@@ -233,6 +233,38 @@ export interface WasiGccCompileResult extends Omit<CrossGccCompileResult, 'artif
 	readonly artifact?: WasiGccArtifact;
 }
 
+export interface WasiGccPreopen {
+	/** Canonical absolute guest path, e.g. /work. Mounts must not overlap. */
+	readonly path: string;
+	/** Denies all guest filesystem mutations in this mount. Default: false. */
+	readonly readonly?: boolean;
+	/** Canonical relative paths. Missing parent directories are created before execution. */
+	readonly files?: readonly {
+		readonly path: string;
+		readonly contents: string | Uint8Array;
+	}[];
+	/** Additional empty directories, using canonical relative paths. */
+	readonly directories?: readonly string[];
+}
+
+export interface WasiGccFilesystemLimits {
+	/** Live files and directories, including mount roots and open unlinked files. Default: 1024. */
+	readonly maxEntries?: number;
+	/** Default: 16 MiB per file. */
+	readonly maxFileBytes?: number;
+	/** Default: 64 MiB across all mounts, including open unlinked files. */
+	readonly maxTotalBytes?: number;
+	/** Maximum absolute guest path length in UTF-8 bytes. Default: 4096. */
+	readonly maxPathBytes?: number;
+	/** Open filesystem descriptors, including preopens. Default: 256. */
+	readonly maxOpenFiles?: number;
+}
+
+export interface WasiGccResultFile {
+	readonly path: string;
+	readonly contents: Uint8Array;
+}
+
 export interface WasiGccRunOptions {
 	/** Complete input; EOF follows these bytes. */
 	readonly stdin?: string | Uint8Array;
@@ -240,6 +272,9 @@ export interface WasiGccRunOptions {
 	readonly env?: Readonly<Record<string, string>>;
 	/** Combined stdout and stderr limit. Default: four MiB. */
 	readonly maxOutputBytes?: number;
+	/** Fresh, copied in-memory mounts for this run only; absent means no filesystem access. */
+	readonly preopens?: readonly WasiGccPreopen[];
+	readonly filesystemLimits?: WasiGccFilesystemLimits;
 }
 
 export interface WasiGccRunResult {
@@ -248,6 +283,8 @@ export interface WasiGccRunResult {
 	readonly stderr: string;
 	readonly milliseconds: number;
 	readonly peakMemoryBytes: number;
+	/** Sorted absolute paths and copied final bytes of every remaining file, including inputs. */
+	readonly files: readonly WasiGccResultFile[];
 }
 
 export interface WasiGccCompiler {

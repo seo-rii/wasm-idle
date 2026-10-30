@@ -9,6 +9,7 @@ import path from 'node:path';
 import { createGzip } from 'node:zlib';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
+	assertFileSnapshot,
 	digest,
 	inspectWasm,
 	measureBundle,
@@ -85,6 +86,52 @@ for (const fixture of cases) {
 		typeof fixture.stdin === 'string' && typeof fixture.stdout === 'string',
 		'Missing fixture IO'
 	);
+	if (fixture.runOptions || fixture.expectedFiles)
+		assert(
+			options.manifest,
+			'Filesystem fixtures require the real SDK compiler and Worker --manifest path'
+		);
+	if (fixture.expectedFiles)
+		assert(Array.isArray(fixture.expectedFiles), 'expectedFiles must be an array');
+	assert(
+		Number.isSafeInteger(fixture.repeatRuns ?? 1) &&
+			(fixture.repeatRuns ?? 1) >= 1 &&
+			(fixture.repeatRuns ?? 1) <= 10,
+		'Invalid fixture repeatRuns'
+	);
+	if (fixture.nodeWasiUnsupported) {
+		assert(
+			typeof fixture.nodeWasiUnsupported === 'string',
+			'Node WASI exclusion needs a reason'
+		);
+		assert(
+			fixture.runOptions?.filesystemLimits ||
+				fixture.runOptions?.preopens?.some((mount) => mount.readonly),
+			'Only SDK read-only/quota policies may exclude the independent Node WASI oracle'
+		);
+	}
+}
+function serializableFixture(fixture) {
+	const files = (entries) =>
+		entries?.map((file) => ({
+			...file,
+			contents: typeof file.contents === 'string' ? file.contents : [...file.contents]
+		}));
+	return {
+		...fixture,
+		...(fixture.runOptions
+			? {
+					runOptions: {
+						...fixture.runOptions,
+						preopens: fixture.runOptions.preopens?.map((mount) => ({
+							...mount,
+							files: files(mount.files)
+						}))
+					}
+				}
+			: {}),
+		...(fixture.expectedFiles ? { expectedFiles: files(fixture.expectedFiles) } : {})
+	};
 }
 const fixtures = selectCases(options.cases, cases);
 const output = path.resolve(options.output || `out/gcc-wasi-qualification-${Date.now()}`);
@@ -107,7 +154,8 @@ const report = {
 	fixtures: fixtures.map((fixture) => ({
 		id: fixture.id,
 		sha256: digest(JSON.stringify(fixture)),
-		features: fixture.features
+		features: fixture.features,
+		...(fixture.expectedFiles ? { filesystemContract: serializableFixture(fixture) } : {})
 	})),
 	cases: fixtures.map((fixture) => ({
 		id: fixture.id,
@@ -396,6 +444,7 @@ try {
 		entry.status = 'running';
 		let bytes;
 		let execution;
+		let repeatedExecutions = [];
 		if (manifest) {
 			const actual = await page.evaluate(
 				async ({ fixture, saveIntermediates }) => {
@@ -438,11 +487,52 @@ try {
 					for (let offset = 0; offset < bytes.length; offset += 32768)
 						chunks.push(String.fromCharCode(...bytes.subarray(offset, offset + 32768)));
 					let execution;
+					const repeatedExecutions = [];
 					try {
-						execution = await compiler.run(artifact, {
-							stdin: fixture.stdin,
-							signal: AbortSignal.timeout(30_000)
-						});
+						const runOptions = {
+							...fixture.runOptions,
+							...(fixture.runOptions?.preopens
+								? {
+										preopens: fixture.runOptions.preopens.map((mount) => ({
+											...mount,
+											files: mount.files?.map((file) => ({
+												...file,
+												contents:
+													typeof file.contents === 'string'
+														? file.contents
+														: Uint8Array.from(file.contents)
+											}))
+										}))
+									}
+								: {})
+						};
+						const originalInputs = JSON.stringify(runOptions);
+						for (let run = 0; run < (fixture.repeatRuns ?? 1); run++) {
+							const result = await compiler.run(artifact, {
+								...runOptions,
+								stdin: fixture.stdin,
+								signal: AbortSignal.timeout(30_000)
+							});
+							if (JSON.stringify(runOptions) !== originalInputs)
+								throw new Error('GCC run mutated caller filesystem inputs');
+							if (fixture.expectedFiles) {
+								if (
+									!Array.isArray(result.files) ||
+									result.files.some(
+										(file) => !(file.contents instanceof Uint8Array)
+									)
+								)
+									throw new Error(
+										'GCC run did not return Uint8Array file snapshots'
+									);
+								result.files = result.files.map((file) => ({
+									...file,
+									contents: [...file.contents]
+								}));
+							}
+							if (run === 0) execution = result;
+							else repeatedExecutions.push(result);
+						}
 					} catch (error) {
 						// Preserve the compiler stages and executable even if the guest
 						// traps; Node execution can then distinguish codegen from host bugs.
@@ -453,10 +543,14 @@ try {
 						intermediates,
 						artifact: { ...metadata, base64: btoa(chunks.join('')) },
 						execution,
+						repeatedExecutions,
 						elapsedMs: performance.now() - started
 					};
 				},
-				{ fixture, saveIntermediates: Boolean(options.saveIntermediates) }
+				{
+					fixture: serializableFixture(fixture),
+					saveIntermediates: Boolean(options.saveIntermediates)
+				}
 			);
 			entry.compilation = actual.compilation;
 			entry.elapsedMs = actual.elapsedMs;
@@ -543,6 +637,7 @@ try {
 				);
 			bytes = Buffer.from(actual.artifact.base64, 'base64');
 			execution = actual.execution;
+			repeatedExecutions = actual.repeatedExecutions;
 		} else {
 			const receipt = provenance.programs?.[fixture.id];
 			assert(receipt, `Native receipt does not bind ${fixture.id}`);
@@ -589,11 +684,25 @@ try {
 		const file = path.join(output, `${fixture.id}.wasm`);
 		await fs.writeFile(file, bytes);
 		entry.chromiumWorker = execution;
-		entry.node = runNodeWasi(file, fixture);
+		if (repeatedExecutions.length) entry.repeatedChromiumWorkers = repeatedExecutions;
+		entry.node = fixture.nodeWasiUnsupported
+			? { status: 'not-applicable', reason: fixture.nodeWasiUnsupported }
+			: runNodeWasi(file, fixture);
 		assert(!execution.error, `${fixture.id}: Chromium Worker failed: ${execution.error}`);
-		assert.equal(execution.exitCode, 0, `${fixture.id}: Chromium Worker exit status`);
-		assert.equal(execution.stdout, fixture.stdout, `${fixture.id}: Chromium Worker stdout`);
-		assert.equal(execution.stderr, '', `${fixture.id}: Chromium Worker stderr`);
+		assert.equal(
+			repeatedExecutions.length,
+			(fixture.repeatRuns ?? 1) - 1,
+			`${fixture.id}: repeat run count`
+		);
+		for (const [index, result] of [execution, ...repeatedExecutions].entries()) {
+			const label = `${fixture.id}: Chromium Worker run ${index + 1}`;
+			assert(!result.error, `${label}: ${result.error}`);
+			assert.equal(result.exitCode, 0, `${label}: exit status`);
+			assert.equal(result.stdout, fixture.stdout, `${label}: stdout`);
+			assert.equal(result.stderr, '', `${label}: stderr`);
+			if (fixture.expectedFiles)
+				assertFileSnapshot(result.files, fixture.expectedFiles, `${label}: files`);
+		}
 		entry.success = true;
 		entry.status = 'passed';
 		await fs.writeFile(

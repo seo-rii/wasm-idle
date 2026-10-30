@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { WASI, wasi } from '@bjorn3/browser_wasi_shim';
 import { createGccCompiler } from '../src/compiler.js';
 import { gccAssetPaths, parseCrossGccManifest, parseWasiGccManifest } from '../src/manifest.js';
 import { gccCompilePlan } from '../src/plan.js';
@@ -721,12 +722,103 @@ describe('WASI runner and binary validation with hand-encoded Wasm fixtures', ()
 			exitCode: 7,
 			stdout: 'input 42 한글\n',
 			stderr: '',
-			peakMemoryBytes: 65536
+			peakMemoryBytes: 65536,
+			files: []
 		});
 		const inspection = await inspectGccWasm(echoFixture(), 'executable');
 		expect(inspection.memory).toEqual({ initialPages: 1, maximumPages: 2, shared: false });
 		expect(inspection.imports).toHaveLength(3);
 		expect(inspection.exports.map(({ name }) => name)).toEqual(['memory', '_start']);
+	});
+
+	it('snapshots preopen bytes before asynchronous compilation and does not retain mounts', async () => {
+		const contents = new Uint8Array([0, 255]);
+		const pending = runGccWasiArtifact(artifact(), {
+			stdin: 'files\n',
+			preopens: [{ path: '/work', files: [{ path: 'input.bin', contents }] }],
+			filesystemLimits: { maxTotalBytes: 2 }
+		});
+		contents[0] = 42;
+		expect(await pending).toMatchObject({
+			exitCode: 7,
+			stdout: 'files\n',
+			files: [{ path: '/work/input.bin', contents: new Uint8Array([0, 255]) }]
+		});
+		expect(await runGccWasiArtifact(artifact(), { stdin: 'fresh\n' })).toMatchObject({
+			exitCode: 7,
+			stdout: 'fresh\n',
+			files: []
+		});
+	});
+
+	it('reuses closed WASI descriptor slots during repeated opens', async () => {
+		const originalStart = WASI.prototype.start;
+		let largestTable = 0;
+		const start = vi.spyOn(WASI.prototype, 'start').mockImplementation(function (
+			this: WASI,
+			instance
+		) {
+			const exitCode = originalStart.call(this, instance);
+			const memory = instance.exports.memory;
+			new Uint8Array(memory.buffer).set(encoder.encode('input'), 256);
+			const view = new DataView(memory.buffer);
+			for (let i = 0; i < 64; i++) {
+				expect(
+					this.wasiImport.path_open(
+						3,
+						0,
+						256,
+						5,
+						0,
+						BigInt(wasi.RIGHTS_FD_READ),
+						0n,
+						0,
+						512
+					)
+				).toBe(0);
+				largestTable = Math.max(largestTable, this.fds.length);
+				const fd = view.getUint32(512, true);
+				expect(this.wasiImport.fd_renumber(fd, fd)).toBe(0);
+				expect(this.wasiImport.fd_filestat_get(fd, 544)).toBe(0);
+				expect(this.wasiImport.fd_close(fd)).toBe(0);
+			}
+			return exitCode;
+		});
+		try {
+			expect(
+				await runGccWasiArtifact(artifact(), {
+					stdin: 'ok',
+					preopens: [{ path: '/work', files: [{ path: 'input', contents: 'abc' }] }],
+					filesystemLimits: { maxOpenFiles: 2 }
+				})
+			).toMatchObject({ exitCode: 7, stdout: 'ok' });
+			expect(largestTable).toBeLessThanOrEqual(5);
+		} finally {
+			start.mockRestore();
+		}
+	});
+
+	it('does not let stdin allocation or truncation bypass filesystem limits', async () => {
+		const originalStart = WASI.prototype.start;
+		const start = vi.spyOn(WASI.prototype, 'start').mockImplementation(function (
+			this: WASI,
+			instance
+		) {
+			const exitCode = originalStart.call(this, instance);
+			expect(this.wasiImport.fd_allocate(0, 0n, 64n)).toBe(wasi.ERRNO_BADF);
+			expect(this.wasiImport.fd_filestat_set_size(0, 128n)).toBe(wasi.ERRNO_BADF);
+			return exitCode;
+		});
+		try {
+			expect(
+				await runGccWasiArtifact(artifact(), {
+					stdin: 'ok',
+					filesystemLimits: { maxFileBytes: 1, maxTotalBytes: 1 }
+				})
+			).toMatchObject({ exitCode: 7, stdout: 'ok', files: [] });
+		} finally {
+			start.mockRestore();
+		}
 	});
 
 	it('rejects ELF, plain modules passed as objects, foreign imports and shared memory', async () => {
