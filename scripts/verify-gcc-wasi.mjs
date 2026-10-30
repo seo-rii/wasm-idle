@@ -119,6 +119,17 @@ function serializableFixture(fixture) {
 		}));
 	return {
 		...fixture,
+		...(fixture.request.linkInputs
+			? {
+					request: {
+						...fixture.request,
+						linkInputs: fixture.request.linkInputs.map((input) => ({
+							...input,
+							bytes: Array.from(input.bytes)
+						}))
+					}
+				}
+			: {}),
 		...(fixture.runOptions
 			? {
 					runOptions: {
@@ -425,7 +436,7 @@ try {
 				const { artifact, ...compilation } = result;
 				return { compilation, ...(artifact ? { bytes: [...artifact.bytes] } : {}) };
 			},
-			{ ...fixtures[0].request, sources: undefined }
+			{ ...fixtures[0].request, sources: undefined, linkInputs: undefined }
 		);
 		assert.equal(
 			object.compilation.exitCode,
@@ -438,6 +449,71 @@ try {
 			compilation: object.compilation
 		};
 		await fs.writeFile(path.join(output, 'object-milestone.o'), objectBytes);
+		if (fixtures.some((fixture) => fixture.request.linkInputs?.length)) {
+			const roundtripFixture = {
+				id: 'public-link-input-roundtrip',
+				stdin: '41\n',
+				stdout: 'roundtrip 42\n'
+			};
+			const roundtrip = await page.evaluate(async (fixture) => {
+				const compiler = globalThis.gccWasiQualification;
+				const provider = await compiler.compile(
+					{
+						code: 'int external_increment(int n) { return n + 1; }\n',
+						language: 'c',
+						optimization: '2',
+						emit: 'object'
+					},
+					{ signal: AbortSignal.timeout(600_000) }
+				);
+				if (provider.exitCode || !provider.artifact?.linkInput)
+					throw new Error(`Object receipt missing: ${provider.stderr}`);
+				const { artifact: object, ...providerCompilation } = provider;
+				const result = await compiler.compile(
+					{
+						code: '#include <stdio.h>\nint external_increment(int); int main(void) { int n; if (scanf("%d", &n) != 1) return 1; printf("roundtrip %d\\n", external_increment(n)); return 0; }\n',
+						language: 'c',
+						optimization: '2',
+						linkInputs: [
+							{ path: 'increment.o', bytes: object.bytes, ...object.linkInput }
+						]
+					},
+					{ signal: AbortSignal.timeout(600_000) }
+				);
+				if (result.exitCode || !result.artifact) throw new Error(result.stderr);
+				const { artifact, ...compilation } = result;
+				const execution = await compiler.run(artifact, {
+					stdin: fixture.stdin,
+					signal: AbortSignal.timeout(30_000)
+				});
+				return {
+					providerCompilation,
+					receipt: object.linkInput,
+					objectBytes: Array.from(object.bytes),
+					compilation,
+					execution,
+					bytes: Array.from(artifact.bytes)
+				};
+			}, roundtripFixture);
+			const { bytes, objectBytes, ...proof } = roundtrip;
+			const objectData = Uint8Array.from(objectBytes),
+				programData = Uint8Array.from(bytes);
+			assert.equal(proof.receipt.sha256, digest(objectData));
+			assert.equal(proof.receipt.profile.compatibility.manifestSha256, report.manifestSha256);
+			assert.equal(proof.execution.exitCode, 0);
+			assert.equal(proof.execution.stdout, roundtripFixture.stdout);
+			assert.equal(proof.execution.stderr, '');
+			await fs.writeFile(path.join(output, 'link-input-roundtrip.o'), objectData);
+			const programPath = path.join(output, 'link-input-roundtrip.wasm');
+			await fs.writeFile(programPath, programData);
+			report.linkInputRoundtrip = {
+				...proof,
+				object: inspectWasm(objectData, { object: true }),
+				program: inspectWasm(programData),
+				node: runNodeWasi(programPath, roundtripFixture),
+				status: 'passed'
+			};
+		}
 	}
 	for (const fixture of fixtures) {
 		const entry = report.cases.find((candidate) => candidate.id === fixture.id);
@@ -449,12 +525,22 @@ try {
 			const actual = await page.evaluate(
 				async ({ fixture, saveIntermediates }) => {
 					const compiler = globalThis.gccWasiQualification;
+					if (fixture.request.linkInputs)
+						fixture.request.linkInputs = fixture.request.linkInputs.map((input) => ({
+							...input,
+							bytes: Uint8Array.from(input.bytes)
+						}));
 					const started = performance.now();
 					const intermediates = [];
 					if (saveIntermediates) {
 						for (const emit of ['assembly', 'object']) {
 							const capture = await compiler.compile(
-								{ ...fixture.request, sources: undefined, emit },
+								{
+									...fixture.request,
+									sources: undefined,
+									linkInputs: undefined,
+									emit
+								},
 								{ signal: AbortSignal.timeout(600_000) }
 							);
 							const { artifact, ...compilation } = capture;
@@ -553,6 +639,20 @@ try {
 				}
 			);
 			entry.compilation = actual.compilation;
+			if (fixture.request.linkInputs)
+				assert.deepEqual(
+					actual.compilation.linkInputs?.map(({ path, sha256, profile }) => ({
+						path,
+						sha256,
+						profile
+					})),
+					fixture.request.linkInputs.map(({ path, sha256, profile }) => ({
+						path,
+						sha256,
+						profile
+					})),
+					`${fixture.id}: ordered external input identity receipt differs`
+				);
 			entry.elapsedMs = actual.elapsedMs;
 			if (options.saveIntermediates) {
 				entry.intermediates = [];

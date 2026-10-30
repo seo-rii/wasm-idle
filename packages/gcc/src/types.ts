@@ -205,6 +205,43 @@ export interface WasiGccCompileRequest extends Omit<CrossGccCompileRequest, 'cpu
 	readonly dynamicLinking?: false;
 	/** Opt in to the bundle's qualified baseline Wasm SIMD operations; never selects x86 AVX. */
 	readonly simd?: boolean;
+	/** Explicit static link inputs, after source objects and before runtime libraries, in this order. */
+	readonly linkInputs?: readonly WasiGccLinkInput[];
+}
+
+/** Caller-declared ABI provenance. Wasm bytes cannot prove source-level C/C++ compatibility. */
+export interface WasiGccLinkProfile {
+	readonly target: 'wasm32-wasi';
+	readonly abi: 'wasm32-wasi-preview1';
+	readonly simd: boolean;
+	readonly compatibility:
+		| Readonly<{ kind: 'gcc-bundle'; manifestSha256: string; sysrootSha256: string }>
+		| Readonly<{
+				/** Nonvariadic scalar C interfaces only; no aggregates, vectors, long double or C++ ABI. */
+				kind: 'clang-c-scalar-v1';
+				compilerVersion: '22.1.0';
+				compilerCommit: '4434dabb69916856b824f68a64b029c67175e532';
+				sysrootSha256: string;
+		  }>;
+}
+
+/** Object outputs supply this receipt for reuse; external inputs require independently known provenance. */
+export interface WasiGccLinkInputReceipt {
+	readonly format: 'wasm-object' | 'wasm-archive';
+	readonly sha256: string;
+	readonly profile: WasiGccLinkProfile;
+}
+
+export interface WasiGccLinkInput extends WasiGccLinkInputReceipt {
+	/** Relative .o/.a name in a separate linker namespace; never a source or a driver option. */
+	readonly path: string;
+	readonly bytes: Uint8Array;
+}
+
+export interface WasiGccLinkedInput extends WasiGccLinkInputReceipt {
+	readonly path: string;
+	readonly bytes: number;
+	readonly members?: readonly Readonly<{ path: string; bytes: number; sha256: string }>[];
 }
 
 export interface WasiGccIdentity extends Omit<CrossGccIdentity, 'target' | 'compilerVersion'> {
@@ -227,10 +264,14 @@ export interface WasiGccArtifact extends Omit<CrossGccArtifact, 'target' | 'form
 	readonly format: 'assembly' | 'wasm-object' | 'wasm-executable';
 	readonly cpu: 'wasm32';
 	readonly wasm?: GccWasmInspection;
+	/** Present for object output. Reuse with {path, bytes: artifact.bytes, ...artifact.linkInput!}. */
+	readonly linkInput?: WasiGccLinkInputReceipt;
 }
 
 export interface WasiGccCompileResult extends Omit<CrossGccCompileResult, 'artifact'> {
 	readonly artifact?: WasiGccArtifact;
+	/** Validated external inputs in the exact linker order, including archive member identities. */
+	readonly linkInputs?: readonly WasiGccLinkedInput[];
 }
 
 export interface WasiGccPreopen {

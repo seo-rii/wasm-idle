@@ -84,6 +84,55 @@ allocation/truncation, open-but-unlinked files, bounded fd reuse and Worker
 structured cloning. The [package contract](../packages/gcc/README.md) documents
 path rules, limits, errors and unsupported filesystem operations.
 
+## Explicit static link inputs
+
+Issue #342 adds typed `linkInputs` for relocatable Wasm objects and regular GNU
+archives, plus reusable object receipts and ordered input identities. See the
+[public API contract](../packages/gcc/README.md) for required hashes and profiles.
+The [2026-10-30 qualification](../docs/gcc-wasi-link-inputs-20261030.json) uses the
+same eleven-patch compiler bundle identified above. No compiler assets changed.
+
+All 12 O0/O2 native programs and the corresponding actual Chromium compiler
+Worker programs passed independent Node WASI execution. Cases cover multiple
+source units, callback pointers, archive order and lazy selection, C++ static
+initializers, pinned Clang scalar C objects and external SIMD instructions. A
+separate Worker check compiles an object, passes its automatic receipt into a
+second compilation, and executes the result in Chromium and Node.
+
+The combined link-input/filesystem suite passed 26 source cases, 29 Chromium
+guest executions (including two repeated runs and the receipt roundtrip), and
+19 Node executions. Eight SDK readonly/quota cases remain explicitly
+inapplicable to Node. All 164 GCC unit tests, 36 package-verifier tests and seven
+production install/import/type/budget scenarios passed. GCC installed size is
+2,704,470 bytes across 182 files and four packages; the aggregate is 42,638,132
+bytes across 3,396 files and 66 packages. Each byte budget increases by 37 KiB;
+the aggregate file limit increases by two. No dependency is added.
+
+Build real external inputs using the exact native build and extracted sysroot
+bound by the compiler manifest, then pass the generated fixture module to the
+existing browser harness. The output directories must be new:
+
+```sh
+node scripts/prepare-gcc-wasi-link-inputs.mjs \
+  --work /path/to/qualified-native-work \
+  --sdk /path/to/wasi-sdk-33 \
+  --manifest /path/to/gcc-wasi-bundle/gcc-toolchain.v2.json \
+  --sysroot /path/to/extracted-bundle-sysroot \
+  --output out/gcc-wasi-link-inputs-native
+pnpm --filter @wasm-idle/core build
+pnpm --filter @wasm-idle/gcc build
+node scripts/verify-gcc-wasi.mjs \
+  --manifest /path/to/gcc-wasi-bundle/gcc-toolchain.v2.json \
+  --suite out/gcc-wasi-link-inputs-native/fixtures.mjs \
+  --save-intermediates --output out/gcc-wasi-link-inputs-browser
+```
+
+The preparation script preserves commands, provider source, objects, archives,
+programs and receipts. It verifies compiler/runtime identities and checks that
+inputs stay unchanged. Binary validation cannot prove source-level ABI: the
+Clang profile declares only the pinned nonvariadic scalar C contract, and does
+not qualify aggregate, vector or C++ interoperability.
+
 ## Additional compiler suites
 
 The optional `--suite /path/to/TRUSTED_LOCAL_MODULE.mjs` imports executable local

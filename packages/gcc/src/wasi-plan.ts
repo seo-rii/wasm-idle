@@ -1,5 +1,6 @@
 import { gccCompileInputs } from './plan.js';
 import { supportsGccWasmSimd } from './wasm-output.js';
+import { snapshotWasiGccLinkInputs } from './wasm-link-inputs.js';
 import type { CrossGccTool, WasiGccCompileRequest, WasiGccManifest } from './types.js';
 
 const unavailableFeatures = ['exceptions', 'rtti', 'threads', 'dynamicLinking'] as const;
@@ -9,13 +10,16 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 	const { language, emit, optimization, standard, main, files, sources, definitions } =
 		gccCompileInputs(
 			request,
-			['cpu', 'simd', ...unavailableFeatures],
+			['cpu', 'simd', 'linkInputs', ...unavailableFeatures],
 			[
 				'program.wat',
 				'program.wasm',
 				...Array.from({ length: 63 }, (_, i) => `program.${i + 1}.wat`)
 			]
 		);
+	const linkInputs = snapshotWasiGccLinkInputs(request.linkInputs);
+	if (linkInputs.length && emit !== 'executable')
+		throw new Error('Explicit GCC link inputs require executable output');
 	if (request.cpu !== undefined && request.cpu !== 'wasm32')
 		throw new Error('GCC wasm32-wasi supports only cpu=wasm32; x86 AVX2/FMA is not Wasm SIMD');
 	for (const feature of unavailableFeatures)
@@ -94,6 +98,7 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 				`-L${lib}`,
 				`-L${manifest.gccInstallation}`,
 				...objects,
+				...linkInputs.map((input) => `/link-inputs/${input.path}`),
 				...(language === 'cpp' && manifest.capabilities.libstdcxx ? ['-lstdc++'] : []),
 				...(manifest.capabilities.longDouble ? ['-lc-printscan-long-double'] : []),
 				'-lm',
@@ -104,7 +109,16 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 		});
 	}
 	return {
-		files,
+		files: [
+			...files,
+			...linkInputs.map((input) => ({
+				path: `/link-inputs/${input.path}`,
+				contents: input.bytes
+			}))
+		],
+		linkInputs,
+		language,
+		simd: request.simd === true,
 		stages,
 		cpu: 'wasm32' as const,
 		emit,

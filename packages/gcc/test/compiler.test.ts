@@ -399,6 +399,63 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 		);
 	});
 
+	it('binds reusable object receipts and validates private link inputs before front-end calls', async () => {
+		// Valid relocatable identity function, used only to exercise host ownership and receipts.
+		host.output = Uint8Array.from([
+			0, 97, 115, 109, 1, 0, 0, 0, 1, 6, 1, 96, 1, 127, 1, 127, 3, 2, 1, 0, 10, 6, 1, 4, 0,
+			32, 0, 11, 0, 19, 7, 108, 105, 110, 107, 105, 110, 103, 2, 8, 8, 1, 0, 0, 0, 3, 97, 100,
+			100
+		]);
+		const compiler = await createGccCompiler(wasiBundle());
+		try {
+			const produced = await compiler.compile({
+				code: 'fixture',
+				language: 'c',
+				emit: 'object'
+			});
+			const artifact = produced.artifact!;
+			expect(artifact.linkInput).toEqual({
+				format: 'wasm-object',
+				sha256: hash(artifact.bytes),
+				profile: {
+					target: 'wasm32-wasi',
+					abi: 'wasm32-wasi-preview1',
+					simd: false,
+					compatibility: {
+						kind: 'gcc-bundle',
+						manifestSha256: compiler.identity.manifestSha256,
+						sysrootSha256: compiler.identity.sysrootSha256
+					}
+				}
+			});
+			const input = { ...artifact.linkInput!, path: 'reuse.o', bytes: artifact.bytes };
+			const before = host.calls.length;
+			const rejected = compiler.compile({
+				code: '',
+				language: 'c',
+				linkInputs: [{ ...input, sha256: '0'.repeat(64) }]
+			});
+			await expect(compiler.compile({ code: 'overlap' })).rejects.toThrow('busy');
+			await expect(rejected).rejects.toThrow('SHA-256 mismatch');
+			expect(host.calls).toHaveLength(before);
+			// A failing source is enough to observe that validation, snapshots, and identity
+			// propagation completed; no synthetic executable is substituted for a linker.
+			const pending = compiler.compile({
+				code: '!source error',
+				language: 'c',
+				linkInputs: [input]
+			});
+			artifact.bytes.fill(255);
+			const result = await pending;
+			expect(result.exitCode).toBe(9);
+			expect(result.artifact).toBeUndefined();
+			expect(result.linkInputs?.[0]).toMatchObject({ path: 'reuse.o', sha256: input.sha256 });
+			expect(host.calls.at(-1)!.files.get('/link-inputs/reuse.o')?.[0]).toBe(0);
+		} finally {
+			compiler.dispose();
+		}
+	});
+
 	it('refuses unrequested SIMD in assembled output and permits the explicit capable-bundle opt-in', async () => {
 		host.output = Uint8Array.from([
 			...wasiCommand(true),

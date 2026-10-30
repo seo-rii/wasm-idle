@@ -45,6 +45,51 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('GCC Worker ownership and cancellation', () => {
+	it('sends private link input snapshots and receipts without detaching caller bytes', async () => {
+		const compiler = await createGccWorker({ ...options, target: 'wasm32-wasi' });
+		const transport = FixtureWorker.instances[0];
+		const bytes = new Uint8Array(new SharedArrayBuffer(8));
+		bytes.set([0, 97, 115, 109, 1, 0, 0, 0]);
+		const original = Array.from(bytes);
+		const pending = compiler.compile({
+			code: 'source',
+			language: 'c',
+			linkInputs: [
+				{
+					path: 'library.o',
+					format: 'wasm-object',
+					bytes,
+					sha256: 'a'.repeat(64),
+					profile: {
+						target: 'wasm32-wasi',
+						abi: 'wasm32-wasi-preview1',
+						simd: false,
+						compatibility: {
+							kind: 'gcc-bundle',
+							manifestSha256: 'b'.repeat(64),
+							sysrootSha256: 'c'.repeat(64)
+						}
+					}
+				}
+			]
+		});
+		bytes.fill(255);
+		const message = transport.messages.at(-1)!;
+		const request = message.request as { linkInputs: { bytes: Uint8Array; sha256: string }[] };
+		expect(Array.from(request.linkInputs[0].bytes)).toEqual(original);
+		expect(request.linkInputs[0].bytes.buffer).toBeInstanceOf(ArrayBuffer);
+		expect(bytes.byteLength).toBe(8);
+		const result = {
+			exitCode: 0,
+			stdout: '',
+			stderr: '',
+			stages: [],
+			linkInputs: [{ path: 'library.o', sha256: 'a'.repeat(64) }]
+		};
+		transport.onmessage?.({ data: { id: message.id, type: 'result', result } });
+		expect(await pending).toEqual(result);
+		compiler.dispose();
+	});
 	it.each([
 		null,
 		{ id: 1, type: 'unknown' },
