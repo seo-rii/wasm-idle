@@ -287,9 +287,11 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Main already exceeds 612 KiB by 3,802 bytes: allow 4 KiB for that baseline.
 		// Lazy receipt lookup adds about 7 KiB and six files; allow another 8 KiB,
 		// retaining at least 1 KiB of headroom with unchanged production dependencies.
-		// Applying #358 and #361 together adds 1,219 measured emitted bytes;
-		// another 1 KiB preserves the same headroom after integration.
-		budget: { maxBytes: 40 * MiB + 625 * 1024, maxFiles: 3_398, maxPackages: 70 },
+		// Combined changes add 5,801 emitted bytes: 1,219 in core (#358/#361)
+		// and 4,582 in the root SDK's worker/Zig modules. Reserve 6 KiB above
+		// the lazy-only 624 KiB allowance; the measured 42,586,341-byte install
+		// retains 1,819 bytes of headroom with no additional files or dependencies.
+		budget: { maxBytes: 40 * MiB + 630 * 1024, maxFiles: 3_398, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
