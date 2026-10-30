@@ -103,7 +103,9 @@ export const scenarios = [
 		// Shared read-only sysroot storage adds two files within an 11 KiB allowance.
 		// PCH support adds 8,315 installed bytes; reserve a further 9 KiB.
 		// Lazy receipt lookup needs another 4 KiB; its six files fit the existing cap.
-		budget: { maxBytes: 2.5 * MiB + 24 * 1024, maxFiles: 184, maxPackages: 4 },
+		// Applying #358 and #361 together adds 1,219 measured emitted bytes;
+		// another 2 KiB keeps at least 1 KiB of headroom after integration.
+		budget: { maxBytes: 2.5 * MiB + 26 * 1024, maxFiles: 184, maxPackages: 4 },
 		absentPackageNames: [
 			'wasm-idle',
 			'@wasm-idle/llvm-core',
@@ -285,7 +287,9 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Main already exceeds 612 KiB by 3,802 bytes: allow 4 KiB for that baseline.
 		// Lazy receipt lookup adds about 7 KiB and six files; allow another 8 KiB,
 		// retaining at least 1 KiB of headroom with unchanged production dependencies.
-		budget: { maxBytes: 40 * MiB + 624 * 1024, maxFiles: 3_398, maxPackages: 70 },
+		// Applying #358 and #361 together adds 1,219 measured emitted bytes;
+		// another 1 KiB preserves the same headroom after integration.
+		budget: { maxBytes: 40 * MiB + 625 * 1024, maxFiles: 3_398, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
