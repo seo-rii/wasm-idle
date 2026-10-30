@@ -1646,7 +1646,7 @@ describe('static worker backed language sandboxes', () => {
 					.map(([event]) => event.estimatedFraction)
 					.filter((value): value is number => typeof value === 'number');
 				expect(fractions).toEqual([...fractions].sort((a, b) => a - b));
-				await sandbox.run('test');
+				await sandbox.run('test', false);
 				expect(payload.manifestBytes.byteLength).toBe(0);
 				expect(payload.wasmBytes.byteLength).toBe(0);
 			} finally {
@@ -4828,6 +4828,58 @@ describe('static worker backed language sandboxes', () => {
 		expect(sandbox.workerReceipt).toEqual(nimTestWorkerReceipt);
 		expect(workerInstances).toHaveLength(1);
 	});
+
+	it.each(['valid', 'invalid'] as const)(
+		'waits for the %s Nim logical digest after the parallel runner download',
+		async (result) => {
+			const originalDigest = globalThis.crypto.subtle.digest.bind(globalThis.crypto.subtle);
+			const logicalDigest = Promise.withResolvers<ArrayBuffer>();
+			let logicalDigestStarted = false;
+			vi.spyOn(globalThis.crypto.subtle, 'digest').mockImplementation((algorithm, data) => {
+				const bytes = ArrayBuffer.isView(data)
+					? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
+					: new Uint8Array(data);
+				if (
+					bytes.byteLength === nimTestSysrootBytes.byteLength &&
+					bytes.every((value, index) => value === nimTestSysrootBytes[index])
+				) {
+					logicalDigestStarted = true;
+					return logicalDigest.promise;
+				}
+				return originalDigest(algorithm, data);
+			});
+			const sandbox = new Nim();
+			const progress = { set: vi.fn() };
+			const load = sandbox.load(nimTestRuntimeAssets(), '', true, [], {}, progress);
+			void load.catch(() => {});
+			try {
+				await vi.waitFor(() => expect(logicalDigestStarted).toBe(true));
+				await vi.waitFor(() =>
+					expect(progress.set).toHaveBeenCalledWith(
+						expect.any(Number),
+						'Nim worker downloaded'
+					)
+				);
+				expect(workerInstances).toHaveLength(0);
+				logicalDigest.resolve(
+					result === 'valid'
+						? await originalDigest('SHA-256', nimTestSysrootBytes)
+						: new ArrayBuffer(32)
+				);
+				if (result === 'valid') {
+					await load;
+					expect(workerInstances).toHaveLength(1);
+				} else {
+					await expect(load).rejects.toMatchObject({ code: 'asset-integrity' });
+					expect(workerInstances).toHaveLength(0);
+				}
+			} finally {
+				logicalDigest.resolve(await originalDigest('SHA-256', nimTestSysrootBytes));
+				await load.catch(() => {});
+				await sandbox.dispose();
+			}
+		}
+	);
 
 	it('rejects a modified Nim runner before creating a worker', async () => {
 		const modifiedSource = `x${nimWorkerSource.slice(1)}`;
