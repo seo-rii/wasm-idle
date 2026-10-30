@@ -117,7 +117,80 @@ Patch `0007` adds direct `v128` calls and singleton vector aggregates, qualified
 against pinned Clang with SIMD enabled on both sides. Disabled profiles use indirect
 calls. Check pinned patches and native/browser results: older bundles support
 fewer operations. Automatic vectorization, `wasm_simd128.h`, relaxed SIMD and
-arbitrary external objects are not promised.
+arbitrary cross-compiler ABI compatibility are not promised.
+
+## Explicit static link inputs
+
+WASI executable requests accept ordered `linkInputs`, separately from `files` and
+`sources`. Each entry has a relative `.o` or `.a` `path`, `format: 'wasm-object'` or
+`'wasm-archive'`, `Uint8Array` `bytes`, lowercase SHA-256, and a typed
+`WasiGccLinkProfile`. Source-generated objects precede these inputs; runtime
+libraries follow them. Entries retain their listed order, including archives.
+Archives use ordinary lazy member extraction; this API adds no `--whole-archive`,
+library search flags, dynamic linking, or arbitrary linker options.
+
+Object compilation supplies a reusable receipt automatically:
+
+```ts
+const produced = await compiler.compile({
+	language: 'c',
+	emit: 'object',
+	code: 'int twice(int n) { return n * 2; }'
+});
+if (produced.exitCode !== 0) throw new Error(produced.stderr);
+const object = produced.artifact!;
+const linked = await compiler.compile({
+	language: 'c',
+	code: 'int twice(int); int main(void) { return twice(21) == 42 ? 0 : 1; }',
+	linkInputs: [{ path: 'twice.o', bytes: object.bytes, ...object.linkInput! }]
+});
+```
+
+The receipt binds the object digest, `target: 'wasm32-wasi'`,
+`abi: 'wasm32-wasi-preview1'`, requested SIMD profile, and the exact GCC manifest
+and sysroot digests (`compatibility.kind: 'gcc-bundle'`). Reuse requires the same
+bundle and SIMD setting. Externally prepared GCC archives need the same receipt
+fields, based on independently recorded compiler inputs. A digest identifies
+bytes; caller-supplied provenance does not authenticate who compiled them or
+prove source-level ABI compatibility.
+
+The only mixed-compiler contract is the explicit caller declaration
+`compatibility.kind: 'clang-c-scalar-v1'`, pinned to Clang 22.1.0 commit
+`4434dabb69916856b824f68a64b029c67175e532` with the matching `sysrootSha256`.
+It requires a C source request and nonvariadic C interfaces using integers up to
+64 bits, float/double, pointers, and function pointers with those same signatures.
+Shared pointees must use agreed scalar layouts or remain opaque to the other
+compiler. Aggregates, bitfields, vectors, long double, int128, variadic boundaries,
+and C++ interfaces are outside this contract. The validator additionally rejects
+vector/reference function types and visible C++ mangled symbols in these inputs;
+those checks cannot reconstruct C declarations from Wasm. In particular, known
+aligned-empty C++ ABI differences in older GCC bundles are not made compatible by
+successful Wasm validation or linking. This restriction does not remove the
+bundle's existing SIMD, binary128 or int128 support for GCC source compilation.
+
+The host copies bytes and profile fields before asynchronous validation or Worker
+transport, without detaching caller buffers. Inputs live under a separate
+`/link-inputs` namespace. Limits are 128 inputs, 64 MiB combined, and 4,096 members
+per archive. Supported archives are regular GNU `ar`, including GNU long names
+and the 32-bit symbol index. Thin/nested archives, LLVM bitcode, ELF, common/TLS
+symbols, and unsupported relocation/features are rejected with the input/member
+name. Archive members are all checked, even when the linker would not select them.
+
+Validation requires WebAssembly version 1, linking metadata version 2 and a symbol
+table. It checks symbol/segment/constructor indices, COMDATs, relocation target
+sections and symbol kinds, nonoverlapping chunk bounds and padded 32-bit LEB
+relocations, archive indices, byte digests, target/ABI and SIMD profiles. Actual
+instructions/types are inspected even when the optional `target_features` section
+is absent, as with older qualified WABT outputs. `wasm-ld --fatal-warnings` still
+performs cross-object resolution and relocation application, and the final
+executable is independently validated. Static constructors require the bundle's
+`staticInitialization` capability.
+
+Compile results record ordered `linkInputs` identities, including each archive
+member's name, length and digest. Include those receipts in application cache
+keys. Invalid inputs fail before any front end runs; failed tools return no old
+artifact. The x86 API continues to reject `linkInputs`, and ordinary `files` never
+become linker inputs implicitly.
 
 `run()` accepts `stdin`, `args`, `env` and `maxOutputBytes` (default: four MiB combined
 stdout/stderr), returning exit code, output, runtime and final linear-memory
@@ -312,7 +385,7 @@ digests at the same URL fetch and verify assets again.
 Compilation has no result cache. Compiled modules belong to the current instance,
 identified by manifest/sysroot digests, GCC version, host and target. Consumer
 caches must also key source/files, ordered `sources`, language/standard,
-preprocessing, defines, output kind, optimization and CPU/SIMD. Failures never return
+preprocessing, defines, ordered link-input receipts, output kind, optimization and CPU/SIMD. Failures never return
 old artifacts; the example clears its download when compilation starts.
 
 Results include stage argv, exit codes, milliseconds and peak linear-memory
@@ -371,6 +444,9 @@ pnpm --dir packages/gcc test
 # Required synthetic Chromium contract CI job (separate from Node-only workspace tests).
 pnpm exec playwright-core install chromium
 pnpm run test:browser:gcc-worker-contract
+
+# Binary metadata/WebCrypto/Worker contract only; no compiler qualification claim.
+WASM_IDLE_RUN_GCC_LINK_INPUTS_BROWSER=1 node --test scripts/gcc-link-inputs.browser.test.mjs
 
 # Actual Wasm GCC in Chromium, then known baseline ELF programs run by Linux x86-64.
 node scripts/verify-x86-cross-gcc.mjs \

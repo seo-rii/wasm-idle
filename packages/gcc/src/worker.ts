@@ -1,3 +1,4 @@
+import { snapshotWasiGccLinkInputs } from './wasm-link-inputs.js';
 import type {
 	CreateCrossGccCompilerOptions,
 	CreateGccCompilerOptions,
@@ -165,7 +166,18 @@ export async function createGccWorker(
 				if (busy) throw new Error('GCC Worker is busy');
 				busy = true;
 				try {
-					const response = await send({ type: 'compile', request }, signal);
+					// postMessage clones ordinary buffers, but SharedArrayBuffer views must
+					// become private bytes too. Never transfer/detach caller-owned inputs.
+					const snapshot =
+						options.target === 'wasm32-wasi' && 'linkInputs' in request
+							? {
+									...request,
+									linkInputs: snapshotWasiGccLinkInputs(
+										(request as WasiGccCompileRequest).linkInputs
+									)
+								}
+							: request;
+					const response = await send({ type: 'compile', request: snapshot }, signal);
 					if (response.type !== 'result')
 						throw new Error('GCC Worker returned an invalid compile response');
 					return response.result;
