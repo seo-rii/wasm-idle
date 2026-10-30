@@ -103,7 +103,9 @@ export const scenarios = [
 		// PCH support adds 8,315 installed bytes; reserve a further 9 KiB.
 		// In-memory preopens measure 2,667,183 bytes / 180 files / four packages.
 		// Raise only the byte limit by the minimum 25 KiB; dependencies stay unchanged.
-		budget: { maxBytes: 2.5 * MiB + 45 * 1024, maxFiles: 184, maxPackages: 4 },
+		// Explicit link inputs measure 2,704,716 bytes / 182 files / four packages.
+		// The additional 37,533 bytes require 37 KiB; the two helper files fit the cap.
+		budget: { maxBytes: 2.5 * MiB + 82 * 1024, maxFiles: 184, maxPackages: 4 },
 		absentPackageNames: [
 			'wasm-idle',
 			'@wasm-idle/llvm-core',
@@ -125,7 +127,7 @@ export const scenarios = [
 			"await (await import('node:fs/promises')).access(new URL('./worker-entry.js', import.meta.resolve('@wasm-idle/gcc')));",
 			"if (workers || requests) throw new Error('GCC import started a Worker or fetched assets');"
 		],
-		typeCheck: `import { createCrossGccWorker, createGccWorker, type CrossGccCompileRequest, type CrossGccArtifact, type WasiGccCompileRequest, type WasiGccArtifact, type WasiGccWorker, type WasiGccManifest, type WasiGccPreopen, type WasiGccFilesystemLimits, type WasiGccResultFile, type WasiGccRunOptions, type WasiGccRunResult } from '@wasm-idle/gcc';
+		typeCheck: `import { createCrossGccWorker, createGccWorker, type CrossGccCompileRequest, type CrossGccArtifact, type WasiGccCompileRequest, type WasiGccCompileResult, type WasiGccArtifact, type WasiGccWorker, type WasiGccManifest, type WasiGccLinkProfile, type WasiGccLinkInputReceipt, type WasiGccLinkInput, type WasiGccLinkedInput, type WasiGccPreopen, type WasiGccFilesystemLimits, type WasiGccResultFile, type WasiGccRunOptions, type WasiGccRunResult } from '@wasm-idle/gcc';
 const request: CrossGccCompileRequest = { code: 'int main() { return 0; }', language: 'cpp', cpu: 'x86-64', emit: 'executable' };
 declare const artifact: CrossGccArtifact;
 const compiler: 'gcc' = artifact.compiler;
@@ -146,6 +148,37 @@ const filesystemLimits: WasiGccFilesystemLimits = { maxEntries: 32, maxFileBytes
 const runOptions: WasiGccRunOptions = { stdin: '42', preopens, filesystemLimits };
 declare const wasiWorker: WasiGccWorker;
 const execution: Promise<WasiGccRunResult> = wasiWorker.run(wasiArtifact, { ...runOptions, signal: new AbortController().signal });
+const gccProfile: WasiGccLinkProfile = { target: 'wasm32-wasi', abi: 'wasm32-wasi-preview1', simd: false, compatibility: { kind: 'gcc-bundle', manifestSha256: '0'.repeat(64), sysrootSha256: '1'.repeat(64) } };
+const clangProfile: WasiGccLinkProfile = { target: 'wasm32-wasi', abi: 'wasm32-wasi-preview1', simd: false, compatibility: { kind: 'clang-c-scalar-v1', compilerVersion: '22.1.0', compilerCommit: '4434dabb69916856b824f68a64b029c67175e532', sysrootSha256: '1'.repeat(64) } };
+declare const objectBytes: Uint8Array;
+declare const archiveBytes: Uint8Array;
+const linkInputs: readonly WasiGccLinkInput[] = [
+  { path: 'answer.o', format: 'wasm-object', bytes: objectBytes, sha256: '2'.repeat(64), profile: clangProfile },
+  { path: 'support.a', format: 'wasm-archive', bytes: archiveBytes, sha256: '3'.repeat(64), profile: gccProfile }
+];
+const linkRequest: WasiGccCompileRequest = { code: 'int answer(void); int main(void) { return answer(); }', language: 'c', emit: 'executable', linkInputs };
+const compilation: Promise<WasiGccCompileResult> = wasiWorker.compile(linkRequest, { signal: new AbortController().signal });
+async function reuseObjectReceipt() {
+  const objectResult = await wasiWorker.compile({ code: 'int answer(void) { return 42; }', language: 'c', emit: 'object' });
+  const object = objectResult.artifact;
+  if (!object?.linkInput) throw new Error('Object compilation did not produce a receipt');
+  const receipt: WasiGccLinkInputReceipt = object.linkInput;
+  const input: WasiGccLinkInput = { path: 'answer.o', bytes: object.bytes, ...receipt };
+  const result = await wasiWorker.compile({ ...linkRequest, linkInputs: [input] });
+  const inputs: readonly WasiGccLinkedInput[] | undefined = result.linkInputs;
+  const linked = inputs?.[0];
+  const identity: string | undefined = linked?.sha256;
+  const inputBytes: number | undefined = linked?.bytes;
+  const memberIdentity: string | undefined = linked?.members?.[0]?.sha256;
+  const manifestIdentity: string | undefined = linked?.profile.compatibility.kind === 'gcc-bundle' ? linked.profile.compatibility.manifestSha256 : undefined;
+  // @ts-expect-error Compile receipts preserve input order in a readonly list.
+  inputs?.push(linked!);
+  // @ts-expect-error Archive member identities are readonly.
+  linked?.members?.push({ path: 'extra.o', bytes: 0, sha256: '' });
+  if (!result.artifact) throw new Error('Linking did not produce an executable');
+  const run: WasiGccRunResult = await wasiWorker.run(result.artifact, runOptions);
+  return { identity, inputBytes, memberIdentity, manifestIdentity, run };
+}
 async function consumeFiles() {
   const result = await execution;
   const files: readonly WasiGccResultFile[] = result.files;
@@ -159,13 +192,25 @@ async function consumeFiles() {
 const invalidPreopen: WasiGccPreopen = { path: '/work', files: [{ path: 'input.bin', contents: [0, 255] }] };
 // @ts-expect-error Filesystem limits are numeric byte/count limits.
 const invalidFilesystemLimit: WasiGccFilesystemLimits = { maxFileBytes: '1024' };
+// @ts-expect-error Link input bytes must be a Uint8Array, not a number array.
+const invalidLinkBytes: WasiGccLinkInput = { ...linkInputs[0], bytes: [0, 97, 115, 109] };
+// @ts-expect-error Every external input requires its identity and ABI profile.
+const incompleteLinkInput: WasiGccLinkInput = { path: 'answer.o', format: 'wasm-object', bytes: objectBytes };
+// @ts-expect-error Executable modules cannot be supplied as relocatable link inputs.
+const executableLinkInput: WasiGccLinkInput = { ...linkInputs[0], format: 'wasm-executable' };
+// @ts-expect-error A GCC bundle profile must bind both the compiler manifest and sysroot.
+const incompleteGccProfile: WasiGccLinkProfile = { ...gccProfile, compatibility: { kind: 'gcc-bundle', manifestSha256: '0'.repeat(64) } };
+// @ts-expect-error Mixed Clang scalar C inputs are qualified for the exact pinned compiler.
+const unqualifiedClangProfile: WasiGccLinkProfile = { ...clangProfile, compatibility: { kind: 'clang-c-scalar-v1', compilerVersion: '22.1.1', compilerCommit: '4434dabb69916856b824f68a64b029c67175e532', sysrootSha256: '1'.repeat(64) } };
+// @ts-expect-error The existing x86 API does not accept WASI link inputs.
+const invalidX86LinkInputs: CrossGccCompileRequest = { code: '', linkInputs };
 // @ts-expect-error Wasm output cannot select an x86 CPU profile.
 const invalidWasiCpu: WasiGccCompileRequest = { code: '', cpu: 'avx2' };
 // @ts-expect-error Wasm SIMD is a boolean opt-in, not an x86 feature name.
 const invalidWasiSimd: WasiGccCompileRequest = { code: '', simd: 'avx2' };
 // @ts-expect-error The existing x86 API does not accept a Wasm SIMD selector.
 const invalidX86Simd: CrossGccCompileRequest = { code: '', simd: true };
-void [request, compiler, host, target, workerFactory, wasiRequest, wasiTarget, simdFeature, simdCapability, longDoubleCapability, int128Capability, wasiWorkerFactory, consumeFiles, invalidPreopen, invalidFilesystemLimit, invalidWasiCpu, invalidWasiSimd, invalidX86Simd];
+void [request, compiler, host, target, workerFactory, wasiRequest, wasiTarget, simdFeature, simdCapability, longDoubleCapability, int128Capability, wasiWorkerFactory, compilation, reuseObjectReceipt, consumeFiles, invalidPreopen, invalidFilesystemLimit, invalidLinkBytes, incompleteLinkInput, executableLinkInput, incompleteGccProfile, unqualifiedClangProfile, invalidX86LinkInputs, invalidWasiCpu, invalidWasiSimd, invalidX86Simd];
 `
 	},
 	{
@@ -302,7 +347,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// PCH support adds another 8,315 bytes without new files or dependencies.
 		// GCC in-memory preopens measure 42,600,845 bytes / 3,394 files / 66 packages.
 		// The filesystem helper adds two files; the minimum byte-cap increase is 31 KiB.
-		budget: { maxBytes: 40 * MiB + 643 * 1024, maxFiles: 3_394, maxPackages: 70 },
+		// Explicit link inputs add 37,533 bytes and two files, requiring another 37 KiB.
+		budget: { maxBytes: 40 * MiB + 680 * 1024, maxFiles: 3_396, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

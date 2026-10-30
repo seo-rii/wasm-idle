@@ -1,0 +1,4215 @@
+{
+	"schemaVersion": 1,
+	"issue": 342,
+	"status": "passed",
+	"basePr": 357,
+	"compiler": {
+		"family": "gcc",
+		"repository": "https://forge.sourceware.org/feedable/gcc-TEST.git",
+		"version": "17.0.0",
+		"commit": "ac20dcd5f8c5ae858f9b2d9cdf4140c0738e5e27"
+	},
+	"manifestSha256": "576ebe8a59ecdda01acaaf71c5f46b8306d3ef75a9d87356728c7fbc9a958d77",
+	"compilerHost": "wasm32-emscripten",
+	"target": "wasm32-wasi",
+	"browser": "156.0.8078.4",
+	"receipts": {
+		"native": {
+			"bytes": 122189,
+			"sha256": "7aca51d274d96704b0f1e8429a6ca99a62d5e3147183676823bb48af5e8b981c"
+		},
+		"combinedWorker": {
+			"bytes": 535045,
+			"sha256": "d08c5e80b3d194369d6a512814e349b6e54c830a08dc28fce367dac6913a6146"
+		},
+		"packageVerifier": {
+			"path": "out/link-inputs-package-verifier-20261030T064239Z/summary.json",
+			"bytes": 3433,
+			"sha256": "2c5814565aa3a6049e9ca751561fae7964d90355358f61e83ddc5f4a20fd2a05"
+		}
+	},
+	"nativeSource": {
+		"gccCommit": "ac20dcd5f8c5ae858f9b2d9cdf4140c0738e5e27",
+		"patches": [
+			{
+				"path": "patches/0001-void-type-return.patch",
+				"purpose": "Use VOID_TYPE_P for typedef void returns and indirect function signatures.",
+				"sha256": "33ca37c901fe3de4668943edfd0ff12e682e76dc44544ade513e2af230434c1b"
+			},
+			{
+				"path": "patches/0002-host-width-format.patch",
+				"purpose": "Match actual host widths in labels, i64 constants, relocation addends, sizes and memory offsets.",
+				"sha256": "8e6999c57fc667fffd6015c7f9c0ed27cbd69692640da3a7401baf248f4bfac7"
+			},
+			{
+				"path": "patches/0003-simd128.patch",
+				"purpose": "Add opt-in SIMD128 machine modes and GCC RTL instruction patterns; disabled by default.",
+				"sha256": "8ee65fdf7edf00784644f994a60392fcaed32120a5f55d442ca5ed86da3643a5"
+			},
+			{
+				"path": "patches/0004-basic-c-abi.patch",
+				"purpose": "Match Basic C ABI singleton/empty aggregate arguments/results and narrow scalar extension.",
+				"sha256": "d868cf019d1c2bee44262b616478e77eed0eeb1f85348c07b4198f361b35c0df"
+			},
+			{
+				"path": "patches/0005-atomic-libcall-abi.patch",
+				"purpose": "Emit the five-argument external libatomic compare-exchange ABI without changing the builtin declaration.",
+				"sha256": "d3ceee6358dc8e35a857e3083599a3d051d78791c438e9cb255e9c0e16a0a8c5"
+			},
+			{
+				"path": "patches/0006-simd-operations.patch",
+				"purpose": "Add SIMD scalar-count shifts, signed/unsigned and IEEE comparisons, conditional selection and fixed constant shuffles.",
+				"sha256": "47da6711e4118623418fe810f0a9901ef6375bd3246274037e7b8691555845b8"
+			},
+			{
+				"path": "patches/0007-vector-abi.patch",
+				"purpose": "Use direct v128 values for enabled vectors and singleton aggregates; preserve vector register modes and aggregate storage.",
+				"sha256": "ad96812c8aa7f85f011540d5b3b4096c90fd911d3318f6af137b93b7931f5a15"
+			},
+			{
+				"path": "patches/0008-binary128-long-double.patch",
+				"purpose": "Implement IEEE binary128 long double storage, soft-float operations and WASI two-i64 argument/indirect-result ABI independently of SIMD.",
+				"sha256": "6bf0934f2d6a09dfd0a1b420df3266b29997f755771dc702f4896dc6c9ebdd2d"
+			},
+			{
+				"path": "patches/0009-int128.patch",
+				"purpose": "Enable signed/unsigned int128, WASI paired arguments/indirect results, scalar bitwise complement and SI runtime shift counts.",
+				"sha256": "981a5355da764da03a12a754fadf301cef29145c40429fcd410d88c078b9e61e"
+			},
+			{
+				"path": "patches/0010-empty-record-abi.patch",
+				"purpose": "Ignore ABI-empty C++ records consistently during layout and generic O0 parameter setup without reading absent incoming data.",
+				"sha256": "a06a7653e1ceea88e52762ba567b2d07836e4513df78d919e3ebb0dcda5e9609"
+			},
+			{
+				"path": "patches/0011-bitfield-layout.patch",
+				"purpose": "Use declared type alignment/storage units for named bitfields and classify singleton ABI values with the original declared storage type; preserve packed and unnamed-field rules.",
+				"sha256": "06f43d844d8da6b26b16989801abcefc593ae4e0650e19795566934b9cd8406f"
+			}
+		],
+		"sourceDiffSha256": "2534d4408b05cf3221755edf38026e6fc57c5519b5c7eb6d59009a76fa88c73c"
+	},
+	"nativeTools": {
+		"cc1": {
+			"bytes": 24399320,
+			"sha256": "e28199b4d70364bd645326d930cc4a3fc73c12337c4d04a38c6df5db2c7c5f9a"
+		},
+		"cc1plus": {
+			"bytes": 26952000,
+			"sha256": "d9f206193baed46ee70987ba8d4c883794ce6c4140e0459b952664fc7cf86f15"
+		},
+		"assembler": {
+			"bytes": 1635504,
+			"sha256": "8203fbf4dc22d46fc2cb334c4666dc9712c7b53d3726cf47719d6b6d91eff8a6"
+		},
+		"clang": {
+			"bytes": 118656,
+			"sha256": "6985ec66b1065976616156773f95ed318b1793f7761fe9e9f38f8e771571021c"
+		},
+		"linker": {
+			"bytes": 4165088,
+			"sha256": "5c965a9e8525c7206aa583f9691f1a7a5e46bd4d793bf65f809b7124c670df26"
+		},
+		"ar": {
+			"bytes": 69576,
+			"sha256": "0b52c0242b9c3998dd106ce11bcff8ac33b134dd0d05aa9215692ecd7feb1da9"
+		},
+		"node": {
+			"bytes": 126879696,
+			"sha256": "e32e2d16081cf644f88392934288086e7662529d0d43277c34f7aad2207cfafb"
+		}
+	},
+	"counts": {
+		"nativeLinkPrograms": 12,
+		"nativeNodeExecutions": 12,
+		"workerLinkPrograms": 12,
+		"workerObjectReceiptRoundtrips": 1,
+		"combinedWorkerSourceCases": 26,
+		"combinedWorkerGuestExecutions": 29,
+		"packageUnitTests": 164,
+		"combinedNodeGuestExecutions": 19,
+		"packageVerifierUnitTests": 36,
+		"productionPackageScenarios": 7
+	},
+	"inputs": {
+		"callback-o0": {
+			"path": "callback-o0.o",
+			"format": "wasm-object",
+			"bytes": 262,
+			"sha256": "ed395c7e3644b95d17291b6e838d76eb67564641b000fa90160febcfcc30bbd0",
+			"profile": {
+				"target": "wasm32-wasi",
+				"abi": "wasm32-wasi-preview1",
+				"simd": false,
+				"compatibility": {
+					"kind": "gcc-bundle",
+					"manifestSha256": "576ebe8a59ecdda01acaaf71c5f46b8306d3ef75a9d87356728c7fbc9a958d77",
+					"sysrootSha256": "a098c6c9ccbae0271eb0ae8e7f40e190bab05c65deb77912f903aa39766f4217"
+				}
+			}
+		},
+		"first-o0": {
+			"path": "first-o0.a",
+			"format": "wasm-archive",
+			"bytes": 362,
+			"sha256": "540fac4d5c18673e569b02fcbf5a2edbb77d19fad29ffc2c9f0a753160abd207",
+			"profile": {
+				"target": "wasm32-wasi",
+				"abi": "wasm32-wasi-preview1",
+				"simd": false,
+				"compatibility": {
+					"kind": "gcc-bundle",
+					"manifestSha256": "576ebe8a59ecdda01acaaf71c5f46b8306d3ef75a9d87356728c7fbc9a958d77",
+					"sysrootSha256": "a098c6c9ccbae0271eb0ae8e7f40e190bab05c65deb77912f903aa39766f4217"
+				}
+			}
+		},
+		"second-o0": {
+			"path": "second-o0.a",
+			"format": "wasm-archive",
+			"bytes": 362,
+			"sha256": "5a32315025bc6d8541e55545660ddea16d990d694b80647e8b04012951fe3ae6",
+			"profile": {
+				"target": "wasm32-wasi",
+				"abi": "wasm32-wasi-preview1",
+				"simd": false,
+				"compatibility": {
+					"kind": "gcc-bundle",
+					"manifestSha256": "576ebe8a59ecdda01acaaf71c5f46b8306d3ef75a9d87356728c7fbc9a958d77",
+					"sysrootSha256": "a098c6c9ccbae0271eb0ae8e7f40e190bab05c65deb77912f903aa39766f4217"
+				}
+			}
+		},
+		"initializer-o0": {
+			"path": "initializer-o0.a",
+			"format": "wasm-archive",
+			"bytes": 850,
+			"sha256": "04c1de2a912c797de1b52d7b37eab8fc6abe5f837db0b2be9a5161daf74343de",
+			"profile": {
+				"target": "wasm32-wasi",
+				"abi": "wasm32-wasi-preview1",
+				"simd": false,
+				"compatibility": {
+					"kind": "gcc-bundle",
+					"manifestSha256": "576ebe8a59ecdda01acaaf71c5f46b8306d3ef75a9d87356728c7fbc9a958d77",
+					"sysrootSha256": "a098c6c9ccbae0271eb0ae8e7f40e190bab05c65deb77912f903aa39766f4217"
+				}
+			}
+		},
+		"clang-callback-o0": {
+			"path": "clang-callback-o0.o",
+			"format": "wasm-object",
+			"bytes": 577,
+			"sha256": "cfb9e3f0d9c7ca7391c5ce0c8600e8095eaff2088fc7c4b81646c032173f0f52",
+			"profile": {
+				"target": "wasm32-wasi",
+				"abi": "wasm32-wasi-preview1",
+				"simd": false,
+				"compatibility": {
+					"kind": "clang-c-scalar-v1",
+					"compilerVersion": "22.1.0",
+					"compilerCommit": "4434dabb69916856b824f68a64b029c67175e532",
+					"sysrootSha256": "a098c6c9ccbae0271eb0ae8e7f40e190bab05c65deb77912f903aa39766f4217"
+				}
+			}
+		},
+		"simd-o0": {
+			"path": "simd-o0.o",
+			"format": "wasm-object",
+			"bytes": 434,
+			"sha256": "22dbe9249a491d877d823ebfed40baa4626a1d5f7c3a0e9b8bf132a176a6696d",
+			"profile": {
+				"target": "wasm32-wasi",
+				"abi": "wasm32-wasi-preview1",
+				"simd": true,
+				"compatibility": {
+					"kind": "gcc-bundle",
+					"manifestSha256": "576ebe8a59ecdda01acaaf71c5f46b8306d3ef75a9d87356728c7fbc9a958d77",
+					"sysrootSha256": "a098c6c9ccbae0271eb0ae8e7f40e190bab05c65deb77912f903aa39766f4217"
+				}
+			}
+		},
+		"callback-o2": {
+			"path": "callback-o2.o",
+			"format": "wasm-object",
+			"bytes": 238,
+			"sha256": "c381333b0ec5c966c376fe5e7b551ff23613e121f3581973e3bca85c3aadb24b",
+			"profile": {
+				"target": "wasm32-wasi",
+				"abi": "wasm32-wasi-preview1",
+				"simd": false,
+				"compatibility": {
+					"kind": "gcc-bundle",
+					"manifestSha256": "576ebe8a59ecdda01acaaf71c5f46b8306d3ef75a9d87356728c7fbc9a958d77",
+					"sysrootSha256": "a098c6c9ccbae0271eb0ae8e7f40e190bab05c65deb77912f903aa39766f4217"
+				}
+			}
+		},
+		"first-o2": {
+			"path": "first-o2.a",
+			"format": "wasm-archive",
+			"bytes": 354,
+			"sha256": "06087bbd696ae3dff210b901c14deff08a9f718710e235a456fa0af6b46957cd",
+			"profile": {
+				"target": "wasm32-wasi",
+				"abi": "wasm32-wasi-preview1",
+				"simd": false,
+				"compatibility": {
+					"kind": "gcc-bundle",
+					"manifestSha256": "576ebe8a59ecdda01acaaf71c5f46b8306d3ef75a9d87356728c7fbc9a958d77",
+					"sysrootSha256": "a098c6c9ccbae0271eb0ae8e7f40e190bab05c65deb77912f903aa39766f4217"
+				}
+			}
+		},
+		"second-o2": {
+			"path": "second-o2.a",
+			"format": "wasm-archive",
+			"bytes": 354,
+			"sha256": "f3c92a5e3847e1121610db6fdf0bd7956b22cef4015f687666f8b103e6fef8ba",
+			"profile": {
+				"target": "wasm32-wasi",
+				"abi": "wasm32-wasi-preview1",
+				"simd": false,
+				"compatibility": {
+					"kind": "gcc-bundle",
+					"manifestSha256": "576ebe8a59ecdda01acaaf71c5f46b8306d3ef75a9d87356728c7fbc9a958d77",
+					"sysrootSha256": "a098c6c9ccbae0271eb0ae8e7f40e190bab05c65deb77912f903aa39766f4217"
+				}
+			}
+		},
+		"initializer-o2": {
+			"path": "initializer-o2.a",
+			"format": "wasm-archive",
+			"bytes": 586,
+			"sha256": "de9799e72dd11e7f5187feac42a9d004594cb8b0e0507b3444b885266c4caf9e",
+			"profile": {
+				"target": "wasm32-wasi",
+				"abi": "wasm32-wasi-preview1",
+				"simd": false,
+				"compatibility": {
+					"kind": "gcc-bundle",
+					"manifestSha256": "576ebe8a59ecdda01acaaf71c5f46b8306d3ef75a9d87356728c7fbc9a958d77",
+					"sysrootSha256": "a098c6c9ccbae0271eb0ae8e7f40e190bab05c65deb77912f903aa39766f4217"
+				}
+			}
+		},
+		"clang-callback-o2": {
+			"path": "clang-callback-o2.o",
+			"format": "wasm-object",
+			"bytes": 481,
+			"sha256": "e1c7c258da70e0ef36c063f1fe72e13eed10f3a718e9568cf452e5087c0aee30",
+			"profile": {
+				"target": "wasm32-wasi",
+				"abi": "wasm32-wasi-preview1",
+				"simd": false,
+				"compatibility": {
+					"kind": "clang-c-scalar-v1",
+					"compilerVersion": "22.1.0",
+					"compilerCommit": "4434dabb69916856b824f68a64b029c67175e532",
+					"sysrootSha256": "a098c6c9ccbae0271eb0ae8e7f40e190bab05c65deb77912f903aa39766f4217"
+				}
+			}
+		},
+		"simd-o2": {
+			"path": "simd-o2.o",
+			"format": "wasm-object",
+			"bytes": 406,
+			"sha256": "69f2f2602d0a3d94bef3ef7dda1717e3bda3241037a06e8eaacf96e4c23b91b2",
+			"profile": {
+				"target": "wasm32-wasi",
+				"abi": "wasm32-wasi-preview1",
+				"simd": true,
+				"compatibility": {
+					"kind": "gcc-bundle",
+					"manifestSha256": "576ebe8a59ecdda01acaaf71c5f46b8306d3ef75a9d87356728c7fbc9a958d77",
+					"sysrootSha256": "a098c6c9ccbae0271eb0ae8e7f40e190bab05c65deb77912f903aa39766f4217"
+				}
+			}
+		}
+	},
+	"cases": [
+		{
+			"id": "external-gcc-object-o0",
+			"success": true,
+			"artifact": {
+				"bytes": 260828,
+				"sha256": "c39d17b17e02d4a97d679a5c9b7943a4c98a9367f67e7ab311cd2013a08e402a",
+				"imports": [
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_close",
+						"kind": 0,
+						"typeIndex": 0
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_fdstat_get",
+						"kind": 0,
+						"typeIndex": 3
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_read",
+						"kind": 0,
+						"typeIndex": 4
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_seek",
+						"kind": 0,
+						"typeIndex": 5
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_write",
+						"kind": 0,
+						"typeIndex": 4
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "proc_exit",
+						"kind": 0,
+						"typeIndex": 6
+					}
+				],
+				"exports": [
+					{
+						"name": "memory",
+						"kind": 2,
+						"index": 0
+					},
+					{
+						"name": "_start",
+						"kind": 0,
+						"index": 7
+					}
+				],
+				"memories": [
+					{
+						"initial": 2,
+						"shared": false,
+						"memory64": false
+					}
+				],
+				"tables": [
+					{
+						"referenceType": 112,
+						"initial": 7,
+						"maximum": 7,
+						"shared": false,
+						"memory64": false
+					}
+				],
+				"customSections": [
+					".debug_loc",
+					".debug_abbrev",
+					".debug_info",
+					".debug_str",
+					".debug_line",
+					".debug_ranges",
+					"name",
+					"producers",
+					"target_features"
+				],
+				"sections": [
+					{
+						"id": 1,
+						"bytes": 173
+					},
+					{
+						"id": 2,
+						"bytes": 209
+					},
+					{
+						"id": 3,
+						"bytes": 90
+					},
+					{
+						"id": 4,
+						"bytes": 5
+					},
+					{
+						"id": 5,
+						"bytes": 3
+					},
+					{
+						"id": 6,
+						"bytes": 13
+					},
+					{
+						"id": 7,
+						"bytes": 19
+					},
+					{
+						"id": 9,
+						"bytes": 12
+					},
+					{
+						"id": 10,
+						"bytes": 50692
+					},
+					{
+						"id": 11,
+						"bytes": 3046
+					},
+					{
+						"id": 0,
+						"bytes": 44406
+					},
+					{
+						"id": 0,
+						"bytes": 15714
+					},
+					{
+						"id": 0,
+						"bytes": 62153
+					},
+					{
+						"id": 0,
+						"bytes": 16027
+					},
+					{
+						"id": 0,
+						"bytes": 62977
+					},
+					{
+						"id": 0,
+						"bytes": 3566
+					},
+					{
+						"id": 0,
+						"bytes": 1384
+					},
+					{
+						"id": 0,
+						"bytes": 142
+					},
+					{
+						"id": 0,
+						"bytes": 134
+					}
+				],
+				"kind": "wasi-preview1-command"
+			},
+			"execution": {
+				"exitCode": 0,
+				"stdout": "object 42\n",
+				"stderr": "",
+				"milliseconds": 2.199999999254942,
+				"peakMemoryBytes": 131072,
+				"files": []
+			},
+			"node": {
+				"host": "node-24.22.1",
+				"exitCode": 0,
+				"stdout": "object 42\n",
+				"stderr": "",
+				"files": []
+			},
+			"inputIdentities": [
+				{
+					"path": "callback-o0.o",
+					"format": "wasm-object",
+					"bytes": 262,
+					"sha256": "ed395c7e3644b95d17291b6e838d76eb67564641b000fa90160febcfcc30bbd0",
+					"profile": {
+						"target": "wasm32-wasi",
+						"abi": "wasm32-wasi-preview1",
+						"simd": false,
+						"compatibility": {
+							"kind": "gcc-bundle",
+							"manifestSha256": "576ebe8a59ecdda01acaaf71c5f46b8306d3ef75a9d87356728c7fbc9a958d77",
+							"sysrootSha256": "a098c6c9ccbae0271eb0ae8e7f40e190bab05c65deb77912f903aa39766f4217"
+						}
+					}
+				}
+			],
+			"native": {
+				"status": "passed",
+				"fixtureSha256": "d9888371ca7f86fec879c743f7e4023c3ae0a98bc730c2dc0610202f423defba",
+				"execution": {
+					"host": "node-24.22.1",
+					"exitCode": 0,
+					"stdout": "object 42\n",
+					"stderr": ""
+				},
+				"artifact": {
+					"path": "/home/seorii/dev/hancomac/.worktrees/wasm-idle-link-inputs-342-20261030/out/link-inputs-native-20261030/external-gcc-object-o0.wasm",
+					"bytes": 209353,
+					"sha256": "98b9d7a88ae403c7b05c31f2c9794a31bd292d5c5f5f0b127c404da1910887ba"
+				}
+			},
+			"fixtureSha256": "04cb12298abf5035ff026367fa450a16a72c70bccd340ac338dd15e5bbb682db"
+		},
+		{
+			"id": "external-archive-first-o0",
+			"success": true,
+			"artifact": {
+				"bytes": 260633,
+				"sha256": "7a65dbabeea011f4a05ce85edf04c643ae5bae67bc8e79e4fa9b62f6882a0369",
+				"imports": [
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_close",
+						"kind": 0,
+						"typeIndex": 2
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_fdstat_get",
+						"kind": 0,
+						"typeIndex": 3
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_read",
+						"kind": 0,
+						"typeIndex": 4
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_seek",
+						"kind": 0,
+						"typeIndex": 5
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_write",
+						"kind": 0,
+						"typeIndex": 4
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "proc_exit",
+						"kind": 0,
+						"typeIndex": 6
+					}
+				],
+				"exports": [
+					{
+						"name": "memory",
+						"kind": 2,
+						"index": 0
+					},
+					{
+						"name": "_start",
+						"kind": 0,
+						"index": 7
+					}
+				],
+				"memories": [
+					{
+						"initial": 2,
+						"shared": false,
+						"memory64": false
+					}
+				],
+				"tables": [
+					{
+						"referenceType": 112,
+						"initial": 6,
+						"maximum": 6,
+						"shared": false,
+						"memory64": false
+					}
+				],
+				"customSections": [
+					".debug_loc",
+					".debug_abbrev",
+					".debug_info",
+					".debug_str",
+					".debug_line",
+					".debug_ranges",
+					"name",
+					"producers",
+					"target_features"
+				],
+				"sections": [
+					{
+						"id": 1,
+						"bytes": 173
+					},
+					{
+						"id": 2,
+						"bytes": 209
+					},
+					{
+						"id": 3,
+						"bytes": 88
+					},
+					{
+						"id": 4,
+						"bytes": 5
+					},
+					{
+						"id": 5,
+						"bytes": 3
+					},
+					{
+						"id": 6,
+						"bytes": 13
+					},
+					{
+						"id": 7,
+						"bytes": 19
+					},
+					{
+						"id": 9,
+						"bytes": 11
+					},
+					{
+						"id": 10,
+						"bytes": 50522
+					},
+					{
+						"id": 11,
+						"bytes": 3047
+					},
+					{
+						"id": 0,
+						"bytes": 44406
+					},
+					{
+						"id": 0,
+						"bytes": 15714
+					},
+					{
+						"id": 0,
+						"bytes": 62153
+					},
+					{
+						"id": 0,
+						"bytes": 16027
+					},
+					{
+						"id": 0,
+						"bytes": 62977
+					},
+					{
+						"id": 0,
+						"bytes": 3566
+					},
+					{
+						"id": 0,
+						"bytes": 1361
+					},
+					{
+						"id": 0,
+						"bytes": 142
+					},
+					{
+						"id": 0,
+						"bytes": 134
+					}
+				],
+				"kind": "wasi-preview1-command"
+			},
+			"execution": {
+				"exitCode": 0,
+				"stdout": "archive 42\n",
+				"stderr": "",
+				"milliseconds": 3,
+				"peakMemoryBytes": 131072,
+				"files": []
+			},
+			"node": {
+				"host": "node-24.22.1",
+				"exitCode": 0,
+				"stdout": "archive 42\n",
+				"stderr": "",
+				"files": []
+			},
+			"inputIdentities": [
+				{
+					"path": "first-o0.a",
+					"format": "wasm-archive",
+					"bytes": 362,
+					"sha256": "540fac4d5c18673e569b02fcbf5a2edbb77d19fad29ffc2c9f0a753160abd207",
+					"profile": {
+						"target": "wasm32-wasi",
+						"abi": "wasm32-wasi-preview1",
+						"simd": false,
+						"compatibility": {
+							"kind": "gcc-bundle",
+							"manifestSha256": "576ebe8a59ecdda01acaaf71c5f46b8306d3ef75a9d87356728c7fbc9a958d77",
+							"sysrootSha256": "a098c6c9ccbae0271eb0ae8e7f40e190bab05c65deb77912f903aa39766f4217"
+						}
+					},
+					"members": [
+						{
+							"path": "first-o0.o",
+							"bytes": 209,
+							"sha256": "c963e7d91fe5fd256e7faaf5387b28b869403356bb50d5d97d407256ba1a55f8"
+						}
+					]
+				},
+				{
+					"path": "second-o0.a",
+					"format": "wasm-archive",
+					"bytes": 362,
+					"sha256": "5a32315025bc6d8541e55545660ddea16d990d694b80647e8b04012951fe3ae6",
+					"profile": {
+						"target": "wasm32-wasi",
+						"abi": "wasm32-wasi-preview1",
+						"simd": false,
+						"compatibility": {
+							"kind": "gcc-bundle",
+							"manifestSha256": "576ebe8a59ecdda01acaaf71c5f46b8306d3ef75a9d87356728c7fbc9a958d77",
+							"sysrootSha256": "a098c6c9ccbae0271eb0ae8e7f40e190bab05c65deb77912f903aa39766f4217"
+						}
+					},
+					"members": [
+						{
+							"path": "second-o0.o",
+							"bytes": 209,
+							"sha256": "670b9aaf6597cafc5a5d7f3b3eadd5f39c0de025730afcc122d535ec417de8ef"
+						}
+					]
+				}
+			],
+			"native": {
+				"status": "passed",
+				"fixtureSha256": "95950696aab4b75a5cf7a99b57654a8611a808eb24acde307f7bb1ee55b44dce",
+				"execution": {
+					"host": "node-24.22.1",
+					"exitCode": 0,
+					"stdout": "archive 42\n",
+					"stderr": ""
+				},
+				"artifact": {
+					"path": "/home/seorii/dev/hancomac/.worktrees/wasm-idle-link-inputs-342-20261030/out/link-inputs-native-20261030/external-archive-first-o0.wasm",
+					"bytes": 209161,
+					"sha256": "d5938bda54872669ad4420f2f71611a288ecc37fe1372f2cb999955cb90de50e"
+				}
+			},
+			"fixtureSha256": "39f7ea7a29276ad31734dbeccff767dd2a5decf402f88053f617e195947be409"
+		},
+		{
+			"id": "external-archive-second-o0",
+			"success": true,
+			"artifact": {
+				"bytes": 260633,
+				"sha256": "5217c79db3d221e46d479d147404a246b7332556a0c3e1e3211ac5367b6609c7",
+				"imports": [
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_close",
+						"kind": 0,
+						"typeIndex": 2
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_fdstat_get",
+						"kind": 0,
+						"typeIndex": 3
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_read",
+						"kind": 0,
+						"typeIndex": 4
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_seek",
+						"kind": 0,
+						"typeIndex": 5
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_write",
+						"kind": 0,
+						"typeIndex": 4
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "proc_exit",
+						"kind": 0,
+						"typeIndex": 6
+					}
+				],
+				"exports": [
+					{
+						"name": "memory",
+						"kind": 2,
+						"index": 0
+					},
+					{
+						"name": "_start",
+						"kind": 0,
+						"index": 7
+					}
+				],
+				"memories": [
+					{
+						"initial": 2,
+						"shared": false,
+						"memory64": false
+					}
+				],
+				"tables": [
+					{
+						"referenceType": 112,
+						"initial": 6,
+						"maximum": 6,
+						"shared": false,
+						"memory64": false
+					}
+				],
+				"customSections": [
+					".debug_loc",
+					".debug_abbrev",
+					".debug_info",
+					".debug_str",
+					".debug_line",
+					".debug_ranges",
+					"name",
+					"producers",
+					"target_features"
+				],
+				"sections": [
+					{
+						"id": 1,
+						"bytes": 173
+					},
+					{
+						"id": 2,
+						"bytes": 209
+					},
+					{
+						"id": 3,
+						"bytes": 88
+					},
+					{
+						"id": 4,
+						"bytes": 5
+					},
+					{
+						"id": 5,
+						"bytes": 3
+					},
+					{
+						"id": 6,
+						"bytes": 13
+					},
+					{
+						"id": 7,
+						"bytes": 19
+					},
+					{
+						"id": 9,
+						"bytes": 11
+					},
+					{
+						"id": 10,
+						"bytes": 50522
+					},
+					{
+						"id": 11,
+						"bytes": 3047
+					},
+					{
+						"id": 0,
+						"bytes": 44406
+					},
+					{
+						"id": 0,
+						"bytes": 15714
+					},
+					{
+						"id": 0,
+						"bytes": 62153
+					},
+					{
+						"id": 0,
+						"bytes": 16027
+					},
+					{
+						"id": 0,
+						"bytes": 62977
+					},
+					{
+						"id": 0,
+						"bytes": 3566
+					},
+					{
+						"id": 0,
+						"bytes": 1361
+					},
+					{
+						"id": 0,
+						"bytes": 142
+					},
+					{
+						"id": 0,
+						"bytes": 134
+					}
+				],
+				"kind": "wasi-preview1-command"
+			},
+			"execution": {
+				"exitCode": 0,
+				"stdout": "archive 53\n",
+				"stderr": "",
+				"milliseconds": 2.100000001490116,
+				"peakMemoryBytes": 131072,
+				"files": []
+			},
+			"node": {
+				"host": "node-24.22.1",
+				"exitCode": 0,
+				"stdout": "archive 53\n",
+				"stderr": "",
+				"files": []
+			},
+			"inputIdentities": [
+				{
+					"path": "second-o0.a",
+					"format": "wasm-archive",
+					"bytes": 362,
+					"sha256": "5a32315025bc6d8541e55545660ddea16d990d694b80647e8b04012951fe3ae6",
+					"profile": {
+						"target": "wasm32-wasi",
+						"abi": "wasm32-wasi-preview1",
+						"simd": false,
+						"compatibility": {
+							"kind": "gcc-bundle",
+							"manifestSha256": "576ebe8a59ecdda01acaaf71c5f46b8306d3ef75a9d87356728c7fbc9a958d77",
+							"sysrootSha256": "a098c6c9ccbae0271eb0ae8e7f40e190bab05c65deb77912f903aa39766f4217"
+						}
+					},
+					"members": [
+						{
+							"path": "second-o0.o",
+							"bytes": 209,
+							"sha256": "670b9aaf6597cafc5a5d7f3b3eadd5f39c0de025730afcc122d535ec417de8ef"
+						}
+					]
+				},
+				{
+					"path": "first-o0.a",
+					"format": "wasm-archive",
+					"bytes": 362,
+					"sha256": "540fac4d5c18673e569b02fcbf5a2edbb77d19fad29ffc2c9f0a753160abd207",
+					"profile": {
+						"target": "wasm32-wasi",
+						"abi": "wasm32-wasi-preview1",
+						"simd": false,
+						"compatibility": {
+							"kind": "gcc-bundle",
+							"manifestSha256": "576ebe8a59ecdda01acaaf71c5f46b8306d3ef75a9d87356728c7fbc9a958d77",
+							"sysrootSha256": "a098c6c9ccbae0271eb0ae8e7f40e190bab05c65deb77912f903aa39766f4217"
+						}
+					},
+					"members": [
+						{
+							"path": "first-o0.o",
+							"bytes": 209,
+							"sha256": "c963e7d91fe5fd256e7faaf5387b28b869403356bb50d5d97d407256ba1a55f8"
+						}
+					]
+				}
+			],
+			"native": {
+				"status": "passed",
+				"fixtureSha256": "1a0b517cbc4f3699fc1f2fc55ffb6e0bac15ec53edd24ec52e1f345cb3d44046",
+				"execution": {
+					"host": "node-24.22.1",
+					"exitCode": 0,
+					"stdout": "archive 53\n",
+					"stderr": ""
+				},
+				"artifact": {
+					"path": "/home/seorii/dev/hancomac/.worktrees/wasm-idle-link-inputs-342-20261030/out/link-inputs-native-20261030/external-archive-second-o0.wasm",
+					"bytes": 209162,
+					"sha256": "1c61ec79e7d93909c9e15fbb060e4553f440d463a191affb1195d0cfd9739e36"
+				}
+			},
+			"fixtureSha256": "187897626b865591d89a74a9d9fd049a1e87f7122832b6c9b6f4a502b4676d22"
+		},
+		{
+			"id": "external-cpp-initializer-o0",
+			"success": true,
+			"artifact": {
+				"bytes": 260966,
+				"sha256": "a876091ef7fca4266bbdaf222fae7a405b12e1c813b84268cbcf7668c39e9194",
+				"imports": [
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_close",
+						"kind": 0,
+						"typeIndex": 2
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_fdstat_get",
+						"kind": 0,
+						"typeIndex": 3
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_read",
+						"kind": 0,
+						"typeIndex": 4
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_seek",
+						"kind": 0,
+						"typeIndex": 5
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_write",
+						"kind": 0,
+						"typeIndex": 4
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "proc_exit",
+						"kind": 0,
+						"typeIndex": 6
+					}
+				],
+				"exports": [
+					{
+						"name": "memory",
+						"kind": 2,
+						"index": 0
+					},
+					{
+						"name": "_start",
+						"kind": 0,
+						"index": 7
+					}
+				],
+				"memories": [
+					{
+						"initial": 2,
+						"shared": false,
+						"memory64": false
+					}
+				],
+				"tables": [
+					{
+						"referenceType": 112,
+						"initial": 6,
+						"maximum": 6,
+						"shared": false,
+						"memory64": false
+					}
+				],
+				"customSections": [
+					".debug_loc",
+					".debug_abbrev",
+					".debug_info",
+					".debug_str",
+					".debug_line",
+					".debug_ranges",
+					"name",
+					"producers",
+					"target_features"
+				],
+				"sections": [
+					{
+						"id": 1,
+						"bytes": 173
+					},
+					{
+						"id": 2,
+						"bytes": 209
+					},
+					{
+						"id": 3,
+						"bytes": 91
+					},
+					{
+						"id": 4,
+						"bytes": 5
+					},
+					{
+						"id": 5,
+						"bytes": 3
+					},
+					{
+						"id": 6,
+						"bytes": 13
+					},
+					{
+						"id": 7,
+						"bytes": 19
+					},
+					{
+						"id": 9,
+						"bytes": 11
+					},
+					{
+						"id": 10,
+						"bytes": 50730
+					},
+					{
+						"id": 11,
+						"bytes": 3073
+					},
+					{
+						"id": 0,
+						"bytes": 44406
+					},
+					{
+						"id": 0,
+						"bytes": 15714
+					},
+					{
+						"id": 0,
+						"bytes": 62153
+					},
+					{
+						"id": 0,
+						"bytes": 16027
+					},
+					{
+						"id": 0,
+						"bytes": 62977
+					},
+					{
+						"id": 0,
+						"bytes": 3566
+					},
+					{
+						"id": 0,
+						"bytes": 1457
+					},
+					{
+						"id": 0,
+						"bytes": 142
+					},
+					{
+						"id": 0,
+						"bytes": 134
+					}
+				],
+				"kind": "wasi-preview1-command"
+			},
+			"execution": {
+				"exitCode": 0,
+				"stdout": "initializer 42\n",
+				"stderr": "",
+				"milliseconds": 2.199999999254942,
+				"peakMemoryBytes": 131072,
+				"files": []
+			},
+			"node": {
+				"host": "node-24.22.1",
+				"exitCode": 0,
+				"stdout": "initializer 42\n",
+				"stderr": "",
+				"files": []
+			},
+			"inputIdentities": [
+				{
+					"path": "initializer-o0.a",
+					"format": "wasm-archive",
+					"bytes": 850,
+					"sha256": "04c1de2a912c797de1b52d7b37eab8fc6abe5f837db0b2be9a5161daf74343de",
+					"profile": {
+						"target": "wasm32-wasi",
+						"abi": "wasm32-wasi-preview1",
+						"simd": false,
+						"compatibility": {
+							"kind": "gcc-bundle",
+							"manifestSha256": "576ebe8a59ecdda01acaaf71c5f46b8306d3ef75a9d87356728c7fbc9a958d77",
+							"sysrootSha256": "a098c6c9ccbae0271eb0ae8e7f40e190bab05c65deb77912f903aa39766f4217"
+						}
+					},
+					"members": [
+						{
+							"path": "initializer-o0.o",
+							"bytes": 599,
+							"sha256": "ef628dff61702f3232cfc9d132c3267a094b4999c80506fec349bb29f1c32bc9"
+						}
+					]
+				}
+			],
+			"native": {
+				"status": "passed",
+				"fixtureSha256": "2a2c05ace8b86dad0c0243c4307fbebe75d8dd97c84c57416db088dad76e9f33",
+				"execution": {
+					"host": "node-24.22.1",
+					"exitCode": 0,
+					"stdout": "initializer 42\n",
+					"stderr": ""
+				},
+				"artifact": {
+					"path": "/home/seorii/dev/hancomac/.worktrees/wasm-idle-link-inputs-342-20261030/out/link-inputs-native-20261030/external-cpp-initializer-o0.wasm",
+					"bytes": 209496,
+					"sha256": "90caa160516fad94934f3b3ab51cd0a81d946b478560eb278559f17df531a08a"
+				}
+			},
+			"fixtureSha256": "63b67815b7f39dd4d91ec0f392ca1336a8c314939d45d1222b8b76eab129bc26"
+		},
+		{
+			"id": "external-clang-scalar-o0",
+			"success": true,
+			"artifact": {
+				"bytes": 260849,
+				"sha256": "ccee4bd81966e17863b212d50d020859ddce62cb8f832f80a0f8af7c779668cc",
+				"imports": [
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_close",
+						"kind": 0,
+						"typeIndex": 0
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_fdstat_get",
+						"kind": 0,
+						"typeIndex": 3
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_read",
+						"kind": 0,
+						"typeIndex": 4
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_seek",
+						"kind": 0,
+						"typeIndex": 5
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_write",
+						"kind": 0,
+						"typeIndex": 4
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "proc_exit",
+						"kind": 0,
+						"typeIndex": 6
+					}
+				],
+				"exports": [
+					{
+						"name": "memory",
+						"kind": 2,
+						"index": 0
+					},
+					{
+						"name": "_start",
+						"kind": 0,
+						"index": 7
+					}
+				],
+				"memories": [
+					{
+						"initial": 2,
+						"shared": false,
+						"memory64": false
+					}
+				],
+				"tables": [
+					{
+						"referenceType": 112,
+						"initial": 7,
+						"maximum": 7,
+						"shared": false,
+						"memory64": false
+					}
+				],
+				"customSections": [
+					".debug_loc",
+					".debug_abbrev",
+					".debug_info",
+					".debug_str",
+					".debug_line",
+					".debug_ranges",
+					"name",
+					"producers",
+					"target_features"
+				],
+				"sections": [
+					{
+						"id": 1,
+						"bytes": 173
+					},
+					{
+						"id": 2,
+						"bytes": 209
+					},
+					{
+						"id": 3,
+						"bytes": 90
+					},
+					{
+						"id": 4,
+						"bytes": 5
+					},
+					{
+						"id": 5,
+						"bytes": 3
+					},
+					{
+						"id": 6,
+						"bytes": 13
+					},
+					{
+						"id": 7,
+						"bytes": 19
+					},
+					{
+						"id": 9,
+						"bytes": 12
+					},
+					{
+						"id": 10,
+						"bytes": 50683
+					},
+					{
+						"id": 11,
+						"bytes": 3046
+					},
+					{
+						"id": 0,
+						"bytes": 44406
+					},
+					{
+						"id": 0,
+						"bytes": 15714
+					},
+					{
+						"id": 0,
+						"bytes": 62153
+					},
+					{
+						"id": 0,
+						"bytes": 16027
+					},
+					{
+						"id": 0,
+						"bytes": 62977
+					},
+					{
+						"id": 0,
+						"bytes": 3566
+					},
+					{
+						"id": 0,
+						"bytes": 1384
+					},
+					{
+						"id": 0,
+						"bytes": 142
+					},
+					{
+						"id": 0,
+						"bytes": 164
+					}
+				],
+				"kind": "wasi-preview1-command"
+			},
+			"execution": {
+				"exitCode": 0,
+				"stdout": "object 42\n",
+				"stderr": "",
+				"milliseconds": 1.6000000014901161,
+				"peakMemoryBytes": 131072,
+				"files": []
+			},
+			"node": {
+				"host": "node-24.22.1",
+				"exitCode": 0,
+				"stdout": "object 42\n",
+				"stderr": "",
+				"files": []
+			},
+			"inputIdentities": [
+				{
+					"path": "clang-callback-o0.o",
+					"format": "wasm-object",
+					"bytes": 577,
+					"sha256": "cfb9e3f0d9c7ca7391c5ce0c8600e8095eaff2088fc7c4b81646c032173f0f52",
+					"profile": {
+						"target": "wasm32-wasi",
+						"abi": "wasm32-wasi-preview1",
+						"simd": false,
+						"compatibility": {
+							"kind": "clang-c-scalar-v1",
+							"compilerVersion": "22.1.0",
+							"compilerCommit": "4434dabb69916856b824f68a64b029c67175e532",
+							"sysrootSha256": "a098c6c9ccbae0271eb0ae8e7f40e190bab05c65deb77912f903aa39766f4217"
+						}
+					}
+				}
+			],
+			"native": {
+				"status": "passed",
+				"fixtureSha256": "ab64c3f877055a81138d89b15093f0f5ca148dc5b2a3f4de9d50301ef8bbbbaf",
+				"execution": {
+					"host": "node-24.22.1",
+					"exitCode": 0,
+					"stdout": "object 42\n",
+					"stderr": ""
+				},
+				"artifact": {
+					"path": "/home/seorii/dev/hancomac/.worktrees/wasm-idle-link-inputs-342-20261030/out/link-inputs-native-20261030/external-clang-scalar-o0.wasm",
+					"bytes": 209376,
+					"sha256": "171f42d9602163d41a55932fa63005197fefb02cd9d28b482d89f83f70800f62"
+				}
+			},
+			"fixtureSha256": "333d2b1709f8573a52f4bbfb1863f76f8e6dba85bc4f9f3f08986be2ec17b096"
+		},
+		{
+			"id": "external-gcc-simd-o0",
+			"success": true,
+			"artifact": {
+				"bytes": 260842,
+				"sha256": "cebbe04cc4a6e1c7d7dedbfa680b7191836279dff4d356ead48437e79918c3ba",
+				"imports": [
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_close",
+						"kind": 0,
+						"typeIndex": 2
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_fdstat_get",
+						"kind": 0,
+						"typeIndex": 3
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_read",
+						"kind": 0,
+						"typeIndex": 4
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_seek",
+						"kind": 0,
+						"typeIndex": 5
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_write",
+						"kind": 0,
+						"typeIndex": 4
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "proc_exit",
+						"kind": 0,
+						"typeIndex": 6
+					}
+				],
+				"exports": [
+					{
+						"name": "memory",
+						"kind": 2,
+						"index": 0
+					},
+					{
+						"name": "_start",
+						"kind": 0,
+						"index": 7
+					}
+				],
+				"memories": [
+					{
+						"initial": 2,
+						"shared": false,
+						"memory64": false
+					}
+				],
+				"tables": [
+					{
+						"referenceType": 112,
+						"initial": 6,
+						"maximum": 6,
+						"shared": false,
+						"memory64": false
+					}
+				],
+				"customSections": [
+					".debug_loc",
+					".debug_abbrev",
+					".debug_info",
+					".debug_str",
+					".debug_line",
+					".debug_ranges",
+					"name",
+					"producers",
+					"target_features"
+				],
+				"sections": [
+					{
+						"id": 1,
+						"bytes": 173
+					},
+					{
+						"id": 2,
+						"bytes": 209
+					},
+					{
+						"id": 3,
+						"bytes": 88
+					},
+					{
+						"id": 4,
+						"bytes": 5
+					},
+					{
+						"id": 5,
+						"bytes": 3
+					},
+					{
+						"id": 6,
+						"bytes": 13
+					},
+					{
+						"id": 7,
+						"bytes": 19
+					},
+					{
+						"id": 9,
+						"bytes": 11
+					},
+					{
+						"id": 10,
+						"bytes": 50735
+					},
+					{
+						"id": 11,
+						"bytes": 3044
+					},
+					{
+						"id": 0,
+						"bytes": 44406
+					},
+					{
+						"id": 0,
+						"bytes": 15714
+					},
+					{
+						"id": 0,
+						"bytes": 62153
+					},
+					{
+						"id": 0,
+						"bytes": 16027
+					},
+					{
+						"id": 0,
+						"bytes": 62977
+					},
+					{
+						"id": 0,
+						"bytes": 3566
+					},
+					{
+						"id": 0,
+						"bytes": 1360
+					},
+					{
+						"id": 0,
+						"bytes": 142
+					},
+					{
+						"id": 0,
+						"bytes": 134
+					}
+				],
+				"kind": "wasi-preview1-command"
+			},
+			"execution": {
+				"exitCode": 0,
+				"stdout": "simd 42\n",
+				"stderr": "",
+				"milliseconds": 1.699999999254942,
+				"peakMemoryBytes": 131072,
+				"files": []
+			},
+			"node": {
+				"host": "node-24.22.1",
+				"exitCode": 0,
+				"stdout": "simd 42\n",
+				"stderr": "",
+				"files": []
+			},
+			"inputIdentities": [
+				{
+					"path": "simd-o0.o",
+					"format": "wasm-object",
+					"bytes": 434,
+					"sha256": "22dbe9249a491d877d823ebfed40baa4626a1d5f7c3a0e9b8bf132a176a6696d",
+					"profile": {
+						"target": "wasm32-wasi",
+						"abi": "wasm32-wasi-preview1",
+						"simd": true,
+						"compatibility": {
+							"kind": "gcc-bundle",
+							"manifestSha256": "576ebe8a59ecdda01acaaf71c5f46b8306d3ef75a9d87356728c7fbc9a958d77",
+							"sysrootSha256": "a098c6c9ccbae0271eb0ae8e7f40e190bab05c65deb77912f903aa39766f4217"
+						}
+					}
+				}
+			],
+			"native": {
+				"status": "passed",
+				"fixtureSha256": "b16a743e302b305d9c38ea1d91945206bad9ffe625b66c756d62fbe1b3ad83ab",
+				"execution": {
+					"host": "node-24.22.1",
+					"exitCode": 0,
+					"stdout": "simd 42\n",
+					"stderr": ""
+				},
+				"artifact": {
+					"path": "/home/seorii/dev/hancomac/.worktrees/wasm-idle-link-inputs-342-20261030/out/link-inputs-native-20261030/external-gcc-simd-o0.wasm",
+					"bytes": 209365,
+					"sha256": "87383a4677ee9cddec5ddd2e8363071d35da6e228e369db5351064ea72885501"
+				}
+			},
+			"fixtureSha256": "a2bf77dac1af198f116122e36082b8fd945ddb6386d3f32b324a660b6d806ac8"
+		},
+		{
+			"id": "external-gcc-object-o2",
+			"success": true,
+			"artifact": {
+				"bytes": 260746,
+				"sha256": "3003202809c5ff1baf940eb55de839a8406b47ca891ea70f8c0b18973fa3755e",
+				"imports": [
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_close",
+						"kind": 0,
+						"typeIndex": 0
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_fdstat_get",
+						"kind": 0,
+						"typeIndex": 3
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_read",
+						"kind": 0,
+						"typeIndex": 4
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_seek",
+						"kind": 0,
+						"typeIndex": 5
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_write",
+						"kind": 0,
+						"typeIndex": 4
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "proc_exit",
+						"kind": 0,
+						"typeIndex": 6
+					}
+				],
+				"exports": [
+					{
+						"name": "memory",
+						"kind": 2,
+						"index": 0
+					},
+					{
+						"name": "_start",
+						"kind": 0,
+						"index": 7
+					}
+				],
+				"memories": [
+					{
+						"initial": 2,
+						"shared": false,
+						"memory64": false
+					}
+				],
+				"tables": [
+					{
+						"referenceType": 112,
+						"initial": 7,
+						"maximum": 7,
+						"shared": false,
+						"memory64": false
+					}
+				],
+				"customSections": [
+					".debug_loc",
+					".debug_abbrev",
+					".debug_info",
+					".debug_str",
+					".debug_line",
+					".debug_ranges",
+					"name",
+					"producers",
+					"target_features"
+				],
+				"sections": [
+					{
+						"id": 1,
+						"bytes": 173
+					},
+					{
+						"id": 2,
+						"bytes": 209
+					},
+					{
+						"id": 3,
+						"bytes": 90
+					},
+					{
+						"id": 4,
+						"bytes": 5
+					},
+					{
+						"id": 5,
+						"bytes": 3
+					},
+					{
+						"id": 6,
+						"bytes": 13
+					},
+					{
+						"id": 7,
+						"bytes": 19
+					},
+					{
+						"id": 9,
+						"bytes": 12
+					},
+					{
+						"id": 10,
+						"bytes": 50610
+					},
+					{
+						"id": 11,
+						"bytes": 3046
+					},
+					{
+						"id": 0,
+						"bytes": 44406
+					},
+					{
+						"id": 0,
+						"bytes": 15714
+					},
+					{
+						"id": 0,
+						"bytes": 62153
+					},
+					{
+						"id": 0,
+						"bytes": 16027
+					},
+					{
+						"id": 0,
+						"bytes": 62977
+					},
+					{
+						"id": 0,
+						"bytes": 3566
+					},
+					{
+						"id": 0,
+						"bytes": 1384
+					},
+					{
+						"id": 0,
+						"bytes": 142
+					},
+					{
+						"id": 0,
+						"bytes": 134
+					}
+				],
+				"kind": "wasi-preview1-command"
+			},
+			"execution": {
+				"exitCode": 0,
+				"stdout": "object 42\n",
+				"stderr": "",
+				"milliseconds": 1.800000000745058,
+				"peakMemoryBytes": 131072,
+				"files": []
+			},
+			"node": {
+				"host": "node-24.22.1",
+				"exitCode": 0,
+				"stdout": "object 42\n",
+				"stderr": "",
+				"files": []
+			},
+			"inputIdentities": [
+				{
+					"path": "callback-o2.o",
+					"format": "wasm-object",
+					"bytes": 238,
+					"sha256": "c381333b0ec5c966c376fe5e7b551ff23613e121f3581973e3bca85c3aadb24b",
+					"profile": {
+						"target": "wasm32-wasi",
+						"abi": "wasm32-wasi-preview1",
+						"simd": false,
+						"compatibility": {
+							"kind": "gcc-bundle",
+							"manifestSha256": "576ebe8a59ecdda01acaaf71c5f46b8306d3ef75a9d87356728c7fbc9a958d77",
+							"sysrootSha256": "a098c6c9ccbae0271eb0ae8e7f40e190bab05c65deb77912f903aa39766f4217"
+						}
+					}
+				}
+			],
+			"native": {
+				"status": "passed",
+				"fixtureSha256": "ff510fa16d600da20607e76331b8742ac8dcafd39dc5f6f12b3f526e362f6bce",
+				"execution": {
+					"host": "node-24.22.1",
+					"exitCode": 0,
+					"stdout": "object 42\n",
+					"stderr": ""
+				},
+				"artifact": {
+					"path": "/home/seorii/dev/hancomac/.worktrees/wasm-idle-link-inputs-342-20261030/out/link-inputs-native-20261030/external-gcc-object-o2.wasm",
+					"bytes": 209271,
+					"sha256": "91a61d22feb9c374cc315a062b959f4d8ddb699f52e3d8f5dbd0c9d474dd5db9"
+				}
+			},
+			"fixtureSha256": "d45719b839320e3fac9e28f47e7b45875171343cb6e37058fb332fdee202eb78"
+		},
+		{
+			"id": "external-archive-first-o2",
+			"success": true,
+			"artifact": {
+				"bytes": 260595,
+				"sha256": "3a2e8b83c6b1fa90b1d5e86fc3701ca00ed4078140dbb950ef232e3f1706fbb7",
+				"imports": [
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_close",
+						"kind": 0,
+						"typeIndex": 2
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_fdstat_get",
+						"kind": 0,
+						"typeIndex": 3
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_read",
+						"kind": 0,
+						"typeIndex": 4
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_seek",
+						"kind": 0,
+						"typeIndex": 5
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_write",
+						"kind": 0,
+						"typeIndex": 4
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "proc_exit",
+						"kind": 0,
+						"typeIndex": 6
+					}
+				],
+				"exports": [
+					{
+						"name": "memory",
+						"kind": 2,
+						"index": 0
+					},
+					{
+						"name": "_start",
+						"kind": 0,
+						"index": 7
+					}
+				],
+				"memories": [
+					{
+						"initial": 2,
+						"shared": false,
+						"memory64": false
+					}
+				],
+				"tables": [
+					{
+						"referenceType": 112,
+						"initial": 6,
+						"maximum": 6,
+						"shared": false,
+						"memory64": false
+					}
+				],
+				"customSections": [
+					".debug_loc",
+					".debug_abbrev",
+					".debug_info",
+					".debug_str",
+					".debug_line",
+					".debug_ranges",
+					"name",
+					"producers",
+					"target_features"
+				],
+				"sections": [
+					{
+						"id": 1,
+						"bytes": 173
+					},
+					{
+						"id": 2,
+						"bytes": 209
+					},
+					{
+						"id": 3,
+						"bytes": 88
+					},
+					{
+						"id": 4,
+						"bytes": 5
+					},
+					{
+						"id": 5,
+						"bytes": 3
+					},
+					{
+						"id": 6,
+						"bytes": 13
+					},
+					{
+						"id": 7,
+						"bytes": 19
+					},
+					{
+						"id": 9,
+						"bytes": 11
+					},
+					{
+						"id": 10,
+						"bytes": 50484
+					},
+					{
+						"id": 11,
+						"bytes": 3047
+					},
+					{
+						"id": 0,
+						"bytes": 44406
+					},
+					{
+						"id": 0,
+						"bytes": 15714
+					},
+					{
+						"id": 0,
+						"bytes": 62153
+					},
+					{
+						"id": 0,
+						"bytes": 16027
+					},
+					{
+						"id": 0,
+						"bytes": 62977
+					},
+					{
+						"id": 0,
+						"bytes": 3566
+					},
+					{
+						"id": 0,
+						"bytes": 1361
+					},
+					{
+						"id": 0,
+						"bytes": 142
+					},
+					{
+						"id": 0,
+						"bytes": 134
+					}
+				],
+				"kind": "wasi-preview1-command"
+			},
+			"execution": {
+				"exitCode": 0,
+				"stdout": "archive 42\n",
+				"stderr": "",
+				"milliseconds": 1.8999999985098839,
+				"peakMemoryBytes": 131072,
+				"files": []
+			},
+			"node": {
+				"host": "node-24.22.1",
+				"exitCode": 0,
+				"stdout": "archive 42\n",
+				"stderr": "",
+				"files": []
+			},
+			"inputIdentities": [
+				{
+					"path": "first-o2.a",
+					"format": "wasm-archive",
+					"bytes": 354,
+					"sha256": "06087bbd696ae3dff210b901c14deff08a9f718710e235a456fa0af6b46957cd",
+					"profile": {
+						"target": "wasm32-wasi",
+						"abi": "wasm32-wasi-preview1",
+						"simd": false,
+						"compatibility": {
+							"kind": "gcc-bundle",
+							"manifestSha256": "576ebe8a59ecdda01acaaf71c5f46b8306d3ef75a9d87356728c7fbc9a958d77",
+							"sysrootSha256": "a098c6c9ccbae0271eb0ae8e7f40e190bab05c65deb77912f903aa39766f4217"
+						}
+					},
+					"members": [
+						{
+							"path": "first-o2.o",
+							"bytes": 201,
+							"sha256": "93ab04ccc6af94c5f1ba8d47d1bedebadc698daf1b533f35c60b275b3a9cb6d1"
+						}
+					]
+				},
+				{
+					"path": "second-o2.a",
+					"format": "wasm-archive",
+					"bytes": 354,
+					"sha256": "f3c92a5e3847e1121610db6fdf0bd7956b22cef4015f687666f8b103e6fef8ba",
+					"profile": {
+						"target": "wasm32-wasi",
+						"abi": "wasm32-wasi-preview1",
+						"simd": false,
+						"compatibility": {
+							"kind": "gcc-bundle",
+							"manifestSha256": "576ebe8a59ecdda01acaaf71c5f46b8306d3ef75a9d87356728c7fbc9a958d77",
+							"sysrootSha256": "a098c6c9ccbae0271eb0ae8e7f40e190bab05c65deb77912f903aa39766f4217"
+						}
+					},
+					"members": [
+						{
+							"path": "second-o2.o",
+							"bytes": 201,
+							"sha256": "6ebef5abc0a6a4071adb9b7b972fefc90f3fc6303b4efa34f4491a106f8c1016"
+						}
+					]
+				}
+			],
+			"native": {
+				"status": "passed",
+				"fixtureSha256": "bb2ae9a0cb70b3d2abe37a3dd77021a8e5784a682dac77c082f5fcdfdd87793c",
+				"execution": {
+					"host": "node-24.22.1",
+					"exitCode": 0,
+					"stdout": "archive 42\n",
+					"stderr": ""
+				},
+				"artifact": {
+					"path": "/home/seorii/dev/hancomac/.worktrees/wasm-idle-link-inputs-342-20261030/out/link-inputs-native-20261030/external-archive-first-o2.wasm",
+					"bytes": 209123,
+					"sha256": "8b63ccbabb1c83c1767bae3722e72953b97e7572d808e94dd31103a72bd7566d"
+				}
+			},
+			"fixtureSha256": "0ba6776ef60d0b74c059be3ec7d0ac4dbcf43921cfbf27fdb812da3b0f2ec928"
+		},
+		{
+			"id": "external-archive-second-o2",
+			"success": true,
+			"artifact": {
+				"bytes": 260595,
+				"sha256": "bfc2e636f3ae69cc751515858885c47b0e91e96a48aa773ef826fde51244ecfc",
+				"imports": [
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_close",
+						"kind": 0,
+						"typeIndex": 2
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_fdstat_get",
+						"kind": 0,
+						"typeIndex": 3
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_read",
+						"kind": 0,
+						"typeIndex": 4
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_seek",
+						"kind": 0,
+						"typeIndex": 5
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_write",
+						"kind": 0,
+						"typeIndex": 4
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "proc_exit",
+						"kind": 0,
+						"typeIndex": 6
+					}
+				],
+				"exports": [
+					{
+						"name": "memory",
+						"kind": 2,
+						"index": 0
+					},
+					{
+						"name": "_start",
+						"kind": 0,
+						"index": 7
+					}
+				],
+				"memories": [
+					{
+						"initial": 2,
+						"shared": false,
+						"memory64": false
+					}
+				],
+				"tables": [
+					{
+						"referenceType": 112,
+						"initial": 6,
+						"maximum": 6,
+						"shared": false,
+						"memory64": false
+					}
+				],
+				"customSections": [
+					".debug_loc",
+					".debug_abbrev",
+					".debug_info",
+					".debug_str",
+					".debug_line",
+					".debug_ranges",
+					"name",
+					"producers",
+					"target_features"
+				],
+				"sections": [
+					{
+						"id": 1,
+						"bytes": 173
+					},
+					{
+						"id": 2,
+						"bytes": 209
+					},
+					{
+						"id": 3,
+						"bytes": 88
+					},
+					{
+						"id": 4,
+						"bytes": 5
+					},
+					{
+						"id": 5,
+						"bytes": 3
+					},
+					{
+						"id": 6,
+						"bytes": 13
+					},
+					{
+						"id": 7,
+						"bytes": 19
+					},
+					{
+						"id": 9,
+						"bytes": 11
+					},
+					{
+						"id": 10,
+						"bytes": 50484
+					},
+					{
+						"id": 11,
+						"bytes": 3047
+					},
+					{
+						"id": 0,
+						"bytes": 44406
+					},
+					{
+						"id": 0,
+						"bytes": 15714
+					},
+					{
+						"id": 0,
+						"bytes": 62153
+					},
+					{
+						"id": 0,
+						"bytes": 16027
+					},
+					{
+						"id": 0,
+						"bytes": 62977
+					},
+					{
+						"id": 0,
+						"bytes": 3566
+					},
+					{
+						"id": 0,
+						"bytes": 1361
+					},
+					{
+						"id": 0,
+						"bytes": 142
+					},
+					{
+						"id": 0,
+						"bytes": 134
+					}
+				],
+				"kind": "wasi-preview1-command"
+			},
+			"execution": {
+				"exitCode": 0,
+				"stdout": "archive 53\n",
+				"stderr": "",
+				"milliseconds": 3.199999999254942,
+				"peakMemoryBytes": 131072,
+				"files": []
+			},
+			"node": {
+				"host": "node-24.22.1",
+				"exitCode": 0,
+				"stdout": "archive 53\n",
+				"stderr": "",
+				"files": []
+			},
+			"inputIdentities": [
+				{
+					"path": "second-o2.a",
+					"format": "wasm-archive",
+					"bytes": 354,
+					"sha256": "f3c92a5e3847e1121610db6fdf0bd7956b22cef4015f687666f8b103e6fef8ba",
+					"profile": {
+						"target": "wasm32-wasi",
+						"abi": "wasm32-wasi-preview1",
+						"simd": false,
+						"compatibility": {
+							"kind": "gcc-bundle",
+							"manifestSha256": "576ebe8a59ecdda01acaaf71c5f46b8306d3ef75a9d87356728c7fbc9a958d77",
+							"sysrootSha256": "a098c6c9ccbae0271eb0ae8e7f40e190bab05c65deb77912f903aa39766f4217"
+						}
+					},
+					"members": [
+						{
+							"path": "second-o2.o",
+							"bytes": 201,
+							"sha256": "6ebef5abc0a6a4071adb9b7b972fefc90f3fc6303b4efa34f4491a106f8c1016"
+						}
+					]
+				},
+				{
+					"path": "first-o2.a",
+					"format": "wasm-archive",
+					"bytes": 354,
+					"sha256": "06087bbd696ae3dff210b901c14deff08a9f718710e235a456fa0af6b46957cd",
+					"profile": {
+						"target": "wasm32-wasi",
+						"abi": "wasm32-wasi-preview1",
+						"simd": false,
+						"compatibility": {
+							"kind": "gcc-bundle",
+							"manifestSha256": "576ebe8a59ecdda01acaaf71c5f46b8306d3ef75a9d87356728c7fbc9a958d77",
+							"sysrootSha256": "a098c6c9ccbae0271eb0ae8e7f40e190bab05c65deb77912f903aa39766f4217"
+						}
+					},
+					"members": [
+						{
+							"path": "first-o2.o",
+							"bytes": 201,
+							"sha256": "93ab04ccc6af94c5f1ba8d47d1bedebadc698daf1b533f35c60b275b3a9cb6d1"
+						}
+					]
+				}
+			],
+			"native": {
+				"status": "passed",
+				"fixtureSha256": "6d43826c5e1ccd0224f80276761ce7def21c1e988e193c623b39b0eadfeb1b7a",
+				"execution": {
+					"host": "node-24.22.1",
+					"exitCode": 0,
+					"stdout": "archive 53\n",
+					"stderr": ""
+				},
+				"artifact": {
+					"path": "/home/seorii/dev/hancomac/.worktrees/wasm-idle-link-inputs-342-20261030/out/link-inputs-native-20261030/external-archive-second-o2.wasm",
+					"bytes": 209124,
+					"sha256": "9843c7d4c5aa74e715a56246e7a1b3081c6e240de35e7388df7f02d795d3f677"
+				}
+			},
+			"fixtureSha256": "e451e937ef730abeefc70fe07b4791a8071d389bbb821ee7f5533f7205ac9c24"
+		},
+		{
+			"id": "external-cpp-initializer-o2",
+			"success": true,
+			"artifact": {
+				"bytes": 260715,
+				"sha256": "663d2b69d2c3b5242f9f1525d159474a163cc8664700238298fa34a446d4aa93",
+				"imports": [
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_close",
+						"kind": 0,
+						"typeIndex": 2
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_fdstat_get",
+						"kind": 0,
+						"typeIndex": 3
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_read",
+						"kind": 0,
+						"typeIndex": 4
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_seek",
+						"kind": 0,
+						"typeIndex": 5
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_write",
+						"kind": 0,
+						"typeIndex": 4
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "proc_exit",
+						"kind": 0,
+						"typeIndex": 6
+					}
+				],
+				"exports": [
+					{
+						"name": "memory",
+						"kind": 2,
+						"index": 0
+					},
+					{
+						"name": "_start",
+						"kind": 0,
+						"index": 7
+					}
+				],
+				"memories": [
+					{
+						"initial": 2,
+						"shared": false,
+						"memory64": false
+					}
+				],
+				"tables": [
+					{
+						"referenceType": 112,
+						"initial": 6,
+						"maximum": 6,
+						"shared": false,
+						"memory64": false
+					}
+				],
+				"customSections": [
+					".debug_loc",
+					".debug_abbrev",
+					".debug_info",
+					".debug_str",
+					".debug_line",
+					".debug_ranges",
+					"name",
+					"producers",
+					"target_features"
+				],
+				"sections": [
+					{
+						"id": 1,
+						"bytes": 173
+					},
+					{
+						"id": 2,
+						"bytes": 209
+					},
+					{
+						"id": 3,
+						"bytes": 89
+					},
+					{
+						"id": 4,
+						"bytes": 5
+					},
+					{
+						"id": 5,
+						"bytes": 3
+					},
+					{
+						"id": 6,
+						"bytes": 13
+					},
+					{
+						"id": 7,
+						"bytes": 19
+					},
+					{
+						"id": 9,
+						"bytes": 11
+					},
+					{
+						"id": 10,
+						"bytes": 50545
+					},
+					{
+						"id": 11,
+						"bytes": 3068
+					},
+					{
+						"id": 0,
+						"bytes": 44406
+					},
+					{
+						"id": 0,
+						"bytes": 15714
+					},
+					{
+						"id": 0,
+						"bytes": 62153
+					},
+					{
+						"id": 0,
+						"bytes": 16027
+					},
+					{
+						"id": 0,
+						"bytes": 62977
+					},
+					{
+						"id": 0,
+						"bytes": 3566
+					},
+					{
+						"id": 0,
+						"bytes": 1398
+					},
+					{
+						"id": 0,
+						"bytes": 142
+					},
+					{
+						"id": 0,
+						"bytes": 134
+					}
+				],
+				"kind": "wasi-preview1-command"
+			},
+			"execution": {
+				"exitCode": 0,
+				"stdout": "initializer 42\n",
+				"stderr": "",
+				"milliseconds": 2,
+				"peakMemoryBytes": 131072,
+				"files": []
+			},
+			"node": {
+				"host": "node-24.22.1",
+				"exitCode": 0,
+				"stdout": "initializer 42\n",
+				"stderr": "",
+				"files": []
+			},
+			"inputIdentities": [
+				{
+					"path": "initializer-o2.a",
+					"format": "wasm-archive",
+					"bytes": 586,
+					"sha256": "de9799e72dd11e7f5187feac42a9d004594cb8b0e0507b3444b885266c4caf9e",
+					"profile": {
+						"target": "wasm32-wasi",
+						"abi": "wasm32-wasi-preview1",
+						"simd": false,
+						"compatibility": {
+							"kind": "gcc-bundle",
+							"manifestSha256": "576ebe8a59ecdda01acaaf71c5f46b8306d3ef75a9d87356728c7fbc9a958d77",
+							"sysrootSha256": "a098c6c9ccbae0271eb0ae8e7f40e190bab05c65deb77912f903aa39766f4217"
+						}
+					},
+					"members": [
+						{
+							"path": "initializer-o2.o",
+							"bytes": 354,
+							"sha256": "800ce8b60e4c006b65422a9bc804e21666121610fe942965ff4abac9c8ed479b"
+						}
+					]
+				}
+			],
+			"native": {
+				"status": "passed",
+				"fixtureSha256": "202339f86ec1a1b52aac14046f0085d27ecb2dd1ab42e491be819f8ad066e707",
+				"execution": {
+					"host": "node-24.22.1",
+					"exitCode": 0,
+					"stdout": "initializer 42\n",
+					"stderr": ""
+				},
+				"artifact": {
+					"path": "/home/seorii/dev/hancomac/.worktrees/wasm-idle-link-inputs-342-20261030/out/link-inputs-native-20261030/external-cpp-initializer-o2.wasm",
+					"bytes": 209245,
+					"sha256": "47e61ca0e14548045f6ec9a4b6b75cc1bb9851cad39a1da06a5c7334987871af"
+				}
+			},
+			"fixtureSha256": "4edaff70d2c94d0d8d6b132864b5696776f890715c263fec8b771ff1ca1534f6"
+		},
+		{
+			"id": "external-clang-scalar-o2",
+			"success": true,
+			"artifact": {
+				"bytes": 260730,
+				"sha256": "a701a7f2c61cce686f2b605ecfeeedc4587c0e0e533f804662e096be8113e538",
+				"imports": [
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_close",
+						"kind": 0,
+						"typeIndex": 0
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_fdstat_get",
+						"kind": 0,
+						"typeIndex": 3
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_read",
+						"kind": 0,
+						"typeIndex": 4
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_seek",
+						"kind": 0,
+						"typeIndex": 5
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_write",
+						"kind": 0,
+						"typeIndex": 4
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "proc_exit",
+						"kind": 0,
+						"typeIndex": 6
+					}
+				],
+				"exports": [
+					{
+						"name": "memory",
+						"kind": 2,
+						"index": 0
+					},
+					{
+						"name": "_start",
+						"kind": 0,
+						"index": 7
+					}
+				],
+				"memories": [
+					{
+						"initial": 2,
+						"shared": false,
+						"memory64": false
+					}
+				],
+				"tables": [
+					{
+						"referenceType": 112,
+						"initial": 7,
+						"maximum": 7,
+						"shared": false,
+						"memory64": false
+					}
+				],
+				"customSections": [
+					".debug_loc",
+					".debug_abbrev",
+					".debug_info",
+					".debug_str",
+					".debug_line",
+					".debug_ranges",
+					"name",
+					"producers",
+					"target_features"
+				],
+				"sections": [
+					{
+						"id": 1,
+						"bytes": 173
+					},
+					{
+						"id": 2,
+						"bytes": 209
+					},
+					{
+						"id": 3,
+						"bytes": 90
+					},
+					{
+						"id": 4,
+						"bytes": 5
+					},
+					{
+						"id": 5,
+						"bytes": 3
+					},
+					{
+						"id": 6,
+						"bytes": 13
+					},
+					{
+						"id": 7,
+						"bytes": 19
+					},
+					{
+						"id": 9,
+						"bytes": 12
+					},
+					{
+						"id": 10,
+						"bytes": 50564
+					},
+					{
+						"id": 11,
+						"bytes": 3046
+					},
+					{
+						"id": 0,
+						"bytes": 44406
+					},
+					{
+						"id": 0,
+						"bytes": 15714
+					},
+					{
+						"id": 0,
+						"bytes": 62153
+					},
+					{
+						"id": 0,
+						"bytes": 16027
+					},
+					{
+						"id": 0,
+						"bytes": 62977
+					},
+					{
+						"id": 0,
+						"bytes": 3566
+					},
+					{
+						"id": 0,
+						"bytes": 1384
+					},
+					{
+						"id": 0,
+						"bytes": 142
+					},
+					{
+						"id": 0,
+						"bytes": 164
+					}
+				],
+				"kind": "wasi-preview1-command"
+			},
+			"execution": {
+				"exitCode": 0,
+				"stdout": "object 42\n",
+				"stderr": "",
+				"milliseconds": 1.5999999977648258,
+				"peakMemoryBytes": 131072,
+				"files": []
+			},
+			"node": {
+				"host": "node-24.22.1",
+				"exitCode": 0,
+				"stdout": "object 42\n",
+				"stderr": "",
+				"files": []
+			},
+			"inputIdentities": [
+				{
+					"path": "clang-callback-o2.o",
+					"format": "wasm-object",
+					"bytes": 481,
+					"sha256": "e1c7c258da70e0ef36c063f1fe72e13eed10f3a718e9568cf452e5087c0aee30",
+					"profile": {
+						"target": "wasm32-wasi",
+						"abi": "wasm32-wasi-preview1",
+						"simd": false,
+						"compatibility": {
+							"kind": "clang-c-scalar-v1",
+							"compilerVersion": "22.1.0",
+							"compilerCommit": "4434dabb69916856b824f68a64b029c67175e532",
+							"sysrootSha256": "a098c6c9ccbae0271eb0ae8e7f40e190bab05c65deb77912f903aa39766f4217"
+						}
+					}
+				}
+			],
+			"native": {
+				"status": "passed",
+				"fixtureSha256": "4c0d5209c9a1c21b66339096f0985a8ab926e7918839ef7e95c5af3ae37d7076",
+				"execution": {
+					"host": "node-24.22.1",
+					"exitCode": 0,
+					"stdout": "object 42\n",
+					"stderr": ""
+				},
+				"artifact": {
+					"path": "/home/seorii/dev/hancomac/.worktrees/wasm-idle-link-inputs-342-20261030/out/link-inputs-native-20261030/external-clang-scalar-o2.wasm",
+					"bytes": 209257,
+					"sha256": "c58ec4186363b3100d6fbd99368a967c9012d06551518c25e597a1997f076d0f"
+				}
+			},
+			"fixtureSha256": "e5d03ddc4d12a3a07e2a7368df7e3d5deabf11bb69832245d58187c56cac7419"
+		},
+		{
+			"id": "external-gcc-simd-o2",
+			"success": true,
+			"artifact": {
+				"bytes": 260780,
+				"sha256": "4a31de860144aebdc056a7cc6a8ffb693f286bba8dfb1167ba3eb5b6deaf1cd0",
+				"imports": [
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_close",
+						"kind": 0,
+						"typeIndex": 2
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_fdstat_get",
+						"kind": 0,
+						"typeIndex": 3
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_read",
+						"kind": 0,
+						"typeIndex": 4
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_seek",
+						"kind": 0,
+						"typeIndex": 5
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "fd_write",
+						"kind": 0,
+						"typeIndex": 4
+					},
+					{
+						"module": "wasi_snapshot_preview1",
+						"name": "proc_exit",
+						"kind": 0,
+						"typeIndex": 6
+					}
+				],
+				"exports": [
+					{
+						"name": "memory",
+						"kind": 2,
+						"index": 0
+					},
+					{
+						"name": "_start",
+						"kind": 0,
+						"index": 7
+					}
+				],
+				"memories": [
+					{
+						"initial": 2,
+						"shared": false,
+						"memory64": false
+					}
+				],
+				"tables": [
+					{
+						"referenceType": 112,
+						"initial": 6,
+						"maximum": 6,
+						"shared": false,
+						"memory64": false
+					}
+				],
+				"customSections": [
+					".debug_loc",
+					".debug_abbrev",
+					".debug_info",
+					".debug_str",
+					".debug_line",
+					".debug_ranges",
+					"name",
+					"producers",
+					"target_features"
+				],
+				"sections": [
+					{
+						"id": 1,
+						"bytes": 173
+					},
+					{
+						"id": 2,
+						"bytes": 209
+					},
+					{
+						"id": 3,
+						"bytes": 88
+					},
+					{
+						"id": 4,
+						"bytes": 5
+					},
+					{
+						"id": 5,
+						"bytes": 3
+					},
+					{
+						"id": 6,
+						"bytes": 13
+					},
+					{
+						"id": 7,
+						"bytes": 19
+					},
+					{
+						"id": 9,
+						"bytes": 11
+					},
+					{
+						"id": 10,
+						"bytes": 50673
+					},
+					{
+						"id": 11,
+						"bytes": 3044
+					},
+					{
+						"id": 0,
+						"bytes": 44406
+					},
+					{
+						"id": 0,
+						"bytes": 15714
+					},
+					{
+						"id": 0,
+						"bytes": 62153
+					},
+					{
+						"id": 0,
+						"bytes": 16027
+					},
+					{
+						"id": 0,
+						"bytes": 62977
+					},
+					{
+						"id": 0,
+						"bytes": 3566
+					},
+					{
+						"id": 0,
+						"bytes": 1360
+					},
+					{
+						"id": 0,
+						"bytes": 142
+					},
+					{
+						"id": 0,
+						"bytes": 134
+					}
+				],
+				"kind": "wasi-preview1-command"
+			},
+			"execution": {
+				"exitCode": 0,
+				"stdout": "simd 42\n",
+				"stderr": "",
+				"milliseconds": 4.299999997019768,
+				"peakMemoryBytes": 131072,
+				"files": []
+			},
+			"node": {
+				"host": "node-24.22.1",
+				"exitCode": 0,
+				"stdout": "simd 42\n",
+				"stderr": "",
+				"files": []
+			},
+			"inputIdentities": [
+				{
+					"path": "simd-o2.o",
+					"format": "wasm-object",
+					"bytes": 406,
+					"sha256": "69f2f2602d0a3d94bef3ef7dda1717e3bda3241037a06e8eaacf96e4c23b91b2",
+					"profile": {
+						"target": "wasm32-wasi",
+						"abi": "wasm32-wasi-preview1",
+						"simd": true,
+						"compatibility": {
+							"kind": "gcc-bundle",
+							"manifestSha256": "576ebe8a59ecdda01acaaf71c5f46b8306d3ef75a9d87356728c7fbc9a958d77",
+							"sysrootSha256": "a098c6c9ccbae0271eb0ae8e7f40e190bab05c65deb77912f903aa39766f4217"
+						}
+					}
+				}
+			],
+			"native": {
+				"status": "passed",
+				"fixtureSha256": "1eaf8409f06f36487846fa2659888174749ad9876fa43612a0b0758e1753d2af",
+				"execution": {
+					"host": "node-24.22.1",
+					"exitCode": 0,
+					"stdout": "simd 42\n",
+					"stderr": ""
+				},
+				"artifact": {
+					"path": "/home/seorii/dev/hancomac/.worktrees/wasm-idle-link-inputs-342-20261030/out/link-inputs-native-20261030/external-gcc-simd-o2.wasm",
+					"bytes": 209303,
+					"sha256": "f3c0abaf32d6bfe651b24b7d91a64926f27fe260d0a66b4649408779af627dd0"
+				}
+			},
+			"fixtureSha256": "6bc40befa33041c4aff7820a9ef1821c5243e8831b20bf76f8c732d1abd599c3"
+		}
+	],
+	"objectReceiptRoundtrip": {
+		"receipt": {
+			"format": "wasm-object",
+			"sha256": "c0135a4ad31cbd5a97a76608748e5621e3226c82f122a5ff696cbd30a6a20074",
+			"profile": {
+				"target": "wasm32-wasi",
+				"abi": "wasm32-wasi-preview1",
+				"simd": false,
+				"compatibility": {
+					"kind": "gcc-bundle",
+					"manifestSha256": "576ebe8a59ecdda01acaaf71c5f46b8306d3ef75a9d87356728c7fbc9a958d77",
+					"sysrootSha256": "a098c6c9ccbae0271eb0ae8e7f40e190bab05c65deb77912f903aa39766f4217"
+				}
+			}
+		},
+		"execution": {
+			"exitCode": 0,
+			"stdout": "roundtrip 42\n",
+			"stderr": "",
+			"milliseconds": 2.199999999254942,
+			"peakMemoryBytes": 131072,
+			"files": []
+		},
+		"object": {
+			"bytes": 213,
+			"sha256": "c0135a4ad31cbd5a97a76608748e5621e3226c82f122a5ff696cbd30a6a20074",
+			"imports": [
+				{
+					"module": "env",
+					"name": "__stack_pointer",
+					"kind": 3,
+					"global": {
+						"valueType": 127,
+						"mutable": 1
+					}
+				},
+				{
+					"module": "env",
+					"name": "memory",
+					"kind": 2,
+					"memory": {
+						"initial": 0,
+						"shared": false,
+						"memory64": false
+					}
+				},
+				{
+					"module": "env",
+					"name": "__indirect_function_table",
+					"kind": 1,
+					"table": {
+						"referenceType": 112,
+						"initial": 0,
+						"shared": false,
+						"memory64": false
+					}
+				}
+			],
+			"exports": [],
+			"memories": [],
+			"tables": [],
+			"customSections": ["linking", "reloc.Code"],
+			"sections": [
+				{
+					"id": 1,
+					"bytes": 6
+				},
+				{
+					"id": 2,
+					"bytes": 72
+				},
+				{
+					"id": 3,
+					"bytes": 2
+				},
+				{
+					"id": 10,
+					"bytes": 51
+				},
+				{
+					"id": 0,
+					"bytes": 43
+				},
+				{
+					"id": 0,
+					"bytes": 19
+				}
+			],
+			"kind": "wasm-relocatable-object"
+		},
+		"program": {
+			"bytes": 260603,
+			"sha256": "800c64c4f3df8f3ed7acad7eef55af47b72308084766bce9ac02c1ae4eb05a75",
+			"imports": [
+				{
+					"module": "wasi_snapshot_preview1",
+					"name": "fd_close",
+					"kind": 0,
+					"typeIndex": 2
+				},
+				{
+					"module": "wasi_snapshot_preview1",
+					"name": "fd_fdstat_get",
+					"kind": 0,
+					"typeIndex": 3
+				},
+				{
+					"module": "wasi_snapshot_preview1",
+					"name": "fd_read",
+					"kind": 0,
+					"typeIndex": 4
+				},
+				{
+					"module": "wasi_snapshot_preview1",
+					"name": "fd_seek",
+					"kind": 0,
+					"typeIndex": 5
+				},
+				{
+					"module": "wasi_snapshot_preview1",
+					"name": "fd_write",
+					"kind": 0,
+					"typeIndex": 4
+				},
+				{
+					"module": "wasi_snapshot_preview1",
+					"name": "proc_exit",
+					"kind": 0,
+					"typeIndex": 6
+				}
+			],
+			"exports": [
+				{
+					"name": "memory",
+					"kind": 2,
+					"index": 0
+				},
+				{
+					"name": "_start",
+					"kind": 0,
+					"index": 7
+				}
+			],
+			"memories": [
+				{
+					"initial": 2,
+					"shared": false,
+					"memory64": false
+				}
+			],
+			"tables": [
+				{
+					"referenceType": 112,
+					"initial": 6,
+					"maximum": 6,
+					"shared": false,
+					"memory64": false
+				}
+			],
+			"customSections": [
+				".debug_loc",
+				".debug_abbrev",
+				".debug_info",
+				".debug_str",
+				".debug_line",
+				".debug_ranges",
+				"name",
+				"producers",
+				"target_features"
+			],
+			"sections": [
+				{
+					"id": 1,
+					"bytes": 173
+				},
+				{
+					"id": 2,
+					"bytes": 209
+				},
+				{
+					"id": 3,
+					"bytes": 88
+				},
+				{
+					"id": 4,
+					"bytes": 5
+				},
+				{
+					"id": 5,
+					"bytes": 3
+				},
+				{
+					"id": 6,
+					"bytes": 13
+				},
+				{
+					"id": 7,
+					"bytes": 19
+				},
+				{
+					"id": 9,
+					"bytes": 11
+				},
+				{
+					"id": 10,
+					"bytes": 50486
+				},
+				{
+					"id": 11,
+					"bytes": 3049
+				},
+				{
+					"id": 0,
+					"bytes": 44406
+				},
+				{
+					"id": 0,
+					"bytes": 15714
+				},
+				{
+					"id": 0,
+					"bytes": 62153
+				},
+				{
+					"id": 0,
+					"bytes": 16027
+				},
+				{
+					"id": 0,
+					"bytes": 62977
+				},
+				{
+					"id": 0,
+					"bytes": 3566
+				},
+				{
+					"id": 0,
+					"bytes": 1365
+				},
+				{
+					"id": 0,
+					"bytes": 142
+				},
+				{
+					"id": 0,
+					"bytes": 134
+				}
+			],
+			"kind": "wasi-preview1-command"
+		},
+		"node": {
+			"host": "node-24.22.1",
+			"exitCode": 0,
+			"stdout": "roundtrip 42\n",
+			"stderr": "",
+			"files": []
+		},
+		"status": "passed"
+	},
+	"runtimeInputs": [
+		{
+			"path": "node_modules/@bjorn3/browser_wasi_shim/dist/debug.js",
+			"bytes": 414,
+			"sha256": "a91848ee180529e2a60c05dfb9584cad19cd4e1c6f391fdb76a938bcae4c0328"
+		},
+		{
+			"path": "node_modules/@bjorn3/browser_wasi_shim/dist/fd.js",
+			"bytes": 1906,
+			"sha256": "9e82e1fc1bfd3e3573f64349dc42b4b624ed61d24e5c553f2bb4d041444f166c"
+		},
+		{
+			"path": "node_modules/@bjorn3/browser_wasi_shim/dist/fs_mem.js",
+			"bytes": 12206,
+			"sha256": "85dbc9e0ee784d9ff8b55452644e00bf7058e32355aab974f8b71d7d85772324"
+		},
+		{
+			"path": "node_modules/@bjorn3/browser_wasi_shim/dist/fs_opfs.js",
+			"bytes": 2280,
+			"sha256": "4b96aaeb5ac5986cf802cbf22b975c656682d22a38248160c96fc2ded5644869"
+		},
+		{
+			"path": "node_modules/@bjorn3/browser_wasi_shim/dist/index.js",
+			"bytes": 316,
+			"sha256": "7e2fd52ee3f728bb0b1d6e449724e0f13e3d586bb25bde6e02a66366175b5605"
+		},
+		{
+			"path": "node_modules/@bjorn3/browser_wasi_shim/dist/strace.js",
+			"bytes": 318,
+			"sha256": "ece435d3784d928d02bff4d015b7cb686f8c06de8536ff9f8ebc38a8f403a3be"
+		},
+		{
+			"path": "node_modules/@bjorn3/browser_wasi_shim/dist/wasi.js",
+			"bytes": 16429,
+			"sha256": "168eb977a826f75ab0c39f9322f78cc58dbd5b233019ad1d6a7e940af8a7c4aa"
+		},
+		{
+			"path": "node_modules/@bjorn3/browser_wasi_shim/dist/wasi_defs.js",
+			"bytes": 9027,
+			"sha256": "0db0f42ba330749a7b05095ea1fd0ff63fd2b30e84cead30fe4c28359d15f194"
+		},
+		{
+			"path": "node_modules/@bjorn3/browser_wasi_shim/package.json",
+			"bytes": 1373,
+			"sha256": "4025e157abfadd44037158899001a4ea0407651c2ee9c8a9f51d5c9d0ecf613c"
+		},
+		{
+			"path": "packages/gcc/dist/compiler.js",
+			"bytes": 23931,
+			"sha256": "dde3b853c1c141f82a518900dee556053bd8463d6102ab70ff0d05e578bcdccb"
+		},
+		{
+			"path": "packages/gcc/dist/index.js",
+			"bytes": 357,
+			"sha256": "b0f6e041c8cdcb2d8064f8f9ef45a99be05d3a266f1253009bd304bec2eefecb"
+		},
+		{
+			"path": "packages/gcc/dist/manifest.js",
+			"bytes": 8495,
+			"sha256": "435a0c6940bef97635237b9da1edcab35c9c547f353a63fa8ca323072b7fc19b"
+		},
+		{
+			"path": "packages/gcc/dist/module-loader.js",
+			"bytes": 743,
+			"sha256": "993fb7fce6e523f565ba4ad53ab66af167d228ab66da1a7c5a6aaf7dddd143df"
+		},
+		{
+			"path": "packages/gcc/dist/plan.js",
+			"bytes": 9267,
+			"sha256": "2d0fb5f00ef2b6d47f528564f92d99f49d5311c3db9450863c9019985709dc94"
+		},
+		{
+			"path": "packages/gcc/dist/sysroot-fs.js",
+			"bytes": 3793,
+			"sha256": "52cb3ed93f3b3bdbe52ee9d550a6266fe894225448016c921e1a163315b09398"
+		},
+		{
+			"path": "packages/gcc/dist/types.js",
+			"bytes": 44,
+			"sha256": "01ae2a5b120382f9a648ced7ee8507493a134f216d100fc61600c6c9738235d2"
+		},
+		{
+			"path": "packages/gcc/dist/wasi-filesystem.js",
+			"bytes": 20811,
+			"sha256": "756cdda14e15b431865f92b1796d98e58f422718177703cedc260e9cea7e3b8f"
+		},
+		{
+			"path": "packages/gcc/dist/wasi-linker.js",
+			"bytes": 2440,
+			"sha256": "c38805b08765301c295efefb5232b3b6034b7e2024b5eb0e27a8c80d8929eb8b"
+		},
+		{
+			"path": "packages/gcc/dist/wasi-plan.js",
+			"bytes": 5246,
+			"sha256": "df5cc76028c4ee83bd3a16ea8248e6a61e6b27edb6c9cf5f91e882fb1be7201d"
+		},
+		{
+			"path": "packages/gcc/dist/wasi-run.js",
+			"bytes": 5239,
+			"sha256": "1db95aa7d955b7496486d3d1d3c21fb8f3f1c17d692616ed3389c2e8f5d0e166"
+		},
+		{
+			"path": "packages/gcc/dist/wasm-link-inputs.js",
+			"bytes": 27027,
+			"sha256": "f19d7e2b68541739628522ad77ee3f6ba4b373dcaa67f8f39679dcb79913286c"
+		},
+		{
+			"path": "packages/gcc/dist/wasm-output.js",
+			"bytes": 13217,
+			"sha256": "317ef277fa63d68f0a22a3a92af4ffa22fd8d7896a089c2ae4faf8564bbd42d9"
+		},
+		{
+			"path": "packages/gcc/dist/worker-entry.js",
+			"bytes": 2276,
+			"sha256": "d250fcbe78750f6ff0aed0b0d985a34143f0acb749a8858d1e3ff61d2e080221"
+		},
+		{
+			"path": "packages/gcc/dist/worker.js",
+			"bytes": 7530,
+			"sha256": "6070f7dba409fae2578cdb6b63463790a93142a2439d1e9a5a8be59cdaa637fe"
+		},
+		{
+			"path": "packages/core/dist/asset-delivery-budget.js",
+			"bytes": 9542,
+			"sha256": "02fb09f4ae0f8fc691fb541df167762645a60d4ff2e56535454d0aeaf06f2643"
+		},
+		{
+			"path": "packages/core/dist/asset-integrity.js",
+			"bytes": 5598,
+			"sha256": "75b89cdda3cd1fc2175504c9fdec4e451f3ed81f4790ef99372cc5c3a449089e"
+		},
+		{
+			"path": "packages/core/dist/awk-runtime.js",
+			"bytes": 38879,
+			"sha256": "2b4edefdd29b0f732f4bca5d5dbad308f278bb49a68aa2a91fa5606d64cb6dae"
+		},
+		{
+			"path": "packages/core/dist/bash-runtime.js",
+			"bytes": 46576,
+			"sha256": "7863353ef0e61bcdd2d6b3e3f42a60662801973305cdab3ecb4e3460340e11cc"
+		},
+		{
+			"path": "packages/core/dist/capabilities.js",
+			"bytes": 13372,
+			"sha256": "8e6af9254c850918dd3fe56d4b8c412ad7cf5bdc903b1388d8f08459bf8ba00f"
+		},
+		{
+			"path": "packages/core/dist/debug-configuration.js",
+			"bytes": 3565,
+			"sha256": "fcce5d16db75528b9da3a76fc0f48b76cc47f6c44bdc78af8dfeae85c78ad8ea"
+		},
+		{
+			"path": "packages/core/dist/debug.js",
+			"bytes": 44,
+			"sha256": "57ba6941b79b6139798465a83ac0f02d5dd7e31598a567a8e7cdba67d52c504d"
+		},
+		{
+			"path": "packages/core/dist/errors.js",
+			"bytes": 7283,
+			"sha256": "993bf37007430a1180b59efc169f2d4d262239516c160862304b6143dffa2070"
+		},
+		{
+			"path": "packages/core/dist/execution.js",
+			"bytes": 10155,
+			"sha256": "50276d43c7f3b99436e521856ee7c2acb956fdb5bdb4939ee077628e14db3e20"
+		},
+		{
+			"path": "packages/core/dist/haskell-runtime.generated.js",
+			"bytes": 760,
+			"sha256": "25809ffb2f92dd2310a11aeeb49bb47a55ca753bda293e7d14cc2976a9097aaf"
+		},
+		{
+			"path": "packages/core/dist/haskell-runtime.js",
+			"bytes": 1893,
+			"sha256": "b1aa86f212e6a799add7e8c263a96eb787e270cadd835107f39ca6a66d7f6c65"
+		},
+		{
+			"path": "packages/core/dist/index.js",
+			"bytes": 8941,
+			"sha256": "e5e5030083e43c7e54e79162bde043220ec8862bcd35847147285fe7cd1b30c2"
+		},
+		{
+			"path": "packages/core/dist/janet-runtime.js",
+			"bytes": 38247,
+			"sha256": "2e277c8244beef710f6b0bf0775cccb32945ecd3471f0d9934132d8053bede6c"
+		},
+		{
+			"path": "packages/core/dist/julia-runtime.js",
+			"bytes": 45968,
+			"sha256": "3c863ab3c6d6c6a7cf143347e0b03e3d10337c14420c210a49aade3bd292c151"
+		},
+		{
+			"path": "packages/core/dist/languages.js",
+			"bytes": 6087,
+			"sha256": "6902b28bd78998173fbff958aceb56e6f6d8426ef5e75341c807d31fee22f398"
+		},
+		{
+			"path": "packages/core/dist/lisp-runtime.js",
+			"bytes": 18490,
+			"sha256": "ce1d4165ef9543936c8d491eb1349f97e0655c5a072e0a463d3d5c69f32ff312"
+		},
+		{
+			"path": "packages/core/dist/module-asset-rewrite.js",
+			"bytes": 2358,
+			"sha256": "010c630e05800052ea694b54d754fd7404d8da89462cd2bf9d466d5e5bd1d333"
+		},
+		{
+			"path": "packages/core/dist/nim-runtime.js",
+			"bytes": 51205,
+			"sha256": "e1beed20586c37d5e76114f279be3a52fd78ff31a2e7a9b6f2dcc8561e39b7a3"
+		},
+		{
+			"path": "packages/core/dist/pascal-runtime.js",
+			"bytes": 43327,
+			"sha256": "79a417a599ed5d693bb324ea874f65698af6dd8f59379da8a540190cd5502201"
+		},
+		{
+			"path": "packages/core/dist/perl-runtime.js",
+			"bytes": 42311,
+			"sha256": "381ce16e60bfc5b3be97da1141d8f2d52d59b8ed62803712b9c534e71ad18e3e"
+		},
+		{
+			"path": "packages/core/dist/persistent-asset-cache.js",
+			"bytes": 32058,
+			"sha256": "078f2e183f34507c95bcf875c66e9826ad7883cae0d949fa973d6b070a4cef90"
+		},
+		{
+			"path": "packages/core/dist/pinned-asset-fetch.js",
+			"bytes": 10864,
+			"sha256": "0805ffaeae3810c65e853d54aeeb206b26ee8e2ceb81ad96aff63cfc023f2dba"
+		},
+		{
+			"path": "packages/core/dist/prewarm.js",
+			"bytes": 4907,
+			"sha256": "a0548ddfd2ac8d22ac899ded907ad85032bfcc57b66cb54bae91da3eef9bf515"
+		},
+		{
+			"path": "packages/core/dist/progress.js",
+			"bytes": 5745,
+			"sha256": "61e262024e511e9c9d93ce0e135b0b50923a1052bb12e326600755f2f74c28a0"
+		},
+		{
+			"path": "packages/core/dist/prolog-runtime.js",
+			"bytes": 36739,
+			"sha256": "ae89fcb239c5ba9a63b25dcb44e50c916b66c4f884f5e5d45163661be567a13f"
+		},
+		{
+			"path": "packages/core/dist/protocol.js",
+			"bytes": 16318,
+			"sha256": "68d83880c8fff0aadfbdd2436160c8e2c41f1dfb9ad4316f2d174aaf5d239fef"
+		},
+		{
+			"path": "packages/core/dist/python-runtime-module.js",
+			"bytes": 1619,
+			"sha256": "106ad9a5621264ff8e0464ce4f551132bab44947fbfca21eebe1b0ea474d671b"
+		},
+		{
+			"path": "packages/core/dist/resource-budget.js",
+			"bytes": 6452,
+			"sha256": "ffea2e31029003587fba806dbbda79f6b0b60e0521795732545599bfe4905da7"
+		},
+		{
+			"path": "packages/core/dist/ruby-runtime.generated.js",
+			"bytes": 1843,
+			"sha256": "6fc79fe74d587807f5c5f1770141cd57013754bf80408b0a8cda91c3d393c339"
+		},
+		{
+			"path": "packages/core/dist/ruby-runtime.js",
+			"bytes": 59307,
+			"sha256": "82f7397796c7300320491af6d5d0e7a483e553a5d73114462e15a936deff14ca"
+		},
+		{
+			"path": "packages/core/dist/ruby-split.generated.js",
+			"bytes": 2024,
+			"sha256": "cb2e2c4c822ceedf35dee46d46eca8d4195b302bc5accda71cb53352525e6d5d"
+		},
+		{
+			"path": "packages/core/dist/ruby-split.js",
+			"bytes": 20769,
+			"sha256": "0e5536c34d4a4751462223d0507019a31887c45c225a27ab640aceb89395f75e"
+		},
+		{
+			"path": "packages/core/dist/runtime-activation.js",
+			"bytes": 7236,
+			"sha256": "03d006a4fcd2df3bf08245c1da5553d97242df3b4d41d025bfc99578fc0dd8f0"
+		},
+		{
+			"path": "packages/core/dist/runtime-asset-loader.js",
+			"bytes": 28926,
+			"sha256": "8a2c8deff7f8e45f2746ecc7b8138193bef83a7067f9754575ceab35d03b43ad"
+		},
+		{
+			"path": "packages/core/dist/runtime-asset-lock.generated.js",
+			"bytes": 589310,
+			"sha256": "4d5802376f49a310c6aadc292884036aed7fa66c2a5f0b6a2c2ad707ee4fe52d"
+		},
+		{
+			"path": "packages/core/dist/runtime-asset-lock.js",
+			"bytes": 1964,
+			"sha256": "51e720b5241f06a4ffa739bc7de7f29bee22acdd126979ed02d43eb5da028092"
+		},
+		{
+			"path": "packages/core/dist/runtime-assets.js",
+			"bytes": 42512,
+			"sha256": "49e1d318ecc9b6149c10f43a77dc43f3e854d91b8a1a97268e53169b0754587c"
+		},
+		{
+			"path": "packages/core/dist/runtime-encode.js",
+			"bytes": 1071,
+			"sha256": "c6b8cd635002faefe4a2e1f003c6047b4183831901cb8cabf36af09d93862517"
+		},
+		{
+			"path": "packages/core/dist/runtime-manifest.js",
+			"bytes": 19811,
+			"sha256": "9199c1a47ddf5081d66fb730e7be56941bb1d1fb224fa78a3ba2cbf182c23fd5"
+		},
+		{
+			"path": "packages/core/dist/runtime-preflight-activation.js",
+			"bytes": 9704,
+			"sha256": "a9276cf1d27450090c9eb7d30ad34013560c3de950f6508abbf7b55e670baaa0"
+		},
+		{
+			"path": "packages/core/dist/runtime-preflight.js",
+			"bytes": 27992,
+			"sha256": "7cf3b56799a60a5281e877607f6d7cc37ea70abaa1791c1281d3ac88e247ea5b"
+		},
+		{
+			"path": "packages/core/dist/runtime-tar.js",
+			"bytes": 2707,
+			"sha256": "732c6d1c1024783c6bebe612140b7adc9d5c2f0e1dd41d5e65e0f6f5991e6fe1"
+		},
+		{
+			"path": "packages/core/dist/runtime-wasm-module-service.js",
+			"bytes": 11678,
+			"sha256": "ad2cab0996f4e85fc998d2b5f73cf0244881ed4e443e52469bf349d7e496cc72"
+		},
+		{
+			"path": "packages/core/dist/sandbox.js",
+			"bytes": 30535,
+			"sha256": "5250344ad6f7d4d325106fd3b56c464cc4cc74fb710381127236ad20915180a0"
+		},
+		{
+			"path": "packages/core/dist/session-asset-cache.js",
+			"bytes": 7206,
+			"sha256": "c00f26cdd7ff007329ff1a63324ea41922171b980c0a9da09527261703e55e41"
+		},
+		{
+			"path": "packages/core/dist/tcl-runtime.js",
+			"bytes": 48993,
+			"sha256": "7449169908cba7cf4cdf15ecdb14de580ba9aef7ddc3ea0b37e02248fea6c240"
+		},
+		{
+			"path": "packages/core/dist/teavm-runtime.generated.js",
+			"bytes": 1093,
+			"sha256": "b66d8dce26456ed5b770c7b4ef0e963003a716303932e0d3ec16f85f689c9069"
+		},
+		{
+			"path": "packages/core/dist/teavm-runtime.js",
+			"bytes": 1835,
+			"sha256": "1716247af3e693c7a2cc02aa8b1ee68da91e2bb3462df096c0f4184ab20bf7c7"
+		},
+		{
+			"path": "packages/core/dist/terminal.js",
+			"bytes": 47,
+			"sha256": "28d7e64041df33f6f363b8271ac0e50d4eb5f035c7f494c22554c2c1fd0353cf"
+		},
+		{
+			"path": "packages/core/dist/worker-lifetime.js",
+			"bytes": 4768,
+			"sha256": "f7eca1d7226129b36a7568bbdea1b341b903d70bdf5d6c127de7379b247efcf9"
+		},
+		{
+			"path": "packages/core/dist/worker-session.js",
+			"bytes": 5201,
+			"sha256": "43db889e0dc35974fab74118ecaeb93a474cd7024675282a039f5f4cc21a1809"
+		},
+		{
+			"path": "packages/core/dist/workspace.js",
+			"bytes": 10548,
+			"sha256": "52d4d5b08d2bf8fd34bdde64c4635080dd441f99b7fcdbdaff8357d7d6507bf3"
+		}
+	],
+	"limitations": [
+		"ABI profiles are caller-declared provenance; object bytes cannot prove source-level C/C++ compatibility.",
+		"Clang interop is restricted to the pinned declared nonvariadic scalar C interface contract.",
+		"Regular GNU archives only; no thin archives, dynamic linking, ELF or LLVM bitcode."
+	],
+	"sourceCommit": "eb57cf515d3ad39c4b0122c5d49dad4206cf75f1",
+	"combinedFilesystemCases": [
+		{
+			"id": "filesystem-read-write-o0",
+			"status": "passed",
+			"chromiumWorker": {
+				"exitCode": 0,
+				"stdout": "files 42 8\n",
+				"stderr": "",
+				"milliseconds": 7.099999997764826,
+				"peakMemoryBytes": 131072,
+				"files": [
+					{
+						"path": "/sandbox/input.bin",
+						"contents": [0, 1, 127, 128, 255, 10, 65, 0]
+					},
+					{
+						"path": "/sandbox/nested/seed.txt",
+						"contents": [115, 101, 101, 100, 10]
+					},
+					{
+						"path": "/sandbox/results/output.bin",
+						"contents": [42, 43, 85, 170, 213, 32, 107, 42, 254, 0]
+					}
+				]
+			},
+			"node": {
+				"host": "node-24.22.1",
+				"exitCode": 0,
+				"stdout": "files 42 8\n",
+				"stderr": "",
+				"files": [
+					{
+						"path": "/sandbox/input.bin",
+						"contents": [0, 1, 127, 128, 255, 10, 65, 0]
+					},
+					{
+						"path": "/sandbox/nested/seed.txt",
+						"contents": [115, 101, 101, 100, 10]
+					},
+					{
+						"path": "/sandbox/results/output.bin",
+						"contents": [42, 43, 85, 170, 213, 32, 107, 42, 254, 0]
+					}
+				]
+			},
+			"repeatedChromiumWorkers": [
+				{
+					"exitCode": 0,
+					"stdout": "files 42 8\n",
+					"stderr": "",
+					"milliseconds": 1.7000000029802322,
+					"peakMemoryBytes": 131072,
+					"files": [
+						{
+							"path": "/sandbox/input.bin",
+							"contents": [0, 1, 127, 128, 255, 10, 65, 0]
+						},
+						{
+							"path": "/sandbox/nested/seed.txt",
+							"contents": [115, 101, 101, 100, 10]
+						},
+						{
+							"path": "/sandbox/results/output.bin",
+							"contents": [42, 43, 85, 170, 213, 32, 107, 42, 254, 0]
+						}
+					]
+				}
+			]
+		},
+		{
+			"id": "filesystem-read-write-o2",
+			"status": "passed",
+			"chromiumWorker": {
+				"exitCode": 0,
+				"stdout": "files 42 8\n",
+				"stderr": "",
+				"milliseconds": 3.899999998509884,
+				"peakMemoryBytes": 131072,
+				"files": [
+					{
+						"path": "/sandbox/input.bin",
+						"contents": [0, 1, 127, 128, 255, 10, 65, 0]
+					},
+					{
+						"path": "/sandbox/nested/seed.txt",
+						"contents": [115, 101, 101, 100, 10]
+					},
+					{
+						"path": "/sandbox/results/output.bin",
+						"contents": [42, 43, 85, 170, 213, 32, 107, 42, 254, 0]
+					}
+				]
+			},
+			"node": {
+				"host": "node-24.22.1",
+				"exitCode": 0,
+				"stdout": "files 42 8\n",
+				"stderr": "",
+				"files": [
+					{
+						"path": "/sandbox/input.bin",
+						"contents": [0, 1, 127, 128, 255, 10, 65, 0]
+					},
+					{
+						"path": "/sandbox/nested/seed.txt",
+						"contents": [115, 101, 101, 100, 10]
+					},
+					{
+						"path": "/sandbox/results/output.bin",
+						"contents": [42, 43, 85, 170, 213, 32, 107, 42, 254, 0]
+					}
+				]
+			},
+			"repeatedChromiumWorkers": [
+				{
+					"exitCode": 0,
+					"stdout": "files 42 8\n",
+					"stderr": "",
+					"milliseconds": 1,
+					"peakMemoryBytes": 131072,
+					"files": [
+						{
+							"path": "/sandbox/input.bin",
+							"contents": [0, 1, 127, 128, 255, 10, 65, 0]
+						},
+						{
+							"path": "/sandbox/nested/seed.txt",
+							"contents": [115, 101, 101, 100, 10]
+						},
+						{
+							"path": "/sandbox/results/output.bin",
+							"contents": [42, 43, 85, 170, 213, 32, 107, 42, 254, 0]
+						}
+					]
+				}
+			]
+		},
+		{
+			"id": "filesystem-path-errors-o0",
+			"status": "passed",
+			"chromiumWorker": {
+				"exitCode": 0,
+				"stdout": "path errors ok\n",
+				"stderr": "",
+				"milliseconds": 11.800000000745058,
+				"peakMemoryBytes": 131072,
+				"files": [
+					{
+						"path": "/sandbox/input.txt",
+						"contents": [115, 97, 102, 101, 10]
+					}
+				]
+			},
+			"node": {
+				"host": "node-24.22.1",
+				"exitCode": 0,
+				"stdout": "path errors ok\n",
+				"stderr": "",
+				"files": [
+					{
+						"path": "/sandbox/input.txt",
+						"contents": [115, 97, 102, 101, 10]
+					}
+				]
+			}
+		},
+		{
+			"id": "filesystem-path-errors-o2",
+			"status": "passed",
+			"chromiumWorker": {
+				"exitCode": 0,
+				"stdout": "path errors ok\n",
+				"stderr": "",
+				"milliseconds": 1.5,
+				"peakMemoryBytes": 131072,
+				"files": [
+					{
+						"path": "/sandbox/input.txt",
+						"contents": [115, 97, 102, 101, 10]
+					}
+				]
+			},
+			"node": {
+				"host": "node-24.22.1",
+				"exitCode": 0,
+				"stdout": "path errors ok\n",
+				"stderr": "",
+				"files": [
+					{
+						"path": "/sandbox/input.txt",
+						"contents": [115, 97, 102, 101, 10]
+					}
+				]
+			}
+		},
+		{
+			"id": "filesystem-readonly-o0",
+			"status": "passed",
+			"chromiumWorker": {
+				"exitCode": 0,
+				"stdout": "readonly errors ok\n",
+				"stderr": "",
+				"milliseconds": 1.699999999254942,
+				"peakMemoryBytes": 131072,
+				"files": [
+					{
+						"path": "/readonly/input.txt",
+						"contents": [105, 109, 109, 117, 116, 97, 98, 108, 101, 10]
+					}
+				]
+			},
+			"node": {
+				"status": "not-applicable",
+				"reason": "Node WASI preopens do not expose a read-only mount contract; checked by the actual GCC program in the SDK Chromium Worker."
+			}
+		},
+		{
+			"id": "filesystem-readonly-o2",
+			"status": "passed",
+			"chromiumWorker": {
+				"exitCode": 0,
+				"stdout": "readonly errors ok\n",
+				"stderr": "",
+				"milliseconds": 1.800000000745058,
+				"peakMemoryBytes": 131072,
+				"files": [
+					{
+						"path": "/readonly/input.txt",
+						"contents": [105, 109, 109, 117, 116, 97, 98, 108, 101, 10]
+					}
+				]
+			},
+			"node": {
+				"status": "not-applicable",
+				"reason": "Node WASI preopens do not expose a read-only mount contract; checked by the actual GCC program in the SDK Chromium Worker."
+			}
+		},
+		{
+			"id": "filesystem-file-quota-o0",
+			"status": "passed",
+			"chromiumWorker": {
+				"exitCode": 0,
+				"stdout": "file quota ok\n",
+				"stderr": "",
+				"milliseconds": 2.100000001490116,
+				"peakMemoryBytes": 131072,
+				"files": [
+					{
+						"path": "/quota/kept.bin",
+						"contents": [1, 2, 3, 4]
+					}
+				]
+			},
+			"node": {
+				"status": "not-applicable",
+				"reason": "Node WASI preopens do not expose per-file memory quotas; checked by the actual GCC program in the SDK Chromium Worker."
+			}
+		},
+		{
+			"id": "filesystem-file-quota-o2",
+			"status": "passed",
+			"chromiumWorker": {
+				"exitCode": 0,
+				"stdout": "file quota ok\n",
+				"stderr": "",
+				"milliseconds": 1.300000000745058,
+				"peakMemoryBytes": 131072,
+				"files": [
+					{
+						"path": "/quota/kept.bin",
+						"contents": [1, 2, 3, 4]
+					}
+				]
+			},
+			"node": {
+				"status": "not-applicable",
+				"reason": "Node WASI preopens do not expose per-file memory quotas; checked by the actual GCC program in the SDK Chromium Worker."
+			}
+		},
+		{
+			"id": "filesystem-total-quota-o0",
+			"status": "passed",
+			"chromiumWorker": {
+				"exitCode": 0,
+				"stdout": "total quota ok\n",
+				"stderr": "",
+				"milliseconds": 1.7000000029802322,
+				"peakMemoryBytes": 131072,
+				"files": [
+					{
+						"path": "/quota/a.bin",
+						"contents": [1, 2, 3, 4]
+					},
+					{
+						"path": "/quota/b.bin",
+						"contents": [5, 6]
+					}
+				]
+			},
+			"node": {
+				"status": "not-applicable",
+				"reason": "Node WASI preopens do not expose total memory quotas; checked by the actual GCC program in the SDK Chromium Worker."
+			}
+		},
+		{
+			"id": "filesystem-total-quota-o2",
+			"status": "passed",
+			"chromiumWorker": {
+				"exitCode": 0,
+				"stdout": "total quota ok\n",
+				"stderr": "",
+				"milliseconds": 1.4000000022351742,
+				"peakMemoryBytes": 131072,
+				"files": [
+					{
+						"path": "/quota/a.bin",
+						"contents": [1, 2, 3, 4]
+					},
+					{
+						"path": "/quota/b.bin",
+						"contents": [5, 6]
+					}
+				]
+			},
+			"node": {
+				"status": "not-applicable",
+				"reason": "Node WASI preopens do not expose total memory quotas; checked by the actual GCC program in the SDK Chromium Worker."
+			}
+		},
+		{
+			"id": "filesystem-entry-quota-o0",
+			"status": "passed",
+			"chromiumWorker": {
+				"exitCode": 0,
+				"stdout": "entry quota ok\n",
+				"stderr": "",
+				"milliseconds": 2.2999999970197678,
+				"peakMemoryBytes": 131072,
+				"files": [
+					{
+						"path": "/quota/replacement.bin",
+						"contents": [9]
+					}
+				]
+			},
+			"node": {
+				"status": "not-applicable",
+				"reason": "Node WASI preopens do not expose memory entry quotas; checked by the actual GCC program in the SDK Chromium Worker."
+			}
+		},
+		{
+			"id": "filesystem-entry-quota-o2",
+			"status": "passed",
+			"chromiumWorker": {
+				"exitCode": 0,
+				"stdout": "entry quota ok\n",
+				"stderr": "",
+				"milliseconds": 1.6000000014901161,
+				"peakMemoryBytes": 131072,
+				"files": [
+					{
+						"path": "/quota/replacement.bin",
+						"contents": [9]
+					}
+				]
+			},
+			"node": {
+				"status": "not-applicable",
+				"reason": "Node WASI preopens do not expose memory entry quotas; checked by the actual GCC program in the SDK Chromium Worker."
+			}
+		},
+		{
+			"id": "filesystem-no-preopens-o0",
+			"status": "passed",
+			"chromiumWorker": {
+				"exitCode": 0,
+				"stdout": "no preopens 42\n",
+				"stderr": "",
+				"milliseconds": 1.6000000014901161,
+				"peakMemoryBytes": 131072,
+				"files": []
+			},
+			"node": {
+				"host": "node-24.22.1",
+				"exitCode": 0,
+				"stdout": "no preopens 42\n",
+				"stderr": "",
+				"files": []
+			}
+		},
+		{
+			"id": "filesystem-no-preopens-o2",
+			"status": "passed",
+			"chromiumWorker": {
+				"exitCode": 0,
+				"stdout": "no preopens 42\n",
+				"stderr": "",
+				"milliseconds": 1.9000000022351742,
+				"peakMemoryBytes": 131072,
+				"files": []
+			},
+			"node": {
+				"host": "node-24.22.1",
+				"exitCode": 0,
+				"stdout": "no preopens 42\n",
+				"stderr": "",
+				"files": []
+			}
+		}
+	],
+	"packageVerification": {
+		"status": "passed",
+		"scope": "Installed public package/API/TypeScript/budget verification for combined #343 filesystem and #342 static link inputs",
+		"run": {
+			"command": ["node", "scripts/verify-package.mjs"],
+			"startedAt": "2026-10-30T06:42:39.705354+00:00",
+			"completedAt": "2026-10-30T06:48:07.655786+00:00",
+			"commandExitCode": 0,
+			"inputsUnchanged": true,
+			"exitCode": 0
+		},
+		"inputs": {
+			"head": "eb57cf515d3ad39c4b0122c5d49dad4206cf75f1",
+			"workingDiffSha256": "76acd1d1f19f88605d0c2288327a4984dcc57f372580c118527757c4b74ea827",
+			"files": 1064,
+			"beforeSha256": "22844fe785cf74e89473f9b6780fbe86394c22bd03300289128124cf6a916661",
+			"afterSha256": "22844fe785cf74e89473f9b6780fbe86394c22bd03300289128124cf6a916661",
+			"verifierSha256": "dcf6886cf3070032fe01abae610964eac9cc4b884e8ed100a79615e4edbe4a2d",
+			"unitTestSha256": "90d6b365a095f713aedcf5e7ca06af66c275e51efee424448af9d9c7543fc7fa"
+		},
+		"log": {
+			"path": "/home/seorii/logs/wasm-idle-342-package-verifier-20261030T064239Z.log",
+			"bytes": 49976,
+			"sha256": "5c23cc62b9afc1395d2da126dbcad6f11f9844b6dce1d8bfb3f5313c50e540ad"
+		},
+		"focusedTests": {
+			"passed": 36,
+			"formatter": "passed",
+			"diffCheck": "passed"
+		},
+		"scenarios": [
+			{
+				"scenario": "wasm-idle root install",
+				"installed": {
+					"bytes": 7361803,
+					"files": 783,
+					"packages": 5
+				},
+				"budget": {
+					"maxBytes": 7405568,
+					"maxFiles": 783,
+					"maxPackages": 6
+				}
+			},
+			{
+				"scenario": "@wasm-idle/gcc install",
+				"installed": {
+					"bytes": 2704470,
+					"files": 182,
+					"packages": 4
+				},
+				"budget": {
+					"maxBytes": 2705408,
+					"maxFiles": 184,
+					"maxPackages": 4
+				}
+			},
+			{
+				"scenario": "wasm-idle/container install",
+				"installed": {
+					"bytes": 7900908,
+					"files": 892,
+					"packages": 6
+				},
+				"budget": {
+					"maxBytes": 8388608,
+					"maxFiles": 1100,
+					"maxPackages": 7
+				}
+			},
+			{
+				"scenario": "@wasm-idle/terminal install",
+				"installed": {
+					"bytes": 17637994,
+					"files": 1328,
+					"packages": 29
+				},
+				"budget": {
+					"maxBytes": 17694720,
+					"maxFiles": 1370,
+					"maxPackages": 32
+				}
+			},
+			{
+				"scenario": "@wasm-idle/debug install",
+				"installed": {
+					"bytes": 8154316,
+					"files": 1187,
+					"packages": 22
+				},
+				"budget": {
+					"maxBytes": 8192000,
+					"maxFiles": 1200,
+					"maxPackages": 25
+				}
+			},
+			{
+				"scenario": "@wasm-idle/lsp install",
+				"installed": {
+					"bytes": 5836971,
+					"files": 833,
+					"packages": 9
+				},
+				"budget": {
+					"maxBytes": 5898240,
+					"maxFiles": 1050,
+					"maxPackages": 10
+				}
+			},
+			{
+				"scenario": "all public packages/adapters aggregate",
+				"installed": {
+					"bytes": 42638132,
+					"files": 3396,
+					"packages": 66
+				},
+				"budget": {
+					"maxBytes": 42639360,
+					"maxFiles": 3396,
+					"maxPackages": 70
+				}
+			}
+		],
+		"isolatedMeasurement": {
+			"path": "/home/seorii/dev/hancomac/.worktrees/wasm-idle-link-inputs-342-20261030/out/link-inputs-package-measure-20261030T064010Z/measurement.json",
+			"sha256": "f1e32ab0773365e8b72c8b8b5f527d8a53274f77ead0f32740579218c711cc81"
+		},
+		"budgetChange": {
+			"gccMaxBytesIncrease": 37888,
+			"aggregateMaxBytesIncrease": 37888,
+			"aggregateMaxFilesIncrease": 2,
+			"explanation": "Smallest whole-KiB increase that fits measured installations, including the 246-byte temporary tarball-path variance in npm hidden package-lock metadata. No new dependencies."
+		}
+	}
+}
