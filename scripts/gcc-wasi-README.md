@@ -45,6 +45,47 @@ translation unit's GCC WAT and assembled object alongside the final program.
 These extra compilations help isolate GCC code generation from assembler/linker
 behavior when native and Wasm compiler hosts disagree.
 
+## Per-run memory filesystem
+
+Issue #343 adds optional `preopens` and `filesystemLimits` to the SDK execution
+host, with final binary file snapshots returned through the actual Worker. The
+compiler backend, compiler hosts, GNU runtime and sysroot are unchanged.
+The 2026-10-30 check used the qualified eleven-patch GCC bundle: all **14 O0/O2
+programs compiled and passed in Chromium 156.0.8078.4**, with **16 executions**
+including two repeated-run checks. The same native GCC sources compiled and
+linked all 14 programs before browser validation. Six cases ran successfully in
+independent Node WASI for both native and browser-produced programs. The other
+eight test SDK readonly and quota policies that Node WASI does not expose; their
+receipts explicitly record that oracle as inapplicable, rather than passed.
+
+The [recorded qualification](../docs/gcc-wasi-filesystem-20261030.json) identifies
+compiler, assembler, linker, sysroot, SDK code, fixtures and each actual program
+by SHA-256. The reused manifest is
+`576ebe8a59ecdda01acaaf71c5f46b8306d3ef75a9d87356728c7fbc9a958d77`.
+The [fixture suite](gcc-wasi-filesystem-fixtures.mjs) includes original C source,
+input bytes and independently specified expected output files. It checks binary
+`fread`/`fwrite`, append and seek, directory enumeration, creation/removal, missing
+files, capability escape, readonly mounts, entry/per-file/total quotas, unchanged
+stdin/stdout and fresh state on repeated execution.
+
+```sh
+pnpm --filter @wasm-idle/core build
+pnpm --filter @wasm-idle/gcc build
+node scripts/verify-gcc-wasi.mjs \
+  --manifest /path/to/gcc-wasi-bundle/gcc-toolchain.v2.json \
+  --suite scripts/gcc-wasi-filesystem-fixtures.mjs \
+  --save-intermediates --output out/gcc-wasi-filesystem-browser
+```
+
+Filesystem fixtures require `--manifest` so the SDK's real compiler and Worker
+path are exercised. File snapshots are compared in full, including unchanged
+inputs. Runtime policy and lifecycle unit tests additionally cover raw WASI
+allocation/truncation, open-but-unlinked files, bounded fd reuse and Worker
+structured cloning. The [package contract](../packages/gcc/README.md) documents
+path rules, limits, errors and unsupported filesystem operations.
+
+## Additional compiler suites
+
 The optional `--suite /path/to/TRUSTED_LOCAL_MODULE.mjs` imports executable local
 test code exporting `cases` and optional `disabledCases` arrays. Both arrays are
 included in selection and the report. Every case carries its original source,

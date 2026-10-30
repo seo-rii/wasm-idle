@@ -101,7 +101,9 @@ export const scenarios = [
 		// The measured 2,628,057-byte install needs 7 KiB above the previous cap.
 		// Shared read-only sysroot storage adds two files within an 11 KiB allowance.
 		// PCH support adds 8,315 installed bytes; reserve a further 9 KiB.
-		budget: { maxBytes: 2.5 * MiB + 20 * 1024, maxFiles: 184, maxPackages: 4 },
+		// In-memory preopens measure 2,667,183 bytes / 180 files / four packages.
+		// Raise only the byte limit by the minimum 25 KiB; dependencies stay unchanged.
+		budget: { maxBytes: 2.5 * MiB + 45 * 1024, maxFiles: 184, maxPackages: 4 },
 		absentPackageNames: [
 			'wasm-idle',
 			'@wasm-idle/llvm-core',
@@ -123,7 +125,7 @@ export const scenarios = [
 			"await (await import('node:fs/promises')).access(new URL('./worker-entry.js', import.meta.resolve('@wasm-idle/gcc')));",
 			"if (workers || requests) throw new Error('GCC import started a Worker or fetched assets');"
 		],
-		typeCheck: `import { createCrossGccWorker, createGccWorker, type CrossGccCompileRequest, type CrossGccArtifact, type WasiGccCompileRequest, type WasiGccArtifact, type WasiGccWorker, type WasiGccManifest } from '@wasm-idle/gcc';
+		typeCheck: `import { createCrossGccWorker, createGccWorker, type CrossGccCompileRequest, type CrossGccArtifact, type WasiGccCompileRequest, type WasiGccArtifact, type WasiGccWorker, type WasiGccManifest, type WasiGccPreopen, type WasiGccFilesystemLimits, type WasiGccResultFile, type WasiGccRunOptions, type WasiGccRunResult } from '@wasm-idle/gcc';
 const request: CrossGccCompileRequest = { code: 'int main() { return 0; }', language: 'cpp', cpu: 'x86-64', emit: 'executable' };
 declare const artifact: CrossGccArtifact;
 const compiler: 'gcc' = artifact.compiler;
@@ -139,13 +141,31 @@ const simdCapability: boolean = wasiManifest.capabilities.simd;
 const longDoubleCapability: boolean | undefined = wasiManifest.capabilities.longDouble;
 const int128Capability: boolean | undefined = wasiManifest.capabilities.int128;
 const wasiWorkerFactory: () => Promise<WasiGccWorker> = () => createGccWorker({ target: 'wasm32-wasi', manifestUrl: 'https://example.invalid/gcc-manifest.json', manifestSha256: '0'.repeat(64) });
+const preopens: readonly WasiGccPreopen[] = [{ path: '/work', readonly: false, directories: ['output'], files: [{ path: 'input.bin', contents: new Uint8Array([0, 255]) }, { path: 'input.txt', contents: 'hello' }] }];
+const filesystemLimits: WasiGccFilesystemLimits = { maxEntries: 32, maxFileBytes: 1024, maxTotalBytes: 2048, maxPathBytes: 256, maxOpenFiles: 8 };
+const runOptions: WasiGccRunOptions = { stdin: '42', preopens, filesystemLimits };
+declare const wasiWorker: WasiGccWorker;
+const execution: Promise<WasiGccRunResult> = wasiWorker.run(wasiArtifact, { ...runOptions, signal: new AbortController().signal });
+async function consumeFiles() {
+  const result = await execution;
+  const files: readonly WasiGccResultFile[] = result.files;
+  const bytes: Uint8Array | undefined = files[0]?.contents;
+  const path: string | undefined = files[0]?.path;
+  // @ts-expect-error The returned file list is readonly.
+  files.push({ path: '/extra', contents: new Uint8Array() });
+  return { bytes, path };
+}
+// @ts-expect-error Binary preopen contents must be a Uint8Array, not a number array.
+const invalidPreopen: WasiGccPreopen = { path: '/work', files: [{ path: 'input.bin', contents: [0, 255] }] };
+// @ts-expect-error Filesystem limits are numeric byte/count limits.
+const invalidFilesystemLimit: WasiGccFilesystemLimits = { maxFileBytes: '1024' };
 // @ts-expect-error Wasm output cannot select an x86 CPU profile.
 const invalidWasiCpu: WasiGccCompileRequest = { code: '', cpu: 'avx2' };
 // @ts-expect-error Wasm SIMD is a boolean opt-in, not an x86 feature name.
 const invalidWasiSimd: WasiGccCompileRequest = { code: '', simd: 'avx2' };
 // @ts-expect-error The existing x86 API does not accept a Wasm SIMD selector.
 const invalidX86Simd: CrossGccCompileRequest = { code: '', simd: true };
-void [request, compiler, host, target, workerFactory, wasiRequest, wasiTarget, simdFeature, simdCapability, longDoubleCapability, int128Capability, wasiWorkerFactory, invalidWasiCpu, invalidWasiSimd, invalidX86Simd];
+void [request, compiler, host, target, workerFactory, wasiRequest, wasiTarget, simdFeature, simdCapability, longDoubleCapability, int128Capability, wasiWorkerFactory, consumeFiles, invalidPreopen, invalidFilesystemLimit, invalidWasiCpu, invalidWasiSimd, invalidX86Simd];
 `
 	},
 	{
@@ -280,7 +300,9 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// This allowance is shared by all three debugger changes; dependencies stay unchanged.
 		// GCC shared sysroot storage adds 5,712 emitted/documentation bytes and two files.
 		// PCH support adds another 8,315 bytes without new files or dependencies.
-		budget: { maxBytes: 40 * MiB + 612 * 1024, maxFiles: 3_392, maxPackages: 70 },
+		// GCC in-memory preopens measure 42,600,845 bytes / 3,394 files / 66 packages.
+		// The filesystem helper adds two files; the minimum byte-cap increase is 31 KiB.
+		budget: { maxBytes: 40 * MiB + 643 * 1024, maxFiles: 3_394, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

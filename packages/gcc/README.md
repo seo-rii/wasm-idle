@@ -121,7 +121,60 @@ arbitrary external objects are not promised.
 
 `run()` accepts `stdin`, `args`, `env` and `maxOutputBytes` (default: four MiB combined
 stdout/stderr), returning exit code, output, runtime and final linear-memory
-capacity. It supplies no directory preopens, threads or dynamic linking.
+capacity. Optional `preopens` provide a fresh in-memory filesystem for each run:
+
+```ts
+const result = await compiler.run(artifact, {
+	stdin: '3\n',
+	preopens: [
+		{ path: '/input', readonly: true, files: [{ path: 'data.bin', contents: inputBytes }] },
+		{ path: '/output', directories: ['results'] }
+	],
+	filesystemLimits: { maxFileBytes: 1024 * 1024, maxTotalBytes: 4 * 1024 * 1024 }
+});
+const output = result.files.find((file) => file.path === '/output/results/data.bin');
+```
+
+Guest code can use `fopen`, `fread`, `fwrite`, directory enumeration, `mkdir`,
+`unlink` and `rmdir` inside the supplied mounts. Mount paths are canonical absolute
+guest paths (`/input`, or `/`); mounts cannot overlap. Input file and directory
+paths are canonical relative paths, with no empty, `.` or `..` components,
+backslashes or NULs. Missing input parent directories are created automatically.
+Guest relative `.` and `..` components are normalized within the directory fd;
+traversed components must exist and be directories. An attempt to escape that fd
+returns `ENOTCAPABLE`. Symlinks, hard links, rename
+and filesystem timestamps are unsupported in this profile.
+
+The SDK copies input bytes before execution. Strings become UTF-8; binary data
+remains bytes. Each normal exit, including a nonzero exit code, returns `files`:
+all remaining regular files from every mount, including unchanged input files,
+sorted by absolute guest path and containing independent `Uint8Array` copies.
+Empty directories are not included. Running again starts from the new options;
+mutating input or returned buffers never changes another run. No preopens means
+no guest filesystem and `files: []`. No host directories or OPFS are mounted.
+Worker requests and results use structured clone without detaching caller buffers.
+
+`readonly: true` rejects file creation, writes, truncation, allocation and directory
+mutation with `EROFS`. Missing files return `ENOENT`. `filesystemLimits` applies
+across every mount, independently of stdout/stderr and Wasm linear memory:
+
+| Limit           | Default | What is counted                                   |
+| --------------- | ------- | ------------------------------------------------- |
+| `maxEntries`    | 1024    | Live files and directories, including mount roots |
+| `maxFileBytes`  | 16 MiB  | Each file's logical size, including holes         |
+| `maxTotalBytes` | 64 MiB  | All live file bytes                               |
+| `maxPathBytes`  | 4096    | Absolute guest path length in UTF-8 bytes         |
+| `maxOpenFiles`  | 256     | Open filesystem descriptors, including preopens   |
+
+Limits must be positive integers no larger than `2**32 - 1`. Initial input that
+exceeds a limit rejects the request. Guest growth beyond entry/byte limits returns
+`ENOSPC` before allocating; overlong paths return `ENAMETOOLONG` and too many open
+descriptors return `EMFILE`. Lookup text is also bounded to the greater of 4096
+code units and `maxPathBytes`; the resolved path uses the UTF-8 byte limit.
+Unlinked files held open still consume entry/byte quota until the last descriptor
+closes. Growth is rejected before the offending write or resize allocates bytes.
+
+Threads and dynamic linking remain unavailable.
 Traps are errors; failed compilation yields no executable artifact.
 
 ## Existing x86 API

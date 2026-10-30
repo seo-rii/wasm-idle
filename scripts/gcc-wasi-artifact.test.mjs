@@ -67,3 +67,60 @@ test('synthetic empty WASI command executes in the disposable Node host', async 
 		await fs.rm(directory, { recursive: true, force: true });
 	}
 });
+
+test('independent Node host preserves binary preopen inputs and checks complete sorted snapshots', async () => {
+	const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'gcc-wasi-preopen-test-'));
+	try {
+		const file = path.join(directory, 'synthetic.wasm');
+		await fs.writeFile(file, syntheticCommand());
+		const input = Uint8Array.from([0, 128, 255, 10]);
+		const fixture = {
+			id: 'synthetic-preopen-host-only',
+			stdin: '',
+			stdout: '',
+			runOptions: {
+				preopens: [
+					{
+						path: '/z',
+						directories: ['empty'],
+						files: [{ path: 'binary', contents: input }]
+					},
+					{ path: '/a', files: [{ path: 'nested/text', contents: '한글\n' }] }
+				]
+			},
+			expectedFiles: [
+				{ path: '/a/nested/text', contents: '한글\n' },
+				{ path: '/z/binary', contents: input }
+			]
+		};
+		const result = runNodeWasi(file, fixture);
+		assert.deepEqual(result.files[1].contents, [0, 128, 255, 10]);
+		assert.deepEqual([...input], [0, 128, 255, 10]);
+		assert.throws(
+			() => runNodeWasi(file, { ...fixture, expectedFiles: [] }),
+			/Node WASI files/
+		);
+	} finally {
+		await fs.rm(directory, { recursive: true, force: true });
+	}
+});
+
+test('independent Node host does not claim to enforce SDK read-only mounts or quotas', () => {
+	const fixture = { id: 'unsupported-host-policy', stdin: '', stdout: '' };
+	assert.throws(
+		() =>
+			runNodeWasi('unused.wasm', {
+				...fixture,
+				runOptions: { preopens: [{ path: '/readonly', readonly: true }] }
+			}),
+		/read-only preopens/
+	);
+	assert.throws(
+		() =>
+			runNodeWasi('unused.wasm', {
+				...fixture,
+				runOptions: { filesystemLimits: { maxEntries: 2 } }
+			}),
+		/memory filesystem quotas/
+	);
+});

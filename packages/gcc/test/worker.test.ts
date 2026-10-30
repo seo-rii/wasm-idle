@@ -13,6 +13,7 @@ class FixtureWorker {
 		FixtureWorker.instances.push(this);
 	}
 	postMessage(message: Record<string, unknown>) {
+		message = structuredClone(message);
 		this.messages.push(message);
 		if (message.type === 'initialize')
 			queueMicrotask(() =>
@@ -176,5 +177,70 @@ describe('GCC Worker ownership and cancellation', () => {
 		controller.abort();
 		await rejected;
 		expect(transport.terminate).toHaveBeenCalledOnce();
+	});
+
+	it('transports preopens and limits with cloned binary input and result files', async () => {
+		const compiler = await createGccWorker({ ...options, target: 'wasm32-wasi' });
+		const transport = FixtureWorker.instances[0];
+		const artifact = {
+			compiler: 'gcc',
+			compilerHost: 'wasm32-emscripten',
+			target: 'wasm32-wasi',
+			format: 'wasm-executable',
+			fileName: 'program.wasm',
+			bytes: new Uint8Array([0, 97, 115, 109]),
+			cpu: 'wasm32'
+		} as const;
+		const contents = new Uint8Array([0, 127, 255]);
+		const preopens = [{ path: '/work', files: [{ path: 'input.bin', contents }] }];
+		const filesystemLimits = {
+			maxEntries: 8,
+			maxFileBytes: 128,
+			maxTotalBytes: 256,
+			maxPathBytes: 64,
+			maxOpenFiles: 4
+		};
+		const pending = compiler.run(artifact, {
+			stdin: '42\n',
+			preopens,
+			filesystemLimits,
+			signal: new AbortController().signal
+		});
+		contents[0] = 99;
+		expect(transport.messages[1]).toMatchObject({
+			type: 'run',
+			options: {
+				stdin: '42\n',
+				preopens: [
+					{
+						path: '/work',
+						files: [{ path: 'input.bin', contents: new Uint8Array([0, 127, 255]) }]
+					}
+				],
+				filesystemLimits
+			}
+		});
+		expect(transport.messages[1].options).not.toHaveProperty('signal');
+		expect(artifact.bytes.byteLength).toBe(4);
+		const output = new Uint8Array([255, 0, 128]);
+		transport.onmessage?.({
+			data: structuredClone({
+				id: 1,
+				type: 'run-result',
+				result: {
+					exitCode: 0,
+					stdout: 'done\n',
+					stderr: '',
+					milliseconds: 1,
+					peakMemoryBytes: 65536,
+					files: [{ path: '/work/result.bin', contents: output }]
+				}
+			})
+		});
+		output[0] = 1;
+		expect((await pending).files).toEqual([
+			{ path: '/work/result.bin', contents: new Uint8Array([255, 0, 128]) }
+		]);
+		compiler.dispose();
 	});
 });

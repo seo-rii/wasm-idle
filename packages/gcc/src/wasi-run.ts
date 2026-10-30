@@ -1,5 +1,12 @@
-import { ConsoleStdout, File, OpenFile, WASI } from '@bjorn3/browser_wasi_shim';
+import {
+	ConsoleStdout,
+	File,
+	OpenFile,
+	WASI,
+	wasi as wasiConstants
+} from '@bjorn3/browser_wasi_shim';
 import { compileGccWasm } from './wasm-output.js';
+import { createGccWasiFilesystem } from './wasi-filesystem.js';
 import type { WasiGccArtifact, WasiGccRunOptions, WasiGccRunResult } from './types.js';
 
 const encoder = new TextEncoder();
@@ -17,7 +24,15 @@ export async function runGccWasiArtifact(
 		throw new Error('GCC run requires a linked wasm32-wasi executable artifact');
 	if (
 		Object.keys(options).some(
-			(key) => !['stdin', 'args', 'env', 'maxOutputBytes'].includes(key)
+			(key) =>
+				![
+					'stdin',
+					'args',
+					'env',
+					'maxOutputBytes',
+					'preopens',
+					'filesystemLimits'
+				].includes(key)
 		)
 	)
 		throw new Error('Unsupported GCC WASI run option');
@@ -56,12 +71,14 @@ export async function runGccWasiArtifact(
 		typeof options.stdin === 'string'
 			? encoder.encode(options.stdin)
 			: Uint8Array.from(options.stdin ?? []);
-	const wasi = new WASI(
-		args,
-		env,
-		[new OpenFile(new File(stdin, { readonly: true })), output(0), output(1)],
-		{ debug: false }
-	);
+	const filesystem = createGccWasiFilesystem(options.preopens, options.filesystemLimits);
+	const input = new OpenFile(new File(stdin, { readonly: true }));
+	// Shim 0.4.2 does not check readonly in these two allocation paths. Stdin is
+	// an input snapshot, never a way for the guest to allocate unbounded host data.
+	input.fd_allocate = input.fd_filestat_set_size = () => wasiConstants.ERRNO_BADF;
+	const wasi = new WASI(args, env, [input, output(0), output(1), ...filesystem.fds], {
+		debug: false
+	});
 	const { module, inspection } = await compileGccWasm(artifact.bytes, 'executable');
 	for (const entry of inspection.imports)
 		if (
@@ -70,6 +87,21 @@ export async function runGccWasiArtifact(
 		)
 			throw new Error(`Unsupported WASI Preview 1 function: ${entry.name}`);
 	let memory: WebAssembly.Memory;
+	// The shim appends every opened fd, even after close. Reuse vacancies so an
+	// open/close loop cannot grow the descriptor table beyond the live-fd limit.
+	const pathOpen = wasi.wasiImport.path_open;
+	wasi.wasiImport.path_open = (...args: Parameters<typeof pathOpen>) => {
+		const vacant = wasi.fds.findIndex((fd) => fd === undefined);
+		const ret = pathOpen(...args);
+		if (ret === 0 && vacant >= 0) {
+			wasi.fds[vacant] = wasi.fds.pop()!;
+			new DataView(memory.buffer).setUint32(args[8], vacant, true);
+		}
+		return ret;
+	};
+	const renumber = wasi.wasiImport.fd_renumber;
+	wasi.wasiImport.fd_renumber = (from: number, to: number) =>
+		from === to ? (wasi.fds[from] ? 0 : wasiConstants.ERRNO_BADF) : renumber(from, to);
 	// Shim 0.4.2 counts JS code units for argv allocation; WASI strings are UTF-8 bytes.
 	wasi.wasiImport.args_sizes_get = (argc: number, size: number) => {
 		const view = new DataView(memory.buffer);
@@ -99,6 +131,7 @@ export async function runGccWasiArtifact(
 		stdout: decode(streams[0]),
 		stderr: decode(streams[1]),
 		milliseconds: performance.now() - start,
-		peakMemoryBytes: memory.buffer.byteLength
+		peakMemoryBytes: memory.buffer.byteLength,
+		files: filesystem.files()
 	};
 }
