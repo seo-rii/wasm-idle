@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createCrossGccWorker, createGccWorker } from '../src/worker.js';
+import type { WasiGccCompileRequest, WasiGccLinkProfile } from '../src/types.js';
 
 /** Synthetic transport fixture only: CPU/compiler correctness belongs to the real bundle probe. */
 class FixtureWorker {
@@ -45,6 +46,53 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('GCC Worker ownership and cancellation', () => {
+	it('snapshots RTTI requests and known link language profiles before caller mutation', async () => {
+		const compiler = await createGccWorker({ ...options, target: 'wasm32-wasi' });
+		const transport = FixtureWorker.instances[0];
+		const profile: WasiGccLinkProfile = {
+			target: 'wasm32-wasi',
+			abi: 'wasm32-wasi-preview1',
+			simd: false,
+			language: 'cpp',
+			rtti: true,
+			compatibility: {
+				kind: 'gcc-bundle',
+				manifestSha256: 'a'.repeat(64),
+				sysrootSha256: 'b'.repeat(64)
+			}
+		};
+		const request: WasiGccCompileRequest = {
+			code: 'source',
+			language: 'cpp',
+			rtti: true,
+			linkInputs: [
+				{
+					path: 'provider.o',
+					format: 'wasm-object',
+					sha256: 'c'.repeat(64),
+					bytes: Uint8Array.from([0, 97, 115, 109, 1, 0, 0, 0]),
+					profile
+				}
+			]
+		};
+		const pending = compiler.compile(request);
+		(request as { rtti: boolean }).rtti = false;
+		(profile as { language: string; rtti: boolean }).language = 'c';
+		(profile as { rtti: boolean }).rtti = false;
+		const message = transport.messages.at(-1)!,
+			snapshot = message.request as WasiGccCompileRequest;
+		expect(snapshot.rtti).toBe(true);
+		expect(snapshot.linkInputs?.[0].profile).toMatchObject({ language: 'cpp', rtti: true });
+		transport.onmessage?.({
+			data: {
+				id: message.id,
+				type: 'result',
+				result: { exitCode: 1, stdout: '', stderr: 'synthetic', stages: [] }
+			}
+		});
+		await pending;
+		compiler.dispose();
+	});
 	it('sends private link input snapshots and receipts without detaching caller bytes', async () => {
 		const compiler = await createGccWorker({ ...options, target: 'wasm32-wasi' });
 		const transport = FixtureWorker.instances[0];

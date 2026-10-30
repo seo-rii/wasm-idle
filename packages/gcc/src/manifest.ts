@@ -187,11 +187,16 @@ export function parseWasiGccManifest(value: unknown): WasiGccManifest {
 	}
 	if (!capabilities.c || (capabilities.libstdcxx && !capabilities.cpp))
 		throw new Error('Invalid GCC WASI language capabilities');
-	for (const name of ['exceptions', 'rtti', 'threads', 'dynamicLinking']) {
+	for (const name of ['exceptions', 'threads', 'dynamicLinking']) {
 		if (capabilityInput[name] !== false)
 			throw new Error(`Unsupported GCC WASI capability: ${name}`);
 		capabilities[name] = false;
 	}
+	if (typeof capabilityInput.rtti !== 'boolean')
+		throw new Error('Invalid GCC WASI capability: rtti');
+	capabilities.rtti = capabilityInput.rtti;
+	if (capabilities.rtti && (!capabilities.cpp || !capabilities.libstdcxx))
+		throw new Error('GCC WASI RTTI requires C++ and a qualified GNU libstdc++ runtime');
 	if (typeof capabilityInput.simd !== 'boolean')
 		throw new Error('Invalid GCC WASI capability: simd');
 	capabilities.simd = capabilityInput.simd;

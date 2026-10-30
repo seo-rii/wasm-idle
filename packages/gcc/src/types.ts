@@ -182,7 +182,8 @@ export interface WasiGccManifest {
 		/** Qualified signed/unsigned __int128 operations and ABI. */
 		int128?: boolean;
 		exceptions: false;
-		rtti: false;
+		/** Qualified GNU RTTI runtime; exception-dependent failures remain unsupported. */
+		rtti: boolean;
 		threads: false;
 		dynamicLinking: false;
 		/** True only for a producer bundle qualified with the GCC simd128 backend patch. */
@@ -200,7 +201,8 @@ export interface WasiGccCompileRequest extends Omit<CrossGccCompileRequest, 'cpu
 	/** Baseline Wasm only. An x86 AVX2/FMA profile is not Wasm SIMD. */
 	readonly cpu?: 'wasm32';
 	readonly exceptions?: false;
-	readonly rtti?: false;
+	/** Opt in to qualified C++ RTTI. Omitted/false retains -fno-rtti; exceptions stay disabled. */
+	readonly rtti?: boolean;
 	readonly threads?: false;
 	readonly dynamicLinking?: false;
 	/** Opt in to the bundle's qualified baseline Wasm SIMD operations; never selects x86 AVX. */
@@ -214,6 +216,10 @@ export interface WasiGccLinkProfile {
 	readonly target: 'wasm32-wasi';
 	readonly abi: 'wasm32-wasi-preview1';
 	readonly simd: boolean;
+	/** Known source language. Legacy omission cannot establish that an input is pure C. */
+	readonly language?: 'c' | 'cpp';
+	/** C++ RTTI profile; legacy omission means false. Pure C inputs are RTTI-neutral. */
+	readonly rtti?: boolean;
 	readonly compatibility:
 		| Readonly<{ kind: 'gcc-bundle'; manifestSha256: string; sysrootSha256: string }>
 		| Readonly<{

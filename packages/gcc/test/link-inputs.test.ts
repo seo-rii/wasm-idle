@@ -276,6 +276,96 @@ describe('explicit WASI link inputs', () => {
 		).resolves.toHaveLength(1);
 	});
 
+	it('preserves legacy profiles while copying explicit language and RTTI provenance', async () => {
+		const legacy = await input();
+		expect(snapshotWasiGccLinkInputs([legacy])[0].profile).toEqual(profile);
+		const declared = { ...profile, language: 'cpp' as const, rtti: true };
+		const value = await input(object(), 'cpp.o', declared);
+		const copied = snapshotWasiGccLinkInputs([value]);
+		declared.rtti = false;
+		expect(copied[0].profile).toMatchObject({ language: 'cpp', rtti: true });
+		expect(Object.isFrozen(copied[0].profile)).toBe(true);
+		for (const update of [
+			{ language: 'objc' },
+			{ language: null },
+			{ rtti: 'true' },
+			{ rtti: 1 },
+			{ rtti: true },
+			{ language: 'c', rtti: true }
+		])
+			expect(() =>
+				snapshotWasiGccLinkInputs([
+					{ ...legacy, profile: { ...profile, ...update } } as never
+				])
+			).toThrow(/language|RTTI/);
+	});
+
+	it('allows known C objects and archives with either C++ RTTI mode', async () => {
+		const capable = { ...manifest, capabilities: { ...manifest.capabilities, rtti: true } };
+		const c = { ...profile, language: 'c' as const };
+		const values = [
+			await input(object(), 'helper.o', c),
+			await input(
+				archive([{ path: 'helper.o', bytes: object(), symbol: 'helper' }]),
+				'libhelper.a',
+				c
+			)
+		];
+		for (const rtti of [false, true])
+			await expect(
+				validateWasiGccLinkInputs(
+					snapshotWasiGccLinkInputs(values),
+					capable,
+					hash,
+					false,
+					'cpp',
+					rtti
+				)
+			).resolves.toHaveLength(2);
+		await expect(
+			validateWasiGccLinkInputs(snapshotWasiGccLinkInputs(values), capable, hash, false, 'c')
+		).resolves.toHaveLength(2);
+	});
+
+	it('requires matching C++ RTTI modes and treats legacy missing language conservatively', async () => {
+		const capable = { ...manifest, capabilities: { ...manifest.capabilities, rtti: true } };
+		for (const rtti of [false, true]) {
+			const declared = { ...profile, language: 'cpp' as const, rtti };
+			for (const value of [
+				await input(object(), 'cpp.o', declared),
+				await input(
+					archive([{ path: 'cpp.o', bytes: object(), symbol: 'helper' }]),
+					'libcpp.a',
+					declared
+				)
+			]) {
+				const values = snapshotWasiGccLinkInputs([value]);
+				await expect(
+					validateWasiGccLinkInputs(values, capable, hash, false, 'cpp', rtti)
+				).resolves.toHaveLength(1);
+				await expect(
+					validateWasiGccLinkInputs(values, capable, hash, false, 'cpp', !rtti)
+				).rejects.toThrow('C++ RTTI profile');
+			}
+		}
+		const legacy = snapshotWasiGccLinkInputs([await input()]);
+		await expect(
+			validateWasiGccLinkInputs(legacy, capable, hash, false, 'cpp')
+		).resolves.toHaveLength(1);
+		await expect(
+			validateWasiGccLinkInputs(legacy, capable, hash, false, 'cpp', true)
+		).rejects.toThrow('unknown legacy language');
+		const enabled = snapshotWasiGccLinkInputs([
+			await input(object(), 'cpp.o', { ...profile, language: 'cpp', rtti: true })
+		]);
+		await expect(
+			validateWasiGccLinkInputs(enabled, manifest, hash, false, 'cpp')
+		).rejects.toThrow('RTTI-capable');
+		await expect(validateWasiGccLinkInputs(enabled, capable, hash, false, 'c')).rejects.toThrow(
+			'C++ RTTI profile'
+		);
+	});
+
 	it('requires the pinned explicitly declared scalar C contract for Clang inputs', async () => {
 		const clang: WasiGccLinkProfile = {
 			...profile,
@@ -289,6 +379,20 @@ describe('explicit WASI link inputs', () => {
 		const value = await input(object(), 'clang.o', clang);
 		await expect(validate([value])).resolves.toHaveLength(1);
 		await expect(validate([value], false, 'cpp')).rejects.toThrow('C source request');
+		const capable = { ...manifest, capabilities: { ...manifest.capabilities, rtti: true } };
+		await expect(
+			validateWasiGccLinkInputs(
+				snapshotWasiGccLinkInputs([value]),
+				capable,
+				hash,
+				false,
+				'cpp',
+				true
+			)
+		).rejects.toThrow('C source request');
+		expect(() =>
+			snapshotWasiGccLinkInputs([{ ...value, profile: { ...clang, language: 'cpp' } }])
+		).toThrow('C language profile');
 		await expect(
 			validate([await input(object({ symbol: '_Z6helperi' }), 'clang.o', clang)])
 		).rejects.toThrow('C++ object interfaces');

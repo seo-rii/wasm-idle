@@ -26,13 +26,25 @@ function record(value: unknown, keys: readonly string[], label: string) {
 }
 
 function profileSnapshot(value: unknown): WasiGccLinkProfile {
-	const profile = record(value, ['target', 'abi', 'simd', 'compatibility'], 'profile');
+	const profile = record(
+		value,
+		['target', 'abi', 'simd', 'language', 'rtti', 'compatibility'],
+		'profile'
+	);
 	if (
 		profile.target !== 'wasm32-wasi' ||
 		profile.abi !== 'wasm32-wasi-preview1' ||
 		typeof profile.simd !== 'boolean'
 	)
 		throw new Error('Unsupported GCC link input target/ABI/SIMD profile');
+	const language = profile.language,
+		rtti = profile.rtti;
+	if (language !== undefined && language !== 'c' && language !== 'cpp')
+		throw new Error('Invalid GCC link input language profile');
+	if (rtti !== undefined && typeof rtti !== 'boolean')
+		throw new Error('Invalid GCC link input RTTI profile');
+	if (rtti === true && language !== 'cpp')
+		throw new Error('RTTI-enabled link inputs require an explicit C++ language profile');
 	const compatibility = record(
 		profile.compatibility,
 		['kind', 'manifestSha256', 'sysrootSha256', 'compilerVersion', 'compilerCommit'],
@@ -54,6 +66,7 @@ function profileSnapshot(value: unknown): WasiGccLinkProfile {
 		compatibility.compilerCommit === clangCommit &&
 		!('manifestSha256' in compatibility)
 	) {
+		if (language === 'cpp') throw new Error('clang-c-scalar-v1 requires a C language profile');
 		contract = {
 			kind: 'clang-c-scalar-v1',
 			compilerVersion: '22.1.0',
@@ -65,6 +78,8 @@ function profileSnapshot(value: unknown): WasiGccLinkProfile {
 		target: 'wasm32-wasi',
 		abi: 'wasm32-wasi-preview1',
 		simd: profile.simd,
+		...(language === undefined ? {} : { language }),
+		...(rtti === undefined ? {} : { rtti }),
 		compatibility: Object.freeze(contract)
 	});
 }
@@ -623,8 +638,11 @@ export async function validateWasiGccLinkInputs(
 	manifest: WasiGccManifest,
 	manifestSha256: string,
 	simd: boolean,
-	language: 'c' | 'cpp'
+	language: 'c' | 'cpp',
+	rtti = false
 ): Promise<readonly WasiGccLinkedInput[]> {
+	if (rtti && (language !== 'cpp' || !manifest.capabilities.rtti))
+		throw new Error('RTTI link validation requires a capable bundle and C++ source request');
 	const identities: WasiGccLinkedInput[] = [];
 	for (const input of inputs) {
 		try {
@@ -643,6 +661,15 @@ export async function validateWasiGccLinkInputs(
 					compatibility.kind === 'gcc-bundle'
 						? 'Link input GCC bundle identity mismatch'
 						: 'clang-c-scalar-v1 requires a C source request'
+				);
+			if (profile.rtti === true && !manifest.capabilities.rtti)
+				throw new Error('Link input requires an RTTI-capable GCC bundle');
+			// C has no RTTI mode. Unknown legacy provenance must not be assumed C.
+			if (profile.language !== 'c' && (profile.rtti === true) !== rtti)
+				throw new Error(
+					profile.language === undefined && rtti
+						? 'Link input has unknown legacy language provenance for an RTTI-enabled request'
+						: 'Link input C++ RTTI profile differs from the compilation request'
 				);
 			if ((await gccLinkDigest(input.bytes)) !== input.sha256)
 				throw new Error('Link input SHA-256 mismatch');

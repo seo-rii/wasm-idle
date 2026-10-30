@@ -98,9 +98,24 @@ The GNU runtime excludes timezone databases, C++26 debugger functions and prebui
 `std` modules: their atomics/signals need unsupported interfaces, so use fails at
 compile/link time. Advertising `libstdcxx` requires real STL/iostream qualification.
 
-Requests for exceptions, RTTI, threads, dynamic linking or relaxed SIMD fail.
-C++ uses `-fno-exceptions -fno-rtti -fuse-cxa-atexit -fno-threadsafe-statics`,
-preserving static destruction in this single-threaded environment.
+RTTI is opt-in: `rtti: true` requires a C++ request and a bundle with
+`capabilities.rtti: true`, backed by its qualified GNU libstdc++ runtime. C++ then
+uses `-frtti`. Omitted or false keeps `-fno-rtti`, including with capable bundles;
+unchanged older `rtti: false` manifests remain supported and reject opt-in.
+The manifest field remains a required boolean. C requests reject `rtti: true`.
+All translation units use the same request profile.
+
+The RTTI contract covers the producer's qualified nonthrowing operations, including
+pointer `dynamic_cast` and `typeid` on valid operands. Failed reference casts and
+`typeid` through null polymorphic pointers require exception paths and remain
+outside this profile. The option does not promise recovery from those failures
+or source-level rejection of every expression that might reach them. Native and
+actual Worker execution of the exact compiler/runtime must establish support;
+SDK parser/planner tests alone do not qualify a bundle.
+
+Requests for exceptions, threads, dynamic linking or relaxed SIMD still fail.
+C++ retains `-fno-exceptions -fuse-cxa-atexit -fno-threadsafe-statics`, preserving
+static destruction in this single-threaded environment.
 `__GCC_WASI_SINGLE_THREAD__=1` selects the producer's `errno` header, which uses
 single-thread WASI libc storage and rejects `_REENTRANT`; it provides no TLS.
 `cpu` must be `wasm32`; x86 `avx2`/`avx2-fma` do not select Wasm SIMD. GCC diagnoses
@@ -154,6 +169,22 @@ fields, based on independently recorded compiler inputs. A digest identifies
 bytes; caller-supplied provenance does not authenticate who compiled them or
 prove source-level ABI compatibility.
 
+For RTTI-capable bundles, generated object profiles also record `language: 'c'`
+or `'cpp'`; C++ profiles record the effective `rtti` boolean. Known same-bundle C
+objects are RTTI-neutral and can be used by C++ callers with either setting.
+C++ objects must match the request's RTTI mode. A pure-C archive can declare the
+C profile; an archive containing C++ members must declare their compatible C++
+RTTI profile. The validator checks this declared contract before any frontend
+runs; Wasm symbols cannot prove the original language or class hierarchy.
+
+Legacy profile omission means unknown language and RTTI disabled. Those receipts
+retain their existing default/off behavior. An enabled C++ request rejects an
+unknown-language legacy input rather than assuming it is C: regenerate the object
+receipt or provide independently known C provenance. RTTI-false bundles continue
+emitting the original profile shape, preserving old receipt consumers. Manifests
+and sysroots must still match exactly; a new profile never makes different
+bundles compatible.
+
 The only mixed-compiler contract is the explicit caller declaration
 `compatibility.kind: 'clang-c-scalar-v1'`, pinned to Clang 22.1.0 commit
 `4434dabb69916856b824f68a64b029c67175e532` with the matching `sysrootSha256`.
@@ -179,7 +210,7 @@ name. Archive members are all checked, even when the linker would not select the
 Validation requires WebAssembly version 1, linking metadata version 2 and a symbol
 table. It checks symbol/segment/constructor indices, COMDATs, relocation target
 sections and symbol kinds, nonoverlapping chunk bounds and padded 32-bit LEB
-relocations, archive indices, byte digests, target/ABI and SIMD profiles. Actual
+relocations, archive indices, byte digests, target/ABI and SIMD/RTTI profiles. Actual
 instructions/types are inspected even when the optional `target_features` section
 is absent, as with older qualified WABT outputs. `wasm-ld --fatal-warnings` still
 performs cross-object resolution and relocation application, and the final
@@ -385,7 +416,8 @@ digests at the same URL fetch and verify assets again.
 Compilation has no result cache. Compiled modules belong to the current instance,
 identified by manifest/sysroot digests, GCC version, host and target. Consumer
 caches must also key source/files, ordered `sources`, language/standard,
-preprocessing, defines, ordered link-input receipts, output kind, optimization and CPU/SIMD. Failures never return
+preprocessing, defines, ordered link-input receipts, output kind, optimization and
+CPU/SIMD/RTTI settings. Failures never return
 old artifacts; the example clears its download when compilation starts.
 
 Results include stage argv, exit codes, milliseconds and peak linear-memory
