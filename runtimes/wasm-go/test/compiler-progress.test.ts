@@ -4,17 +4,24 @@ import { normalizeRuntimeManifest } from '../src/runtime-manifest.js';
 import type { BrowserGoCompileProgress } from '../src/types.js';
 import { createCompileRequest, createRuntimeManifest } from './helpers.js';
 
-const { executeGoToolInvocation } = vi.hoisted(() => ({
-	executeGoToolInvocation: vi.fn()
+const { executeGoToolInvocation, prepareGoToolModule } = vi.hoisted(() => ({
+	executeGoToolInvocation: vi.fn(),
+	prepareGoToolModule: vi.fn()
 }));
 
 vi.mock('../src/tool-runtime.js', () => ({
-	executeGoToolInvocation
+	executeGoToolInvocation,
+	prepareGoToolModule
 }));
 
 describe('compiler progress', () => {
 	beforeEach(() => {
 		executeGoToolInvocation.mockReset();
+		prepareGoToolModule.mockReset();
+		prepareGoToolModule.mockImplementation(async (_invocation, _base, _fetch, progress) => {
+			progress?.('tools/link.wasm.gz', 16, 64);
+			return {} as WebAssembly.Module;
+		});
 	});
 
 	it('reports download-linked progress before compile and link complete', async () => {
