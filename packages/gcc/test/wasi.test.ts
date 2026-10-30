@@ -269,6 +269,108 @@ describe('GCC WASI API contract (synthetic fixtures, not GCC qualification)', ()
 		}
 	});
 
+	it('accepts RTTI only as a required boolean backed by C++ and the GNU runtime', () => {
+		const source = manifestFixture();
+		expect(parseWasiGccManifest(source).capabilities.rtti).toBe(false);
+		const capable = {
+			...source,
+			capabilities: { ...source.capabilities, rtti: true, libstdcxx: true }
+		};
+		expect(parseWasiGccManifest(capable).capabilities.rtti).toBe(true);
+		for (const rtti of [undefined, null, 0, 'true', {}, []])
+			expect(() =>
+				parseWasiGccManifest({ ...source, capabilities: { ...source.capabilities, rtti } })
+			).toThrow('capability: rtti');
+		for (const capabilities of [
+			{ ...capable.capabilities, libstdcxx: false },
+			{ ...capable.capabilities, cpp: false, libstdcxx: false }
+		])
+			expect(() => parseWasiGccManifest({ ...source, capabilities })).toThrow(
+				'RTTI requires'
+			);
+	});
+
+	it('keeps RTTI disabled by default and selects one explicit flag for every C++ translation unit', () => {
+		const source = manifestFixture();
+		source.capabilities.libstdcxx = true;
+		const legacy = parseWasiGccManifest(source);
+		const capable = parseWasiGccManifest({
+			...source,
+			capabilities: { ...source.capabilities, rtti: true }
+		});
+		for (const emit of ['assembly', 'object', 'executable'] as const) {
+			const request = {
+				code: 'int helper(); int main() { return helper(); }',
+				emit,
+				language: 'cpp' as const,
+				...(emit === 'executable'
+					? {
+							files: [{ path: 'helper.cpp', contents: 'int helper() { return 0; }' }],
+							sources: ['helper.cpp']
+						}
+					: {})
+			};
+			const old = wasiGccCompilePlan(request, legacy);
+			for (const manifest of [legacy, capable])
+				for (const update of [{}, { rtti: false }]) {
+					const plan = wasiGccCompilePlan({ ...request, ...update }, manifest);
+					expect(plan.stages).toEqual(old.stages);
+					expect(plan.rtti).toBe(false);
+				}
+			const enabled = wasiGccCompilePlan({ ...request, rtti: true }, capable);
+			expect(enabled.rtti).toBe(true);
+			for (const stage of enabled.stages.filter((stage) => stage.tool === 'cc1plus')) {
+				expect(stage.argv.filter((flag) => /^(?:-frtti|-fno-rtti)$/.test(flag))).toEqual([
+					'-frtti'
+				]);
+				expect(stage.argv).toEqual(
+					expect.arrayContaining([
+						'-fno-exceptions',
+						'-fuse-cxa-atexit',
+						'-fno-threadsafe-statics'
+					])
+				);
+			}
+			expect(enabled.stages.filter((stage) => stage.tool !== 'cc1plus')).toEqual(
+				old.stages.filter((stage) => stage.tool !== 'cc1plus')
+			);
+		}
+	});
+
+	it('rejects invalid RTTI requests and preserves the C and legacy defaults', () => {
+		const source = manifestFixture(),
+			legacy = parseWasiGccManifest(source);
+		const capable = parseWasiGccManifest({
+			...source,
+			capabilities: { ...source.capabilities, rtti: true, libstdcxx: true }
+		});
+		for (const manifest of [legacy, capable]) {
+			const request = { code: '', language: 'c' as const };
+			expect(wasiGccCompilePlan({ ...request, rtti: false }, manifest).stages).toEqual(
+				wasiGccCompilePlan(request, manifest).stages
+			);
+			expect(
+				wasiGccCompilePlan(request, manifest).stages[0].argv.some((flag) =>
+					flag.includes('rtti')
+				)
+			).toBe(false);
+			expect(() => wasiGccCompilePlan({ ...request, rtti: true }, manifest)).toThrow(
+				'C++ source'
+			);
+			for (const rtti of [null, 'true', 0, {}, []])
+				expect(() => wasiGccCompilePlan({ code: '', rtti } as never, manifest)).toThrow(
+					'RTTI option'
+				);
+		}
+		expect(() => wasiGccCompilePlan({ code: '', rtti: true }, legacy)).toThrow(
+			'does not support RTTI'
+		);
+		// The shared default language is C++; explicit opt-in must reach that frontend too.
+		expect(wasiGccCompilePlan({ code: '', rtti: true }, capable).stages[0].argv).toContain(
+			'-frtti'
+		);
+	});
+
 	it('links the binary128 print/scan extension before libc only for qualified bundles', () => {
 		const source = manifestFixture();
 		const legacy = parseWasiGccManifest(source);
@@ -471,6 +573,24 @@ describe('GCC WASI API contract (synthetic fixtures, not GCC qualification)', ()
 		expect(plan.stages.at(-1)?.argv).toEqual(
 			expect.arrayContaining(['-static', '-lstdc++', '-lm', '-lgcc_eh'])
 		);
+		for (const version of ['13.3.0', '16.2.0'] as const) {
+			const major = version.split('.')[0],
+				installation = `/sysroot/usr/lib/gcc/x86_64-linux-gnu/${major}`;
+			const existing = parseCrossGccManifest({
+				...manifest,
+				compiler: { family: 'gcc', version },
+				gccInstallation: installation,
+				resourceDir: installation + '/include',
+				gnu: { ...manifest.gnu, gccVersion: major }
+			});
+			const current = gccCompilePlan({ code: '' }, existing);
+			expect(current.stages[0].argv).toContain('-fexceptions');
+			expect(current.stages[0].argv.some((flag) => flag.includes('rtti'))).toBe(false);
+			for (const rtti of [false, true])
+				expect(() => gccCompilePlan({ code: '', rtti } as never, existing)).toThrow(
+					'Unsupported GCC option'
+				);
+		}
 	});
 
 	it('rejects an implicit target before fetching compiler assets', async () => {

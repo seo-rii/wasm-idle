@@ -3,14 +3,14 @@ import { supportsGccWasmSimd } from './wasm-output.js';
 import { snapshotWasiGccLinkInputs } from './wasm-link-inputs.js';
 import type { CrossGccTool, WasiGccCompileRequest, WasiGccManifest } from './types.js';
 
-const unavailableFeatures = ['exceptions', 'rtti', 'threads', 'dynamicLinking'] as const;
+const unavailableFeatures = ['exceptions', 'threads', 'dynamicLinking'] as const;
 
 /** GCC emits WAT; patched WABT emits relocatable Wasm; LLVM is used only as the linker. */
 export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: WasiGccManifest) {
 	const { language, emit, optimization, standard, main, files, sources, definitions } =
 		gccCompileInputs(
 			request,
-			['cpu', 'simd', 'linkInputs', ...unavailableFeatures],
+			['cpu', 'simd', 'rtti', 'linkInputs', ...unavailableFeatures],
 			[
 				'program.wat',
 				'program.wasm',
@@ -25,6 +25,13 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 	for (const feature of unavailableFeatures)
 		if (request[feature] !== undefined && request[feature] !== false)
 			throw new Error(`GCC wasm32-wasi does not support ${feature}`);
+	if (request.rtti !== undefined && typeof request.rtti !== 'boolean')
+		throw new Error('Invalid GCC WASI RTTI option');
+	if (request.rtti === true) {
+		if (language !== 'cpp') throw new Error('GCC WASI RTTI requires a C++ source request');
+		if (!manifest.capabilities.rtti)
+			throw new Error('This GCC wasm32-wasi bundle does not support RTTI');
+	}
 	if (request.simd !== undefined && typeof request.simd !== 'boolean')
 		throw new Error('Invalid GCC WASI SIMD option');
 	if (request.simd) {
@@ -50,7 +57,12 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 	// Legacy scalar bundles do not recognize either flag; leave their argv unchanged.
 	if (manifest.capabilities.simd) cc.push(request.simd ? '-msimd128' : '-mno-simd128');
 	if (language === 'cpp')
-		cc.push('-fno-exceptions', '-fno-rtti', '-fuse-cxa-atexit', '-fno-threadsafe-statics');
+		cc.push(
+			'-fno-exceptions',
+			request.rtti === true ? '-frtti' : '-fno-rtti',
+			'-fuse-cxa-atexit',
+			'-fno-threadsafe-statics'
+		);
 	if (request.preprocessed) cc.push('-fpreprocessed');
 	else {
 		cc.push('-nostdinc', '-isysroot', manifest.sysrootPath);
@@ -119,6 +131,7 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 		linkInputs,
 		language,
 		simd: request.simd === true,
+		rtti: request.rtti === true,
 		stages,
 		cpu: 'wasm32' as const,
 		emit,

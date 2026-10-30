@@ -281,7 +281,15 @@ function wasiCommand(simd = false) {
 	]);
 }
 
-function wasiBundle(linker = wasiCommand()) {
+function wasiObject() {
+	// Relocatable identity function: exercises host receipts, not GCC semantics.
+	return Uint8Array.from([
+		0, 97, 115, 109, 1, 0, 0, 0, 1, 6, 1, 96, 1, 127, 1, 127, 3, 2, 1, 0, 10, 6, 1, 4, 0, 32, 0,
+		11, 0, 19, 7, 108, 105, 110, 107, 105, 110, 103, 2, 8, 8, 1, 0, 0, 0, 3, 97, 100, 100
+	]);
+}
+
+function wasiBundle(linker = wasiCommand(), rtti = false) {
 	const fixture = bundle();
 	fixture.files.delete('gcc-toolchain.v1.json');
 	fixture.files.delete('ld.mjs');
@@ -312,10 +320,10 @@ function wasiBundle(linker = wasiCommand()) {
 			cpp: true,
 			libc: true,
 			libm: true,
-			libstdcxx: false,
+			libstdcxx: rtti,
 			staticInitialization: false,
 			exceptions: false,
-			rtti: false,
+			rtti,
 			threads: false,
 			dynamicLinking: false,
 			simd: true
@@ -400,12 +408,7 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 	});
 
 	it('binds reusable object receipts and validates private link inputs before front-end calls', async () => {
-		// Valid relocatable identity function, used only to exercise host ownership and receipts.
-		host.output = Uint8Array.from([
-			0, 97, 115, 109, 1, 0, 0, 0, 1, 6, 1, 96, 1, 127, 1, 127, 3, 2, 1, 0, 10, 6, 1, 4, 0,
-			32, 0, 11, 0, 19, 7, 108, 105, 110, 107, 105, 110, 103, 2, 8, 8, 1, 0, 0, 0, 3, 97, 100,
-			100
-		]);
+		host.output = wasiObject();
 		const compiler = await createGccCompiler(wasiBundle());
 		try {
 			const produced = await compiler.compile({
@@ -451,6 +454,80 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 			expect(result.artifact).toBeUndefined();
 			expect(result.linkInputs?.[0]).toMatchObject({ path: 'reuse.o', sha256: input.sha256 });
 			expect(host.calls.at(-1)!.files.get('/link-inputs/reuse.o')?.[0]).toBe(0);
+		} finally {
+			compiler.dispose();
+		}
+	});
+
+	it('records known language/RTTI modes and rejects incompatible inputs before frontend calls', async () => {
+		host.output = wasiObject();
+		const compiler = await createGccCompiler(wasiBundle(undefined, true));
+		try {
+			const artifacts = [];
+			for (const request of [
+				{ language: 'c' as const },
+				{ language: 'cpp' as const },
+				{ language: 'cpp' as const, rtti: true }
+			]) {
+				const result = await compiler.compile({
+					code: 'fixture',
+					emit: 'object',
+					...request
+				});
+				const profile = result.artifact!.linkInput!.profile;
+				expect(profile.language).toBe(request.language);
+				if (request.language === 'c') expect(profile).not.toHaveProperty('rtti');
+				else expect(profile.rtti).toBe(request.rtti === true);
+				artifacts.push(result.artifact!);
+			}
+			const inputs = artifacts.map((artifact) => ({
+				...artifact.linkInput!,
+				bytes: artifact.bytes,
+				path: 'reuse.o'
+			}));
+			const before = host.calls.length;
+			for (const [input, rtti] of [
+				[inputs[1], true],
+				[inputs[2], false]
+			] as const)
+				await expect(
+					compiler.compile({ code: '', language: 'cpp', rtti, linkInputs: [input] })
+				).rejects.toThrow('C++ RTTI profile');
+			const { language: _language, rtti: _rtti, ...legacy } = inputs[0].profile;
+			await expect(
+				compiler.compile({
+					code: '',
+					rtti: true,
+					linkInputs: [{ ...inputs[0], profile: legacy }]
+				})
+			).rejects.toThrow('unknown legacy language');
+			await expect(compiler.compile({ code: '', language: 'c', rtti: true })).rejects.toThrow(
+				'C++ source'
+			);
+			expect(host.calls).toHaveLength(before);
+			// Validation reaches the synthetic failing frontend for known C and matching C++.
+			for (const input of [inputs[0], inputs[2]]) {
+				const result = await compiler.compile({
+					code: '!source failure',
+					rtti: true,
+					linkInputs: [input]
+				});
+				expect(result.exitCode).toBe(9);
+				expect(result.linkInputs?.[0].profile).toEqual(input.profile);
+				expect(host.calls.at(-1)?.argv).toContain('-frtti');
+			}
+		} finally {
+			compiler.dispose();
+		}
+	});
+
+	it('rejects RTTI opt-in against an old bundle before any tool runs', async () => {
+		const compiler = await createGccCompiler(wasiBundle());
+		try {
+			await expect(compiler.compile({ code: '', rtti: true })).rejects.toThrow(
+				'does not support RTTI'
+			);
+			expect(host.calls).toHaveLength(0);
 		} finally {
 			compiler.dispose();
 		}

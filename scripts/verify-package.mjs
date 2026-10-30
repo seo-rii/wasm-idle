@@ -105,7 +105,9 @@ export const scenarios = [
 		// Raise only the byte limit by the minimum 25 KiB; dependencies stay unchanged.
 		// Explicit link inputs measure 2,704,716 bytes / 182 files / four packages.
 		// The additional 37,533 bytes require 37 KiB; the two helper files fit the cap.
-		budget: { maxBytes: 2.5 * MiB + 82 * 1024, maxFiles: 184, maxPackages: 4 },
+		// RTTI contracts measure 2,709,792 bytes / 182 files / four packages with exact
+		// locked dependencies. The 4,384-byte overflow requires only another 5 KiB.
+		budget: { maxBytes: 2.5 * MiB + 87 * 1024, maxFiles: 184, maxPackages: 4 },
 		absentPackageNames: [
 			'wasm-idle',
 			'@wasm-idle/llvm-core',
@@ -142,6 +144,8 @@ const simdFeature: boolean | undefined = wasiArtifact.wasm?.features.simd128;
 const simdCapability: boolean = wasiManifest.capabilities.simd;
 const longDoubleCapability: boolean | undefined = wasiManifest.capabilities.longDouble;
 const int128Capability: boolean | undefined = wasiManifest.capabilities.int128;
+const rttiCapability: boolean = wasiManifest.capabilities.rtti;
+const rttiRequest: WasiGccCompileRequest = { code: '', language: 'cpp', rtti: true };
 const wasiWorkerFactory: () => Promise<WasiGccWorker> = () => createGccWorker({ target: 'wasm32-wasi', manifestUrl: 'https://example.invalid/gcc-manifest.json', manifestSha256: '0'.repeat(64) });
 const preopens: readonly WasiGccPreopen[] = [{ path: '/work', readonly: false, directories: ['output'], files: [{ path: 'input.bin', contents: new Uint8Array([0, 255]) }, { path: 'input.txt', contents: 'hello' }] }];
 const filesystemLimits: WasiGccFilesystemLimits = { maxEntries: 32, maxFileBytes: 1024, maxTotalBytes: 2048, maxPathBytes: 256, maxOpenFiles: 8 };
@@ -149,6 +153,8 @@ const runOptions: WasiGccRunOptions = { stdin: '42', preopens, filesystemLimits 
 declare const wasiWorker: WasiGccWorker;
 const execution: Promise<WasiGccRunResult> = wasiWorker.run(wasiArtifact, { ...runOptions, signal: new AbortController().signal });
 const gccProfile: WasiGccLinkProfile = { target: 'wasm32-wasi', abi: 'wasm32-wasi-preview1', simd: false, compatibility: { kind: 'gcc-bundle', manifestSha256: '0'.repeat(64), sysrootSha256: '1'.repeat(64) } };
+const knownCProfile: WasiGccLinkProfile = { ...gccProfile, language: 'c' };
+const cppRttiProfile: WasiGccLinkProfile = { ...gccProfile, language: 'cpp', rtti: true };
 const clangProfile: WasiGccLinkProfile = { target: 'wasm32-wasi', abi: 'wasm32-wasi-preview1', simd: false, compatibility: { kind: 'clang-c-scalar-v1', compilerVersion: '22.1.0', compilerCommit: '4434dabb69916856b824f68a64b029c67175e532', sysrootSha256: '1'.repeat(64) } };
 declare const objectBytes: Uint8Array;
 declare const archiveBytes: Uint8Array;
@@ -210,6 +216,13 @@ const invalidWasiCpu: WasiGccCompileRequest = { code: '', cpu: 'avx2' };
 const invalidWasiSimd: WasiGccCompileRequest = { code: '', simd: 'avx2' };
 // @ts-expect-error The existing x86 API does not accept a Wasm SIMD selector.
 const invalidX86Simd: CrossGccCompileRequest = { code: '', simd: true };
+// @ts-expect-error RTTI is a boolean opt-in.
+const invalidRtti: WasiGccCompileRequest = { code: '', rtti: 'true' };
+// @ts-expect-error RTTI profile values are booleans.
+const invalidRttiProfile: WasiGccLinkProfile = { ...gccProfile, rtti: 1 };
+// @ts-expect-error The existing x86 request contract does not accept the WASI RTTI option.
+const invalidX86Rtti: CrossGccCompileRequest = { code: '', rtti: true };
+void [rttiCapability, rttiRequest, knownCProfile, cppRttiProfile, invalidRtti, invalidRttiProfile, invalidX86Rtti];
 void [request, compiler, host, target, workerFactory, wasiRequest, wasiTarget, simdFeature, simdCapability, longDoubleCapability, int128Capability, wasiWorkerFactory, compilation, reuseObjectReceipt, consumeFiles, invalidPreopen, invalidFilesystemLimit, invalidLinkBytes, incompleteLinkInput, executableLinkInput, incompleteGccProfile, unqualifiedClangProfile, invalidX86LinkInputs, invalidWasiCpu, invalidWasiSimd, invalidX86Simd];
 `
 	},
@@ -348,7 +361,9 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// GCC in-memory preopens measure 42,600,845 bytes / 3,394 files / 66 packages.
 		// The filesystem helper adds two files; the minimum byte-cap increase is 31 KiB.
 		// Explicit link inputs add 37,533 bytes and two files, requiring another 37 KiB.
-		budget: { maxBytes: 40 * MiB + 680 * 1024, maxFiles: 3_396, maxPackages: 70 },
+		// RTTI adds 5,318 packed GCC bytes without files or dependencies; propagate
+		// the same 5 KiB increment, using the existing aggregate headroom.
+		budget: { maxBytes: 40 * MiB + 685 * 1024, maxFiles: 3_396, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

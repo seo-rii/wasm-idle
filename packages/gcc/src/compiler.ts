@@ -226,7 +226,8 @@ export async function createGccCompiler(
 		files: readonly { path: string; contents: Uint8Array }[],
 		simdEnabled = false,
 		linkInputs: readonly WasiGccLinkInput[] = [],
-		language: 'c' | 'cpp' = 'cpp'
+		language: 'c' | 'cpp' = 'cpp',
+		rttiEnabled = false
 	): Promise<{
 		exitCode: number;
 		stdout: string;
@@ -269,7 +270,8 @@ export async function createGccCompiler(
 					manifest,
 					manifestSha256,
 					simdEnabled,
-					language
+					language,
+					rttiEnabled
 				);
 			for (const stage of stages) {
 				if (disposed) throw new Error('GCC compiler is disposed');
@@ -541,7 +543,8 @@ export async function createGccCompiler(
 					manifest.capabilities.simd &&
 					(request as WasiGccCompileRequest).simd === true,
 				'linkInputs' in plan ? plan.linkInputs : [],
-				'language' in plan ? plan.language : 'cpp'
+				'language' in plan ? plan.language : 'cpp',
+				'rtti' in plan && plan.rtti
 			);
 			if (!result.workspace) return result;
 			const { workspace, wasmInspection, ...completed } = result;
@@ -555,6 +558,14 @@ export async function createGccCompiler(
 								target: 'wasm32-wasi',
 								abi: 'wasm32-wasi-preview1',
 								simd: 'simd' in plan && plan.simd,
+								// Preserve legacy false-bundle receipt shapes. New bundles
+								// distinguish pure C from both C++ RTTI profiles.
+								...(manifest.capabilities.rtti && 'language' in plan
+									? {
+											language: plan.language,
+											...(plan.language === 'cpp' ? { rtti: plan.rtti } : {})
+										}
+									: {}),
 								compatibility: Object.freeze({
 									kind: 'gcc-bundle',
 									manifestSha256,
