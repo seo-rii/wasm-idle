@@ -66,7 +66,12 @@ export async function fetchBoundedExternalAsset(
 	}
 	if (options.signal?.aborted) throw abortReason(options.signal);
 	const { requestUrl, expectedFinalUrl } = resolveExternalAssetUrl(options.url);
-	const receipt = resolveLanguageToolPersistentReceipt(requestUrl, options, options.integrity);
+	const receipt = await resolveLanguageToolPersistentReceipt(
+		requestUrl,
+		options,
+		options.integrity,
+		options.signal
+	);
 	if (!receipt?.sha256 || !expectedFinalUrl) return fetchBoundedExternalAssetNetwork(options);
 	const candidates = [{ sha256: receipt.sha256, bytes: receipt.bytes }];
 	if (receipt.uncompressedSha256 !== undefined && receipt.uncompressedBytes !== undefined) {

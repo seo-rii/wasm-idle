@@ -644,6 +644,7 @@ export async function syncWasmLispDist(options = {}) {
 	};
 	const fingerprint = computeLispRuntimeFingerprint(manifestBody);
 	const manifest = { ...manifestBody, fingerprint };
+	const manifestBytes = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`);
 	const legacyManifest = {
 		format: 'wasm-lisp-runtime-manifest-v1',
 		runtime: RUNTIME,
@@ -656,7 +657,12 @@ export async function syncWasmLispDist(options = {}) {
 			...storage.map((asset) => asset.path)
 		].sort()
 	};
-	const versionModuleSource = `export const WASM_LISP_ASSET_VERSION =\n\t'${fingerprint}';\n`;
+	const versionModuleSource =
+		`export const WASM_LISP_ASSET_VERSION =\n\t'${fingerprint}';\n` +
+		`export const WASM_LISP_MANIFEST_RECEIPT = Object.freeze({\n` +
+		`\tsha256: '${sha256(manifestBytes)}',\n` +
+		`\tbytes: ${manifestBytes.byteLength},\n` +
+		`\tmediaType: 'application/json'\n});\n`;
 	const lspVersionModuleSource = `export const BUNDLED_LISP_MANIFEST_FINGERPRINT =\n\t'${fingerprint}';\n`;
 	const licenseBytes = sourceBytes.get(LICENSE_FILE);
 	const noticesBytes = sourceBytes.get(NOTICES_FILE);
@@ -670,7 +676,7 @@ export async function syncWasmLispDist(options = {}) {
 		[NOTICES_FILE, noticesBytes],
 		[BUILD_METADATA_FILE, buildMetadataBytes],
 		[LEGACY_MANIFEST_FILE, Buffer.from(`${JSON.stringify(legacyManifest, null, 2)}\n`)],
-		[MANIFEST_FILE, Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`)]
+		[MANIFEST_FILE, manifestBytes]
 	]);
 
 	await Promise.all(

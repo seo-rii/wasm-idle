@@ -1,6 +1,6 @@
 import {
 	resolveRuntimeAssetCacheOptions,
-	resolveRuntimeAssetLockEntry,
+	resolveRuntimeAssetLockEntryFromManifest,
 	type RuntimeAssetCacheOptions
 } from '@wasm-idle/core';
 import { BUNDLED_CLANG_ASSET_INTEGRITY } from '$lib/playground/clangAssetIntegrity';
@@ -48,7 +48,10 @@ import {
 	WASM_GOLFSCRIPT_INTERPRETER_RECEIPT
 } from '$lib/playground/wasmGolfscriptVersion';
 import { WASM_JULIA_RUNTIME_BUNDLE } from '$lib/playground/wasmJuliaVersion';
-import { WASM_LISP_ASSET_VERSION } from '$lib/playground/wasmLispVersion';
+import {
+	WASM_LISP_ASSET_VERSION,
+	WASM_LISP_MANIFEST_RECEIPT
+} from '$lib/playground/wasmLispVersion';
 import { WASM_NIM_RUNTIME_BUNDLE } from '$lib/playground/wasmNimVersion';
 import { WASM_PASCAL_RUNTIME_BUNDLE } from '$lib/playground/wasmPascalVersion';
 import { WASM_AWK_RUNTIME_BUNDLE } from '$lib/playground/wasmAwkVersion';
@@ -2031,9 +2034,14 @@ export function resolveLispRuntimeAssetConfig(
 	const manifestReceipt =
 		configured?.manifestReceipt ??
 		(usesBundledRoot && !configuredManifestUrl && !configuredFingerprint
-			? resolveRuntimeAssetLockEntry(manifestUrl, {
+			? resolveRuntimeAssetLockEntryFromManifest(manifestUrl, {
 					assetRoot: new URL('./', new URL(moduleUrl, currentUrl || 'http://localhost/')),
-					assetPrefix: 'wasm-lisp'
+					assetPrefix: 'wasm-lisp',
+					manifest: {
+						schemaVersion: 1,
+						version: WASM_LISP_ASSET_VERSION,
+						assets: { 'wasm-lisp/runtime-manifest.v2.json': WASM_LISP_MANIFEST_RECEIPT }
+					}
 				})
 			: undefined);
 	return {

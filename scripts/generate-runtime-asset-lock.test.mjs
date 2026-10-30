@@ -9,7 +9,8 @@ import { build } from 'esbuild';
 import {
 	createRuntimeAssetLock,
 	generateRuntimeAssetLock,
-	renderRuntimeAssetLock
+	renderRuntimeAssetLock,
+	renderRuntimeAssetVersion
 } from './generate-runtime-asset-lock.mjs';
 
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
@@ -99,7 +100,12 @@ test('generation and check are deterministic and reject stale release output', a
 	const f = await fixture(t);
 	const manifest = await generateRuntimeAssetLock(f);
 	assert.equal(await readFile(f.output, 'utf8'), renderRuntimeAssetLock(manifest));
+	const versionFile = path.join(path.dirname(f.output), 'runtime-asset-version.generated.ts');
+	assert.equal(await readFile(versionFile, 'utf8'), renderRuntimeAssetVersion(manifest));
 	await generateRuntimeAssetLock({ ...f, check: true });
+	await writeFile(versionFile, renderRuntimeAssetVersion({ version: '0.0.0' }));
+	await assert.rejects(generateRuntimeAssetLock({ ...f, check: true }), /lock is stale/);
+	await writeFile(versionFile, renderRuntimeAssetVersion(manifest));
 	await f.put('clang/bin/clang.js', 'changed');
 	await assert.rejects(generateRuntimeAssetLock({ ...f, check: true }), /lock is stale/);
 });

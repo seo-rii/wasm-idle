@@ -8,12 +8,13 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { gunzip as gunzipCallback } from 'node:zlib';
 
-import { createRuntimeAssetLock, renderRuntimeAssetLock } from './generate-runtime-asset-lock.mjs';
+import { createRuntimeAssetLock, runtimeAssetLockSources } from './generate-runtime-asset-lock.mjs';
 
 const gunzip = promisify(gunzipCallback);
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DEFAULT_REGISTRY = 'https://registry.npmjs.org/';
 const RUNTIME_ASSET_LOCK_PATH = 'packages/core/src/runtime-asset-lock.generated.ts';
+const RUNTIME_ASSET_VERSION_PATH = 'packages/core/src/runtime-asset-version.generated.ts';
 const RELEASE_PACKAGE_LOCATIONS = [
 	['wasm-idle', '.'],
 	['@wasm-idle/container', 'packages/container'],
@@ -440,6 +441,7 @@ async function assertReleaseWorktree(packages, targetVersion, targetVersions, as
 			!isBookkeepingPath(relativePath) &&
 			relativePath !== 'pnpm-lock.yaml' &&
 			relativePath !== RUNTIME_ASSET_LOCK_PATH &&
+			relativePath !== RUNTIME_ASSET_VERSION_PATH &&
 			!manifestByPath.has(relativePath)
 	);
 	if (unexpectedPaths.length > 0) {
@@ -473,7 +475,10 @@ async function assertReleaseWorktree(packages, targetVersion, targetVersions, as
 			'pnpm-lock.yaml is dirty without matching release manifest changes. Commit or stash it first.'
 		);
 	}
-	if (dirtyPaths.includes(RUNTIME_ASSET_LOCK_PATH)) {
+	if (
+		dirtyPaths.includes(RUNTIME_ASSET_LOCK_PATH) ||
+		dirtyPaths.includes(RUNTIME_ASSET_VERSION_PATH)
+	) {
 		const output = path.join(REPO_ROOT, RUNTIME_ASSET_LOCK_PATH);
 		if (!(await lstat(output)).isFile())
 			throw new Error(
@@ -492,10 +497,12 @@ async function assertReleaseWorktree(packages, targetVersion, targetVersions, as
 			targetVersion,
 			committed.stdout
 		);
-		if ((await readFile(output, 'utf8')) !== renderRuntimeAssetLock(candidate)) {
-			throw new Error(
-				`${RUNTIME_ASSET_LOCK_PATH} contains changes beyond the generated ${targetVersion} release lock for this asset root. Commit or stash them first.`
-			);
+		for (const [file, source] of runtimeAssetLockSources(candidate, output)) {
+			if (!(await lstat(file)).isFile() || (await readFile(file, 'utf8')) !== source) {
+				throw new Error(
+					`${path.relative(REPO_ROOT, file)} contains changes beyond the generated ${targetVersion} release lock for this asset root. Commit or stash them first.`
+				);
+			}
 		}
 	}
 }
@@ -686,7 +693,9 @@ async function prepareRuntimeAssetLock(assetRoot, targetVersion) {
 		targetVersion,
 		await readFile(output, 'utf8')
 	);
-	await writeFile(output, renderRuntimeAssetLock(candidate));
+	for (const [file, source] of runtimeAssetLockSources(candidate, output)) {
+		await writeFile(file, source);
+	}
 	console.log(
 		`Generated runtime asset lock ${candidate.version}: ${Object.keys(candidate.assets).length} receipts`
 	);

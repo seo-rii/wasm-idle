@@ -49,11 +49,17 @@ async function createServer(
 		? new URL(lifecycle.rootUrl, lifecycle.currentUrl || globalThis.location?.href).href
 		: undefined;
 	const moduleUrl = new URL('pyodide.asm.wasm', pyodideBaseUrl).href;
-	const moduleReceipt = resolveLanguageToolPersistentReceipt(moduleUrl, { assetRoot });
 	try {
 		await waitForLanguageServerStartup(
-			() =>
-				new Promise<void>((resolve, reject) => {
+			async () => {
+				const moduleReceipt = await resolveLanguageToolPersistentReceipt(
+					moduleUrl,
+					{ assetRoot },
+					undefined,
+					controller.signal
+				);
+				controller.signal.throwIfAborted();
+				return new Promise<void>((resolve, reject) => {
 					const activeWorker = createWorker();
 					worker = activeWorker;
 					const readyListener = (event: MessageEvent<PythonLspWorkerOutboundMessage>) => {
@@ -135,7 +141,8 @@ async function createServer(
 								: undefined
 						}
 					});
-				}),
+				});
+			},
 			{ signal: lifecycle.signal, timeoutMs: lifecycle.startupTimeoutMs }
 		);
 	} catch (error) {
