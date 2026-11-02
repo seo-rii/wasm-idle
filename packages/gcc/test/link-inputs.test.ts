@@ -57,6 +57,7 @@ function object(
 		simd?: boolean;
 		feature?: string;
 		init?: boolean;
+		importName?: string;
 	} = {}
 ) {
 	const symbol = options.symbol ?? 'helper';
@@ -76,7 +77,9 @@ function object(
 		0,
 		0,
 		...section(1, options.simd ? [1, 0x60, 0, 1, 0x7b] : [1, 0x60, 1, 0x7f, 1, 0x7f]),
-		...(options.relocation ? section(2, [1, ...name('env'), ...name('callee'), 0, 0]) : []),
+		...(options.relocation
+			? section(2, [1, ...name('env'), ...name(options.importName ?? 'callee'), 0, 0])
+			: []),
 		...section(3, [1, 0]),
 		...section(10, [1, ...uint(body.length), ...body]),
 		...custom('linking', [
@@ -145,6 +148,41 @@ const validate = (inputs: readonly WasiGccLinkInput[], simd = false, language: '
 	validateWasiGccLinkInputs(snapshotWasiGccLinkInputs(inputs), manifest, hash, simd, language);
 
 describe('explicit WASI link inputs', () => {
+	it('preserves explicit coverage provenance and rejects covered objects/archives even when undeclared', async () => {
+		const plain = await input();
+		expect(snapshotWasiGccLinkInputs([plain])[0].profile).not.toHaveProperty('coverage');
+		await expect(
+			validate([{ ...plain, profile: { ...plain.profile, coverage: false } }])
+		).resolves.toHaveLength(1);
+		const covered = { ...plain, profile: { ...plain.profile, coverage: true } };
+		expect(snapshotWasiGccLinkInputs([covered])[0].profile.coverage).toBe(true);
+		await expect(validate([covered])).rejects.toThrow(
+			'coverage link inputs are currently unsupported'
+		);
+		for (const bytes of [
+			object({ symbol: '__gcov0.helper' }),
+			object({ relocation: true, importName: '__gcov_init' }),
+			archive([
+				{
+					path: 'covered.o',
+					bytes: object({ symbol: '__gcov_merge_add' }),
+					symbol: '__gcov_merge_add'
+				}
+			])
+		]) {
+			const isArchive = new TextDecoder().decode(bytes.subarray(0, 8)) === '!<arch>\n';
+			await expect(
+				validate([await input(bytes, isArchive ? 'covered.a' : 'covered.o')])
+			).rejects.toThrow('coverage link inputs are currently unsupported');
+		}
+		for (const coverage of [null, 'true', 0, [], {}])
+			expect(() =>
+				snapshotWasiGccLinkInputs([
+					{ ...plain, profile: { ...plain.profile, coverage } }
+				] as never)
+			).toThrow('Invalid GCC link input coverage profile');
+	});
+
 	it('copies bytes and profiles synchronously, including SharedArrayBuffer views', async () => {
 		const bytes = new Uint8Array(new SharedArrayBuffer(object().length));
 		bytes.set(object());

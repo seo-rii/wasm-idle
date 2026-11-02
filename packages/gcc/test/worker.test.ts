@@ -46,6 +46,41 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('GCC Worker ownership and cancellation', () => {
+	it('snapshots the coverage opt-in and preserves binary notes and profile metadata in results', async () => {
+		const compiler = await createGccWorker({ ...options, target: 'wasm32-wasi' });
+		const transport = FixtureWorker.instances[0];
+		const request = { code: 'source', language: 'c' as const, coverage: true };
+		const pending = compiler.compile(request);
+		request.coverage = false;
+		const message = transport.messages.at(-1)!;
+		expect((message.request as WasiGccCompileRequest).coverage).toBe(true);
+		const result = {
+			exitCode: 0,
+			stdout: '',
+			stderr: '',
+			stages: [],
+			coverage: {
+				format: 'gcc-gcov',
+				compilerVersion: '17.0.0',
+				compilerCommit: 'a'.repeat(40),
+				notes: [
+					{
+						path: 'program.gcno',
+						dataPath: '/profile/program.gcda',
+						contents: Uint8Array.of(0, 255, 42)
+					}
+				]
+			}
+		};
+		transport.onmessage?.({
+			data: structuredClone({ id: message.id, type: 'result', result })
+		});
+		const received = await pending;
+		expect(received.coverage).toEqual(result.coverage);
+		expect(received.coverage!.notes[0].contents).not.toBe(result.coverage.notes[0].contents);
+		compiler.dispose();
+	});
+
 	it('snapshots RTTI requests and known link language profiles before caller mutation', async () => {
 		const compiler = await createGccWorker({ ...options, target: 'wasm32-wasi' });
 		const transport = FixtureWorker.instances[0];

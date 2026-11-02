@@ -59,6 +59,29 @@ export async function runGccWasiArtifact(
 			throw new Error('Invalid GCC WASI environment entry');
 		return `${key}=${value}`;
 	});
+	if (artifact.coverage !== undefined) {
+		const coverage = artifact.coverage;
+		if (
+			!coverage ||
+			coverage.format !== 'gcc-gcov' ||
+			coverage.directory !== '/profile' ||
+			!Array.isArray(coverage.dataPaths) ||
+			coverage.dataPaths.length < 1 ||
+			coverage.dataPaths.length > 64 ||
+			Array.from(coverage.dataPaths).some(
+				(path, index) => path !== `/profile/program${index ? `.${index}` : ''}.gcda`
+			)
+		)
+			throw new Error('Invalid GCC WASI executable coverage metadata');
+		if (
+			!Array.isArray(options.preopens) ||
+			!options.preopens.some((mount) => mount?.path === '/profile' && mount.readonly !== true)
+		)
+			throw new Error('GCC WASI coverage requires an exact writable /profile preopen');
+		for (const name of ['GCOV_PREFIX', 'GCOV_PREFIX_STRIP'])
+			if (Object.hasOwn(options.env ?? {}, name))
+				throw new Error(`GCC WASI coverage does not support ${name} profile redirection`);
+	}
 	let outputBytes = 0;
 	const streams = [[], []] as Uint8Array[][];
 	const output = (stream: number) =>
