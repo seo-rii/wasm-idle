@@ -373,6 +373,46 @@ async function readBoundedResponse(
 	return loadedBytes;
 }
 
+async function verifyPreflightAssetBytes(
+	asset: RuntimeRegistryAsset,
+	bytes: Uint8Array,
+	mimeType: string | undefined,
+	signal: AbortSignal,
+	runtimeId: string,
+	profileId: string
+) {
+	if (signal.aborted) {
+		throw signal.reason ?? new Error('Runtime asset preflight was aborted');
+	}
+	const identity = asset.encoding === 'identity';
+	// The normalized manifest requires identical delivery/logical hashes and sizes
+	// for identity assets. Verify these owned bytes once, including their logical
+	// MIME type, without reusing a digest across loads or trusting cache metadata.
+	const integrity = await waitForAbortable(
+		verifyRuntimeAssetIntegrity({
+			asset: asset.path,
+			bytes,
+			expected: {
+				sha256: asset.compressedSha256,
+				bytes: asset.compressedBytes,
+				...(identity ? { mediaType: asset.mediaType } : {})
+			},
+			mimeType,
+			runtimeId,
+			profileId
+		}),
+		signal
+	);
+	return {
+		deliveryIntegrity: identity
+			? Object.freeze({ ...integrity, mediaType: undefined })
+			: integrity,
+		runtimeIntegrity: identity
+			? Object.freeze({ ...integrity, stage: 'uncompressed' as const })
+			: undefined
+	};
+}
+
 async function preflightAssetFromNetwork(
 	asset: RuntimeRegistryAsset,
 	assetRootUrl: URL,
@@ -512,46 +552,15 @@ async function preflightAssetFromNetwork(
 		profileId,
 		accountDeliveryBytes
 	);
-	const expected = {
-		sha256: asset.compressedSha256,
-		bytes: asset.compressedBytes,
-		mediaType: asset.mediaType,
-		uncompressedSha256: asset.uncompressedSha256,
-		uncompressedBytes: asset.uncompressedBytes
-	};
-	if (signal.aborted) {
-		throw signal.reason ?? new Error('Runtime asset preflight was aborted');
-	}
-	const deliveryIntegrity = await waitForAbortable(
-		verifyRuntimeAssetIntegrity({
-			asset: asset.path,
-			bytes,
-			expected,
-			stage: 'compressed',
-			runtimeId,
-			profileId
-		}),
-		signal
-	);
 	const mimeType = response.headers.get('content-type') || undefined;
-	let runtimeIntegrity: VerifiedRuntimeAssetIntegrity | undefined;
-	if (asset.encoding === 'identity') {
-		if (signal.aborted) {
-			throw signal.reason ?? new Error('Runtime asset preflight was aborted');
-		}
-		runtimeIntegrity = await waitForAbortable(
-			verifyRuntimeAssetIntegrity({
-				asset: asset.path,
-				bytes,
-				expected,
-				stage: 'uncompressed',
-				mimeType,
-				runtimeId,
-				profileId
-			}),
-			signal
-		);
-	}
+	const { deliveryIntegrity, runtimeIntegrity } = await verifyPreflightAssetBytes(
+		asset,
+		bytes,
+		mimeType,
+		signal,
+		runtimeId,
+		profileId
+	);
 	return Object.freeze({
 		key: asset.key,
 		path: asset.path,
@@ -619,39 +628,14 @@ async function preflightAsset(
 	const bytes = await readPersistentRuntimeAsset({ identity, cache: persistentCache, signal });
 	if (bytes) {
 		accountDeliveryBytes?.(bytes.byteLength);
-		const expected = {
-			sha256: asset.compressedSha256,
-			bytes: asset.compressedBytes,
-			uncompressedSha256: asset.uncompressedSha256,
-			uncompressedBytes: asset.uncompressedBytes,
-			mediaType: asset.mediaType
-		};
-		const deliveryIntegrity = await waitForAbortable(
-			verifyRuntimeAssetIntegrity({
-				asset: asset.path,
-				bytes,
-				expected,
-				stage: 'compressed',
-				runtimeId,
-				profileId
-			}),
-			signal
+		const { deliveryIntegrity, runtimeIntegrity } = await verifyPreflightAssetBytes(
+			asset,
+			bytes,
+			asset.mediaType,
+			signal,
+			runtimeId,
+			profileId
 		);
-		const runtimeIntegrity =
-			asset.encoding === 'identity'
-				? await waitForAbortable(
-						verifyRuntimeAssetIntegrity({
-							asset: asset.path,
-							bytes,
-							expected,
-							stage: 'uncompressed',
-							mimeType: asset.mediaType,
-							runtimeId,
-							profileId
-						}),
-						signal
-					)
-				: undefined;
 		reportProgress(bytes.byteLength);
 		return Object.freeze({
 			key: asset.key,

@@ -193,6 +193,12 @@ describe('syncWasmLispDist', () => {
 		await expect(readFile(fixture.versionModulePath, 'utf8')).resolves.toContain(
 			fixture.result.fingerprint
 		);
+		const manifestBytes = await readFile(
+			path.join(fixture.targetDir, 'runtime-manifest.v2.json')
+		);
+		const versionModule = await readFile(fixture.versionModulePath, 'utf8');
+		expect(versionModule).toContain(`sha256: '${sha256(manifestBytes)}'`);
+		expect(versionModule).toContain(`bytes: ${manifestBytes.byteLength}`);
 		await expect(readFile(fixture.lspVersionModulePath, 'utf8')).resolves.toContain(
 			fixture.result.fingerprint
 		);

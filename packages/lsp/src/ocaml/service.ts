@@ -345,7 +345,7 @@ async function loadDefaultOcamlCompilerHost(
 ): Promise<OcamlCompilerHost> {
 	const policy = resolveLanguageToolPersistentOptions();
 	// Custom manifests without a trusted outer receipt stay on the original network path.
-	const manifestReceipt = resolveLanguageToolPersistentReceipt(options.manifestUrl, {});
+	const manifestReceipt = await resolveLanguageToolPersistentReceipt(options.manifestUrl, {});
 	const persistentCache =
 		policy.persistentCache.enabled && manifestReceipt?.sha256
 			? createRuntimeAssetCacheBackend(policy.persistentCache)

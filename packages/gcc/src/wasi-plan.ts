@@ -10,7 +10,7 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 	const { language, emit, optimization, standard, main, files, sources, definitions } =
 		gccCompileInputs(
 			request,
-			['cpu', 'simd', 'rtti', 'coverage', 'linkInputs', ...unavailableFeatures],
+			['cpu', 'simd', 'rtti', 'coverage', 'debug', 'linkInputs', ...unavailableFeatures],
 			[
 				'program.wat',
 				'program.wasm',
@@ -20,6 +20,17 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 				...Array.from({ length: 63 }, (_, i) => `program.${i + 1}.wat`)
 			]
 		);
+	if (request.debug !== undefined && typeof request.debug !== 'boolean')
+		throw new Error('Invalid GCC WASI debug option');
+	const debug = request.debug === true;
+	if (debug) {
+		if (!manifest.capabilities.debug)
+			throw new Error('This GCC wasm32-wasi bundle does not support DWARF debug information');
+		if (manifest.qualification.status !== 'verified')
+			throw new Error('GCC WASI debug requires a qualified bundle');
+		if (request.optimization !== undefined && optimization !== '0')
+			throw new Error('GCC WASI debug currently requires optimization=0');
+	}
 	const linkInputs = snapshotWasiGccLinkInputs(request.linkInputs);
 	if (linkInputs.length && emit !== 'executable')
 		throw new Error('Explicit GCC link inputs require executable output');
@@ -60,7 +71,7 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 		throw new Error('This GCC wasm32-wasi bundle cannot link WASI libc and libm executables');
 	const cc = [
 		'-quiet',
-		`-O${optimization}`,
+		`-O${debug ? '0' : optimization}`,
 		`-std=${standard}`,
 		'-fdiagnostics-color=never',
 		'-Werror=attributes',
@@ -68,6 +79,7 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 		'-D__GCC_WASI_SINGLE_THREAD__=1',
 		...definitions
 	];
+	if (debug) cc.push('-g', '-gdwarf-4', '-gno-variable-location-views');
 	// Legacy scalar bundles do not recognize either flag; leave their argv unchanged.
 	if (manifest.capabilities.simd) cc.push(request.simd ? '-msimd128' : '-mno-simd128');
 	if (coverage)

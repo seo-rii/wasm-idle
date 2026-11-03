@@ -56,7 +56,8 @@ export const scenarios = [
 		// The Zig debug asset/bitcode helper ships one JavaScript/declaration pair.
 		// Python debug setup and Zig value formatting add two more such pairs.
 		// Scala adds 20 adapter/Worker/declaration/license files; assets remain external.
-		budget: { maxBytes: 7 * MiB + 64 * 1024, maxFiles: 783, maxPackages: 6 },
+		// Lazy receipt lookup adds three core JavaScript/declaration pairs (789 files measured).
+		budget: { maxBytes: 7 * MiB + 64 * 1024, maxFiles: 789, maxPackages: 6 },
 		absentPackageNames: [
 			'java-parser',
 			'chevrotain',
@@ -109,7 +110,12 @@ export const scenarios = [
 		// locked dependencies. The 4,384-byte overflow requires only another 5 KiB.
 		// Coverage contracts measure 2,721,254 bytes / 182 files / four packages.
 		// The 10,726-byte overflow requires another 11 KiB; no files/dependencies are added.
-		budget: { maxBytes: 2.5 * MiB + 98 * 1024, maxFiles: 184, maxPackages: 4 },
+		// Debug contracts measure 2,723,557 bytes / 182 files / four packages.
+		// The 2,235-byte delta needs 3 KiB, retaining 1,307 bytes of measured headroom.
+		// Integrating main's lazy receipt lookup and #358/#361 adds 6,907 bytes and six files.
+		// The combined 2,730,464-byte / 188-file install needs another 7 KiB to retain
+		// at least 1 KiB of headroom (1,568 bytes); dependencies remain unchanged.
+		budget: { maxBytes: 2.5 * MiB + 108 * 1024, maxFiles: 190, maxPackages: 4 },
 		absentPackageNames: [
 			'wasm-idle',
 			'@wasm-idle/llvm-core',
@@ -150,6 +156,8 @@ const rttiCapability: boolean = wasiManifest.capabilities.rtti;
 const rttiRequest: WasiGccCompileRequest = { code: '', language: 'cpp', rtti: true };
 const coverageCapability: boolean | undefined = wasiManifest.capabilities.coverage;
 const coverageRequest: WasiGccCompileRequest = { code: '', language: 'c', coverage: true };
+const debugCapability: boolean | undefined = wasiManifest.capabilities.debug;
+const debugRequest: WasiGccCompileRequest = { code: '', language: 'c', debug: true, optimization: '0' };
 const wasiWorkerFactory: () => Promise<WasiGccWorker> = () => createGccWorker({ target: 'wasm32-wasi', manifestUrl: 'https://example.invalid/gcc-manifest.json', manifestSha256: '0'.repeat(64) });
 const preopens: readonly WasiGccPreopen[] = [{ path: '/work', readonly: false, directories: ['output'], files: [{ path: 'input.bin', contents: new Uint8Array([0, 255]) }, { path: 'input.txt', contents: 'hello' }] }];
 const filesystemLimits: WasiGccFilesystemLimits = { maxEntries: 32, maxFileBytes: 1024, maxTotalBytes: 2048, maxPathBytes: 256, maxOpenFiles: 8 };
@@ -248,6 +256,10 @@ const invalidX86Rtti: CrossGccCompileRequest = { code: '', rtti: true };
 const invalidCoverage: WasiGccCompileRequest = { code: '', coverage: 'true' };
 // @ts-expect-error Coverage provenance is a boolean.
 const invalidCoverageProfile: WasiGccLinkProfile = { ...gccProfile, coverage: 1 };
+// @ts-expect-error debug accepts only a boolean
+const invalidDebugRequest: WasiGccCompileRequest = { code: '', debug: 'true' };
+// @ts-expect-error the x86 API has no debug option
+const invalidX86Debug: CrossGccCompileRequest = { code: '', debug: true };
 // @ts-expect-error The existing x86 API does not accept WASI coverage.
 const invalidX86Coverage: CrossGccCompileRequest = { code: '', coverage: true };
 void [coverageCapability, coverageRequest, coveredProfile, consumeCoverage, invalidCoverage, invalidCoverageProfile, invalidX86Coverage];
@@ -394,7 +406,16 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// the same 5 KiB increment, using the existing aggregate headroom.
 		// Coverage adds 11,470 emitted/documentation bytes, with no files/dependencies.
 		// Propagate the rounded 12 KiB delta while preserving existing aggregate headroom.
-		budget: { maxBytes: 40 * MiB + 697 * 1024, maxFiles: 3_396, maxPackages: 70 },
+		// Debug adds 2,235 packed GCC bytes without files/dependencies; propagate 3 KiB.
+		// Main already exceeds 612 KiB by 3,802 bytes: allow 4 KiB for that baseline.
+		// Lazy receipt lookup adds about 7 KiB and six files; allow another 8 KiB,
+		// retaining at least 1 KiB of headroom with unchanged production dependencies.
+		// Combined changes add 5,801 emitted bytes: 1,219 in core (#358/#361)
+		// and 4,582 in the root SDK's worker/Zig modules. Reserve 6 KiB above
+		// the lazy-only 624 KiB allowance; main's measured 42,586,341-byte install
+		// retains 1,819 bytes of headroom with no additional files or dependencies.
+		// Add main's 18 KiB / six-file increase to GCC's existing 700 KiB / 3,396 files.
+		budget: { maxBytes: 40 * MiB + 718 * 1024, maxFiles: 3_402, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

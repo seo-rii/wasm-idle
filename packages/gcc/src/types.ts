@@ -183,6 +183,8 @@ export interface WasiGccManifest {
 		int128?: boolean;
 		/** Qualified GCC single-thread gcov instrumentation and normal-exit profile writes. */
 		coverage?: boolean;
+		/** Qualified embedded DWARF4 source/type/location information at O0. */
+		debug?: boolean;
 		exceptions: false;
 		/** Qualified GNU RTTI runtime; exception-dependent failures remain unsupported. */
 		rtti: boolean;
@@ -211,6 +213,9 @@ export interface WasiGccCompileRequest extends Omit<CrossGccCompileRequest, 'cpu
 	readonly simd?: boolean;
 	/** Source-only GCC gcov instrumentation. Requires a qualified bundle and no linkInputs. */
 	readonly coverage?: boolean;
+	/** Embed standard DWARF4 in WAT/object/executable output. Requires a qualified bundle;
+	 * defaults to optimization=0 and rejects explicitly selected nonzero optimization. */
+	readonly debug?: boolean;
 	/** Explicit static link inputs, after source objects and before runtime libraries, in this order. */
 	readonly linkInputs?: readonly WasiGccLinkInput[];
 }

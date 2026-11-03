@@ -278,6 +278,23 @@ code units and `maxPathBytes`; the resolved path uses the UTF-8 byte limit.
 Unlinked files held open still consume entry/byte quota until the last descriptor
 closes. Growth is rejected before the offending write or resize allocates bytes.
 
+### DWARF debug information
+
+WASI requests can select `debug: true` when a verified producer bundle declares
+`capabilities.debug: true`. Missing capabilities are false. The initial profile
+embeds standard DWARF4 with `-g -gdwarf-4 -gno-variable-location-views` and defaults
+to `optimization: '0'`; an explicitly selected nonzero optimization is rejected
+before any tool runs. This applies to assembly, object and executable outputs,
+including additional source units through `files` and `sources`. Source text is
+passed unchanged to GCC. The separate x86 request API does not accept `debug`.
+
+Debug information stays inside the normal WAT or Wasm artifact; it adds no debug
+receipt or ABI profile field. `debug: false` and omission preserve the ordinary
+optimization default (`'2'`), compiler arguments and receipt shapes. RTTI, SIMD,
+wide values and coverage retain their existing request rules. Actual debugger
+locations depend on the producer's qualified profile; an unavailable location
+does not disable the language feature itself.
+
 ### GCC coverage
 
 WASI requests can opt in with `coverage: true` when the pinned bundle declares

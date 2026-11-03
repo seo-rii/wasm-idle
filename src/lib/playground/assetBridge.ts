@@ -12,7 +12,7 @@ import {
 	verifyRuntimeAssetPair,
 	readPersistentRuntimeAsset,
 	writePersistentRuntimeAsset,
-	resolveRuntimeAssetLockEntry,
+	loadRuntimeAssetLockEntry,
 	resolveRuntimeAssetCacheOptions,
 	type RuntimeAssetCacheOptions,
 	type ResolvedRuntimeAssetCacheOptions,
@@ -1188,15 +1188,17 @@ export class WorkerAssetBridge {
 		const persistentCache = context.config.persistentCache;
 		const configured = context.config.integrity?.[asset];
 		const expected = typeof configured === 'string' ? { sha256: configured } : configured;
-		const lock = context.config.assetPrefix
-			? resolveRuntimeAssetLockEntry(requestUrl, {
-					assetRoot: context.config.baseUrl,
-					assetPrefix: context.config.assetPrefix
-				})
-			: undefined;
 		// Existing .gz receipts without a pair describe logical bytes, not stored gzip bytes.
 		const receipt =
-			expected && (!asset.endsWith('.gz') || expected.uncompressedSha256) ? expected : lock;
+			expected && (!asset.endsWith('.gz') || expected.uncompressedSha256)
+				? expected
+				: context.config.assetPrefix
+					? await loadRuntimeAssetLockEntry(requestUrl, {
+							assetRoot: context.config.baseUrl,
+							assetPrefix: context.config.assetPrefix,
+							signal
+						})
+					: undefined;
 		const identity = receipt
 			? {
 					url: requestUrl.href,

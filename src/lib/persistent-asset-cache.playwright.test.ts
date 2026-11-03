@@ -195,6 +195,184 @@ describe.skipIf(!enabled)('persistent runtime assets in real Chromium', () => {
 		expect(result).toEqual({ cancelled: true, text: 'compiler-a-fixture' });
 	});
 
+	it('verifies cached bodies concurrently while namespace clearing waits for both readers', async () => {
+		await load(page, identity('/asset-a'));
+		await load(page, identity('/asset-b'));
+		const result = await page.evaluate(
+			async (assets) => {
+				const api = window.persistentAssetCache;
+				const digest = crypto.subtle.digest.bind(crypto.subtle);
+				const bothStarted = Promise.withResolvers<void>();
+				const release = Promise.withResolvers<void>();
+				let calls = 0;
+				crypto.subtle.digest = async (...args) => {
+					if (++calls === 2) bothStarted.resolve();
+					await release.promise;
+					return digest(...args);
+				};
+				const reads = assets.map((asset) =>
+					api.readPersistentRuntimeAsset({ identity: asset })
+				);
+				let timer: ReturnType<typeof setTimeout> | undefined;
+				try {
+					const overlapped = await Promise.race([
+						bothStarted.promise.then(() => true),
+						new Promise<boolean>((resolve) => {
+							timer = setTimeout(() => resolve(false), 1000);
+						})
+					]);
+					const held = (await navigator.locks.query()).held ?? [];
+					let cleared = false;
+					const clearing = api.clearRuntimeAssetCache().then(() => {
+						cleared = true;
+					});
+					await new Promise<void>((resolve) => setTimeout(resolve, 0));
+					const clearWaited = !cleared;
+					release.resolve();
+					const bytes = await Promise.all(reads);
+					await clearing;
+					return {
+						overlapped,
+						sharedReaders: held.filter((lock) => lock.mode === 'shared').length,
+						clearWaited,
+						texts: bytes.map((value) => new TextDecoder().decode(value)),
+						entries: (await api.getRuntimeAssetCacheStats()).entries
+					};
+				} finally {
+					clearTimeout(timer);
+					release.resolve();
+					crypto.subtle.digest = digest;
+					await Promise.allSettled(reads);
+				}
+			},
+			[identity('/asset-a'), identity('/asset-b')]
+		);
+		expect(result).toEqual({
+			overlapped: true,
+			sharedReaders: 2,
+			clearWaited: true,
+			texts: ['compiler-a-fixture', 'compiler-b-fixture'],
+			entries: 0
+		});
+	});
+
+	it('merges version references from concurrent readers before version cleanup', async () => {
+		await load(page, identity('/asset-a', 'seed'));
+		const result = await page.evaluate(
+			async (asset) => {
+				const api = window.persistentAssetCache;
+				const readers = Array.from({ length: 8 }, (_, index) => ({
+					...asset,
+					version: `reader-${index}`
+				}));
+				const bytes = await Promise.all(
+					readers.map((identity) => api.readPersistentRuntimeAsset({ identity }))
+				);
+				await api.clearRuntimeAssetCache({ version: 'seed' });
+				const stats = await api.getRuntimeAssetCacheStats();
+				return {
+					allHits: bytes.every(
+						(value) => new TextDecoder().decode(value) === 'compiler-a-fixture'
+					),
+					entries: stats.entries,
+					versions: stats.versions
+				};
+			},
+			identity('/asset-a', 'seed')
+		);
+		expect(result).toEqual({
+			allHits: true,
+			entries: 1,
+			versions: Array.from({ length: 8 }, (_, index) => `reader-${index}`)
+		});
+	});
+
+	it('rechecks a corrupt body under an exclusive lock without deleting a queued repair', async () => {
+		await load();
+		const result = await page.evaluate(async (asset) => {
+			const api = window.persistentAssetCache;
+			const cache = await caches.open('wasm-idle-assets-v1:wasm-idle');
+			const key = `https://wasm-idle.invalid/.runtime-assets/wasm-idle/${asset.sha256}`;
+			await cache.put(key, new Response(new Uint8Array(asset.bytes!).fill(42)));
+			const digest = crypto.subtle.digest.bind(crypto.subtle);
+			const started = Promise.withResolvers<void>();
+			const release = Promise.withResolvers<void>();
+			let first = true;
+			crypto.subtle.digest = async (...args) => {
+				if (first) {
+					first = false;
+					started.resolve();
+					await release.promise;
+				}
+				return digest(...args);
+			};
+			const pendingRead = api.readPersistentRuntimeAsset({ identity: asset });
+			let repair: Promise<boolean> | undefined;
+			try {
+				await started.promise;
+				repair = api.writePersistentRuntimeAsset({
+					identity: asset,
+					bytes: new TextEncoder().encode('compiler-a-fixture')
+				});
+				const deadline = performance.now() + 1000;
+				while (
+					!(await navigator.locks.query()).pending?.some(
+						(lock) => lock.mode === 'exclusive'
+					)
+				) {
+					if (performance.now() >= deadline)
+						throw new Error('Repair did not queue behind the reader');
+					await new Promise<void>((resolve) => setTimeout(resolve, 0));
+				}
+				release.resolve();
+				const [bytes, stored] = await Promise.all([pendingRead, repair]);
+				const retained = await api.readPersistentRuntimeAsset({ identity: asset });
+				return {
+					stored,
+					text: new TextDecoder().decode(bytes),
+					retained: new TextDecoder().decode(retained)
+				};
+			} finally {
+				release.resolve();
+				crypto.subtle.digest = digest;
+				await Promise.allSettled([pendingRead, repair]);
+			}
+		}, identity());
+		expect(result).toEqual({
+			stored: true,
+			text: 'compiler-a-fixture',
+			retained: 'compiler-a-fixture'
+		});
+	});
+
+	it('returns verified bytes without a global error when reference publication throws', async () => {
+		await load();
+		const errors: Error[] = [];
+		const onPageError = (error: Error) => errors.push(error);
+		page.on('pageerror', onPageError);
+		try {
+			const text = await page.evaluate(async (asset) => {
+				const put = IDBObjectStore.prototype.put;
+				IDBObjectStore.prototype.put = () => {
+					throw new DOMException('Metadata quota exhausted', 'QuotaExceededError');
+				};
+				try {
+					return new TextDecoder().decode(
+						await window.persistentAssetCache.readPersistentRuntimeAsset({
+							identity: asset
+						})
+					);
+				} finally {
+					IDBObjectStore.prototype.put = put;
+				}
+			}, identity());
+			expect(text).toBe('compiler-a-fixture');
+			expect(errors).toEqual([]);
+		} finally {
+			page.off('pageerror', onPageError);
+		}
+	});
+
 	it('keeps a real Web Lock until a cancelled native write settles, then recovers', async () => {
 		const result = await page.evaluate(async (asset) => {
 			const api = window.persistentAssetCache;

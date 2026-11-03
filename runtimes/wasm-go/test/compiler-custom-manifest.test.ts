@@ -3,17 +3,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createCompileRequest, createRuntimeManifest } from './helpers.js';
 import { normalizeRuntimeManifest } from '../src/runtime-manifest.js';
 
-const { executeGoToolInvocation } = vi.hoisted(() => ({
-	executeGoToolInvocation: vi.fn()
+const { executeGoToolInvocation, prepareGoToolModule } = vi.hoisted(() => ({
+	executeGoToolInvocation: vi.fn(),
+	prepareGoToolModule: vi.fn()
 }));
 
 vi.mock('../src/tool-runtime.js', () => ({
-	executeGoToolInvocation
+	executeGoToolInvocation,
+	prepareGoToolModule
 }));
 
 describe('compiler custom manifest execution', () => {
 	beforeEach(() => {
 		executeGoToolInvocation.mockReset();
+		prepareGoToolModule.mockReset();
+		prepareGoToolModule.mockResolvedValue({} as WebAssembly.Module);
 	});
 
 	afterEach(() => {
@@ -103,6 +107,21 @@ describe('compiler custom manifest execution', () => {
 			})
 		);
 		expect(executeGoToolInvocation).toHaveBeenCalledTimes(2);
+		expect(prepareGoToolModule).toHaveBeenCalledWith(
+			expect.objectContaining({ tool: 'link' }),
+			expect.any(URL),
+			expect.any(Function),
+			expect.any(Function),
+			expect.objectContaining({
+				signal: expect.any(AbortSignal),
+				assetTimeoutMs: 47,
+				maxAssetBytes: 4_096,
+				maxWasmMemoryBytes: 8 * 65_536
+			})
+		);
+		expect(String(prepareGoToolModule.mock.calls[0][1])).toBe(
+			'https://example.invalid/custom/?v=9'
+		);
 		for (const call of executeGoToolInvocation.mock.calls) {
 			expect(String(call[2])).toBe('https://example.invalid/custom/?v=9');
 			expect(call[5]).toEqual(
