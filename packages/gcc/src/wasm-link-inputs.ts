@@ -533,7 +533,9 @@ async function inspectObject(
 			if ([3, 4, 5, 8, 9, 23].includes(type)) r.signed();
 			const leb = [0, 1, 3, 4, 6, 7, 20].includes(type),
 				width = leb ? 5 : 4;
-			const start = target.start + offset,
+			// Custom relocation offsets exclude the encoded section name. Standard
+			// code/data offsets retain their section-payload base and chunk bounds.
+			const start = (target.id === 0 ? target.payload : target.start) + offset,
 				end = start + width;
 			const ranges = chunks.get(target) ?? [{ start: target.payload, end: target.end }];
 			if (

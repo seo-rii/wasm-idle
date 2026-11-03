@@ -218,6 +218,125 @@ function instructionFixture(
 }
 
 describe('GCC WASI API contract (synthetic fixtures, not GCC qualification)', () => {
+	it('gates optional debug requests and preserves disabled plans and original sources', () => {
+		const source = manifestFixture();
+		const legacy = parseWasiGccManifest(source);
+		expect(legacy.capabilities.debug).toBe(false);
+		const manifest = parseWasiGccManifest({
+			...source,
+			capabilities: { ...source.capabilities, debug: true },
+			qualification: { status: 'verified' }
+		});
+		for (const language of ['c', 'cpp'] as const)
+			for (const emit of ['assembly', 'object', 'executable'] as const) {
+				const request = { code: '#define VALUE 7\n/* untouched */', language, emit };
+				const ordinary = wasiGccCompilePlan(request, manifest);
+				expect(wasiGccCompilePlan({ ...request, debug: false }, manifest)).toEqual(
+					ordinary
+				);
+				expect(wasiGccCompilePlan({ ...request, debug: false }, legacy)).toEqual(
+					wasiGccCompilePlan(request, legacy)
+				);
+				expect(ordinary.stages[0].argv).toContain('-O2');
+				expect(ordinary.stages[0].argv).not.toContain('-g');
+				expect(() => wasiGccCompilePlan({ ...request, debug: true }, legacy)).toThrow(
+					'does not support DWARF debug information'
+				);
+				const debug = wasiGccCompilePlan({ ...request, debug: true }, manifest);
+				expect(debug.stages[0].argv).toEqual(
+					wasiGccCompilePlan({ ...request, debug: true, optimization: '0' }, manifest)
+						.stages[0].argv
+				);
+				expect(debug.stages[0].argv).toContain('-O0');
+				expect(debug.stages[0].argv).toEqual(
+					expect.arrayContaining(['-g', '-gdwarf-4', '-gno-variable-location-views'])
+				);
+				expect(new TextDecoder().decode(debug.files[0].contents)).toBe(request.code);
+				// Debug information is embedded, without a receipt/profile field or linker flags.
+				expect(Object.keys(debug)).toEqual(Object.keys(ordinary));
+				expect(debug.stages.slice(1)).toEqual(ordinary.stages.slice(1));
+			}
+		for (const debug of [null, 'true', 0, [], {}]) {
+			expect(() =>
+				parseWasiGccManifest({
+					...source,
+					capabilities: { ...source.capabilities, debug }
+				})
+			).toThrow('Invalid GCC WASI capability: debug');
+			expect(() => wasiGccCompilePlan({ code: '', debug } as never, manifest)).toThrow(
+				'Invalid GCC WASI debug option'
+			);
+		}
+		for (const optimization of ['1', '2', '3', 's'] as const)
+			expect(() =>
+				wasiGccCompilePlan({ code: '', debug: true, optimization }, manifest)
+			).toThrow('debug currently requires optimization=0');
+		expect(() =>
+			wasiGccCompilePlan(
+				{ code: '', debug: true },
+				{
+					...manifest,
+					qualification: { status: 'unverified' }
+				}
+			)
+		).toThrow('debug requires a qualified bundle');
+		expect(() => gccCompilePlan({ code: '', debug: true } as never, {} as never)).toThrow(
+			'Unsupported GCC option'
+		);
+	});
+
+	it('applies debug flags to all source units without narrowing existing language or feature options', () => {
+		const source = manifestFixture();
+		const manifest = parseWasiGccManifest({
+			...source,
+			capabilities: {
+				...source.capabilities,
+				debug: true,
+				rtti: true,
+				libstdcxx: true,
+				simd: true,
+				longDouble: true,
+				int128: true,
+				coverage: true,
+				staticInitialization: true
+			},
+			qualification: { status: 'verified' }
+		});
+		const code = 'struct Base { virtual ~Base() {} }; __int128 wide; long double value;';
+		const contents = '/* keep this unit */ int helper() { return 7; }';
+		const plan = wasiGccCompilePlan(
+			{
+				code,
+				debug: true,
+				language: 'cpp',
+				rtti: true,
+				simd: true,
+				coverage: true,
+				files: [{ path: 'helper.cpp', contents }],
+				sources: ['helper.cpp']
+			},
+			manifest
+		);
+		const frontends = plan.stages.filter(({ tool }) => tool === 'cc1plus');
+		expect(frontends).toHaveLength(2);
+		for (const stage of frontends)
+			expect(stage.argv).toEqual(
+				expect.arrayContaining([
+					'-O0',
+					'-g',
+					'-gdwarf-4',
+					'-gno-variable-location-views',
+					'-frtti',
+					'-msimd128',
+					'-fprofile-arcs'
+				])
+			);
+		expect(plan.files.map(({ contents }) => new TextDecoder().decode(contents))).toEqual([
+			code,
+			contents
+		]);
+	});
+
 	it('gates coverage by an optional qualified capability and leaves disabled plans unchanged', () => {
 		const source = manifestFixture();
 		const legacy = parseWasiGccManifest(source);

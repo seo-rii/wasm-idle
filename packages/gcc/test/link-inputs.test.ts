@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { gccCompilePlan } from '../src/plan.js';
 import { wasiGccCompilePlan } from '../src/wasi-plan.js';
@@ -148,6 +149,80 @@ const validate = (inputs: readonly WasiGccLinkInput[], simd = false, language: '
 	validateWasiGccLinkInputs(snapshotWasiGccLinkInputs(inputs), manifest, hash, simd, language);
 
 describe('explicit WASI link inputs', () => {
+	it('accepts native DWARF custom relocations relative to payload and checks every slot boundary', async () => {
+		const bytes = Uint8Array.from(
+			readFileSync(new URL('./fixtures/dwarf-native.o', import.meta.url))
+		);
+		const provenance = JSON.parse(
+			readFileSync(new URL('./fixtures/dwarf-native.json', import.meta.url), 'utf8')
+		);
+		expect(bytes.length).toBe(provenance.object.bytes);
+		expect(await gccLinkDigest(bytes)).toBe(provenance.object.sha256);
+		const receipt = await validate([await input(bytes, 'dwarf.o')]);
+		expect(receipt[0].sha256).toBe(provenance.object.sha256);
+
+		// Rebuild only the standard relocation vector around this real object.
+		// Custom offsets start after both the name-length LEB and name bytes.
+		const readUint = (data: Uint8Array, start: number): [number, number] => {
+			let value = 0,
+				shift = 0,
+				cursor = start;
+			for (;;) {
+				const byte = data[cursor++];
+				value += (byte & 127) * 2 ** shift;
+				if (byte < 128) return [value, cursor];
+				shift += 7;
+			}
+		};
+		const parts: { id: number; bytes: Uint8Array; name?: string; payload: number }[] = [];
+		for (let cursor = 8; cursor < bytes.length;) {
+			const id = bytes[cursor++];
+			const [length, start] = readUint(bytes, cursor);
+			const end = start + length;
+			let payload = start,
+				name: string | undefined;
+			if (id === 0) {
+				const [size, begin] = readUint(bytes, payload);
+				name = new TextDecoder().decode(bytes.subarray(begin, begin + size));
+				payload = begin + size;
+			}
+			parts.push({ id, name, bytes: bytes.subarray(start, end), payload: payload - start });
+			cursor = end;
+		}
+		const relocation = parts.find((part) => part.name === 'reloc..debug_info')!;
+		const [target, cursor] = readUint(relocation.bytes, relocation.payload);
+		const [, entryStart] = readUint(relocation.bytes, cursor);
+		const entries = relocation.bytes.subarray(entryStart);
+		const [type, afterType] = readUint(entries, 0);
+		const [, afterOffset] = readUint(entries, afterType);
+		const source = parts[target];
+		const size = source.bytes.length - source.payload;
+		// One original relocation is retained, so the vector must end at its first entry.
+		// All supported DWARF custom slots are fixed i32 and carry a standard signed addend.
+		const [symbol, afterSymbol] = readUint(entries, afterOffset);
+		let afterAddend = afterSymbol;
+		if ([5, 8, 9].includes(type)) do {} while (entries[afterAddend++] & 128);
+		const oneEntry = entries.subarray(afterOffset, afterAddend);
+		const singleOffset = (offset: number) =>
+			Uint8Array.from([
+				...bytes.subarray(0, 8),
+				...parts.flatMap((part) =>
+					part === relocation
+						? custom(part.name!, [target, 1, type, ...uint(offset), ...oneEntry])
+						: section(part.id, [...part.bytes])
+				)
+			]);
+		expect(symbol).toBeGreaterThanOrEqual(0);
+		for (const offset of [0, size - 4])
+			await expect(
+				validate([await input(singleOffset(offset), 'boundary.o')])
+			).resolves.toHaveLength(1);
+		for (const offset of [size - 3, size, 0xffffffff])
+			await expect(
+				validate([await input(singleOffset(offset), 'outside.o')])
+			).rejects.toThrow('outside');
+	});
+
 	it('preserves explicit coverage provenance and rejects covered objects/archives even when undeclared', async () => {
 		const plain = await input();
 		expect(snapshotWasiGccLinkInputs([plain])[0].profile).not.toHaveProperty('coverage');

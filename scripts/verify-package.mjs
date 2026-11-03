@@ -109,7 +109,9 @@ export const scenarios = [
 		// locked dependencies. The 4,384-byte overflow requires only another 5 KiB.
 		// Coverage contracts measure 2,721,254 bytes / 182 files / four packages.
 		// The 10,726-byte overflow requires another 11 KiB; no files/dependencies are added.
-		budget: { maxBytes: 2.5 * MiB + 98 * 1024, maxFiles: 184, maxPackages: 4 },
+		// Debug contracts measure 2,723,557 bytes / 182 files / four packages.
+		// The 2,235-byte delta needs 3 KiB, retaining 1,307 bytes of measured headroom.
+		budget: { maxBytes: 2.5 * MiB + 101 * 1024, maxFiles: 184, maxPackages: 4 },
 		absentPackageNames: [
 			'wasm-idle',
 			'@wasm-idle/llvm-core',
@@ -150,6 +152,8 @@ const rttiCapability: boolean = wasiManifest.capabilities.rtti;
 const rttiRequest: WasiGccCompileRequest = { code: '', language: 'cpp', rtti: true };
 const coverageCapability: boolean | undefined = wasiManifest.capabilities.coverage;
 const coverageRequest: WasiGccCompileRequest = { code: '', language: 'c', coverage: true };
+const debugCapability: boolean | undefined = wasiManifest.capabilities.debug;
+const debugRequest: WasiGccCompileRequest = { code: '', language: 'c', debug: true, optimization: '0' };
 const wasiWorkerFactory: () => Promise<WasiGccWorker> = () => createGccWorker({ target: 'wasm32-wasi', manifestUrl: 'https://example.invalid/gcc-manifest.json', manifestSha256: '0'.repeat(64) });
 const preopens: readonly WasiGccPreopen[] = [{ path: '/work', readonly: false, directories: ['output'], files: [{ path: 'input.bin', contents: new Uint8Array([0, 255]) }, { path: 'input.txt', contents: 'hello' }] }];
 const filesystemLimits: WasiGccFilesystemLimits = { maxEntries: 32, maxFileBytes: 1024, maxTotalBytes: 2048, maxPathBytes: 256, maxOpenFiles: 8 };
@@ -248,6 +252,10 @@ const invalidX86Rtti: CrossGccCompileRequest = { code: '', rtti: true };
 const invalidCoverage: WasiGccCompileRequest = { code: '', coverage: 'true' };
 // @ts-expect-error Coverage provenance is a boolean.
 const invalidCoverageProfile: WasiGccLinkProfile = { ...gccProfile, coverage: 1 };
+// @ts-expect-error debug accepts only a boolean
+const invalidDebugRequest: WasiGccCompileRequest = { code: '', debug: 'true' };
+// @ts-expect-error the x86 API has no debug option
+const invalidX86Debug: CrossGccCompileRequest = { code: '', debug: true };
 // @ts-expect-error The existing x86 API does not accept WASI coverage.
 const invalidX86Coverage: CrossGccCompileRequest = { code: '', coverage: true };
 void [coverageCapability, coverageRequest, coveredProfile, consumeCoverage, invalidCoverage, invalidCoverageProfile, invalidX86Coverage];
@@ -394,7 +402,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// the same 5 KiB increment, using the existing aggregate headroom.
 		// Coverage adds 11,470 emitted/documentation bytes, with no files/dependencies.
 		// Propagate the rounded 12 KiB delta while preserving existing aggregate headroom.
-		budget: { maxBytes: 40 * MiB + 697 * 1024, maxFiles: 3_396, maxPackages: 70 },
+		// Debug adds 2,235 packed GCC bytes without files/dependencies; propagate 3 KiB.
+		budget: { maxBytes: 40 * MiB + 700 * 1024, maxFiles: 3_396, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
