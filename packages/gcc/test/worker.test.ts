@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createCrossGccWorker, createGccWorker } from '../src/worker.js';
+import type { WasiGccCompileRequest, WasiGccLinkProfile } from '../src/types.js';
 
 /** Synthetic transport fixture only: CPU/compiler correctness belongs to the real bundle probe. */
 class FixtureWorker {
@@ -45,6 +46,133 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('GCC Worker ownership and cancellation', () => {
+	it('snapshots the coverage opt-in and preserves binary notes and profile metadata in results', async () => {
+		const compiler = await createGccWorker({ ...options, target: 'wasm32-wasi' });
+		const transport = FixtureWorker.instances[0];
+		const request = { code: 'source', language: 'c' as const, coverage: true };
+		const pending = compiler.compile(request);
+		request.coverage = false;
+		const message = transport.messages.at(-1)!;
+		expect((message.request as WasiGccCompileRequest).coverage).toBe(true);
+		const result = {
+			exitCode: 0,
+			stdout: '',
+			stderr: '',
+			stages: [],
+			coverage: {
+				format: 'gcc-gcov',
+				compilerVersion: '17.0.0',
+				compilerCommit: 'a'.repeat(40),
+				notes: [
+					{
+						path: 'program.gcno',
+						dataPath: '/profile/program.gcda',
+						contents: Uint8Array.of(0, 255, 42)
+					}
+				]
+			}
+		};
+		transport.onmessage?.({
+			data: structuredClone({ id: message.id, type: 'result', result })
+		});
+		const received = await pending;
+		expect(received.coverage).toEqual(result.coverage);
+		expect(received.coverage!.notes[0].contents).not.toBe(result.coverage.notes[0].contents);
+		compiler.dispose();
+	});
+
+	it('snapshots RTTI requests and known link language profiles before caller mutation', async () => {
+		const compiler = await createGccWorker({ ...options, target: 'wasm32-wasi' });
+		const transport = FixtureWorker.instances[0];
+		const profile: WasiGccLinkProfile = {
+			target: 'wasm32-wasi',
+			abi: 'wasm32-wasi-preview1',
+			simd: false,
+			language: 'cpp',
+			rtti: true,
+			compatibility: {
+				kind: 'gcc-bundle',
+				manifestSha256: 'a'.repeat(64),
+				sysrootSha256: 'b'.repeat(64)
+			}
+		};
+		const request: WasiGccCompileRequest = {
+			code: 'source',
+			language: 'cpp',
+			rtti: true,
+			linkInputs: [
+				{
+					path: 'provider.o',
+					format: 'wasm-object',
+					sha256: 'c'.repeat(64),
+					bytes: Uint8Array.from([0, 97, 115, 109, 1, 0, 0, 0]),
+					profile
+				}
+			]
+		};
+		const pending = compiler.compile(request);
+		(request as { rtti: boolean }).rtti = false;
+		(profile as { language: string; rtti: boolean }).language = 'c';
+		(profile as { rtti: boolean }).rtti = false;
+		const message = transport.messages.at(-1)!,
+			snapshot = message.request as WasiGccCompileRequest;
+		expect(snapshot.rtti).toBe(true);
+		expect(snapshot.linkInputs?.[0].profile).toMatchObject({ language: 'cpp', rtti: true });
+		transport.onmessage?.({
+			data: {
+				id: message.id,
+				type: 'result',
+				result: { exitCode: 1, stdout: '', stderr: 'synthetic', stages: [] }
+			}
+		});
+		await pending;
+		compiler.dispose();
+	});
+	it('sends private link input snapshots and receipts without detaching caller bytes', async () => {
+		const compiler = await createGccWorker({ ...options, target: 'wasm32-wasi' });
+		const transport = FixtureWorker.instances[0];
+		const bytes = new Uint8Array(new SharedArrayBuffer(8));
+		bytes.set([0, 97, 115, 109, 1, 0, 0, 0]);
+		const original = Array.from(bytes);
+		const pending = compiler.compile({
+			code: 'source',
+			language: 'c',
+			linkInputs: [
+				{
+					path: 'library.o',
+					format: 'wasm-object',
+					bytes,
+					sha256: 'a'.repeat(64),
+					profile: {
+						target: 'wasm32-wasi',
+						abi: 'wasm32-wasi-preview1',
+						simd: false,
+						compatibility: {
+							kind: 'gcc-bundle',
+							manifestSha256: 'b'.repeat(64),
+							sysrootSha256: 'c'.repeat(64)
+						}
+					}
+				}
+			]
+		});
+		bytes.fill(255);
+		const message = transport.messages.at(-1)!;
+		const request = message.request as { linkInputs: { bytes: Uint8Array; sha256: string }[] };
+		expect(Array.from(request.linkInputs[0].bytes)).toEqual(original);
+		expect(request.linkInputs[0].bytes.buffer).toBeInstanceOf(ArrayBuffer);
+		expect(bytes.byteLength).toBe(8);
+		const result = {
+			exitCode: 0,
+			stdout: '',
+			stderr: '',
+			stages: [],
+			linkInputs: [{ path: 'library.o', sha256: 'a'.repeat(64) }]
+		};
+		transport.onmessage?.({ data: { id: message.id, type: 'result', result } });
+		expect(await pending).toEqual(result);
+		compiler.dispose();
+	});
 	it.each([
 		null,
 		{ id: 1, type: 'unknown' },

@@ -1,26 +1,62 @@
 import { gccCompileInputs } from './plan.js';
 import { supportsGccWasmSimd } from './wasm-output.js';
+import { snapshotWasiGccLinkInputs } from './wasm-link-inputs.js';
 import type { CrossGccTool, WasiGccCompileRequest, WasiGccManifest } from './types.js';
 
-const unavailableFeatures = ['exceptions', 'rtti', 'threads', 'dynamicLinking'] as const;
+const unavailableFeatures = ['exceptions', 'threads', 'dynamicLinking'] as const;
 
 /** GCC emits WAT; patched WABT emits relocatable Wasm; LLVM is used only as the linker. */
 export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: WasiGccManifest) {
 	const { language, emit, optimization, standard, main, files, sources, definitions } =
 		gccCompileInputs(
 			request,
-			['cpu', 'simd', ...unavailableFeatures],
+			['cpu', 'simd', 'rtti', 'coverage', 'debug', 'linkInputs', ...unavailableFeatures],
 			[
 				'program.wat',
 				'program.wasm',
+				...(request?.coverage === true
+					? Array.from({ length: 64 }, (_, i) => `program${i ? `.${i}` : ''}.gcno`)
+					: []),
 				...Array.from({ length: 63 }, (_, i) => `program.${i + 1}.wat`)
 			]
 		);
+	if (request.debug !== undefined && typeof request.debug !== 'boolean')
+		throw new Error('Invalid GCC WASI debug option');
+	const debug = request.debug === true;
+	if (debug) {
+		if (!manifest.capabilities.debug)
+			throw new Error('This GCC wasm32-wasi bundle does not support DWARF debug information');
+		if (manifest.qualification.status !== 'verified')
+			throw new Error('GCC WASI debug requires a qualified bundle');
+		if (request.optimization !== undefined && optimization !== '0')
+			throw new Error('GCC WASI debug currently requires optimization=0');
+	}
+	const linkInputs = snapshotWasiGccLinkInputs(request.linkInputs);
+	if (linkInputs.length && emit !== 'executable')
+		throw new Error('Explicit GCC link inputs require executable output');
+	if (request.coverage !== undefined && typeof request.coverage !== 'boolean')
+		throw new Error('Invalid GCC WASI coverage option');
+	const coverage = request.coverage === true;
+	if (coverage) {
+		if (!manifest.capabilities.coverage)
+			throw new Error('This GCC wasm32-wasi bundle does not support coverage');
+		if (linkInputs.length)
+			throw new Error(
+				'GCC WASI coverage currently requires source-only compilation without linkInputs'
+			);
+	}
 	if (request.cpu !== undefined && request.cpu !== 'wasm32')
 		throw new Error('GCC wasm32-wasi supports only cpu=wasm32; x86 AVX2/FMA is not Wasm SIMD');
 	for (const feature of unavailableFeatures)
 		if (request[feature] !== undefined && request[feature] !== false)
 			throw new Error(`GCC wasm32-wasi does not support ${feature}`);
+	if (request.rtti !== undefined && typeof request.rtti !== 'boolean')
+		throw new Error('Invalid GCC WASI RTTI option');
+	if (request.rtti === true) {
+		if (language !== 'cpp') throw new Error('GCC WASI RTTI requires a C++ source request');
+		if (!manifest.capabilities.rtti)
+			throw new Error('This GCC wasm32-wasi bundle does not support RTTI');
+	}
 	if (request.simd !== undefined && typeof request.simd !== 'boolean')
 		throw new Error('Invalid GCC WASI SIMD option');
 	if (request.simd) {
@@ -35,7 +71,7 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 		throw new Error('This GCC wasm32-wasi bundle cannot link WASI libc and libm executables');
 	const cc = [
 		'-quiet',
-		`-O${optimization}`,
+		`-O${debug ? '0' : optimization}`,
 		`-std=${standard}`,
 		'-fdiagnostics-color=never',
 		'-Werror=attributes',
@@ -43,10 +79,24 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 		'-D__GCC_WASI_SINGLE_THREAD__=1',
 		...definitions
 	];
+	if (debug) cc.push('-g', '-gdwarf-4', '-gno-variable-location-views');
 	// Legacy scalar bundles do not recognize either flag; leave their argv unchanged.
 	if (manifest.capabilities.simd) cc.push(request.simd ? '-msimd128' : '-mno-simd128');
+	if (coverage)
+		cc.push(
+			'-fprofile-arcs',
+			'-ftest-coverage',
+			'-fprofile-update=single',
+			'-fprofile-dir=/profile',
+			'-fprofile-prefix-path=/workspace'
+		);
 	if (language === 'cpp')
-		cc.push('-fno-exceptions', '-fno-rtti', '-fuse-cxa-atexit', '-fno-threadsafe-statics');
+		cc.push(
+			'-fno-exceptions',
+			request.rtti === true ? '-frtti' : '-fno-rtti',
+			'-fuse-cxa-atexit',
+			'-fno-threadsafe-statics'
+		);
 	if (request.preprocessed) cc.push('-fpreprocessed');
 	else {
 		cc.push('-nostdinc', '-isysroot', manifest.sysrootPath);
@@ -58,15 +108,32 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 		includes.push(manifest.resourceDir, '/sysroot/include/wasm32-wasi', '/sysroot/include');
 		for (const include of includes) cc.push('-isystem', include);
 	}
-	const stages: { tool: CrossGccTool; argv: string[]; output: string }[] = [];
+	const stages: {
+		tool: CrossGccTool;
+		argv: string[];
+		output: string;
+		coverageNote?: { path: string; dataPath: string };
+	}[] = [];
 	const objects: string[] = [];
 	for (const [index, source] of [main, ...sources].entries()) {
 		const stem = index === 0 ? 'program' : `program.${index}`;
 		const assembly = `/workspace/${stem}.wat`;
+		const extension = language === 'c' ? '.c' : '.cpp';
 		stages.push({
 			tool: language === 'c' ? 'cc1' : 'cc1plus',
-			argv: [...cc, `/workspace/${source}`, '-o', assembly],
-			output: assembly
+			argv: [
+				...cc,
+				...(coverage
+					? ['-dumpbase', `${stem}${extension}`, '-dumpbase-ext', extension]
+					: []),
+				`/workspace/${source}`,
+				'-o',
+				assembly
+			],
+			output: assembly,
+			...(coverage
+				? { coverageNote: { path: `${stem}.gcno`, dataPath: `/profile/${stem}.gcda` } }
+				: {})
 		});
 		if (emit !== 'assembly') {
 			const object = `/workspace/${stem}.o`;
@@ -94,8 +161,10 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 				`-L${lib}`,
 				`-L${manifest.gccInstallation}`,
 				...objects,
+				...linkInputs.map((input) => `/link-inputs/${input.path}`),
 				...(language === 'cpp' && manifest.capabilities.libstdcxx ? ['-lstdc++'] : []),
 				...(manifest.capabilities.longDouble ? ['-lc-printscan-long-double'] : []),
+				...(coverage ? ['-lgcov', '-lwasi-emulated-getpid'] : []),
 				'-lm',
 				'-lc',
 				...manifest.runtimeLibraries
@@ -104,7 +173,18 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 		});
 	}
 	return {
-		files,
+		files: [
+			...files,
+			...linkInputs.map((input) => ({
+				path: `/link-inputs/${input.path}`,
+				contents: input.bytes
+			}))
+		],
+		linkInputs,
+		language,
+		simd: request.simd === true,
+		rtti: request.rtti === true,
+		...(coverage ? { coverage: true as const } : {}),
 		stages,
 		cpu: 'wasm32' as const,
 		emit,

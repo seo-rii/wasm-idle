@@ -35,6 +35,7 @@ const DEFAULT_ZIP_FILE_BUFFER_BYTES = 64 * 1024;
 interface ZigStdlibArchiveLimits {
 	maxExpandedBytes?: number;
 	maxFiles?: number;
+	signal?: AbortSignal;
 }
 
 let stdinBufferZig: Int32Array | null = null;
@@ -223,7 +224,8 @@ async function fetchBytes(
 	maxAssetBytes: number,
 	progressStart: number,
 	progressEnd: number,
-	expected: RuntimeAssetIntegrityEntry
+	expected: RuntimeAssetIntegrityEntry,
+	signal?: AbortSignal
 ) {
 	const data = await fetchRuntimeAssetBytes({
 		url,
@@ -231,6 +233,7 @@ async function fetchBytes(
 		expected,
 		integrityContext: { asset, runtimeId: 'ZIG' },
 		maxAssetBytes,
+		signal,
 		onProgress: ({ loaded, total }) => {
 			if (total && total > 0) {
 				postProgress(progressStart + ((progressEnd - progressStart) * loaded) / total);
@@ -349,6 +352,8 @@ export async function loadLibDirectory(
 	limits: ZigStdlibArchiveLimits = {},
 	receipt?: ZigExecutionAssetReceipt
 ) {
+	const signal = limits.signal;
+	signal?.throwIfAborted();
 	const maxExpandedBytes = limits.maxExpandedBytes ?? DEFAULT_ZIG_STDLIB_MAX_EXPANDED_BYTES;
 	const maxFiles = limits.maxFiles ?? DEFAULT_ZIG_STDLIB_MAX_FILES;
 	if (!Number.isSafeInteger(maxExpandedBytes) || maxExpandedBytes <= 0) {
@@ -366,6 +371,7 @@ export async function loadLibDirectory(
 			throw new Error('Zig receipt-backed standard library must be a gzip archive or TAR');
 		}
 		const { Unzip, UnzipInflate } = await import('fflate');
+		signal?.throwIfAborted();
 		let archiveError: unknown;
 		const unzip = new Unzip((file) => {
 			const stopFile = (error: unknown) => {
@@ -453,9 +459,11 @@ export async function loadLibDirectory(
 				runtimeId: 'ZIG'
 			});
 		}
+		signal?.throwIfAborted();
 		const expanded = sourceIsGzip
-			? await decompressGzip(source, assetUrl, maxExpandedBytes)
+			? await decompressGzip(source, assetUrl, maxExpandedBytes, signal)
 			: source;
+		signal?.throwIfAborted();
 		if (receipt) {
 			await verifyRuntimeAssetIntegrity({
 				asset: 'std.tar.gz',
@@ -465,6 +473,7 @@ export async function loadLibDirectory(
 				runtimeId: 'ZIG'
 			});
 		}
+		signal?.throwIfAborted();
 		untar(expanded, {
 			addDirectory(directoryPath) {
 				budget.addDirectory(directoryPath);
@@ -529,44 +538,57 @@ async function loadAssets(
 
 	const pending = (async () => {
 		postProgress(5);
-		const [compilerBytes, stdlibBytes] = await Promise.all([
-			fetchBytes(
-				nextCompilerUrl,
-				'zig_small.wasm',
-				receipts['zig_small.wasm'].bytes,
-				5,
-				45,
-				receipts['zig_small.wasm']
-			),
-			fetchBytes(
-				nextStdlibUrl,
-				'std.tar.gz',
-				Math.max(
-					receipts['std.tar.gz'].bytes,
-					receipts['std.tar.gz'].uncompressedBytes || 0
-				),
-				45,
-				70,
-				receipts['std.tar.gz']
-			)
-		]);
-		await verifyRuntimeAssetIntegrity({
-			asset: 'zig_small.wasm',
-			bytes: compilerBytes,
-			expected: receipts['zig_small.wasm'],
-			runtimeId: 'ZIG'
-		});
-		const [compilerModule, libDirectory] = await Promise.all([
-			WebAssembly.compile(compilerBytes),
-			loadLibDirectory(
-				stdlibBytes,
-				nextStdlibUrl,
-				{ maxExpandedBytes: maxAssetBytes },
-				receipts['std.tar.gz']
-			)
-		]);
-		postProgress(100);
-		return { compilerModule, libDirectory };
+		const controller = new AbortController();
+		try {
+			// Each asset can finish verification and preparation while its peer is downloading.
+			// Observe both branches together so a failure cancels outstanding sibling I/O.
+			const [compilerModule, libDirectory] = await Promise.all([
+				(async () => {
+					const compilerBytes = await fetchBytes(
+						nextCompilerUrl,
+						'zig_small.wasm',
+						receipts['zig_small.wasm'].bytes,
+						5,
+						45,
+						receipts['zig_small.wasm'],
+						controller.signal
+					);
+					await verifyRuntimeAssetIntegrity({
+						asset: 'zig_small.wasm',
+						bytes: compilerBytes,
+						expected: receipts['zig_small.wasm'],
+						runtimeId: 'ZIG'
+					});
+					controller.signal.throwIfAborted();
+					return WebAssembly.compile(compilerBytes);
+				})(),
+				(async () => {
+					const stdlibBytes = await fetchBytes(
+						nextStdlibUrl,
+						'std.tar.gz',
+						Math.max(
+							receipts['std.tar.gz'].bytes,
+							receipts['std.tar.gz'].uncompressedBytes || 0
+						),
+						45,
+						70,
+						receipts['std.tar.gz'],
+						controller.signal
+					);
+					return loadLibDirectory(
+						stdlibBytes,
+						nextStdlibUrl,
+						{ maxExpandedBytes: maxAssetBytes, signal: controller.signal },
+						receipts['std.tar.gz']
+					);
+				})()
+			]);
+			postProgress(100);
+			return { compilerModule, libDirectory };
+		} catch (error) {
+			controller.abort(error);
+			throw error;
+		}
 	})();
 	loadingAssets = { key: nextAssetKey, promise: pending };
 	try {
