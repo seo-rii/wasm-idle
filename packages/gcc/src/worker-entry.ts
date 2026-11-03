@@ -48,10 +48,12 @@ scope.onmessage = async ({
 				'run' in compiler
 					? await compiler.compile(data.request as WasiGccCompileRequest)
 					: await compiler.compile(data.request as CrossGccCompileRequest);
-			scope.postMessage(
-				{ id: data.id, type: 'result', result },
-				result.artifact ? [result.artifact.bytes.buffer as ArrayBuffer] : []
-			);
+			scope.postMessage({ id: data.id, type: 'result', result }, [
+				...(result.artifact ? [result.artifact.bytes.buffer as ArrayBuffer] : []),
+				...('coverage' in result && result.coverage
+					? result.coverage.notes.map((note) => note.contents.buffer as ArrayBuffer)
+					: [])
+			]);
 		} else if (data.type === 'precompileHeader') {
 			if (!compiler || !('precompileHeader' in compiler))
 				throw new Error('GCC Worker requires an x86 compiler to precompile headers');

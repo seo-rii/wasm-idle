@@ -200,13 +200,15 @@ export function parseWasiGccManifest(value: unknown): WasiGccManifest {
 	if (typeof capabilityInput.simd !== 'boolean')
 		throw new Error('Invalid GCC WASI capability: simd');
 	capabilities.simd = capabilityInput.simd;
-	for (const name of ['longDouble', 'int128']) {
+	for (const name of ['longDouble', 'int128', 'coverage', 'debug']) {
 		if (capabilityInput[name] !== undefined && typeof capabilityInput[name] !== 'boolean')
 			throw new Error(`Invalid GCC WASI capability: ${name}`);
 		capabilities[name] = (capabilityInput[name] ?? false) as boolean;
 	}
 	if (capabilities.longDouble && (!capabilities.libc || !capabilities.libm))
 		throw new Error('GCC WASI longDouble requires libc and libm');
+	if (capabilities.coverage && (!capabilities.libc || !capabilities.staticInitialization))
+		throw new Error('GCC WASI coverage requires libc and static initialization');
 	if (!Array.isArray(input.runtimeLibraries) || input.runtimeLibraries.length > 16)
 		throw new Error('Invalid GCC WASI runtime libraries');
 	const runtimeLibraries = input.runtimeLibraries.map((path: unknown) => {

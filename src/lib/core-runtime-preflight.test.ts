@@ -141,6 +141,77 @@ describe('runtime registry asset preflight', () => {
 		expect(Object.isFrozen(result.assets)).toBe(true);
 	});
 
+	it.each(['text/javascript; charset=utf-8', 'application/javascript'])(
+		'verifies identity bytes once while preserving both receipts for %s',
+		async (mimeType) => {
+			const digest = vi.spyOn(globalThis.crypto.subtle, 'digest');
+			try {
+				const result = await preflightRuntimeAssets({
+					manifest: createManifest([assets[0]!]),
+					runtimeId: 'fortran/preflight-test',
+					rootUrl: 'https://example.test/',
+					persistentCache: false,
+					fetch: async () =>
+						new Response(loaderBytes, { headers: { 'content-type': mimeType } })
+				});
+				expect(digest).toHaveBeenCalledOnce();
+				expect(result.assets.loader?.deliveryIntegrity).toEqual({
+					asset: 'loader.js',
+					stage: 'compressed',
+					sha256: sha256(loaderBytes),
+					bytes: loaderBytes.byteLength,
+					mediaType: undefined
+				});
+				expect(result.assets.loader?.runtimeIntegrity).toEqual({
+					asset: 'loader.js',
+					stage: 'uncompressed',
+					sha256: sha256(loaderBytes),
+					bytes: loaderBytes.byteLength,
+					mediaType: mimeType.split(';', 1)[0]
+				});
+				expect(Object.isFrozen(result.assets.loader?.deliveryIntegrity)).toBe(true);
+				expect(Object.isFrozen(result.assets.loader?.runtimeIntegrity)).toBe(true);
+			} finally {
+				digest.mockRestore();
+			}
+		}
+	);
+
+	it.each(['text/plain', undefined])(
+		'rejects identity assets with MIME type %s',
+		async (mimeType) => {
+			await expect(
+				preflightRuntimeAssets({
+					manifest: createManifest([assets[0]!]),
+					runtimeId: 'fortran/preflight-test',
+					rootUrl: 'https://example.test/',
+					persistentCache: false,
+					fetch: async () =>
+						new Response(loaderBytes, {
+							headers: mimeType ? { 'content-type': mimeType } : {}
+						})
+				})
+			).rejects.toThrow('MIME type mismatch');
+		}
+	);
+
+	it('verifies fresh identity bytes again when the same URL is loaded later', async () => {
+		const bytes = Uint8Array.from(loaderBytes);
+		const request = {
+			manifest: createManifest([assets[0]!]),
+			runtimeId: 'fortran/preflight-test',
+			rootUrl: 'https://example.test/',
+			persistentCache: false as const,
+			fetch: async () =>
+				new Response(bytes, { headers: { 'content-type': 'text/javascript' } })
+		};
+		await preflightRuntimeAssets(request);
+		bytes[0] ^= 1;
+		await expect(preflightRuntimeAssets(request)).rejects.toThrow(
+			'compressed SHA-256 mismatch'
+		);
+	});
+
 	it('supports a cache-busted URL only for the same declared asset path', async () => {
 		const requestUrl = `https://example.test/runtime/loader.js?v=${sha256(loaderBytes)}`;
 		const fetch = vi.fn(async (input: RequestInfo | URL) => {

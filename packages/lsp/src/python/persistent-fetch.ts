@@ -39,7 +39,12 @@ export async function withPersistentPythonLspAssets<T>(
 		if (filename !== 'pyodide.asm.wasm' && filename !== 'python_stdlib.zip') {
 			return nativeFetch.call(globalThis, input, init);
 		}
-		const receipt = resolveLanguageToolPersistentReceipt(url, options);
+		const receipt = await resolveLanguageToolPersistentReceipt(
+			url,
+			options,
+			undefined,
+			init?.signal ?? request?.signal ?? undefined
+		);
 		if (!receipt?.sha256) return nativeFetch.call(globalThis, input, init);
 		const bytes = await fetchBoundedExternalAsset({
 			...options,

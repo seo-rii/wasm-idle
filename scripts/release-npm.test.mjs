@@ -25,7 +25,11 @@ import {
 	validateResumeArtifacts,
 	validateSourceRelease
 } from './release-npm.mjs';
-import { createRuntimeAssetLock, renderRuntimeAssetLock } from './generate-runtime-asset-lock.mjs';
+import {
+	createRuntimeAssetLock,
+	renderRuntimeAssetLock,
+	runtimeAssetLockSources
+} from './generate-runtime-asset-lock.mjs';
 
 describe('release package discovery', () => {
 	it('includes every public package and validates their synchronized workspace references', async () => {
@@ -169,15 +173,13 @@ async function createReleaseFixture() {
 			'packages/core/src/runtime-asset-lock.generated.ts'
 		);
 		await mkdir(path.dirname(assetLockPath), { recursive: true });
-		await writeFile(
-			assetLockPath,
-			renderRuntimeAssetLock(
-				await createRuntimeAssetLock({
-					rootDir: assetRoot,
-					packageFile: path.join(fixture, 'package.json')
-				})
-			)
-		);
+		const manifest = await createRuntimeAssetLock({
+			rootDir: assetRoot,
+			packageFile: path.join(fixture, 'package.json')
+		});
+		for (const [file, source] of runtimeAssetLockSources(manifest, assetLockPath)) {
+			await writeFile(file, source);
+		}
 		await writeFile(
 			path.join(fixture, '.gitignore'),
 			'bin/\ncalls.jsonl\nstatic/\nasset snapshot/\n'
@@ -302,7 +304,20 @@ throw new Error('Unexpected fixture invocation');
 					}
 				}
 			);
-		return { fixture, trace, invoke, packages, bin, assetRoot, assetLockPath };
+		const assetVersionPath = path.join(
+			path.dirname(assetLockPath),
+			'runtime-asset-version.generated.ts'
+		);
+		return {
+			fixture,
+			trace,
+			invoke,
+			packages,
+			bin,
+			assetRoot,
+			assetLockPath,
+			assetVersionPath
+		};
 	} catch (error) {
 		await rm(fixture, { recursive: true, force: true });
 		throw error;
@@ -341,11 +356,11 @@ describe('release CLI', () => {
 	});
 
 	it('bumps versions, then publishes the prepared mixed-version plan with its asset root', async () => {
-		const { fixture, trace, invoke, packages, assetRoot, assetLockPath } =
+		const { fixture, trace, invoke, packages, assetRoot, assetVersionPath } =
 			await createReleaseFixture();
 		try {
 			assert.match(
-				await readFile(assetLockPath, 'utf8'),
+				await readFile(assetVersionPath, 'utf8'),
 				/WASM_IDLE_ASSET_VERSION: string = '1\.9\.0'/u
 			);
 			await rm(path.join(fixture, 'static'), { recursive: true });
@@ -365,7 +380,7 @@ describe('release CLI', () => {
 				.map((line) => JSON.parse(line));
 			assert.match(dryRun.stdout, /Generated runtime asset lock 2\.0\.0: 2 receipts/u);
 			assert.match(
-				await readFile(assetLockPath, 'utf8'),
+				await readFile(assetVersionPath, 'utf8'),
 				/WASM_IDLE_ASSET_VERSION: string = '2\.0\.0'/u
 			);
 			assert.ok(
@@ -460,7 +475,7 @@ describe('release CLI', () => {
 	});
 
 	it('resumes a partial publish after advancing the runtime asset lock version', async () => {
-		const { fixture, trace, invoke, packages, bin, assetLockPath } =
+		const { fixture, trace, invoke, packages, bin, assetLockPath, assetVersionPath } =
 			await createReleaseFixture();
 		try {
 			const registryFile = path.join(bin, 'registry.json');
@@ -478,7 +493,10 @@ describe('release CLI', () => {
 			const publishedBefore = Object.keys(JSON.parse(await readFile(registryFile, 'utf8')));
 			assert.ok(publishedBefore.length > 0 && publishedBefore.length < packages.length);
 			const preparedLock = await readFile(assetLockPath, 'utf8');
-			assert.match(preparedLock, /WASM_IDLE_ASSET_VERSION: string = '2\.0\.0'/u);
+			assert.match(
+				await readFile(assetVersionPath, 'utf8'),
+				/WASM_IDLE_ASSET_VERSION: string = '2\.0\.0'/u
+			);
 
 			await writeFile(trace, '');
 			const resumed = invoke(['--publish', '--resume'], environment);
@@ -501,14 +519,14 @@ describe('release CLI', () => {
 	});
 
 	it('rejects tampered generated locks and unrelated source changes before npm calls', async () => {
-		const { fixture, trace, invoke, assetLockPath, bin } = await createReleaseFixture();
+		const { fixture, trace, invoke, assetLockPath, assetVersionPath, bin } =
+			await createReleaseFixture();
 		try {
 			const prepared = invoke([], { RELEASE_TEST_PACK: '1' });
 			assert.equal(prepared.status, 0, prepared.stderr);
 			const generated = await readFile(assetLockPath, 'utf8');
 			for (const tampered of [
 				`${generated}\nexport const unrelated = true;\n`,
-				generated.replace("'2.0.0'", "'2.1.0'"),
 				generated.replace(/"sha256":"[a-f0-9]{64}"/u, `"sha256":"${'0'.repeat(64)}"`)
 			]) {
 				assert.notEqual(tampered, generated);
@@ -521,6 +539,16 @@ describe('release CLI', () => {
 				assert.equal(await readFile(assetLockPath, 'utf8'), tampered);
 			}
 			await writeFile(assetLockPath, generated);
+			const version = await readFile(assetVersionPath, 'utf8');
+			await writeFile(assetVersionPath, version.replace("'2.0.0'", "'2.1.0'"));
+			const invalidVersion = invoke(['--publish'], { RELEASE_TEST_AUTH: '1' });
+			assert.equal(invalidVersion.status, 1);
+			assert.match(
+				invalidVersion.stderr,
+				/changes beyond the generated 2\.0\.0 release lock/u
+			);
+			assert.equal(await readFile(trace, 'utf8'), '');
+			await writeFile(assetVersionPath, version);
 			await writeFile(
 				path.join(fixture, 'unrelated-source.ts'),
 				'export const unrelated = true;\n'

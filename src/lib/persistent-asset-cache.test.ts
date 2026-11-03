@@ -63,22 +63,28 @@ function installStorage() {
 			transaction: () => {
 				const transaction: Record<string, any> = {};
 				let finished = false;
+				let pendingRequests = 0;
 				transaction.abort = () => {
 					if (finished) return;
 					finished = true;
 					queueMicrotask(() => transaction.onabort?.());
 				};
 				const operation = (fn: () => unknown) => {
-					const result: Record<string, unknown> = {};
+					const result: Record<string, any> = {};
+					pendingRequests++;
 					queueMicrotask(() => {
 						if (finished) return;
 						result.result = structuredClone(fn());
-						finished = true;
-						transaction.oncomplete?.();
+						result.onsuccess?.();
+						if (--pendingRequests === 0) {
+							finished = true;
+							transaction.oncomplete?.();
+						}
 					});
 					return result;
 				};
 				transaction.objectStore = () => ({
+					transaction,
 					get: (key: string) => operation(() => values!.get(key)),
 					getAll: () => operation(() => [...values!.values()]),
 					put: (record: { sha256: string }) =>

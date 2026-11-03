@@ -1,10 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const fetchAsset = vi.hoisted(() => vi.fn());
+const resolveReceipt = vi.hoisted(() =>
+	vi.fn(async (_url: string, options: { assetRoot?: string }) =>
+		options.assetRoot ? { sha256: 'a'.repeat(64), bytes: 8 } : undefined
+	)
+);
 vi.mock('../src/external-asset.js', () => ({ fetchBoundedExternalAsset: fetchAsset }));
 vi.mock('../src/persistent-assets.js', () => ({
-	resolveLanguageToolPersistentReceipt: (_url: string, options: { assetRoot?: string }) =>
-		options.assetRoot ? { sha256: 'a'.repeat(64), bytes: 8 } : undefined
+	resolveLanguageToolPersistentReceipt: resolveReceipt
 }));
 vi.mock('../src/jsonrpc.js', () => ({
 	BrowserMessageReader: class {
@@ -51,10 +55,44 @@ const start = (worker: WorkerProbe, signal?: AbortSignal) =>
 const bytes = () => new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]);
 afterEach(() => {
 	vi.restoreAllMocks();
+	vi.useRealTimers();
 	fetchAsset.mockReset();
+	resolveReceipt.mockReset();
 });
 
 describe('Python LSP host module handoff', () => {
+	it.each(['timeout', 'abort'])(
+		'settles %s while the receipt import is pending without creating a late worker',
+		async (stop) => {
+			vi.useFakeTimers();
+			let release!: (receipt: { sha256: string; bytes: number }) => void;
+			resolveReceipt.mockImplementationOnce(
+				() =>
+					new Promise((resolve) => {
+						release = resolve;
+					})
+			);
+			const controller = new AbortController();
+			const createWorker = vi.fn(() => new WorkerProbe() as unknown as Worker);
+			const started = createPythonLanguageServer({
+				rootUrl: 'https://runtime.test/root/',
+				createWorker,
+				signal: controller.signal,
+				startupTimeoutMs: 20
+			});
+			const failed = expect(started).rejects.toThrow(
+				stop === 'timeout' ? 'timed out' : 'cancel receipt import'
+			);
+			await vi.advanceTimersByTimeAsync(0);
+			if (stop === 'timeout') await vi.advanceTimersByTimeAsync(20);
+			else controller.abort(new Error('cancel receipt import'));
+			await failed;
+			release({ sha256: 'a'.repeat(64), bytes: 8 });
+			await vi.advanceTimersByTimeAsync(0);
+			expect(createWorker).not.toHaveBeenCalled();
+		}
+	);
+
 	it('hands the same immutable module to recreated workers', async () => {
 		fetchAsset.mockImplementation(async () => bytes());
 		const first = new WorkerProbe(),

@@ -28,7 +28,7 @@ function record(value: unknown, keys: readonly string[], label: string) {
 function profileSnapshot(value: unknown): WasiGccLinkProfile {
 	const profile = record(
 		value,
-		['target', 'abi', 'simd', 'language', 'rtti', 'compatibility'],
+		['target', 'abi', 'simd', 'language', 'rtti', 'coverage', 'compatibility'],
 		'profile'
 	);
 	if (
@@ -45,6 +45,8 @@ function profileSnapshot(value: unknown): WasiGccLinkProfile {
 		throw new Error('Invalid GCC link input RTTI profile');
 	if (rtti === true && language !== 'cpp')
 		throw new Error('RTTI-enabled link inputs require an explicit C++ language profile');
+	if (profile.coverage !== undefined && typeof profile.coverage !== 'boolean')
+		throw new Error('Invalid GCC link input coverage profile');
 	const compatibility = record(
 		profile.compatibility,
 		['kind', 'manifestSha256', 'sysrootSha256', 'compilerVersion', 'compilerCommit'],
@@ -80,6 +82,7 @@ function profileSnapshot(value: unknown): WasiGccLinkProfile {
 		simd: profile.simd,
 		...(language === undefined ? {} : { language }),
 		...(rtti === undefined ? {} : { rtti }),
+		...(profile.coverage === undefined ? {} : { coverage: profile.coverage }),
 		compatibility: Object.freeze(contract)
 	});
 }
@@ -255,6 +258,8 @@ async function inspectObject(
 			const module = r.name(),
 				name = r.name(),
 				kind = r.byte();
+			if (name.startsWith('__gcov'))
+				throw new Error('Instrumented GCC coverage link inputs are currently unsupported');
 			if (module !== 'env' && module !== 'wasi_snapshot_preview1')
 				throw new Error(`Unsupported object import module: ${module}`);
 			if (kind === 0) {
@@ -378,6 +383,8 @@ async function inspectObject(
 			if (!sections[symbol.index] || ![0, 10, 11].includes(sections[symbol.index].id))
 				throw new Error('Invalid object section symbol');
 		} else throw new Error('Unsupported Wasm object symbol kind');
+		if (symbol.name?.startsWith('__gcov'))
+			throw new Error('Instrumented GCC coverage link inputs are currently unsupported');
 		if (symbol.name !== undefined && (flags & 3) !== 2) {
 			if (!symbol.name || externalNames.has(symbol.name))
 				throw new Error('Duplicate or empty external object symbol');
@@ -526,7 +533,9 @@ async function inspectObject(
 			if ([3, 4, 5, 8, 9, 23].includes(type)) r.signed();
 			const leb = [0, 1, 3, 4, 6, 7, 20].includes(type),
 				width = leb ? 5 : 4;
-			const start = target.start + offset,
+			// Custom relocation offsets exclude the encoded section name. Standard
+			// code/data offsets retain their section-payload base and chunk bounds.
+			const start = (target.id === 0 ? target.payload : target.start) + offset,
 				end = start + width;
 			const ranges = chunks.get(target) ?? [{ start: target.payload, end: target.end }];
 			if (
@@ -648,6 +657,8 @@ export async function validateWasiGccLinkInputs(
 		try {
 			const { profile } = input,
 				{ compatibility } = profile;
+			if (profile.coverage === true)
+				throw new Error('Instrumented GCC coverage link inputs are currently unsupported');
 			if (profile.simd !== simd)
 				throw new Error('Link input SIMD profile differs from the compilation request');
 			if (compatibility.sysrootSha256 !== manifest.assets.sysroot.sha256)

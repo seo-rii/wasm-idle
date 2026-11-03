@@ -278,6 +278,90 @@ code units and `maxPathBytes`; the resolved path uses the UTF-8 byte limit.
 Unlinked files held open still consume entry/byte quota until the last descriptor
 closes. Growth is rejected before the offending write or resize allocates bytes.
 
+### DWARF debug information
+
+WASI requests can select `debug: true` when a verified producer bundle declares
+`capabilities.debug: true`. Missing capabilities are false. The initial profile
+embeds standard DWARF4 with `-g -gdwarf-4 -gno-variable-location-views` and defaults
+to `optimization: '0'`; an explicitly selected nonzero optimization is rejected
+before any tool runs. This applies to assembly, object and executable outputs,
+including additional source units through `files` and `sources`. Source text is
+passed unchanged to GCC. The separate x86 request API does not accept `debug`.
+
+Debug information stays inside the normal WAT or Wasm artifact; it adds no debug
+receipt or ABI profile field. `debug: false` and omission preserve the ordinary
+optimization default (`'2'`), compiler arguments and receipt shapes. RTTI, SIMD,
+wide values and coverage retain their existing request rules. Actual debugger
+locations depend on the producer's qualified profile; an unavailable location
+does not disable the language feature itself.
+
+### GCC coverage
+
+WASI requests can opt in with `coverage: true` when the pinned bundle declares
+`capabilities.coverage: true`. Older manifests omit the capability and treat it
+as false. Omission or `coverage: false` preserves ordinary compiler/linker
+arguments and object receipts. The separate x86 API does not accept this option.
+
+```ts
+const compiled = await compiler.compile({
+	code: 'int main(void) { return 0; }',
+	language: 'c',
+	coverage: true
+});
+if (!compiled.artifact || !compiled.coverage) throw new Error(compiled.stderr);
+const executed = await compiler.run(compiled.artifact, {
+	preopens: [{ path: '/profile' }]
+});
+const note = compiled.coverage.notes[0];
+const data = executed.files.find((file) => file.path === note.dataPath);
+// Save note.contents as note.path, and data.contents as the matching .gcda filename.
+```
+
+This profile uses GCC's `-fprofile-arcs -ftest-coverage` instrumentation with
+`-fprofile-update=single`, and links the bundle's official `libgcov.a` and WASI
+SDK `libwasi-emulated-getpid.a` only for covered executables. Every C/C++ source
+unit uses the same selected optimization and coverage flags. Additional sources
+work through the existing `files`/`sources` API. Initial coverage compilation
+accepts source units only: combining `coverage: true` with `linkInputs` rejects
+the request. Assembly, object and executable outputs are supported; a covered
+object receipt records `profile.coverage: true`, and covered external objects or
+archives currently reject in every executable request. Visible reserved
+`__gcov` imports/symbols also reject undeclared instrumented inputs. Caller
+provenance remains required; binary checks cannot authenticate all source options.
+Ordinary uncovered link inputs retain their existing compatibility rules.
+
+On success, `compiled.coverage` identifies the GCC version and commit and returns
+exact binary `.gcno` notes in source/link order. Filenames are `program.gcno`,
+`program.1.gcno`, and so on; matching guest data paths are
+`/profile/program.gcda`, `/profile/program.1.gcda`, and so on. Generated note
+names, including a same-named directory, are reserved against input collisions
+only when coverage is enabled. Each frontend's notes are captured before its
+filesystem is discarded and copied into private `Uint8Array` buffers. Limits are
+16 MiB per note and 64 MiB total. Worker responses transfer these private output
+buffers without detaching caller inputs. Failed compilation returns no artifact
+or partial coverage result, and subsequent requests start fresh.
+
+Covered executable metadata declares the fixed `/profile` directory and expected
+data paths. `run()` requires an exact writable `{ path: '/profile' }` preopen;
+missing/read-only mounts reject before execution. `GCOV_PREFIX` and
+`GCOV_PREFIX_STRIP` overrides reject because they redirect those paths. Other
+environment entries retain their normal behavior. Normal termination writes real
+`.gcda` bytes into the existing `files` result, subject to filesystem limits and
+guest I/O errors reported by libgcov. A trap, Worker cancellation, or `_Exit`
+does not guarantee a profile. Each run has a fresh mount; profiles merge only if
+the caller explicitly supplies previous `.gcda` bytes as mount inputs.
+
+Analyze matching `.gcno`/`.gcda` pairs with the producer's official pinned GCC 17
+`gcov`, using `--json-format --branch-probabilities --branch-counts` when needed.
+The qualified base GCC revision is
+`ac20dcd5f8c5ae858f9b2d9cdf4140c0738e5e27`; its version word is `B70 ` (including
+the trailing space), and its JSON format version is 2. These binary files use
+GCC's private format; the SDK returns them unchanged and supplies no custom
+parser. Coverage describes the selected optimized program; inlining and dead
+code removal can change source-level counts. PGO/value profiling, atomic
+updates, info-section streaming, condition/path coverage, function-entry hooks,
+manual gcov control calls, and PID-dependent naming are outside this API.
+
 Threads and dynamic linking remain unavailable.
 Traps are errors; failed compilation yields no executable artifact.
 
