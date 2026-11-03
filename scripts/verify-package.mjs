@@ -56,7 +56,8 @@ export const scenarios = [
 		// The Zig debug asset/bitcode helper ships one JavaScript/declaration pair.
 		// Python debug setup and Zig value formatting add two more such pairs.
 		// Scala adds 20 adapter/Worker/declaration/license files; assets remain external.
-		budget: { maxBytes: 7 * MiB + 64 * 1024, maxFiles: 783, maxPackages: 6 },
+		// Lazy receipt lookup adds three core JavaScript/declaration pairs (789 files measured).
+		budget: { maxBytes: 7 * MiB + 64 * 1024, maxFiles: 789, maxPackages: 6 },
 		absentPackageNames: [
 			'java-parser',
 			'chevrotain',
@@ -111,7 +112,10 @@ export const scenarios = [
 		// The 10,726-byte overflow requires another 11 KiB; no files/dependencies are added.
 		// Debug contracts measure 2,723,557 bytes / 182 files / four packages.
 		// The 2,235-byte delta needs 3 KiB, retaining 1,307 bytes of measured headroom.
-		budget: { maxBytes: 2.5 * MiB + 101 * 1024, maxFiles: 184, maxPackages: 4 },
+		// Integrating main's lazy receipt lookup and #358/#361 adds 6,907 bytes and six files.
+		// The combined 2,730,464-byte / 188-file install needs another 7 KiB to retain
+		// at least 1 KiB of headroom (1,568 bytes); dependencies remain unchanged.
+		budget: { maxBytes: 2.5 * MiB + 108 * 1024, maxFiles: 190, maxPackages: 4 },
 		absentPackageNames: [
 			'wasm-idle',
 			'@wasm-idle/llvm-core',
@@ -403,7 +407,15 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Coverage adds 11,470 emitted/documentation bytes, with no files/dependencies.
 		// Propagate the rounded 12 KiB delta while preserving existing aggregate headroom.
 		// Debug adds 2,235 packed GCC bytes without files/dependencies; propagate 3 KiB.
-		budget: { maxBytes: 40 * MiB + 700 * 1024, maxFiles: 3_396, maxPackages: 70 },
+		// Main already exceeds 612 KiB by 3,802 bytes: allow 4 KiB for that baseline.
+		// Lazy receipt lookup adds about 7 KiB and six files; allow another 8 KiB,
+		// retaining at least 1 KiB of headroom with unchanged production dependencies.
+		// Combined changes add 5,801 emitted bytes: 1,219 in core (#358/#361)
+		// and 4,582 in the root SDK's worker/Zig modules. Reserve 6 KiB above
+		// the lazy-only 624 KiB allowance; main's measured 42,586,341-byte install
+		// retains 1,819 bytes of headroom with no additional files or dependencies.
+		// Add main's 18 KiB / six-file increase to GCC's existing 700 KiB / 3,396 files.
+		budget: { maxBytes: 40 * MiB + 718 * 1024, maxFiles: 3_402, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

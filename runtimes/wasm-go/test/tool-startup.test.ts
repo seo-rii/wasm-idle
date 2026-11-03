@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { gzipSync } from 'node:zlib';
 
 import { clearGoToolModuleCache } from '../src/tool-module.js';
-import { executeGoToolInvocation } from '../src/tool-runtime.js';
+import { executeGoToolInvocation, prepareGoToolModule } from '../src/tool-runtime.js';
 import type { BrowserGoBuildPlan, BrowserGoToolInvocation } from '../src/types.js';
 
 // A real, minimal WASI command exporting memory and a no-op _start.
@@ -40,14 +40,15 @@ function fixture() {
 	const fetchImpl = vi.fn((url: string | URL | Request) =>
 		String(url).includes('/tools/') ? tool.promise : sysroot.promise
 	) as unknown as typeof fetch;
-	const start = (options = {}) =>
+	const start = (options = {}, preparedModule?: WebAssembly.Module) =>
 		executeGoToolInvocation(
 			invocation,
 			plan,
 			'https://example.test/go/',
 			fetchImpl,
 			undefined,
-			options
+			options,
+			preparedModule
 		);
 	return { invocation, plan, sysroot, tool, fetchImpl, start };
 }
@@ -60,6 +61,23 @@ afterEach(() => {
 });
 
 describe('Go tool startup', () => {
+	it('executes a prepared Wasm tool without downloading or compiling it twice', async () => {
+		const compile = vi.spyOn(WebAssembly, 'compile');
+		const f = fixture();
+		const preparation = prepareGoToolModule(
+			f.invocation,
+			'https://example.test/go/',
+			f.fetchImpl
+		);
+		f.tool.resolve(response(command));
+		const module = await preparation;
+		expect(module).toBeInstanceOf(WebAssembly.Module);
+		f.sysroot.resolve(new Response('library'));
+		expect((await f.start({}, module)).exitCode).toBe(0);
+		expect(f.fetchImpl).toHaveBeenCalledTimes(2);
+		expect(compile).toHaveBeenCalledOnce();
+	});
+
 	it('starts both asset requests before either response is available', async () => {
 		const f = fixture();
 		const run = f.start();

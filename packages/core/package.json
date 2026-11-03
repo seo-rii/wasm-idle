@@ -4,6 +4,7 @@
 	"description": "Framework-neutral contracts and helpers for wasm-idle hosts",
 	"license": "MIT",
 	"type": "module",
+	"sideEffects": false,
 	"exports": {
 		".": {
 			"types": "./dist/index.d.ts",

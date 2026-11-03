@@ -222,10 +222,11 @@ async function fetchAsset(
 	const receipt =
 		config.loader && !config.integrity?.[asset]
 			? undefined
-			: resolveLanguageToolPersistentReceipt(
+			: await resolveLanguageToolPersistentReceipt(
 					requestUrl.href,
 					config,
-					config.integrity?.[asset]
+					config.integrity?.[asset],
+					signal
 				);
 	if (!receipt?.sha256)
 		return fetchAssetNetwork(runtime, url, asset, config, reportProgress, signal);
