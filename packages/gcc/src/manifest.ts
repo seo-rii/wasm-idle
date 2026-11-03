@@ -187,21 +187,28 @@ export function parseWasiGccManifest(value: unknown): WasiGccManifest {
 	}
 	if (!capabilities.c || (capabilities.libstdcxx && !capabilities.cpp))
 		throw new Error('Invalid GCC WASI language capabilities');
-	for (const name of ['exceptions', 'rtti', 'threads', 'dynamicLinking']) {
+	for (const name of ['exceptions', 'threads', 'dynamicLinking']) {
 		if (capabilityInput[name] !== false)
 			throw new Error(`Unsupported GCC WASI capability: ${name}`);
 		capabilities[name] = false;
 	}
+	if (typeof capabilityInput.rtti !== 'boolean')
+		throw new Error('Invalid GCC WASI capability: rtti');
+	capabilities.rtti = capabilityInput.rtti;
+	if (capabilities.rtti && (!capabilities.cpp || !capabilities.libstdcxx))
+		throw new Error('GCC WASI RTTI requires C++ and a qualified GNU libstdc++ runtime');
 	if (typeof capabilityInput.simd !== 'boolean')
 		throw new Error('Invalid GCC WASI capability: simd');
 	capabilities.simd = capabilityInput.simd;
-	for (const name of ['longDouble', 'int128']) {
+	for (const name of ['longDouble', 'int128', 'coverage', 'debug']) {
 		if (capabilityInput[name] !== undefined && typeof capabilityInput[name] !== 'boolean')
 			throw new Error(`Invalid GCC WASI capability: ${name}`);
 		capabilities[name] = (capabilityInput[name] ?? false) as boolean;
 	}
 	if (capabilities.longDouble && (!capabilities.libc || !capabilities.libm))
 		throw new Error('GCC WASI longDouble requires libc and libm');
+	if (capabilities.coverage && (!capabilities.libc || !capabilities.staticInitialization))
+		throw new Error('GCC WASI coverage requires libc and static initialization');
 	if (!Array.isArray(input.runtimeLibraries) || input.runtimeLibraries.length > 16)
 		throw new Error('Invalid GCC WASI runtime libraries');
 	const runtimeLibraries = input.runtimeLibraries.map((path: unknown) => {

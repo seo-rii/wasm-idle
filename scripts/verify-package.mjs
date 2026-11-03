@@ -56,7 +56,8 @@ export const scenarios = [
 		// The Zig debug asset/bitcode helper ships one JavaScript/declaration pair.
 		// Python debug setup and Zig value formatting add two more such pairs.
 		// Scala adds 20 adapter/Worker/declaration/license files; assets remain external.
-		budget: { maxBytes: 7 * MiB + 64 * 1024, maxFiles: 783, maxPackages: 6 },
+		// Lazy receipt lookup adds three core JavaScript/declaration pairs (789 files measured).
+		budget: { maxBytes: 7 * MiB + 64 * 1024, maxFiles: 789, maxPackages: 6 },
 		absentPackageNames: [
 			'java-parser',
 			'chevrotain',
@@ -105,7 +106,16 @@ export const scenarios = [
 		// Raise only the byte limit by the minimum 25 KiB; dependencies stay unchanged.
 		// Explicit link inputs measure 2,704,716 bytes / 182 files / four packages.
 		// The additional 37,533 bytes require 37 KiB; the two helper files fit the cap.
-		budget: { maxBytes: 2.5 * MiB + 82 * 1024, maxFiles: 184, maxPackages: 4 },
+		// RTTI contracts measure 2,709,792 bytes / 182 files / four packages with exact
+		// locked dependencies. The 4,384-byte overflow requires only another 5 KiB.
+		// Coverage contracts measure 2,721,254 bytes / 182 files / four packages.
+		// The 10,726-byte overflow requires another 11 KiB; no files/dependencies are added.
+		// Debug contracts measure 2,723,557 bytes / 182 files / four packages.
+		// The 2,235-byte delta needs 3 KiB, retaining 1,307 bytes of measured headroom.
+		// Integrating main's lazy receipt lookup and #358/#361 adds 6,907 bytes and six files.
+		// The combined 2,730,464-byte / 188-file install needs another 7 KiB to retain
+		// at least 1 KiB of headroom (1,568 bytes); dependencies remain unchanged.
+		budget: { maxBytes: 2.5 * MiB + 108 * 1024, maxFiles: 190, maxPackages: 4 },
 		absentPackageNames: [
 			'wasm-idle',
 			'@wasm-idle/llvm-core',
@@ -127,7 +137,7 @@ export const scenarios = [
 			"await (await import('node:fs/promises')).access(new URL('./worker-entry.js', import.meta.resolve('@wasm-idle/gcc')));",
 			"if (workers || requests) throw new Error('GCC import started a Worker or fetched assets');"
 		],
-		typeCheck: `import { createCrossGccWorker, createGccWorker, type CrossGccCompileRequest, type CrossGccArtifact, type WasiGccCompileRequest, type WasiGccCompileResult, type WasiGccArtifact, type WasiGccWorker, type WasiGccManifest, type WasiGccLinkProfile, type WasiGccLinkInputReceipt, type WasiGccLinkInput, type WasiGccLinkedInput, type WasiGccPreopen, type WasiGccFilesystemLimits, type WasiGccResultFile, type WasiGccRunOptions, type WasiGccRunResult } from '@wasm-idle/gcc';
+		typeCheck: `import { createCrossGccWorker, createGccWorker, type CrossGccCompileRequest, type CrossGccArtifact, type WasiGccCompileRequest, type WasiGccCompileResult, type WasiGccArtifact, type WasiGccWorker, type WasiGccManifest, type WasiGccCoverageNote, type WasiGccLinkProfile, type WasiGccLinkInputReceipt, type WasiGccLinkInput, type WasiGccLinkedInput, type WasiGccPreopen, type WasiGccFilesystemLimits, type WasiGccResultFile, type WasiGccRunOptions, type WasiGccRunResult } from '@wasm-idle/gcc';
 const request: CrossGccCompileRequest = { code: 'int main() { return 0; }', language: 'cpp', cpu: 'x86-64', emit: 'executable' };
 declare const artifact: CrossGccArtifact;
 const compiler: 'gcc' = artifact.compiler;
@@ -142,6 +152,12 @@ const simdFeature: boolean | undefined = wasiArtifact.wasm?.features.simd128;
 const simdCapability: boolean = wasiManifest.capabilities.simd;
 const longDoubleCapability: boolean | undefined = wasiManifest.capabilities.longDouble;
 const int128Capability: boolean | undefined = wasiManifest.capabilities.int128;
+const rttiCapability: boolean = wasiManifest.capabilities.rtti;
+const rttiRequest: WasiGccCompileRequest = { code: '', language: 'cpp', rtti: true };
+const coverageCapability: boolean | undefined = wasiManifest.capabilities.coverage;
+const coverageRequest: WasiGccCompileRequest = { code: '', language: 'c', coverage: true };
+const debugCapability: boolean | undefined = wasiManifest.capabilities.debug;
+const debugRequest: WasiGccCompileRequest = { code: '', language: 'c', debug: true, optimization: '0' };
 const wasiWorkerFactory: () => Promise<WasiGccWorker> = () => createGccWorker({ target: 'wasm32-wasi', manifestUrl: 'https://example.invalid/gcc-manifest.json', manifestSha256: '0'.repeat(64) });
 const preopens: readonly WasiGccPreopen[] = [{ path: '/work', readonly: false, directories: ['output'], files: [{ path: 'input.bin', contents: new Uint8Array([0, 255]) }, { path: 'input.txt', contents: 'hello' }] }];
 const filesystemLimits: WasiGccFilesystemLimits = { maxEntries: 32, maxFileBytes: 1024, maxTotalBytes: 2048, maxPathBytes: 256, maxOpenFiles: 8 };
@@ -149,6 +165,9 @@ const runOptions: WasiGccRunOptions = { stdin: '42', preopens, filesystemLimits 
 declare const wasiWorker: WasiGccWorker;
 const execution: Promise<WasiGccRunResult> = wasiWorker.run(wasiArtifact, { ...runOptions, signal: new AbortController().signal });
 const gccProfile: WasiGccLinkProfile = { target: 'wasm32-wasi', abi: 'wasm32-wasi-preview1', simd: false, compatibility: { kind: 'gcc-bundle', manifestSha256: '0'.repeat(64), sysrootSha256: '1'.repeat(64) } };
+const knownCProfile: WasiGccLinkProfile = { ...gccProfile, language: 'c' };
+const cppRttiProfile: WasiGccLinkProfile = { ...gccProfile, language: 'cpp', rtti: true };
+const coveredProfile: WasiGccLinkProfile = { ...gccProfile, coverage: true };
 const clangProfile: WasiGccLinkProfile = { target: 'wasm32-wasi', abi: 'wasm32-wasi-preview1', simd: false, compatibility: { kind: 'clang-c-scalar-v1', compilerVersion: '22.1.0', compilerCommit: '4434dabb69916856b824f68a64b029c67175e532', sysrootSha256: '1'.repeat(64) } };
 declare const objectBytes: Uint8Array;
 declare const archiveBytes: Uint8Array;
@@ -188,6 +207,23 @@ async function consumeFiles() {
   files.push({ path: '/extra', contents: new Uint8Array() });
   return { bytes, path };
 }
+async function consumeCoverage() {
+  const result = await wasiWorker.compile(coverageRequest);
+  const notes: readonly WasiGccCoverageNote[] | undefined = result.coverage?.notes;
+  const format: 'gcc-gcov' | undefined = result.coverage?.format;
+  const version: string | undefined = result.coverage?.compilerVersion;
+  const commit: string | undefined = result.coverage?.compilerCommit;
+  const bytes: Uint8Array | undefined = notes?.[0]?.contents;
+  const notePath: string | undefined = notes?.[0]?.path;
+  const dataPath: string | undefined = notes?.[0]?.dataPath;
+  const directory: '/profile' | undefined = result.artifact?.coverage?.directory;
+  const dataPaths: readonly string[] | undefined = result.artifact?.coverage?.dataPaths;
+  // @ts-expect-error Coverage notes preserve source order in a readonly list.
+  notes?.push({ path: '', dataPath: '', contents: new Uint8Array() });
+  // @ts-expect-error Expected profile paths are readonly artifact metadata.
+  dataPaths?.push('/profile/other.gcda');
+  return { format, version, commit, bytes, notePath, dataPath, directory };
+}
 // @ts-expect-error Binary preopen contents must be a Uint8Array, not a number array.
 const invalidPreopen: WasiGccPreopen = { path: '/work', files: [{ path: 'input.bin', contents: [0, 255] }] };
 // @ts-expect-error Filesystem limits are numeric byte/count limits.
@@ -210,6 +246,24 @@ const invalidWasiCpu: WasiGccCompileRequest = { code: '', cpu: 'avx2' };
 const invalidWasiSimd: WasiGccCompileRequest = { code: '', simd: 'avx2' };
 // @ts-expect-error The existing x86 API does not accept a Wasm SIMD selector.
 const invalidX86Simd: CrossGccCompileRequest = { code: '', simd: true };
+// @ts-expect-error RTTI is a boolean opt-in.
+const invalidRtti: WasiGccCompileRequest = { code: '', rtti: 'true' };
+// @ts-expect-error RTTI profile values are booleans.
+const invalidRttiProfile: WasiGccLinkProfile = { ...gccProfile, rtti: 1 };
+// @ts-expect-error The existing x86 request contract does not accept the WASI RTTI option.
+const invalidX86Rtti: CrossGccCompileRequest = { code: '', rtti: true };
+// @ts-expect-error Coverage is an explicit boolean opt-in.
+const invalidCoverage: WasiGccCompileRequest = { code: '', coverage: 'true' };
+// @ts-expect-error Coverage provenance is a boolean.
+const invalidCoverageProfile: WasiGccLinkProfile = { ...gccProfile, coverage: 1 };
+// @ts-expect-error debug accepts only a boolean
+const invalidDebugRequest: WasiGccCompileRequest = { code: '', debug: 'true' };
+// @ts-expect-error the x86 API has no debug option
+const invalidX86Debug: CrossGccCompileRequest = { code: '', debug: true };
+// @ts-expect-error The existing x86 API does not accept WASI coverage.
+const invalidX86Coverage: CrossGccCompileRequest = { code: '', coverage: true };
+void [coverageCapability, coverageRequest, coveredProfile, consumeCoverage, invalidCoverage, invalidCoverageProfile, invalidX86Coverage];
+void [rttiCapability, rttiRequest, knownCProfile, cppRttiProfile, invalidRtti, invalidRttiProfile, invalidX86Rtti];
 void [request, compiler, host, target, workerFactory, wasiRequest, wasiTarget, simdFeature, simdCapability, longDoubleCapability, int128Capability, wasiWorkerFactory, compilation, reuseObjectReceipt, consumeFiles, invalidPreopen, invalidFilesystemLimit, invalidLinkBytes, incompleteLinkInput, executableLinkInput, incompleteGccProfile, unqualifiedClangProfile, invalidX86LinkInputs, invalidWasiCpu, invalidWasiSimd, invalidX86Simd];
 `
 	},
@@ -348,7 +402,20 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// GCC in-memory preopens measure 42,600,845 bytes / 3,394 files / 66 packages.
 		// The filesystem helper adds two files; the minimum byte-cap increase is 31 KiB.
 		// Explicit link inputs add 37,533 bytes and two files, requiring another 37 KiB.
-		budget: { maxBytes: 40 * MiB + 680 * 1024, maxFiles: 3_396, maxPackages: 70 },
+		// RTTI adds 5,318 packed GCC bytes without files or dependencies; propagate
+		// the same 5 KiB increment, using the existing aggregate headroom.
+		// Coverage adds 11,470 emitted/documentation bytes, with no files/dependencies.
+		// Propagate the rounded 12 KiB delta while preserving existing aggregate headroom.
+		// Debug adds 2,235 packed GCC bytes without files/dependencies; propagate 3 KiB.
+		// Main already exceeds 612 KiB by 3,802 bytes: allow 4 KiB for that baseline.
+		// Lazy receipt lookup adds about 7 KiB and six files; allow another 8 KiB,
+		// retaining at least 1 KiB of headroom with unchanged production dependencies.
+		// Combined changes add 5,801 emitted bytes: 1,219 in core (#358/#361)
+		// and 4,582 in the root SDK's worker/Zig modules. Reserve 6 KiB above
+		// the lazy-only 624 KiB allowance; main's measured 42,586,341-byte install
+		// retains 1,819 bytes of headroom with no additional files or dependencies.
+		// Add main's 18 KiB / six-file increase to GCC's existing 700 KiB / 3,396 files.
+		budget: { maxBytes: 40 * MiB + 718 * 1024, maxFiles: 3_402, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

@@ -98,9 +98,24 @@ The GNU runtime excludes timezone databases, C++26 debugger functions and prebui
 `std` modules: their atomics/signals need unsupported interfaces, so use fails at
 compile/link time. Advertising `libstdcxx` requires real STL/iostream qualification.
 
-Requests for exceptions, RTTI, threads, dynamic linking or relaxed SIMD fail.
-C++ uses `-fno-exceptions -fno-rtti -fuse-cxa-atexit -fno-threadsafe-statics`,
-preserving static destruction in this single-threaded environment.
+RTTI is opt-in: `rtti: true` requires a C++ request and a bundle with
+`capabilities.rtti: true`, backed by its qualified GNU libstdc++ runtime. C++ then
+uses `-frtti`. Omitted or false keeps `-fno-rtti`, including with capable bundles;
+unchanged older `rtti: false` manifests remain supported and reject opt-in.
+The manifest field remains a required boolean. C requests reject `rtti: true`.
+All translation units use the same request profile.
+
+The RTTI contract covers the producer's qualified nonthrowing operations, including
+pointer `dynamic_cast` and `typeid` on valid operands. Failed reference casts and
+`typeid` through null polymorphic pointers require exception paths and remain
+outside this profile. The option does not promise recovery from those failures
+or source-level rejection of every expression that might reach them. Native and
+actual Worker execution of the exact compiler/runtime must establish support;
+SDK parser/planner tests alone do not qualify a bundle.
+
+Requests for exceptions, threads, dynamic linking or relaxed SIMD still fail.
+C++ retains `-fno-exceptions -fuse-cxa-atexit -fno-threadsafe-statics`, preserving
+static destruction in this single-threaded environment.
 `__GCC_WASI_SINGLE_THREAD__=1` selects the producer's `errno` header, which uses
 single-thread WASI libc storage and rejects `_REENTRANT`; it provides no TLS.
 `cpu` must be `wasm32`; x86 `avx2`/`avx2-fma` do not select Wasm SIMD. GCC diagnoses
@@ -154,6 +169,22 @@ fields, based on independently recorded compiler inputs. A digest identifies
 bytes; caller-supplied provenance does not authenticate who compiled them or
 prove source-level ABI compatibility.
 
+For RTTI-capable bundles, generated object profiles also record `language: 'c'`
+or `'cpp'`; C++ profiles record the effective `rtti` boolean. Known same-bundle C
+objects are RTTI-neutral and can be used by C++ callers with either setting.
+C++ objects must match the request's RTTI mode. A pure-C archive can declare the
+C profile; an archive containing C++ members must declare their compatible C++
+RTTI profile. The validator checks this declared contract before any frontend
+runs; Wasm symbols cannot prove the original language or class hierarchy.
+
+Legacy profile omission means unknown language and RTTI disabled. Those receipts
+retain their existing default/off behavior. An enabled C++ request rejects an
+unknown-language legacy input rather than assuming it is C: regenerate the object
+receipt or provide independently known C provenance. RTTI-false bundles continue
+emitting the original profile shape, preserving old receipt consumers. Manifests
+and sysroots must still match exactly; a new profile never makes different
+bundles compatible.
+
 The only mixed-compiler contract is the explicit caller declaration
 `compatibility.kind: 'clang-c-scalar-v1'`, pinned to Clang 22.1.0 commit
 `4434dabb69916856b824f68a64b029c67175e532` with the matching `sysrootSha256`.
@@ -179,7 +210,7 @@ name. Archive members are all checked, even when the linker would not select the
 Validation requires WebAssembly version 1, linking metadata version 2 and a symbol
 table. It checks symbol/segment/constructor indices, COMDATs, relocation target
 sections and symbol kinds, nonoverlapping chunk bounds and padded 32-bit LEB
-relocations, archive indices, byte digests, target/ABI and SIMD profiles. Actual
+relocations, archive indices, byte digests, target/ABI and SIMD/RTTI profiles. Actual
 instructions/types are inspected even when the optional `target_features` section
 is absent, as with older qualified WABT outputs. `wasm-ld --fatal-warnings` still
 performs cross-object resolution and relocation application, and the final
@@ -246,6 +277,90 @@ descriptors return `EMFILE`. Lookup text is also bounded to the greater of 4096
 code units and `maxPathBytes`; the resolved path uses the UTF-8 byte limit.
 Unlinked files held open still consume entry/byte quota until the last descriptor
 closes. Growth is rejected before the offending write or resize allocates bytes.
+
+### DWARF debug information
+
+WASI requests can select `debug: true` when a verified producer bundle declares
+`capabilities.debug: true`. Missing capabilities are false. The initial profile
+embeds standard DWARF4 with `-g -gdwarf-4 -gno-variable-location-views` and defaults
+to `optimization: '0'`; an explicitly selected nonzero optimization is rejected
+before any tool runs. This applies to assembly, object and executable outputs,
+including additional source units through `files` and `sources`. Source text is
+passed unchanged to GCC. The separate x86 request API does not accept `debug`.
+
+Debug information stays inside the normal WAT or Wasm artifact; it adds no debug
+receipt or ABI profile field. `debug: false` and omission preserve the ordinary
+optimization default (`'2'`), compiler arguments and receipt shapes. RTTI, SIMD,
+wide values and coverage retain their existing request rules. Actual debugger
+locations depend on the producer's qualified profile; an unavailable location
+does not disable the language feature itself.
+
+### GCC coverage
+
+WASI requests can opt in with `coverage: true` when the pinned bundle declares
+`capabilities.coverage: true`. Older manifests omit the capability and treat it
+as false. Omission or `coverage: false` preserves ordinary compiler/linker
+arguments and object receipts. The separate x86 API does not accept this option.
+
+```ts
+const compiled = await compiler.compile({
+	code: 'int main(void) { return 0; }',
+	language: 'c',
+	coverage: true
+});
+if (!compiled.artifact || !compiled.coverage) throw new Error(compiled.stderr);
+const executed = await compiler.run(compiled.artifact, {
+	preopens: [{ path: '/profile' }]
+});
+const note = compiled.coverage.notes[0];
+const data = executed.files.find((file) => file.path === note.dataPath);
+// Save note.contents as note.path, and data.contents as the matching .gcda filename.
+```
+
+This profile uses GCC's `-fprofile-arcs -ftest-coverage` instrumentation with
+`-fprofile-update=single`, and links the bundle's official `libgcov.a` and WASI
+SDK `libwasi-emulated-getpid.a` only for covered executables. Every C/C++ source
+unit uses the same selected optimization and coverage flags. Additional sources
+work through the existing `files`/`sources` API. Initial coverage compilation
+accepts source units only: combining `coverage: true` with `linkInputs` rejects
+the request. Assembly, object and executable outputs are supported; a covered
+object receipt records `profile.coverage: true`, and covered external objects or
+archives currently reject in every executable request. Visible reserved
+`__gcov` imports/symbols also reject undeclared instrumented inputs. Caller
+provenance remains required; binary checks cannot authenticate all source options.
+Ordinary uncovered link inputs retain their existing compatibility rules.
+
+On success, `compiled.coverage` identifies the GCC version and commit and returns
+exact binary `.gcno` notes in source/link order. Filenames are `program.gcno`,
+`program.1.gcno`, and so on; matching guest data paths are
+`/profile/program.gcda`, `/profile/program.1.gcda`, and so on. Generated note
+names, including a same-named directory, are reserved against input collisions
+only when coverage is enabled. Each frontend's notes are captured before its
+filesystem is discarded and copied into private `Uint8Array` buffers. Limits are
+16 MiB per note and 64 MiB total. Worker responses transfer these private output
+buffers without detaching caller inputs. Failed compilation returns no artifact
+or partial coverage result, and subsequent requests start fresh.
+
+Covered executable metadata declares the fixed `/profile` directory and expected
+data paths. `run()` requires an exact writable `{ path: '/profile' }` preopen;
+missing/read-only mounts reject before execution. `GCOV_PREFIX` and
+`GCOV_PREFIX_STRIP` overrides reject because they redirect those paths. Other
+environment entries retain their normal behavior. Normal termination writes real
+`.gcda` bytes into the existing `files` result, subject to filesystem limits and
+guest I/O errors reported by libgcov. A trap, Worker cancellation, or `_Exit`
+does not guarantee a profile. Each run has a fresh mount; profiles merge only if
+the caller explicitly supplies previous `.gcda` bytes as mount inputs.
+
+Analyze matching `.gcno`/`.gcda` pairs with the producer's official pinned GCC 17
+`gcov`, using `--json-format --branch-probabilities --branch-counts` when needed.
+The qualified base GCC revision is
+`ac20dcd5f8c5ae858f9b2d9cdf4140c0738e5e27`; its version word is `B70 ` (including
+the trailing space), and its JSON format version is 2. These binary files use
+GCC's private format; the SDK returns them unchanged and supplies no custom
+parser. Coverage describes the selected optimized program; inlining and dead
+code removal can change source-level counts. PGO/value profiling, atomic
+updates, info-section streaming, condition/path coverage, function-entry hooks,
+manual gcov control calls, and PID-dependent naming are outside this API.
 
 Threads and dynamic linking remain unavailable.
 Traps are errors; failed compilation yields no executable artifact.
@@ -385,7 +500,8 @@ digests at the same URL fetch and verify assets again.
 Compilation has no result cache. Compiled modules belong to the current instance,
 identified by manifest/sysroot digests, GCC version, host and target. Consumer
 caches must also key source/files, ordered `sources`, language/standard,
-preprocessing, defines, ordered link-input receipts, output kind, optimization and CPU/SIMD. Failures never return
+preprocessing, defines, ordered link-input receipts, output kind, optimization and
+CPU/SIMD/RTTI settings. Failures never return
 old artifacts; the example clears its download when compilation starts.
 
 Results include stage argv, exit codes, milliseconds and peak linear-memory

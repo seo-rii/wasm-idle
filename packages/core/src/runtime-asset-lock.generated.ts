@@ -4,8 +4,9 @@ import type { RuntimeAssetLockManifest } from './runtime-asset-lock.js';
 export const WASM_IDLE_ASSET_VERSION: string = '1.3.0';
 export const RUNTIME_ASSET_LOCK_VERSION: string = WASM_IDLE_ASSET_VERSION;
 
+// The initializer only freezes its own literal; unused synchronous API exports can drop it.
 // prettier-ignore
-export const RUNTIME_ASSET_LOCK: RuntimeAssetLockManifest = {
+export const RUNTIME_ASSET_LOCK: RuntimeAssetLockManifest = /* @__PURE__ */ freezeLock({
 	schemaVersion: 1,
 	version: WASM_IDLE_ASSET_VERSION,
 	assets: {
@@ -2438,11 +2439,13 @@ export const RUNTIME_ASSET_LOCK: RuntimeAssetLockManifest = {
 		"webr/000bd2c7d2f13441/webr-worker.js": {"sha256":"c64282f5e15b51ef473e26548203313f868208c8988b2c7bdfc22c5730de418b","bytes":134029,"mediaType":"text/javascript"},
 		"webr/000bd2c7d2f13441/webr.js": {"sha256":"4c04d3240de6cd3e7f59e081756168faa8566f8a8b97251400770939815c344a","bytes":66672,"mediaType":"text/javascript"}
 	}
-};
+});
 
-for (const entry of Object.values(RUNTIME_ASSET_LOCK.assets)) {
-	if (entry.layer) Object.freeze(entry.layer);
-	Object.freeze(entry);
+function freezeLock(lock: RuntimeAssetLockManifest): RuntimeAssetLockManifest {
+	for (const entry of Object.values(lock.assets)) {
+		if (entry.layer) Object.freeze(entry.layer);
+		Object.freeze(entry);
+	}
+	Object.freeze(lock.assets);
+	return Object.freeze(lock);
 }
-Object.freeze(RUNTIME_ASSET_LOCK.assets);
-Object.freeze(RUNTIME_ASSET_LOCK);

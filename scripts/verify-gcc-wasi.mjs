@@ -813,12 +813,12 @@ try {
 	}
 	if (manifest) {
 		report.unsupportedFeatures = await page.evaluate(
-			async ({ request, simdSupported }) => {
+			async ({ request, simdSupported, rttiSupported }) => {
 				const compiler = globalThis.gccWasiQualification;
 				const results = [];
 				for (const feature of [
 					'exceptions',
-					'rtti',
+					...(rttiSupported ? [] : ['rtti']),
 					'threads',
 					'dynamicLinking',
 					...(simdSupported ? [] : ['simd']),
@@ -847,7 +847,11 @@ try {
 				});
 				return results;
 			},
-			{ request: defaultCases[0].request, simdSupported: manifest.capabilities.simd }
+			{
+				request: defaultCases[0].request,
+				simdSupported: manifest.capabilities.simd,
+				rttiSupported: manifest.capabilities.rtti
+			}
 		);
 		assert(
 			report.unsupportedFeatures.every((feature) => feature.rejected && feature.diagnostic),

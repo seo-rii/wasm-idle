@@ -29,7 +29,7 @@ describe('createOcamlWorkerService', () => {
 			);
 			const resolveReceipt = vi
 				.spyOn(persistentAssets, 'resolveLanguageToolPersistentReceipt')
-				.mockReturnValue(
+				.mockResolvedValue(
 					stock
 						? {
 								bytes: manifestBytes.length,

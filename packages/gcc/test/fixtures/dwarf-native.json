@@ -1,0 +1,139 @@
+{
+	"kind": "genuine-gcc-wasi-dwarf4-object-fixture",
+	"scope": "One real native GCC C translation unit, assembled by pinned WABT and verified by official LLVM. The originating multi-unit smoke passed partially; this parser fixture does not claim full compiler or browser-host qualification. Undefined external imports in this standalone relocatable object are intentional.",
+	"inputFiles": [
+		{
+			"path": "dwarf-native/main.c",
+			"bytes": 516,
+			"sha256": "0f2d566cae8bba7031c7a377935efa9379edb4bded7e4f389d58ec13e605d9d4"
+		},
+		{
+			"path": "dwarf-native/record.h",
+			"bytes": 331,
+			"sha256": "254681d3c9a8fc14ab50fb86e474e02f3c385502cb136e982c7179436011619d"
+		}
+	],
+	"translationUnit": "dwarf-native/main.c",
+	"originalSourceFileName": "main.c",
+	"originalProgram": "frames-c",
+	"source": {
+		"repository": "https://forge.sourceware.org/feedable/gcc-TEST.git",
+		"commit": "ac20dcd5f8c5ae858f9b2d9cdf4140c0738e5e27",
+		"sourceDiffSha256": "d5eaa9f02306418a26f48f01c92a7e0bcf25ceb4d8f54a1f6a04134d9d39de85",
+		"dwarfPatch": {
+			"path": "patches/0021-dwarf-debug.patch",
+			"purpose": "Emit genuine embedded DWARF4 through typed Wasm custom-section fixups and actual local/frame locations while preserving the default release path.",
+			"sha256": "aab871a1c2ac9d5657284d86c377d9bca1a58c7662f0e463a18be9a484d96859"
+		},
+		"sourceLock": {
+			"bytes": 9424,
+			"sha256": "ce3cd4440eb7a7417ffd727e97ec0914d4a024b68519aa6d78510916bc8ad878"
+		}
+	},
+	"assemblerSource": {
+		"repository": "https://github.com/feedab1e/wabt.git",
+		"commit": "651c9ffbce3d0525d2d1324fab79160e5fcf8173",
+		"sourceDiffSha256": "ed771f2fc12af0316db6f0b0e4732a39a6cec6aeae326a846f83955c12368eeb",
+		"dwarfPatch": {
+			"path": "patches/wabt-0003-dwarf-debug.patch",
+			"purpose": "Transport checked DWARF custom-section slots, code anchors and standard relocations, preserving opaque debug bytes only under verified readback layout.",
+			"sha256": "c446f1efc0a7dafc4aa289d69ec8395476b119c89785375693164f29545f6a50"
+		}
+	},
+	"tools": {
+		"gcc": {
+			"bytes": 24492616,
+			"sha256": "2ffc1cf50aed0851c226386bf5f8faa0bf199de29f2b1ccef06b1b19d280afff"
+		},
+		"assembler": {
+			"bytes": 1727336,
+			"sha256": "eb0d407aca8c2a5c6c1776ec7b90afb7189d0780c05281fd91e27bb9072cbcbb"
+		},
+		"validator": {
+			"bytes": 1332528,
+			"sha256": "b6313f8200403f4416c02ad1f65340447efdb0d1a2238f61fce32abc3de6b1f3"
+		},
+		"llvmDwarf": {
+			"bytes": 144080,
+			"sha256": "0f281b5b88c8a7ba66a395676111813e91da6a64e57e0aabceeffed521ce9477"
+		}
+	},
+	"commands": {
+		"compilation": {
+			"tool": "cc1",
+			"argv": [
+				"-quiet",
+				"-O0",
+				"-std=gnu11",
+				"-mno-simd128",
+				"-fdiagnostics-color=never",
+				"-nostdinc",
+				"-D__GCC_WASI_SINGLE_THREAD__=1",
+				"-Werror=implicit-function-declaration",
+				"-g",
+				"-gdwarf-4",
+				"-gno-variable-location-views",
+				"-I${FIXTURE_DIR}",
+				"-isystem",
+				"${GCC_NATIVE}/include",
+				"-isystem",
+				"${WASI_SYSROOT}/include/wasm32-wasi",
+				"-isystem",
+				"${WASI_SYSROOT}/include",
+				"${FIXTURE_DIR}/main.c",
+				"-o",
+				"${FIXTURE_DIR}/unit0.wat"
+			],
+			"cwd": "${FIXTURE_DIR}",
+			"status": 0,
+			"stdout": "",
+			"stderr": ""
+		},
+		"assembling": {
+			"tool": "wat2wasm",
+			"argv": [
+				"-r",
+				"--enable-annotations",
+				"${FIXTURE_DIR}/unit0.wat",
+				"-o",
+				"${FIXTURE_DIR}/unit0.o"
+			],
+			"cwd": "${FIXTURE_DIR}",
+			"status": 0,
+			"stdout": "",
+			"stderr": ""
+		},
+		"validation": {
+			"tool": "wasm-validate",
+			"argv": ["${FIXTURE_DIR}/unit0.o"],
+			"cwd": "${FIXTURE_DIR}",
+			"status": 0,
+			"stdout": "",
+			"stderr": ""
+		},
+		"verify": {
+			"tool": "llvm-dwarfdump",
+			"argv": ["--verify", "${FIXTURE_DIR}/unit0.o"],
+			"cwd": "${FIXTURE_DIR}",
+			"status": 0,
+			"stdout": "Verifying /data/codex-wasm-llvm-worktrees/wasm-llvm-dwarf-83-20261103/out/issue83-preparation/native-qualification/smoke-v2/programs/frames-c/debug/unit0.o:\tfile format WASM\nVerifying .debug_abbrev...\nVerifying .debug_info Unit Header Chain...\nVerifying .debug_types Unit Header Chain...\nVerifying non-dwo Units...\nVerifying unit: 1 / 1, \"/data/codex-wasm-llvm-worktrees/wasm-llvm-dwarf-83-20261103/out/issue83-preparation/native-qualification/smoke-v2/programs/frames-c/debug/main.c\"\nVerifying dwo Units...\nVerifying .debug_line...\nVerifying .debug_str_offsets...\nNo errors.\n",
+			"stderr": ""
+		}
+	},
+	"commandPathNote": "Generated build roots are normalized as FIXTURE_DIR/GCC_NATIVE/WASI_SYSROOT; the original command record is bound by originatingQualification below. Source/header/object bytes are copied without edits.",
+	"assembly": {
+		"bytes": 14258,
+		"sha256": "051b90141040dcc16a808c0f0a5b771015f236292034e2e75723b63cd227cb6a"
+	},
+	"object": {
+		"bytes": 3206,
+		"sha256": "a0fa9f95fddde289bcd0ab6d10a97afdd1ee05e500c9a794d3d93b7937f3bc47"
+	},
+	"originatingQualification": {
+		"kind": "gcc-wasi-native-dwarf-qualification",
+		"status": "passed-partial",
+		"relativeProducerPath": "out/issue83-preparation/native-qualification/smoke-v2/qualification.json",
+		"bytes": 1924197,
+		"sha256": "5a24e84e7e22ddcda97021587d1716e354e331367b0d4bea2e5a753480c220c7"
+	}
+}

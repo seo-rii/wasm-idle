@@ -892,14 +892,8 @@ describe('wasm-idle static worker language browser integrations', () => {
 						expect([...url.searchParams.keys()]).toEqual(['v']);
 						expect(url.searchParams.get('v')).toBe(expectedVersion);
 					}
-					const runnerRequestIndex = nimRuntimePaths.indexOf(
-						'/wasm-nim/runner-worker.js'
-					);
-					for (const runtimeAssetPath of expectedNimRuntimePaths.slice(0, 9)) {
-						expect(nimRuntimePaths.indexOf(runtimeAssetPath)).toBeLessThan(
-							runnerRequestIndex
-						);
-					}
+					// Runner download and runtime preflight may overlap. The gated startup
+					// unit tests separately require both to verify before runner creation.
 					for (const legacyOrLogicalPath of [
 						'/wasm-nim/nim/nim-bundle.js.gz',
 						'/wasm-nim/nim/nim.wasm.gz',

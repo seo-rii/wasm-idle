@@ -3,6 +3,12 @@ import { strToU8, zipSync } from 'fflate';
 import { gzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
 import { flushQueuedStdin } from '$lib/playground/stdinBuffer';
+import { decompressGzip } from '@wasm-idle/llvm-core';
+
+vi.mock('@wasm-idle/llvm-core', async (importOriginal) => {
+	const original = await importOriginal<typeof import('@wasm-idle/llvm-core')>();
+	return { ...original, decompressGzip: vi.fn(original.decompressGzip) };
+});
 
 const debugPipeline = vi.hoisted(() => ({ compileZigDebugArtifact: vi.fn() }));
 vi.mock('./zigDebug', async (importOriginal) => ({
@@ -234,6 +240,206 @@ describe('Zig worker', () => {
 		shim.state.compileOutput = null;
 		shim.state.runOutput = null;
 		debugPipeline.compileZigDebugArtifact.mockReset();
+		vi.mocked(decompressGzip).mockClear();
+	});
+
+	it('compiles verified compiler bytes while the library download is still pending', async () => {
+		let finishLibrary!: (response: ReturnType<typeof responseFor>) => void;
+		const libraryResponse = new Promise<ReturnType<typeof responseFor>>((resolve) => {
+			finishLibrary = resolve;
+		});
+		vi.mocked(globalThis.fetch).mockImplementation(async (url) =>
+			String(url).endsWith('zig_small.wasm')
+				? (responseFor(compilerAsset, String(url)) as Response)
+				: (libraryResponse as unknown as Promise<Response>)
+		);
+		await import('./zig');
+		const request = {
+			data: {
+				load: true,
+				compilerUrl: 'https://assets.example.test/zig_small.wasm',
+				stdlibUrl: 'https://assets.example.test/std.tar.gz',
+				integrity: runtimeIntegrity,
+				maxAssetBytes,
+				log: false
+			}
+		};
+		const first = (globalThis as any).self.onmessage(request);
+		const concurrent = (globalThis as any).self.onmessage(request);
+		try {
+			await vi.waitFor(() => expect(WebAssembly.compile).toHaveBeenCalledOnce());
+			expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+			expect(globalThis.postMessage).not.toHaveBeenCalledWith({ load: true });
+		} finally {
+			finishLibrary(responseFor(stdlibTarGzip, request.data.stdlibUrl));
+			await Promise.all([first, concurrent]);
+		}
+		expect(globalThis.postMessage).toHaveBeenCalledWith({ load: true });
+		await (globalThis as any).self.onmessage(request);
+		expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+		expect(WebAssembly.compile).toHaveBeenCalledOnce();
+	});
+
+	it('unpacks the library without waiting for the compiler and aborts it on an archive error', async () => {
+		const missingStdTar = createTar([{ path: 'lib/compiler_rt.zig', contents: stdlibFile }]);
+		const missingStdGzip = gzipSync(missingStdTar);
+		let compilerSignal: AbortSignal | undefined;
+		vi.mocked(globalThis.fetch).mockImplementation(async (url, init) => {
+			if (String(url).endsWith('zig_small.wasm')) {
+				compilerSignal = init?.signal ?? undefined;
+				return new Promise<Response>((_resolve, reject) => {
+					compilerSignal?.addEventListener(
+						'abort',
+						() => reject(compilerSignal?.reason),
+						{
+							once: true
+						}
+					);
+				});
+			}
+			return responseFor(missingStdGzip, String(url)) as Response;
+		});
+		await import('./zig');
+		const load = (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				compilerUrl: 'https://assets.example.test/zig_small.wasm',
+				stdlibUrl: 'https://assets.example.test/std.tar.gz',
+				integrity: {
+					...runtimeIntegrity,
+					'std.tar.gz': {
+						bytes: missingStdGzip.byteLength,
+						sha256: sha256(missingStdGzip),
+						uncompressedBytes: missingStdTar.byteLength,
+						uncompressedSha256: sha256(missingStdTar)
+					}
+				},
+				maxAssetBytes,
+				log: false
+			}
+		});
+		await vi.waitFor(() =>
+			expect(globalThis.postMessage).toHaveBeenCalledWith({
+				error: 'Zig library archive must contain lib/std/'
+			})
+		);
+		await load;
+		expect(compilerSignal?.aborted).toBe(true);
+		expect(WebAssembly.compile).not.toHaveBeenCalled();
+		expect(globalThis.postMessage).not.toHaveBeenCalledWith({ load: true });
+	});
+
+	it('aborts a pending library download after compilation fails and allows a fresh retry', async () => {
+		const compileFailure = new Error('compiler wasm failed to compile');
+		vi.mocked(WebAssembly.compile).mockRejectedValueOnce(compileFailure);
+		let librarySignal: AbortSignal | undefined;
+		vi.mocked(globalThis.fetch).mockImplementation(async (url, init) => {
+			if (String(url).endsWith('zig_small.wasm')) {
+				return responseFor(compilerAsset, String(url)) as Response;
+			}
+			librarySignal = init?.signal ?? undefined;
+			return new Promise<Response>((_resolve, reject) => {
+				librarySignal?.addEventListener('abort', () => reject(librarySignal?.reason), {
+					once: true
+				});
+			});
+		});
+		await import('./zig');
+		const request = {
+			data: {
+				load: true,
+				compilerUrl: 'https://assets.example.test/zig_small.wasm',
+				stdlibUrl: 'https://assets.example.test/std.tar.gz',
+				integrity: runtimeIntegrity,
+				maxAssetBytes,
+				log: false
+			}
+		};
+		const load = (globalThis as any).self.onmessage(request);
+		await vi.waitFor(() =>
+			expect(globalThis.postMessage).toHaveBeenCalledWith({ error: compileFailure.message })
+		);
+		await load;
+		expect(librarySignal?.aborted).toBe(true);
+		expect(globalThis.postMessage).not.toHaveBeenCalledWith({ load: true });
+		vi.mocked(globalThis.fetch).mockImplementation(
+			async (url) =>
+				responseFor(
+					String(url).endsWith('zig_small.wasm') ? compilerAsset : stdlibTarGzip,
+					String(url)
+				) as Response
+		);
+		await (globalThis as any).self.onmessage(request);
+		expect(globalThis.postMessage).toHaveBeenCalledWith({ load: true });
+		expect(WebAssembly.compile).toHaveBeenCalledTimes(2);
+	});
+
+	it('cancels library decompression when compiler preparation fails', async () => {
+		let failCompilation!: (error: Error) => void;
+		vi.mocked(WebAssembly.compile).mockImplementationOnce(
+			() =>
+				new Promise((_resolve, reject) => {
+					failCompilation = reject;
+				})
+		);
+		let decompressionSignal: AbortSignal | undefined;
+		vi.mocked(decompressGzip).mockImplementationOnce((_bytes, _url, _limit, signal) => {
+			decompressionSignal = signal;
+			return new Promise((_resolve, reject) => {
+				signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+			});
+		});
+		await import('./zig');
+		const load = (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				compilerUrl: 'https://assets.example.test/zig_small.wasm',
+				stdlibUrl: 'https://assets.example.test/std.tar.gz',
+				integrity: runtimeIntegrity,
+				maxAssetBytes,
+				log: false
+			}
+		});
+		await vi.waitFor(() => {
+			expect(decompressGzip).toHaveBeenCalledOnce();
+			expect(WebAssembly.compile).toHaveBeenCalledOnce();
+		});
+		const failure = new Error('compiler preparation failed');
+		failCompilation(failure);
+		await load;
+		expect(decompressionSignal?.aborted).toBe(true);
+		expect(decompressionSignal?.reason).toBe(failure);
+		expect(globalThis.postMessage).toHaveBeenCalledWith({ error: failure.message });
+		expect(globalThis.postMessage).not.toHaveBeenCalledWith({ load: true });
+	});
+
+	it('does not unpack library files after cancellation during expanded-byte verification', async () => {
+		const originalDigest = crypto.subtle.digest.bind(crypto.subtle);
+		let finishVerification!: () => void;
+		const verification = new Promise<void>((resolve) => {
+			finishVerification = resolve;
+		});
+		let verifyingExpandedBytes = false;
+		vi.spyOn(crypto.subtle, 'digest').mockImplementation(async (algorithm, bytes) => {
+			if (bytes.byteLength === stdlibTar.byteLength) {
+				verifyingExpandedBytes = true;
+				await verification;
+			}
+			return originalDigest(algorithm, bytes);
+		});
+		const { loadLibDirectory } = await import('./zig');
+		const controller = new AbortController();
+		const loading = loadLibDirectory(
+			stdlibTarGzip,
+			'https://assets.example.test/std.tar.gz',
+			{ signal: controller.signal },
+			runtimeIntegrity['std.tar.gz']
+		);
+		await vi.waitFor(() => expect(verifyingExpandedBytes).toBe(true));
+		const failure = new Error('compiler branch failed during library verification');
+		controller.abort(failure);
+		finishVerification();
+		await expect(loading).rejects.toBe(failure);
 	});
 
 	it('loads compiler assets, compiles Zig source, and runs the emitted WASI artifact', async () => {
@@ -283,7 +489,8 @@ describe('Zig worker', () => {
 			{
 				credentials: 'omit',
 				redirect: 'error',
-				referrerPolicy: 'no-referrer'
+				referrerPolicy: 'no-referrer',
+				signal: expect.any(AbortSignal)
 			}
 		);
 		expect((globalThis as any).fetch).toHaveBeenCalledWith(
@@ -291,7 +498,8 @@ describe('Zig worker', () => {
 			{
 				credentials: 'omit',
 				redirect: 'error',
-				referrerPolicy: 'no-referrer'
+				referrerPolicy: 'no-referrer',
+				signal: expect.any(AbortSignal)
 			}
 		);
 		expect(compileWasi.args).toEqual([

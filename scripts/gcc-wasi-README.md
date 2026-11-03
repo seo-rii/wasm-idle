@@ -135,6 +135,25 @@ not qualify aggregate, vector or C++ interoperability.
 
 ## Additional compiler suites
 
+RTTI qualification requires a producer bundle with `capabilities.rtti: true` and
+the matching rebuilt GNU runtime. The SDK accepts explicit C++ `rtti: true` and
+keeps the default and explicit false profiles disabled. The browser harness
+lists RTTI as unavailable only for a false-capability bundle; this metadata
+change is not evidence that RTTI programs work. Pass the producer's original
+multi-translation-unit RTTI suite through `--suite`, retain native and Worker
+receipts separately, and verify pointer cast success/failure, multiple/virtual
+inheritance and `typeid` with real stdin/stdout. Include default/off controls
+and unchanged older-bundle and x8613/16 regressions. Exception-dependent failure
+paths remain outside the qualified nonthrowing profile.
+
+When a suite uses external objects, retain their language and RTTI receipts:
+known same-bundle C objects are neutral, C++ modes must match, and an omitted
+legacy language cannot be assumed C for an RTTI-enabled caller. The existing
+pinned `clang-c-scalar-v1` contract still requires a C source request.
+
+No successful RTTI native or Worker execution is asserted by these SDK contract
+changes; that evidence belongs to the exact producer bundle's qualification.
+
 The optional `--suite /path/to/TRUSTED_LOCAL_MODULE.mjs` imports executable local
 test code exporting `cases` and optional `disabledCases` arrays. Both arrays are
 included in selection and the report. Every case carries its original source,

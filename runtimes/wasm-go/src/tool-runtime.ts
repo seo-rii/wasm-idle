@@ -87,13 +87,39 @@ function collectInputFiles(invocation: BrowserGoToolInvocation, plan: BrowserGoB
 	return files;
 }
 
+export async function prepareGoToolModule(
+	invocation: Pick<BrowserGoToolInvocation, 'tool' | 'toolAsset'>,
+	runtimeBaseUrl: string | URL,
+	fetchImpl: typeof fetch = fetch,
+	reportAssetProgress?: (asset: string, loaded: number, total?: number) => void,
+	options: GoRuntimeBoundaryOptions = {}
+): Promise<WebAssembly.Module> {
+	throwIfAborted(options.signal);
+	const toolBytes = await fetchRuntimeAssetBytes(
+		resolveVersionedAssetUrl(runtimeBaseUrl, invocation.toolAsset),
+		`${invocation.tool}.wasm`,
+		fetchImpl,
+		true,
+		(loaded, total) => reportAssetProgress?.(invocation.toolAsset, loaded, total),
+		options
+	);
+	throwIfAborted(options.signal);
+	return compileGoToolModule(
+		toolBytes,
+		options.maxWasmMemoryBytes ?? DEFAULT_MAX_WASM_MEMORY_BYTES,
+		`${invocation.tool}.wasm`,
+		options.signal
+	);
+}
+
 export async function executeGoToolInvocation(
 	invocation: BrowserGoToolInvocation,
 	plan: BrowserGoBuildPlan,
 	runtimeBaseUrl: string | URL,
 	fetchImpl: typeof fetch = fetch,
 	reportAssetProgress?: (asset: string, loaded: number, total?: number) => void,
-	options: GoRuntimeBoundaryOptions = {}
+	options: GoRuntimeBoundaryOptions = {},
+	preparedModule?: WebAssembly.Module
 ): Promise<BrowserGoToolResult> {
 	throwIfAborted(options.signal);
 	const maxWasmMemoryBytes = options.maxWasmMemoryBytes ?? DEFAULT_MAX_WASM_MEMORY_BYTES;
@@ -109,23 +135,14 @@ export async function executeGoToolInvocation(
 	try {
 		[sysrootFiles, module] = await Promise.all([
 			loadSysrootFiles(plan, runtimeBaseUrl, fetchImpl, reportAssetProgress, startupOptions),
-			(async () => {
-				const toolBytes = await fetchRuntimeAssetBytes(
-					resolveVersionedAssetUrl(runtimeBaseUrl, invocation.toolAsset),
-					`${invocation.tool}.wasm`,
+			preparedModule ??
+				prepareGoToolModule(
+					invocation,
+					runtimeBaseUrl,
 					fetchImpl,
-					true,
-					(loaded, total) => reportAssetProgress?.(invocation.toolAsset, loaded, total),
+					reportAssetProgress,
 					startupOptions
-				);
-				throwIfAborted(startupController.signal);
-				return await compileGoToolModule(
-					toolBytes,
-					maxWasmMemoryBytes,
-					`${invocation.tool}.wasm`,
-					startupController.signal
-				);
-			})()
+				)
 		]);
 	} catch (error) {
 		startupController.abort(error);

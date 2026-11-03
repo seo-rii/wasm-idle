@@ -181,8 +181,13 @@ export interface WasiGccManifest {
 		longDouble?: boolean;
 		/** Qualified signed/unsigned __int128 operations and ABI. */
 		int128?: boolean;
+		/** Qualified GCC single-thread gcov instrumentation and normal-exit profile writes. */
+		coverage?: boolean;
+		/** Qualified embedded DWARF4 source/type/location information at O0. */
+		debug?: boolean;
 		exceptions: false;
-		rtti: false;
+		/** Qualified GNU RTTI runtime; exception-dependent failures remain unsupported. */
+		rtti: boolean;
 		threads: false;
 		dynamicLinking: false;
 		/** True only for a producer bundle qualified with the GCC simd128 backend patch. */
@@ -200,11 +205,17 @@ export interface WasiGccCompileRequest extends Omit<CrossGccCompileRequest, 'cpu
 	/** Baseline Wasm only. An x86 AVX2/FMA profile is not Wasm SIMD. */
 	readonly cpu?: 'wasm32';
 	readonly exceptions?: false;
-	readonly rtti?: false;
+	/** Opt in to qualified C++ RTTI. Omitted/false retains -fno-rtti; exceptions stay disabled. */
+	readonly rtti?: boolean;
 	readonly threads?: false;
 	readonly dynamicLinking?: false;
 	/** Opt in to the bundle's qualified baseline Wasm SIMD operations; never selects x86 AVX. */
 	readonly simd?: boolean;
+	/** Source-only GCC gcov instrumentation. Requires a qualified bundle and no linkInputs. */
+	readonly coverage?: boolean;
+	/** Embed standard DWARF4 in WAT/object/executable output. Requires a qualified bundle;
+	 * defaults to optimization=0 and rejects explicitly selected nonzero optimization. */
+	readonly debug?: boolean;
 	/** Explicit static link inputs, after source objects and before runtime libraries, in this order. */
 	readonly linkInputs?: readonly WasiGccLinkInput[];
 }
@@ -214,6 +225,12 @@ export interface WasiGccLinkProfile {
 	readonly target: 'wasm32-wasi';
 	readonly abi: 'wasm32-wasi-preview1';
 	readonly simd: boolean;
+	/** Known source language. Legacy omission cannot establish that an input is pure C. */
+	readonly language?: 'c' | 'cpp';
+	/** C++ RTTI profile; legacy omission means false. Pure C inputs are RTTI-neutral. */
+	readonly rtti?: boolean;
+	/** Instrumented object provenance. Covered external inputs are currently unsupported. */
+	readonly coverage?: boolean;
 	readonly compatibility:
 		| Readonly<{ kind: 'gcc-bundle'; manifestSha256: string; sysrootSha256: string }>
 		| Readonly<{
@@ -266,12 +283,34 @@ export interface WasiGccArtifact extends Omit<CrossGccArtifact, 'target' | 'form
 	readonly wasm?: GccWasmInspection;
 	/** Present for object output. Reuse with {path, bytes: artifact.bytes, ...artifact.linkInput!}. */
 	readonly linkInput?: WasiGccLinkInputReceipt;
+	/** Present on covered executables. run() requires an exact writable /profile preopen. */
+	readonly coverage?: Readonly<{
+		format: 'gcc-gcov';
+		directory: '/profile';
+		dataPaths: readonly string[];
+	}>;
+}
+
+export interface WasiGccCoverageNote {
+	/** Stable relative filename, in source/link order: program.gcno, program.1.gcno, ... */
+	readonly path: string;
+	/** Absolute guest path emitted on normal exit; returned in run().files when written. */
+	readonly dataPath: string;
+	/** Independent exact binary GCC notes; interpret with the matching official gcov. */
+	readonly contents: Uint8Array;
 }
 
 export interface WasiGccCompileResult extends Omit<CrossGccCompileResult, 'artifact'> {
 	readonly artifact?: WasiGccArtifact;
 	/** Validated external inputs in the exact linker order, including archive member identities. */
 	readonly linkInputs?: readonly WasiGccLinkedInput[];
+	/** Present after successful coverage compilation. Notes are bounded to 16 MiB each, 64 MiB total. */
+	readonly coverage?: Readonly<{
+		format: 'gcc-gcov';
+		compilerVersion: string;
+		compilerCommit: string;
+		notes: readonly WasiGccCoverageNote[];
+	}>;
 }
 
 export interface WasiGccPreopen {

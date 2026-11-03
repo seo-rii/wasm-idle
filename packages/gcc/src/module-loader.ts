@@ -13,6 +13,7 @@ export interface GccFileSystem {
 	mkdirTree(path: string): void;
 	writeFile(path: string, bytes: Uint8Array, options?: { canOwn?: boolean }): void;
 	readFile(path: string): Uint8Array;
+	stat(path: string): { size: number };
 	chdir(path: string): void;
 	mount(type: { mount(mount: object): GccFileSystemNode }, options: object, path: string): void;
 	createNode(

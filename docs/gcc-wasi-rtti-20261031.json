@@ -1,0 +1,254 @@
+{
+	"schemaVersion": 1,
+	"issue": "seo-rii/wasm-llvm#67",
+	"companionPullRequest": 365,
+	"status": "passed",
+	"qualifiedSdkCommit": "105ac41c270e7b505b75cbe2a6c7e359ce703ee5",
+	"sourceDiffSha256": "aee6894d43206aac9adfe6a558eb6f115e0697a7b348b5efdb44a0129c9c12b0",
+	"compiler": {
+		"family": "gcc",
+		"repository": "https://forge.sourceware.org/feedable/gcc-TEST.git",
+		"version": "17.0.0",
+		"commit": "ac20dcd5f8c5ae858f9b2d9cdf4140c0738e5e27"
+	},
+	"compilerHost": "wasm32-emscripten",
+	"target": "wasm32-wasi",
+	"manifest": {
+		"bytes": 23358,
+		"sha256": "dd2894ce7b23ba6965b5a3dd8941411f0b197cd8792fc98baf5e6d36939e56f1"
+	},
+	"rttiCapability": true,
+	"profile": {
+		"optIn": "C++ rtti:true selects -frtti; default/false selects -fno-rtti",
+		"exceptions": false,
+		"simdInTheseControls": false,
+		"optimizations": ["0", "2"],
+		"runtimeCoverage": [
+			"Pointer dynamic_cast success, failure and null operands",
+			"Valid polymorphic typeid and type_info identity across translation units and GNU libstdc++"
+		],
+		"limits": [
+			"WASI exception-dependent failed reference casts and null polymorphic typeid are outside this profile",
+			"No general Clang/GCC C++ ABI compatibility claim",
+			"Producer native and full public regression matrices are separate evidence"
+		]
+	},
+	"actualWasiSdkControls": {
+		"status": "passed",
+		"compilerExecution": "Original GCC source compiled through public createGccWorker in real Chromium module Worker",
+		"targetExecution": [
+			"Chromium Worker WASI Preview 1",
+			"Identical returned Wasm bytes in Node WASI"
+		],
+		"browser": "156.0.8078.4",
+		"node": "24.22.1",
+		"counts": {
+			"chromiumPrograms": 16,
+			"sameBytesNodePrograms": 16,
+			"gccObjects": 5,
+			"realGnuArchives": 3,
+			"requestRejections": 1,
+			"linkProfileRejectionsBeforeTools": 7,
+			"frontendDefaultOffDiagnostics": 4,
+			"oldSdkManifestRejections": 1
+		},
+		"explicitRttiTruePrograms": 6,
+		"allProgramsCheckStdinStdoutStderrAndStatus": true,
+		"objectProfiles": [
+			"C-neutral",
+			"C++ RTTI enabled",
+			"C++ explicitly disabled",
+			"C++ default disabled"
+		],
+		"archives": "Real llvm-ar GNU archives; extracted members match emitted GCC object bytes; SDK linked-input receipts checked",
+		"legacyProvenanceControl": "Remove only language/RTTI receipt fields from real same-bundle objects/archives; no cross-bundle identity claim",
+		"profileRejectionObservation": "Seven public Worker compile Promises rejected with exact profile diagnostics; no compilation stage results returned",
+		"preToolBoundaryInference": {
+			"kind": "immutable-sdk-validation-before-tool-loop",
+			"reason": "Frozen compiler awaits link validation before entering its fresh-Wasm-per-tool loop",
+			"compiler": {
+				"path": "packages/gcc/src/compiler.ts",
+				"bytes": 21812,
+				"sha256": "6b99207000239125470875535c9961816f6afa9592cf5ca8c39e357c8caec3eb",
+				"validationCallLine": 268,
+				"toolLoopLine": 276
+			},
+			"validator": {
+				"path": "packages/gcc/src/wasm-link-inputs.ts",
+				"bytes": 25321,
+				"sha256": "e12f8ad7651bd2db3d4bf66645367b2597273f4583194b54b914945e20bccfd9"
+			},
+			"workerErrorForwarding": {
+				"path": "packages/gcc/src/worker-entry.ts",
+				"bytes": 2790,
+				"sha256": "0817d0aab4a1603f07d421bd923d5d047982563d6ab43f8c1517e888255f46f1",
+				"line": 74
+			}
+		},
+		"oldSdkLoaderBoundary": {
+			"execution": "Actual unchanged issue-343 public Node loader",
+			"manifest": {
+				"bytes": 23358,
+				"sha256": "dd2894ce7b23ba6965b5a3dd8941411f0b197cd8792fc98baf5e6d36939e56f1"
+			},
+			"manifestRequests": 1,
+			"assetRequests": 0,
+			"diagnostic": "Unsupported GCC WASI capability: rtti"
+		}
+	},
+	"oldBundleCompatibility": {
+		"status": "passed",
+		"manifest": {
+			"bytes": 21551,
+			"sha256": "d8fa39679b4c9f9f8fd5376ed84b33942f0ac81f76b0e10ce8767efe4b7e547d"
+		},
+		"rttiCapability": false,
+		"execution": [
+			"Actual Chromium compiler and WASI Worker",
+			"Identical returned Wasm bytes in Node WASI"
+		],
+		"counts": {
+			"chromiumPrograms": 11,
+			"sameBytesNodePrograms": 11,
+			"gccObjects": 2,
+			"realGnuArchives": 1,
+			"requestRejections": 2,
+			"linkProfileRejectionsBeforeTools": 0,
+			"frontendDefaultOffDiagnostics": 4,
+			"oldSdkManifestRejections": 0
+		},
+		"emittedLegacyReceiptShapePreserved": true
+	},
+	"x86Compatibility": {
+		"status": "passed",
+		"versions": ["13.3.0", "16.2.0"],
+		"compilerExecution": "Real GCC Wasm in Chromium module Worker through unchanged createCrossGccWorker verifier",
+		"targetExecution": "Exact returned ELF bytes run natively on Linux x86-64; no browser x86 target execution",
+		"chromiumCompileCases": 8,
+		"nativeElfStdinStdoutPrograms": 4,
+		"intrinsicAssemblyChecks": 2,
+		"intrinsicObjectDisassemblies": 2,
+		"cppStlPbdsExceptionUnwinding": "Passed for both versions",
+		"workerCancellation": "Passed for both versions",
+		"manifests": {
+			"gcc13": {
+				"bytes": 7776,
+				"sha256": "4de4c401cabad291caa0eb20ec435bdda336597c7ee25954d95323012b8a0867"
+			},
+			"gcc16": {
+				"bytes": 7280,
+				"sha256": "aa9f5d3e2ef15721a8224f71ec53a21c575fd548bd995981759f21556862ea5f"
+			}
+		}
+	},
+	"sdkContractAndPackageProof": {
+		"sdkUnitTests": 173,
+		"sdkUnitTestNature": "Synthetic API/manifest/planner/transport tests, separate from actual compiler execution",
+		"packageVerifierUnitTests": 36,
+		"isolatedCoreAndGccBuildsAndGccTypecheck": "passed",
+		"packedPublicImportsAndPositiveNegativeTypes": "passed",
+		"exactLockedDependencyOfflineInstall": "passed",
+		"installed": {
+			"bytes": 2709792,
+			"files": 182,
+			"packages": 4
+		},
+		"budget": {
+			"maxBytes": 2710528,
+			"maxFiles": 184,
+			"maxPackages": 4
+		},
+		"newDependencies": 0,
+		"newPackedFiles": 0,
+		"packedGccByteIncrease": 5318,
+		"fullAggregateInstallExecuted": false
+	},
+	"inputFreeze": {
+		"sdkSourceDistAndConfigurationFiles": 359,
+		"coreGccDistFiles": 268,
+		"runtimeDependencyFiles": 43,
+		"historicalSdk342And343Files": 665,
+		"newControlInputs": 872,
+		"newControlArtifacts": 24,
+		"combinedUniqueFilesRechecked": 1397,
+		"combinedBytesRechecked": 1295750508,
+		"allRecordedInputsAndArtifactsUnchanged": true
+	},
+	"receipts": {
+		"newWorker": {
+			"path": "out/issue67-browser-controls/rtti-v3/qualification.json",
+			"bytes": 423196,
+			"sha256": "809873a53606f946cf04592b54ec64f97b566954e1ed36fe151a70ab4acb7b25"
+		},
+		"newWorkerStatus": {
+			"path": "out/issue67-browser-controls/rtti-v3.status.json",
+			"bytes": 794,
+			"sha256": "a7ed236bba04a239d18c8c50f6bc2eaf6cb40a8bfca7547f1c31856478c7b2f3"
+		},
+		"oldBundleWorker": {
+			"path": "out/issue67-browser-controls/old-v2/qualification.json",
+			"bytes": 228768,
+			"sha256": "c8e1afcb210e9586db04ad59cd83f7b68fdc2111fba56d6243d48383c62e2c59"
+		},
+		"oldBundleStatus": {
+			"path": "out/issue67-browser-controls/old-v2.status.json",
+			"bytes": 680,
+			"sha256": "3cf75466634895a610ea2779b821a67ba17aece37064b04c409b0e0ab490dc8a"
+		},
+		"x86": {
+			"path": "out/issue67-browser-controls/x86-v1/summary.json",
+			"bytes": 133732,
+			"sha256": "c9d9ea4ece604ba539424c1f847a4f4be8b10ab9a613ec460c19903152f7afb5"
+		},
+		"x86Status": {
+			"path": "out/issue67-browser-controls/x86-v1.status.json",
+			"bytes": 168,
+			"sha256": "58be5fb43457823e5e63519b57ef27e7608aed922c7b9cef4f9a86defb2b1916"
+		},
+		"sdkContracts": {
+			"path": "out/issue67-sdk-validation/validation-receipt.json",
+			"bytes": 4417,
+			"sha256": "2c0b68d8c92814f89a1ea19fa8881338307a1899b76fc390810c35ed2f3cfdfc"
+		},
+		"sdkUnitTests": {
+			"path": "out/issue67-sdk-validation/unit-tests.json",
+			"bytes": 69703,
+			"sha256": "c8b4d7f85b550bda1453d9e03476ca709e47d4d137878462a2b19a420bbb0ab8"
+		},
+		"packageUnitTests": {
+			"path": "out/issue67-sdk-validation/package-tests.json",
+			"bytes": 14759,
+			"sha256": "65da465ba294cfc6a486a43eb779e15c58b03ce96e52efeba7553a54bd880404"
+		},
+		"packageFinal": {
+			"path": "out/issue67-sdk-validation/package-final.json",
+			"bytes": 860,
+			"sha256": "40fc68be0ea544f9c011ef403022dc2d1e73f7d7001b00f9a73314f0ed6608cd"
+		},
+		"lockedPackedInstall": {
+			"path": "out/issue67-sdk-validation/packed-install-registry.json",
+			"bytes": 2949,
+			"sha256": "9d545c4ccda522d6651039933fb8e462a0d561246d2b6545a60666cf77047389"
+		},
+		"packedImportsAndTypes": {
+			"path": "out/issue67-sdk-validation/packed-contract-registry.json",
+			"bytes": 3298,
+			"sha256": "71f5e1a5c03a1e86a7f8064543164c468d09c0054e4d64cb69c2bef01d099286"
+		},
+		"postRunReinspection": {
+			"path": "out/issue67-browser-controls/rtti-v3-reinspection.json",
+			"bytes": 2053,
+			"sha256": "f13a370bc8f39c8109497316f81df09233093ea2df834391b0da16c2cbe9f983"
+		},
+		"actualControlsHelper": {
+			"path": "out/issue67-browser-controls/browser-controls-v3.mjs",
+			"bytes": 30190,
+			"sha256": "158200db21096a115ec341141971d7e0cc7a9ab55b4c3a7fbb56f1fdb65056b0"
+		},
+		"originalSourceFixtures": {
+			"path": "out/issue67-browser-controls/fixtures.mjs",
+			"bytes": 3320,
+			"sha256": "0836944ed97f7338fea0e21536a2aa61470883ff2a8b40e2c9fc62a906fd965a"
+		}
+	}
+}
