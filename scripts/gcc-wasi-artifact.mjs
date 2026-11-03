@@ -127,16 +127,35 @@ export function inspectWasm(bytes, { object = false } = {}) {
 }
 
 export function runNodeWasi(file, fixture) {
+	const options = fixture.runOptions || {};
+	assert(!options.filesystemLimits, 'Node WASI cannot reproduce SDK memory filesystem quotas');
+	assert(
+		!(options.preopens || []).some((mount) => mount.readonly),
+		'Node WASI cannot reproduce SDK read-only preopens'
+	);
+	const wireOptions = {
+		...options,
+		preopens: options.preopens?.map((mount) => ({
+			...mount,
+			files: mount.files?.map((file) => ({
+				...file,
+				contents: typeof file.contents === 'string' ? file.contents : [...file.contents]
+			}))
+		}))
+	};
 	const result = spawnSync(
 		process.execPath,
 		[
 			'--no-warnings',
 			fileURLToPath(new URL('./gcc-wasi-node-runner.mjs', import.meta.url)),
-			file
+			file,
+			'--qualification-options',
+			JSON.stringify(wireOptions)
 		],
 		{
 			input: fixture.stdin,
 			encoding: 'utf8',
+			stdio: ['pipe', 'pipe', 'pipe', 'pipe'],
 			timeout: 30_000,
 			maxBuffer: 1024 * 1024
 		}
@@ -145,12 +164,30 @@ export function runNodeWasi(file, fixture) {
 	assert.equal(result.status, 0, `${fixture.id}: Node WASI exit status; ${result.stderr}`);
 	assert.equal(result.stdout, fixture.stdout, `${fixture.id}: Node WASI stdout`);
 	assert.equal(result.stderr, '', `${fixture.id}: Node WASI stderr`);
+	const { files } = JSON.parse(result.output[3]);
+	if (fixture.expectedFiles)
+		assertFileSnapshot(files, fixture.expectedFiles, `${fixture.id}: Node WASI files`);
 	return {
 		host: `node-${process.versions.node}`,
 		exitCode: result.status,
 		stdout: result.stdout,
-		stderr: result.stderr
+		stderr: result.stderr,
+		files
 	};
+}
+
+/** Compare complete, sorted snapshots, including binary and unchanged input files. */
+export function assertFileSnapshot(actual, expected, message) {
+	assert(Array.isArray(actual), `${message}: missing files array`);
+	const normalize = (files) =>
+		files.map(({ path: file, contents }) => ({
+			path: file,
+			contents:
+				typeof contents === 'string'
+					? [...new TextEncoder().encode(contents)]
+					: [...contents]
+		}));
+	assert.deepEqual(normalize(actual), normalize(expected), message);
 }
 
 export async function readBundleFile(directory, receipt) {

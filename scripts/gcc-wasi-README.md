@@ -45,6 +45,115 @@ translation unit's GCC WAT and assembled object alongside the final program.
 These extra compilations help isolate GCC code generation from assembler/linker
 behavior when native and Wasm compiler hosts disagree.
 
+## Per-run memory filesystem
+
+Issue #343 adds optional `preopens` and `filesystemLimits` to the SDK execution
+host, with final binary file snapshots returned through the actual Worker. The
+compiler backend, compiler hosts, GNU runtime and sysroot are unchanged.
+The 2026-10-30 check used the qualified eleven-patch GCC bundle: all **14 O0/O2
+programs compiled and passed in Chromium 156.0.8078.4**, with **16 executions**
+including two repeated-run checks. The same native GCC sources compiled and
+linked all 14 programs before browser validation. Six cases ran successfully in
+independent Node WASI for both native and browser-produced programs. The other
+eight test SDK readonly and quota policies that Node WASI does not expose; their
+receipts explicitly record that oracle as inapplicable, rather than passed.
+
+The [recorded qualification](../docs/gcc-wasi-filesystem-20261030.json) identifies
+compiler, assembler, linker, sysroot, SDK code, fixtures and each actual program
+by SHA-256. The reused manifest is
+`576ebe8a59ecdda01acaaf71c5f46b8306d3ef75a9d87356728c7fbc9a958d77`.
+The [fixture suite](gcc-wasi-filesystem-fixtures.mjs) includes original C source,
+input bytes and independently specified expected output files. It checks binary
+`fread`/`fwrite`, append and seek, directory enumeration, creation/removal, missing
+files, capability escape, readonly mounts, entry/per-file/total quotas, unchanged
+stdin/stdout and fresh state on repeated execution.
+
+```sh
+pnpm --filter @wasm-idle/core build
+pnpm --filter @wasm-idle/gcc build
+node scripts/verify-gcc-wasi.mjs \
+  --manifest /path/to/gcc-wasi-bundle/gcc-toolchain.v2.json \
+  --suite scripts/gcc-wasi-filesystem-fixtures.mjs \
+  --save-intermediates --output out/gcc-wasi-filesystem-browser
+```
+
+Filesystem fixtures require `--manifest` so the SDK's real compiler and Worker
+path are exercised. File snapshots are compared in full, including unchanged
+inputs. Runtime policy and lifecycle unit tests additionally cover raw WASI
+allocation/truncation, open-but-unlinked files, bounded fd reuse and Worker
+structured cloning. The [package contract](../packages/gcc/README.md) documents
+path rules, limits, errors and unsupported filesystem operations.
+
+## Explicit static link inputs
+
+Issue #342 adds typed `linkInputs` for relocatable Wasm objects and regular GNU
+archives, plus reusable object receipts and ordered input identities. See the
+[public API contract](../packages/gcc/README.md) for required hashes and profiles.
+The [2026-10-30 qualification](../docs/gcc-wasi-link-inputs-20261030.json) uses the
+same eleven-patch compiler bundle identified above. No compiler assets changed.
+
+All 12 O0/O2 native programs and the corresponding actual Chromium compiler
+Worker programs passed independent Node WASI execution. Cases cover multiple
+source units, callback pointers, archive order and lazy selection, C++ static
+initializers, pinned Clang scalar C objects and external SIMD instructions. A
+separate Worker check compiles an object, passes its automatic receipt into a
+second compilation, and executes the result in Chromium and Node.
+
+The combined link-input/filesystem suite passed 26 source cases, 29 Chromium
+guest executions (including two repeated runs and the receipt roundtrip), and
+19 Node executions. Eight SDK readonly/quota cases remain explicitly
+inapplicable to Node. All 164 GCC unit tests, 36 package-verifier tests and seven
+production install/import/type/budget scenarios passed. GCC installed size is
+2,704,470 bytes across 182 files and four packages; the aggregate is 42,638,132
+bytes across 3,396 files and 66 packages. Each byte budget increases by 37 KiB;
+the aggregate file limit increases by two. No dependency is added.
+
+Build real external inputs using the exact native build and extracted sysroot
+bound by the compiler manifest, then pass the generated fixture module to the
+existing browser harness. The output directories must be new:
+
+```sh
+node scripts/prepare-gcc-wasi-link-inputs.mjs \
+  --work /path/to/qualified-native-work \
+  --sdk /path/to/wasi-sdk-33 \
+  --manifest /path/to/gcc-wasi-bundle/gcc-toolchain.v2.json \
+  --sysroot /path/to/extracted-bundle-sysroot \
+  --output out/gcc-wasi-link-inputs-native
+pnpm --filter @wasm-idle/core build
+pnpm --filter @wasm-idle/gcc build
+node scripts/verify-gcc-wasi.mjs \
+  --manifest /path/to/gcc-wasi-bundle/gcc-toolchain.v2.json \
+  --suite out/gcc-wasi-link-inputs-native/fixtures.mjs \
+  --save-intermediates --output out/gcc-wasi-link-inputs-browser
+```
+
+The preparation script preserves commands, provider source, objects, archives,
+programs and receipts. It verifies compiler/runtime identities and checks that
+inputs stay unchanged. Binary validation cannot prove source-level ABI: the
+Clang profile declares only the pinned nonvariadic scalar C contract, and does
+not qualify aggregate, vector or C++ interoperability.
+
+## Additional compiler suites
+
+RTTI qualification requires a producer bundle with `capabilities.rtti: true` and
+the matching rebuilt GNU runtime. The SDK accepts explicit C++ `rtti: true` and
+keeps the default and explicit false profiles disabled. The browser harness
+lists RTTI as unavailable only for a false-capability bundle; this metadata
+change is not evidence that RTTI programs work. Pass the producer's original
+multi-translation-unit RTTI suite through `--suite`, retain native and Worker
+receipts separately, and verify pointer cast success/failure, multiple/virtual
+inheritance and `typeid` with real stdin/stdout. Include default/off controls
+and unchanged older-bundle and x8613/16 regressions. Exception-dependent failure
+paths remain outside the qualified nonthrowing profile.
+
+When a suite uses external objects, retain their language and RTTI receipts:
+known same-bundle C objects are neutral, C++ modes must match, and an omitted
+legacy language cannot be assumed C for an RTTI-enabled caller. The existing
+pinned `clang-c-scalar-v1` contract still requires a C source request.
+
+No successful RTTI native or Worker execution is asserted by these SDK contract
+changes; that evidence belongs to the exact producer bundle's qualification.
+
 The optional `--suite /path/to/TRUSTED_LOCAL_MODULE.mjs` imports executable local
 test code exporting `cases` and optional `disabledCases` arrays. Both arrays are
 included in selection and the report. Every case carries its original source,

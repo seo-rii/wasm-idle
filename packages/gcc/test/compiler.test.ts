@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createCrossGccCompiler, createGccCompiler } from '../src/compiler.js';
 import { parseCrossGccManifest } from '../src/manifest.js';
 import { loadGccModuleFactory } from '../src/module-loader.js';
+import * as wasiLinker from '../src/wasi-linker.js';
 
 interface FixtureNode {
 	mode: number;
@@ -23,6 +24,9 @@ const host = vi.hoisted(() => ({
 	sysrootFiles: [] as WeakRef<Uint8Array>[],
 	mode: '',
 	output: undefined as Uint8Array | undefined,
+	coverageSizes: [] as number[],
+	coverageReads: [] as string[],
+	coverageContentsBytes: undefined as number | undefined,
 	failure: undefined as WebAssembly.RuntimeError | undefined
 }));
 
@@ -68,8 +72,13 @@ vi.mock('../src/module-loader.js', () => ({
 						files.set(path, Uint8Array.from(bytes));
 					},
 					readFile(path: string) {
+						if (path.endsWith('.gcno')) host.coverageReads.push(path);
 						if (!files.has(path)) throw new Error('fixture output missing');
 						return files.get(path)!;
+					},
+					stat(path: string) {
+						if (!files.has(path)) throw new Error('fixture coverage notes missing');
+						return { size: host.coverageSizes.shift() ?? files.get(path)!.length };
 					},
 					ErrnoError: class {
 						constructor(readonly errno: number) {}
@@ -120,6 +129,23 @@ vi.mock('../src/module-loader.js', () => ({
 						return 9;
 					}
 					if (host.mode === 'no-output') return 0;
+					if (
+						tool.startsWith('cc1') &&
+						argv.includes('-ftest-coverage') &&
+						host.mode !== 'no-notes'
+					) {
+						const stem = argv[argv.indexOf('-dumpbase') + 1].replace(
+							/\.(?:c|cpp)$/u,
+							''
+						);
+						// Raw transport bytes only; not a gcov format or compiler semantics fixture.
+						files.set(
+							`/workspace/${stem}.gcno`,
+							host.coverageContentsBytes === undefined
+								? new TextEncoder().encode(`raw-notes:${stem}\0\xff`)
+								: new Uint8Array(host.coverageContentsBytes)
+						);
+					}
 					if (argv.includes('--output-pch'))
 						files.set(argv[argv.indexOf('--output-pch') + 1], encoder.encode('gpch'));
 					const output = argv[argv.indexOf('-o') + 1];
@@ -281,7 +307,15 @@ function wasiCommand(simd = false) {
 	]);
 }
 
-function wasiBundle(linker = wasiCommand()) {
+function wasiObject() {
+	// Relocatable identity function: exercises host receipts, not GCC semantics.
+	return Uint8Array.from([
+		0, 97, 115, 109, 1, 0, 0, 0, 1, 6, 1, 96, 1, 127, 1, 127, 3, 2, 1, 0, 10, 6, 1, 4, 0, 32, 0,
+		11, 0, 19, 7, 108, 105, 110, 107, 105, 110, 103, 2, 8, 8, 1, 0, 0, 0, 3, 97, 100, 100
+	]);
+}
+
+function wasiBundle(linker = wasiCommand(), rtti = false, coverage = false) {
 	const fixture = bundle();
 	fixture.files.delete('gcc-toolchain.v1.json');
 	fixture.files.delete('ld.mjs');
@@ -312,13 +346,14 @@ function wasiBundle(linker = wasiCommand()) {
 			cpp: true,
 			libc: true,
 			libm: true,
-			libstdcxx: false,
-			staticInitialization: false,
+			libstdcxx: rtti,
+			staticInitialization: coverage,
 			exceptions: false,
-			rtti: false,
+			rtti,
 			threads: false,
 			dynamicLinking: false,
-			simd: true
+			simd: true,
+			...(coverage ? { coverage: true } : {})
 		},
 		qualification: { status: 'unverified' },
 		assets: Object.fromEntries(
@@ -345,11 +380,195 @@ beforeEach(() => {
 	host.sysrootFiles = [];
 	host.mode = '';
 	host.output = undefined;
+	host.coverageSizes = [];
+	host.coverageReads = [];
+	host.coverageContentsBytes = undefined;
 	host.failure = undefined;
 });
 afterEach(() => vi.restoreAllMocks());
 
 describe('synthetic GCC host contract (not real compiler qualification)', () => {
+	it('captures private raw per-frontend notes and marks covered objects without changing plain receipts', async () => {
+		host.output = wasiObject();
+		const compiler = await createGccCompiler(wasiBundle(undefined, true, true));
+		try {
+			for (const language of ['c', 'cpp'] as const) {
+				for (const optimization of ['0', '2'] as const) {
+					const result = await compiler.compile({
+						code: 'fixture',
+						language,
+						optimization,
+						emit: 'object',
+						coverage: true
+					});
+					expect(result.coverage).toMatchObject({
+						format: 'gcc-gcov',
+						compilerVersion: '17.0.0',
+						compilerCommit: 'a'.repeat(40)
+					});
+					const note = result.coverage!.notes[0];
+					expect(note.path).toBe('program.gcno');
+					expect(note.dataPath).toBe('/profile/program.gcda');
+					const frontEnd = host.calls.at(-2)!;
+					expect(note.contents).toEqual(frontEnd.files.get('/workspace/program.gcno'));
+					expect(note.contents).not.toBe(frontEnd.files.get('/workspace/program.gcno'));
+					expect(host.calls.at(-1)!.files.has('/workspace/program.gcno')).toBe(false);
+					frontEnd.files.get('/workspace/program.gcno')!.fill(0);
+					expect(new TextDecoder().decode(note.contents)).toContain('raw-notes:program');
+					expect(result.artifact!.linkInput!.profile.coverage).toBe(true);
+					const before = host.calls.length;
+					for (const coverage of [undefined, false])
+						await expect(
+							compiler.compile({
+								code: '',
+								language,
+								coverage,
+								linkInputs: [
+									{
+										path: 'covered.o',
+										bytes: result.artifact!.bytes,
+										...result.artifact!.linkInput!
+									}
+								]
+							})
+						).rejects.toThrow('coverage link inputs are currently unsupported');
+					expect(host.calls).toHaveLength(before);
+					const plain = await compiler.compile({
+						code: 'fixture',
+						language,
+						emit: 'object'
+					});
+					const disabled = await compiler.compile({
+						code: 'fixture',
+						language,
+						emit: 'object',
+						coverage: false
+					});
+					expect(disabled.artifact!.linkInput).toEqual(plain.artifact!.linkInput);
+					expect(plain.artifact!.linkInput!.profile).not.toHaveProperty('coverage');
+					expect(plain).not.toHaveProperty('coverage');
+				}
+			}
+		} finally {
+			compiler.dispose();
+		}
+	});
+
+	it('retains ordered per-unit notes and fixed profile paths on covered executables', async () => {
+		host.output = wasiObject();
+		vi.spyOn(wasiLinker, 'runWasiGccLinker').mockResolvedValue({
+			exitCode: 0,
+			peakMemoryBytes: 65536,
+			output: wasiCommand()
+		});
+		const compiler = await createGccCompiler(wasiBundle(undefined, false, true));
+		try {
+			const result = await compiler.compile({
+				code: 'fixture',
+				language: 'c',
+				coverage: true,
+				files: [
+					{ path: 'left/helper.c', contents: 'fixture left' },
+					{ path: 'right/helper.c', contents: 'fixture right' }
+				],
+				sources: ['left/helper.c', 'right/helper.c']
+			});
+			expect(result.coverage!.notes.map(({ path }) => path)).toEqual([
+				'program.gcno',
+				'program.1.gcno',
+				'program.2.gcno'
+			]);
+			expect(host.coverageReads).toEqual([
+				'/workspace/program.gcno',
+				'/workspace/program.1.gcno',
+				'/workspace/program.2.gcno'
+			]);
+			expect(result.artifact!.coverage).toEqual({
+				format: 'gcc-gcov',
+				directory: '/profile',
+				dataPaths: [
+					'/profile/program.gcda',
+					'/profile/program.1.gcda',
+					'/profile/program.2.gcda'
+				]
+			});
+		} finally {
+			compiler.dispose();
+		}
+	});
+
+	it('requires bounded notes before later tools and recovers after failed coverage requests', async () => {
+		host.output = wasiObject();
+		const compiler = await createGccCompiler(wasiBundle(undefined, false, true));
+		try {
+			const result = await compiler.compile({
+				code: '!synthetic failure',
+				language: 'c',
+				coverage: true,
+				files: [{ path: 'helper.c', contents: 'fixture' }],
+				sources: ['helper.c']
+			});
+			expect(result.exitCode).toBe(9);
+			expect(result.artifact).toBeUndefined();
+			expect(result.coverage).toBeUndefined();
+			expect(host.coverageReads).toHaveLength(0);
+			host.mode = 'no-notes';
+			await expect(
+				compiler.compile({ code: 'fixture', language: 'c', emit: 'object', coverage: true })
+			).rejects.toThrow('coverage notes missing');
+			expect(host.calls.at(-1)!.tool).toBe('cc1');
+			host.mode = '';
+			for (const size of [0, 16 * 1024 * 1024 + 1, Number.NaN]) {
+				host.coverageSizes = [size];
+				const reads = host.coverageReads.length;
+				await expect(
+					compiler.compile({
+						code: 'fixture',
+						language: 'c',
+						emit: 'object',
+						coverage: true
+					})
+				).rejects.toThrow('16 MiB per file or 64 MiB total');
+				expect(host.coverageReads).toHaveLength(reads);
+			}
+			host.coverageSizes = [1];
+			await expect(
+				compiler.compile({ code: 'fixture', language: 'c', emit: 'object', coverage: true })
+			).rejects.toThrow('invalid filesystem size');
+			const recovered = await compiler.compile({
+				code: 'fixture',
+				language: 'c',
+				emit: 'assembly',
+				coverage: true
+			});
+			expect(recovered.coverage!.notes.map(({ path }) => path)).toEqual(['program.gcno']);
+		} finally {
+			compiler.dispose();
+		}
+	});
+
+	it('bounds aggregate notes before reading the file that crosses 64 MiB', async () => {
+		host.output = wasiObject();
+		host.coverageContentsBytes = 16 * 1024 * 1024;
+		const compiler = await createGccCompiler(wasiBundle(undefined, false, true));
+		try {
+			const sources = Array.from({ length: 4 }, (_, i) => `unit${i}.c`);
+			await expect(
+				compiler.compile({
+					code: 'fixture',
+					language: 'c',
+					coverage: true,
+					sources,
+					files: sources.map((path) => ({ path, contents: 'fixture' }))
+				})
+			).rejects.toThrow('64 MiB total');
+			expect(host.coverageReads).toHaveLength(4);
+			expect(host.calls.at(-1)!.tool).toBe('cc1');
+		} finally {
+			compiler.dispose();
+		}
+	});
+
 	it.each(['wasm', 'loader'] as const)(
 		'preserves the original %s initialization failure',
 		async (phase) => {
@@ -397,6 +616,132 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 		await expect(createGccCompiler(wasiBundle(wasm))).rejects.toThrow(
 			'must export memory and _start'
 		);
+	});
+
+	it('binds reusable object receipts and validates private link inputs before front-end calls', async () => {
+		host.output = wasiObject();
+		const compiler = await createGccCompiler(wasiBundle());
+		try {
+			const produced = await compiler.compile({
+				code: 'fixture',
+				language: 'c',
+				emit: 'object'
+			});
+			const artifact = produced.artifact!;
+			expect(artifact.linkInput).toEqual({
+				format: 'wasm-object',
+				sha256: hash(artifact.bytes),
+				profile: {
+					target: 'wasm32-wasi',
+					abi: 'wasm32-wasi-preview1',
+					simd: false,
+					compatibility: {
+						kind: 'gcc-bundle',
+						manifestSha256: compiler.identity.manifestSha256,
+						sysrootSha256: compiler.identity.sysrootSha256
+					}
+				}
+			});
+			const input = { ...artifact.linkInput!, path: 'reuse.o', bytes: artifact.bytes };
+			const before = host.calls.length;
+			const rejected = compiler.compile({
+				code: '',
+				language: 'c',
+				linkInputs: [{ ...input, sha256: '0'.repeat(64) }]
+			});
+			await expect(compiler.compile({ code: 'overlap' })).rejects.toThrow('busy');
+			await expect(rejected).rejects.toThrow('SHA-256 mismatch');
+			expect(host.calls).toHaveLength(before);
+			// A failing source is enough to observe that validation, snapshots, and identity
+			// propagation completed; no synthetic executable is substituted for a linker.
+			const pending = compiler.compile({
+				code: '!source error',
+				language: 'c',
+				linkInputs: [input]
+			});
+			artifact.bytes.fill(255);
+			const result = await pending;
+			expect(result.exitCode).toBe(9);
+			expect(result.artifact).toBeUndefined();
+			expect(result.linkInputs?.[0]).toMatchObject({ path: 'reuse.o', sha256: input.sha256 });
+			expect(host.calls.at(-1)!.files.get('/link-inputs/reuse.o')?.[0]).toBe(0);
+		} finally {
+			compiler.dispose();
+		}
+	});
+
+	it('records known language/RTTI modes and rejects incompatible inputs before frontend calls', async () => {
+		host.output = wasiObject();
+		const compiler = await createGccCompiler(wasiBundle(undefined, true));
+		try {
+			const artifacts = [];
+			for (const request of [
+				{ language: 'c' as const },
+				{ language: 'cpp' as const },
+				{ language: 'cpp' as const, rtti: true }
+			]) {
+				const result = await compiler.compile({
+					code: 'fixture',
+					emit: 'object',
+					...request
+				});
+				const profile = result.artifact!.linkInput!.profile;
+				expect(profile.language).toBe(request.language);
+				if (request.language === 'c') expect(profile).not.toHaveProperty('rtti');
+				else expect(profile.rtti).toBe(request.rtti === true);
+				artifacts.push(result.artifact!);
+			}
+			const inputs = artifacts.map((artifact) => ({
+				...artifact.linkInput!,
+				bytes: artifact.bytes,
+				path: 'reuse.o'
+			}));
+			const before = host.calls.length;
+			for (const [input, rtti] of [
+				[inputs[1], true],
+				[inputs[2], false]
+			] as const)
+				await expect(
+					compiler.compile({ code: '', language: 'cpp', rtti, linkInputs: [input] })
+				).rejects.toThrow('C++ RTTI profile');
+			const { language: _language, rtti: _rtti, ...legacy } = inputs[0].profile;
+			await expect(
+				compiler.compile({
+					code: '',
+					rtti: true,
+					linkInputs: [{ ...inputs[0], profile: legacy }]
+				})
+			).rejects.toThrow('unknown legacy language');
+			await expect(compiler.compile({ code: '', language: 'c', rtti: true })).rejects.toThrow(
+				'C++ source'
+			);
+			expect(host.calls).toHaveLength(before);
+			// Validation reaches the synthetic failing frontend for known C and matching C++.
+			for (const input of [inputs[0], inputs[2]]) {
+				const result = await compiler.compile({
+					code: '!source failure',
+					rtti: true,
+					linkInputs: [input]
+				});
+				expect(result.exitCode).toBe(9);
+				expect(result.linkInputs?.[0].profile).toEqual(input.profile);
+				expect(host.calls.at(-1)?.argv).toContain('-frtti');
+			}
+		} finally {
+			compiler.dispose();
+		}
+	});
+
+	it('rejects RTTI opt-in against an old bundle before any tool runs', async () => {
+		const compiler = await createGccCompiler(wasiBundle());
+		try {
+			await expect(compiler.compile({ code: '', rtti: true })).rejects.toThrow(
+				'does not support RTTI'
+			);
+			expect(host.calls).toHaveLength(0);
+		} finally {
+			compiler.dispose();
+		}
 	});
 
 	it('refuses unrequested SIMD in assembled output and permits the explicit capable-bundle opt-in', async () => {

@@ -1,0 +1,543 @@
+{
+	"schemaVersion": 1,
+	"issue": 343,
+	"status": "passed",
+	"scope": "SDK WASI host filesystem; compiler, assembler, linker and sysroot unchanged",
+	"compiler": {
+		"family": "gcc",
+		"version": "17.0.0",
+		"commit": "ac20dcd5f8c5ae858f9b2d9cdf4140c0738e5e27"
+	},
+	"gccSourceDiffSha256": "2534d4408b05cf3221755edf38026e6fc57c5519b5c7eb6d59009a76fa88c73c",
+	"nativeTools": {
+		"cc1": {
+			"bytes": 24399320,
+			"sha256": "e28199b4d70364bd645326d930cc4a3fc73c12337c4d04a38c6df5db2c7c5f9a"
+		},
+		"wat2wasm": {
+			"bytes": 1635504,
+			"sha256": "8203fbf4dc22d46fc2cb334c4666dc9712c7b53d3726cf47719d6b6d91eff8a6"
+		},
+		"wasm-ld": {
+			"bytes": 4165088,
+			"sha256": "5c965a9e8525c7206aa583f9691f1a7a5e46bd4d793bf65f809b7124c670df26"
+		}
+	},
+	"nativeBuildReceiptSha256": "134f07c9a07405b8108d286dab74563db2ed3c021c04357fac63a8ff6f9724cf",
+	"manifestSha256": "576ebe8a59ecdda01acaaf71c5f46b8306d3ef75a9d87356728c7fbc9a958d77",
+	"sysroot": {
+		"path": "sysroot.tar",
+		"bytes": 25443840,
+		"sha256": "a098c6c9ccbae0271eb0ae8e7f40e190bab05c65deb77912f903aa39766f4217"
+	},
+	"compilerAssets": {
+		"cc1Js": {
+			"path": "cc1.mjs",
+			"bytes": 133499,
+			"sha256": "82daaecc5d19f6d33f945a6622f9dd789666972cb4a68e7305a0d167ccb2bcc3"
+		},
+		"cc1Wasm": {
+			"path": "cc1.wasm",
+			"bytes": 15590758,
+			"sha256": "b0725b11b8ac9d1e331062e68537ad9d3c75b3ef3a3751cc86171884473911fa"
+		},
+		"cc1plusJs": {
+			"path": "cc1plus.mjs",
+			"bytes": 139030,
+			"sha256": "975bcf17ef90c1c502dfa49664ceb32ac4e84214e45258a454c3a174e72e7c37"
+		},
+		"cc1plusWasm": {
+			"path": "cc1plus.wasm",
+			"bytes": 17251474,
+			"sha256": "0fd4b2180d478bc8e5a340d168578b3a7f0ab732feb8ffa8fe4131a8e8410a11"
+		},
+		"asJs": {
+			"path": "as.mjs",
+			"bytes": 61491,
+			"sha256": "c82b3594dbe310c0006fd7ac5c3af3dcf4445353306eb02eece26f6e51fd23fb"
+		},
+		"asWasm": {
+			"path": "as.wasm",
+			"bytes": 597157,
+			"sha256": "339a199928446a5c15d540df3d328a68421fc8bbb64b0aad36bef5e221c5093d"
+		},
+		"ldWasm": {
+			"path": "ld.wasm",
+			"bytes": 16171013,
+			"sha256": "34d39bc410c098e7e09933b61cc8e28699447af9a28abf4544d71b6e9cad1f9d"
+		}
+	},
+	"browser": "156.0.8078.4",
+	"node": "v24.22.1",
+	"suite": {
+		"path": "scripts/gcc-wasi-filesystem-fixtures.mjs",
+		"sha256": "03e7787228f73f9a5efaf5c5d675e901a68a6dfcf4b441cdbce80459d0624e91"
+	},
+	"receipts": {
+		"native": {
+			"path": "out/gcc-wasi-filesystem-native-BpXXRl/qualification.json",
+			"sha256": "681640c685c04cbf2b3faf33b61b8678b6e64644bfd00416052cea2b14944439"
+		},
+		"worker": {
+			"path": "out/gcc-wasi-filesystem-worker-20261030T143641/qualification.json",
+			"sha256": "d8cf53ea39d27a761439c65fee19e7e49077358efcb8e8abd60c54a694e0f44d"
+		}
+	},
+	"counts": {
+		"nativeCompiledAndLinked": 14,
+		"nativeNodeWasiExecutions": 6,
+		"workerCompiledPrograms": 14,
+		"workerExecutions": 16,
+		"workerProgramNodeWasiExecutions": 6
+	},
+	"limitations": [
+		"Node WASI does not expose SDK read-only/entry/byte quota policies; those eight cases execute in the real Chromium Worker only.",
+		"No host filesystem, OPFS persistence, symlinks, hard links, rename or timestamp mutation."
+	],
+	"runtimeInputs": [
+		{
+			"path": "packages/gcc/dist/compiler.js",
+			"bytes": 22080,
+			"sha256": "85938abadfd116f71dd2535100fef7fbf05cc428d39d7a2a5f656c7c75081e3f"
+		},
+		{
+			"path": "packages/gcc/dist/index.js",
+			"bytes": 357,
+			"sha256": "b0f6e041c8cdcb2d8064f8f9ef45a99be05d3a266f1253009bd304bec2eefecb"
+		},
+		{
+			"path": "packages/gcc/dist/manifest.js",
+			"bytes": 8495,
+			"sha256": "435a0c6940bef97635237b9da1edcab35c9c547f353a63fa8ca323072b7fc19b"
+		},
+		{
+			"path": "packages/gcc/dist/module-loader.js",
+			"bytes": 743,
+			"sha256": "993fb7fce6e523f565ba4ad53ab66af167d228ab66da1a7c5a6aaf7dddd143df"
+		},
+		{
+			"path": "packages/gcc/dist/plan.js",
+			"bytes": 9267,
+			"sha256": "2d0fb5f00ef2b6d47f528564f92d99f49d5311c3db9450863c9019985709dc94"
+		},
+		{
+			"path": "packages/gcc/dist/sysroot-fs.js",
+			"bytes": 3793,
+			"sha256": "52cb3ed93f3b3bdbe52ee9d550a6266fe894225448016c921e1a163315b09398"
+		},
+		{
+			"path": "packages/gcc/dist/types.js",
+			"bytes": 44,
+			"sha256": "01ae2a5b120382f9a648ced7ee8507493a134f216d100fc61600c6c9738235d2"
+		},
+		{
+			"path": "packages/gcc/dist/wasi-filesystem.js",
+			"bytes": 20811,
+			"sha256": "756cdda14e15b431865f92b1796d98e58f422718177703cedc260e9cea7e3b8f"
+		},
+		{
+			"path": "packages/gcc/dist/wasi-linker.js",
+			"bytes": 2440,
+			"sha256": "c38805b08765301c295efefb5232b3b6034b7e2024b5eb0e27a8c80d8929eb8b"
+		},
+		{
+			"path": "packages/gcc/dist/wasi-plan.js",
+			"bytes": 4628,
+			"sha256": "5929c8404787d439c5d86ac40cf96ba242219c77ab619e3752e47c8da3de9eac"
+		},
+		{
+			"path": "packages/gcc/dist/wasi-run.js",
+			"bytes": 5239,
+			"sha256": "1db95aa7d955b7496486d3d1d3c21fb8f3f1c17d692616ed3389c2e8f5d0e166"
+		},
+		{
+			"path": "packages/gcc/dist/wasm-output.js",
+			"bytes": 13217,
+			"sha256": "317ef277fa63d68f0a22a3a92af4ffa22fd8d7896a089c2ae4faf8564bbd42d9"
+		},
+		{
+			"path": "packages/gcc/dist/worker-entry.js",
+			"bytes": 2276,
+			"sha256": "d250fcbe78750f6ff0aed0b0d985a34143f0acb749a8858d1e3ff61d2e080221"
+		},
+		{
+			"path": "packages/gcc/dist/worker.js",
+			"bytes": 6956,
+			"sha256": "4606c3bd035d35542f783244258b15c6956a39f4068ad1d90057a4a54f212dfa"
+		}
+	],
+	"cases": [
+		{
+			"id": "filesystem-read-write-o0",
+			"status": "passed",
+			"fixtureSha256": "400d9d96bbcc24d2410ead614c59b0acd7f21a33f387f83e4257bc4cd38fda81",
+			"nativeArtifact": {
+				"bytes": 318335,
+				"sha256": "fa0f6f43e35230242a746097a12316e95858d82c7b7d8d122b07aef6ef5915b9"
+			},
+			"workerArtifact": {
+				"bytes": 371120,
+				"sha256": "ae4ea8cb2b1ca6fe2da0fbe0d4bfe32f94327763fe17f7da68855e8120346042"
+			},
+			"workerExitCode": 0,
+			"stdout": "files 42 8\n",
+			"files": [
+				{
+					"path": "/sandbox/input.bin",
+					"contents": [0, 1, 127, 128, 255, 10, 65, 0]
+				},
+				{
+					"path": "/sandbox/nested/seed.txt",
+					"contents": [115, 101, 101, 100, 10]
+				},
+				{
+					"path": "/sandbox/results/output.bin",
+					"contents": [42, 43, 85, 170, 213, 32, 107, 42, 254, 0]
+				}
+			],
+			"workerExecutions": 2,
+			"node": {
+				"exitCode": 0
+			}
+		},
+		{
+			"id": "filesystem-read-write-o2",
+			"status": "passed",
+			"fixtureSha256": "84031715d7ddba55816b7fcb5306c038e3ebd1800c898433878c225350d05f38",
+			"nativeArtifact": {
+				"bytes": 317364,
+				"sha256": "1a4c01db1cbf09932498958afe8e85fc873ec94514cc15a1f8e9a301a71e8abc"
+			},
+			"workerArtifact": {
+				"bytes": 370149,
+				"sha256": "178bb1a51e9c31262bd2ac4f2cfa51db9c183aaa32f2b0afa18f82b5bc22e65f"
+			},
+			"workerExitCode": 0,
+			"stdout": "files 42 8\n",
+			"files": [
+				{
+					"path": "/sandbox/input.bin",
+					"contents": [0, 1, 127, 128, 255, 10, 65, 0]
+				},
+				{
+					"path": "/sandbox/nested/seed.txt",
+					"contents": [115, 101, 101, 100, 10]
+				},
+				{
+					"path": "/sandbox/results/output.bin",
+					"contents": [42, 43, 85, 170, 213, 32, 107, 42, 254, 0]
+				}
+			],
+			"workerExecutions": 2,
+			"node": {
+				"exitCode": 0
+			}
+		},
+		{
+			"id": "filesystem-path-errors-o0",
+			"status": "passed",
+			"fixtureSha256": "11c2c1b35e2077117c0e1132ec965333eccb28a7b7eacc016b1f0abe09284df9",
+			"nativeArtifact": {
+				"bytes": 184019,
+				"sha256": "2472091e475ce8cf8acdb6530e2832fa09b38247a66ea3f9813e85a1c8d181b0"
+			},
+			"workerArtifact": {
+				"bytes": 184001,
+				"sha256": "ce4daeeeb1b85d1d23b2d51d0ad8688a51702352340be8f0e7656db55183a718"
+			},
+			"workerExitCode": 0,
+			"stdout": "path errors ok\n",
+			"files": [
+				{
+					"path": "/sandbox/input.txt",
+					"contents": [115, 97, 102, 101, 10]
+				}
+			],
+			"workerExecutions": 1,
+			"node": {
+				"exitCode": 0
+			}
+		},
+		{
+			"id": "filesystem-path-errors-o2",
+			"status": "passed",
+			"fixtureSha256": "19dac42ced47d65698ec2a4fff67ff39a51f610079c4a98dccab829cb1de0d1f",
+			"nativeArtifact": {
+				"bytes": 183821,
+				"sha256": "0dc443741505e6a97990837e490581ef813aebc143acae5a696fd4b130f02fad"
+			},
+			"workerArtifact": {
+				"bytes": 183803,
+				"sha256": "6201e229004083015c6a0cd8da7fb2c894e60fbe50b399ec7ded7ed46226e56e"
+			},
+			"workerExitCode": 0,
+			"stdout": "path errors ok\n",
+			"files": [
+				{
+					"path": "/sandbox/input.txt",
+					"contents": [115, 97, 102, 101, 10]
+				}
+			],
+			"workerExecutions": 1,
+			"node": {
+				"exitCode": 0
+			}
+		},
+		{
+			"id": "filesystem-readonly-o0",
+			"status": "passed",
+			"fixtureSha256": "32147efcaba820900ff9d04f8ccbdabdf634ccda2f0ede4b1be50c8652cfd26d",
+			"nativeArtifact": {
+				"bytes": 208175,
+				"sha256": "f68cd402572a111ec8a29e24edb01b527e6327f77883afdd60074bc9be54d658"
+			},
+			"workerArtifact": {
+				"bytes": 208160,
+				"sha256": "fe9a6e75399db9649c12744aa5c92f0e34b1289bc396750d32288315449c3fe2"
+			},
+			"workerExitCode": 0,
+			"stdout": "readonly errors ok\n",
+			"files": [
+				{
+					"path": "/readonly/input.txt",
+					"contents": [105, 109, 109, 117, 116, 97, 98, 108, 101, 10]
+				}
+			],
+			"workerExecutions": 1,
+			"node": {
+				"status": "not-applicable",
+				"reason": "Node WASI preopens do not expose a read-only mount contract; checked by the actual GCC program in the SDK Chromium Worker."
+			}
+		},
+		{
+			"id": "filesystem-readonly-o2",
+			"status": "passed",
+			"fixtureSha256": "52c9874cfa79feb61a5b240406e796c8a7290ed02c892b2b62e6618bc5189d19",
+			"nativeArtifact": {
+				"bytes": 207988,
+				"sha256": "ec520e0f88cefa84c56f1b249df55dca436cd6587b553a6dcc7b24bb8b242481"
+			},
+			"workerArtifact": {
+				"bytes": 207973,
+				"sha256": "44faeaf721c6635ea4a45c977d3fa4736d5434b9fbcf1ace1157de10c904cc0e"
+			},
+			"workerExitCode": 0,
+			"stdout": "readonly errors ok\n",
+			"files": [
+				{
+					"path": "/readonly/input.txt",
+					"contents": [105, 109, 109, 117, 116, 97, 98, 108, 101, 10]
+				}
+			],
+			"workerExecutions": 1,
+			"node": {
+				"status": "not-applicable",
+				"reason": "Node WASI preopens do not expose a read-only mount contract; checked by the actual GCC program in the SDK Chromium Worker."
+			}
+		},
+		{
+			"id": "filesystem-file-quota-o0",
+			"status": "passed",
+			"fixtureSha256": "8a0176e23a61141ec1a47a62004fbfaa5e91c1d2d33e5051d6cb7f77609cea94",
+			"nativeArtifact": {
+				"bytes": 208848,
+				"sha256": "6027a5d84511f7b1d96de6d8f708075b84c63b91c8b7590e1461bcb4f97590dc"
+			},
+			"workerArtifact": {
+				"bytes": 208831,
+				"sha256": "4df5262fb04fd87b119050c8d25fcbbcbdbade769e7dc3cc5ee273e40f56b5af"
+			},
+			"workerExitCode": 0,
+			"stdout": "file quota ok\n",
+			"files": [
+				{
+					"path": "/quota/kept.bin",
+					"contents": [1, 2, 3, 4]
+				}
+			],
+			"workerExecutions": 1,
+			"node": {
+				"status": "not-applicable",
+				"reason": "Node WASI preopens do not expose per-file memory quotas; checked by the actual GCC program in the SDK Chromium Worker."
+			}
+		},
+		{
+			"id": "filesystem-file-quota-o2",
+			"status": "passed",
+			"fixtureSha256": "a74c945dd7ea1e8c4832d0767804835b2244d9a231e00406a26b539425dfef0d",
+			"nativeArtifact": {
+				"bytes": 208756,
+				"sha256": "2bb28d704ca1726d66e0e507d77626e1ef4d8d6ee6583e3000490f13207c0f31"
+			},
+			"workerArtifact": {
+				"bytes": 208739,
+				"sha256": "b35b219266cb48c480f159f61de8d153cb5ee47161093a182414aa677016e782"
+			},
+			"workerExitCode": 0,
+			"stdout": "file quota ok\n",
+			"files": [
+				{
+					"path": "/quota/kept.bin",
+					"contents": [1, 2, 3, 4]
+				}
+			],
+			"workerExecutions": 1,
+			"node": {
+				"status": "not-applicable",
+				"reason": "Node WASI preopens do not expose per-file memory quotas; checked by the actual GCC program in the SDK Chromium Worker."
+			}
+		},
+		{
+			"id": "filesystem-total-quota-o0",
+			"status": "passed",
+			"fixtureSha256": "fb3957c4095fc5d55f982c78af2449f8c5e227bb509ec2096c533af556727f99",
+			"nativeArtifact": {
+				"bytes": 207221,
+				"sha256": "e3337c0e54cb85bce260bb9a16e08216b54e12117b187212b02afac086d7c509"
+			},
+			"workerArtifact": {
+				"bytes": 207203,
+				"sha256": "05e43c2795b73d513bce1e83208d3504fd1677f6bdabb956212b3ea292e413c4"
+			},
+			"workerExitCode": 0,
+			"stdout": "total quota ok\n",
+			"files": [
+				{
+					"path": "/quota/a.bin",
+					"contents": [1, 2, 3, 4]
+				},
+				{
+					"path": "/quota/b.bin",
+					"contents": [5, 6]
+				}
+			],
+			"workerExecutions": 1,
+			"node": {
+				"status": "not-applicable",
+				"reason": "Node WASI preopens do not expose total memory quotas; checked by the actual GCC program in the SDK Chromium Worker."
+			}
+		},
+		{
+			"id": "filesystem-total-quota-o2",
+			"status": "passed",
+			"fixtureSha256": "d218d904e13ad921d441519468e820f6f4900de18633a7564962804a5580f6fb",
+			"nativeArtifact": {
+				"bytes": 207150,
+				"sha256": "c50d489ab37bdfc5642aa6bb590e072f5e8b329cc3d87781a07b4b68b1cde60c"
+			},
+			"workerArtifact": {
+				"bytes": 207132,
+				"sha256": "af501b4ddb1d4045f62c735f4c3e1a380d0927eb9dffa44ca5fa760eeabb4725"
+			},
+			"workerExitCode": 0,
+			"stdout": "total quota ok\n",
+			"files": [
+				{
+					"path": "/quota/a.bin",
+					"contents": [1, 2, 3, 4]
+				},
+				{
+					"path": "/quota/b.bin",
+					"contents": [5, 6]
+				}
+			],
+			"workerExecutions": 1,
+			"node": {
+				"status": "not-applicable",
+				"reason": "Node WASI preopens do not expose total memory quotas; checked by the actual GCC program in the SDK Chromium Worker."
+			}
+		},
+		{
+			"id": "filesystem-entry-quota-o0",
+			"status": "passed",
+			"fixtureSha256": "979553f616024a98d77605ecc8a44c9bd724fec65f9de22615dc756db1a50442",
+			"nativeArtifact": {
+				"bytes": 205792,
+				"sha256": "79367e90be01df2819a9b03baff12be1a46c64fdd4c16f2c1c3677717ae810ad"
+			},
+			"workerArtifact": {
+				"bytes": 205774,
+				"sha256": "8b09fbdf123137d2b0d62b8ca2d46e4fcba24ac598cadfbe63a91f9cf25ae96c"
+			},
+			"workerExitCode": 0,
+			"stdout": "entry quota ok\n",
+			"files": [
+				{
+					"path": "/quota/replacement.bin",
+					"contents": [9]
+				}
+			],
+			"workerExecutions": 1,
+			"node": {
+				"status": "not-applicable",
+				"reason": "Node WASI preopens do not expose memory entry quotas; checked by the actual GCC program in the SDK Chromium Worker."
+			}
+		},
+		{
+			"id": "filesystem-entry-quota-o2",
+			"status": "passed",
+			"fixtureSha256": "9ff27ac97717d8a360bf44d0acbe12e164ca5943a820359480f0f8c130c29cb0",
+			"nativeArtifact": {
+				"bytes": 205673,
+				"sha256": "d059c22eca6a20538c051b8877f89fa33f5d593c77e4209b9bc423693b803ee2"
+			},
+			"workerArtifact": {
+				"bytes": 205655,
+				"sha256": "d92dcbc13694ffcd4be1f468e652e9cd47e79ba592c81fa582dab122f0d7da70"
+			},
+			"workerExitCode": 0,
+			"stdout": "entry quota ok\n",
+			"files": [
+				{
+					"path": "/quota/replacement.bin",
+					"contents": [9]
+				}
+			],
+			"workerExecutions": 1,
+			"node": {
+				"status": "not-applicable",
+				"reason": "Node WASI preopens do not expose memory entry quotas; checked by the actual GCC program in the SDK Chromium Worker."
+			}
+		},
+		{
+			"id": "filesystem-no-preopens-o0",
+			"status": "passed",
+			"fixtureSha256": "b201e436527c823d8e420ef77395308680e0490c1042ae9b84cc4f834c1dd19d",
+			"nativeArtifact": {
+				"bytes": 298029,
+				"sha256": "f54f82f6c3cb6bf15570aaf2bb18bd7905f2559072d9f0197329600505bcdc26"
+			},
+			"workerArtifact": {
+				"bytes": 348714,
+				"sha256": "09aad19ac6ca9add202421b086429edf9e8bf459699fd1486eb4ee9fd0cd38d3"
+			},
+			"workerExitCode": 0,
+			"stdout": "no preopens 42\n",
+			"files": [],
+			"workerExecutions": 1,
+			"node": {
+				"exitCode": 0
+			}
+		},
+		{
+			"id": "filesystem-no-preopens-o2",
+			"status": "passed",
+			"fixtureSha256": "e44fc6199d8b877f2b3ec4389beb9938f40837f39fdf7c06b26cb4347f70c70e",
+			"nativeArtifact": {
+				"bytes": 297997,
+				"sha256": "5bf45ee9d8cb7ab334cec8a32baff81590e262f48fa5e6dd823852edbc32cad3"
+			},
+			"workerArtifact": {
+				"bytes": 348682,
+				"sha256": "0ff80413b7db866487479c12c1c6d67b04a78b40bcc0d60d756025aa76b6b7ee"
+			},
+			"workerExitCode": 0,
+			"stdout": "no preopens 42\n",
+			"files": [],
+			"workerExecutions": 1,
+			"node": {
+				"exitCode": 0
+			}
+		}
+	]
+}

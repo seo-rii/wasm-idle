@@ -9,6 +9,7 @@ import { wasiGccCompilePlan } from './wasi-plan.js';
 import { compileGccWasm, inspectGccWasm } from './wasm-output.js';
 import { runGccWasiArtifact } from './wasi-run.js';
 import { runWasiGccLinker } from './wasi-linker.js';
+import { gccLinkDigest, validateWasiGccLinkInputs } from './wasm-link-inputs.js';
 import type {
 	CreateCrossGccCompilerOptions,
 	CreateGccCompilerOptions,
@@ -24,12 +25,18 @@ import type {
 	WasiGccArtifact,
 	WasiGccCompileRequest,
 	WasiGccCompiler,
+	WasiGccCoverageNote,
+	WasiGccLinkInput,
+	WasiGccLinkedInput,
+	WasiGccLinkInputReceipt,
 	WasiGccRunOptions
 } from './types.js';
 
 const tools = ['cc1', 'cc1plus', 'as', 'ld'] as const;
 const encoder = new TextEncoder();
 const maxDiagnosticsBytes = 4 * 1024 * 1024;
+const maxCoverageNoteBytes = 16 * 1024 * 1024;
+const maxCoverageNotesBytes = 64 * 1024 * 1024;
 const pchDirectory = '/pch',
 	pchPath = `${pchDirectory}/bits/stdc++.h.gch`;
 
@@ -218,16 +225,32 @@ export async function createGccCompiler(
 			argv: readonly string[];
 			output: string;
 			precompiledHeader?: Uint8Array;
+			coverageNote?: { path: string; dataPath: string };
 		}[],
 		files: readonly { path: string; contents: Uint8Array }[],
-		simdEnabled = false
-	) {
+		simdEnabled = false,
+		linkInputs: readonly WasiGccLinkInput[] = [],
+		language: 'c' | 'cpp' = 'cpp',
+		rttiEnabled = false
+	): Promise<{
+		exitCode: number;
+		stdout: string;
+		stderr: string;
+		stages: CrossGccStageResult[];
+		workspace?: Map<string, Uint8Array>;
+		wasmInspection?: GccWasmInspection;
+		linkInputs?: readonly WasiGccLinkedInput[];
+		coverageNotes?: readonly WasiGccCoverageNote[];
+	}> {
 		if (disposed) throw new Error('GCC compiler is disposed');
 		if (active) throw new Error('GCC compiler is busy');
 		active = true;
 		const workspace = new Map(files.map((file) => [file.path, file.contents]));
 		const results: CrossGccStageResult[] = [];
+		const coverageNotes: WasiGccCoverageNote[] = [];
+		let coverageNotesBytes = 0;
 		let wasmInspection: GccWasmInspection | undefined;
+		let linkedInputs: readonly WasiGccLinkedInput[] | undefined;
 		async function inspectOutput(bytes: Uint8Array, emit: 'object' | 'executable') {
 			const inspection = await inspectGccWasm(bytes, emit);
 			if (inspection.features.simd128 && !simdEnabled)
@@ -248,6 +271,15 @@ export async function createGccCompiler(
 			else stderr += value;
 		};
 		try {
+			if (linkInputs.length && manifest.target === 'wasm32-wasi')
+				linkedInputs = await validateWasiGccLinkInputs(
+					linkInputs,
+					manifest,
+					manifestSha256,
+					simdEnabled,
+					language,
+					rttiEnabled
+				);
 			for (const stage of stages) {
 				if (disposed) throw new Error('GCC compiler is disposed');
 				const loaded = factories.get(stage.tool)!;
@@ -269,7 +301,13 @@ export async function createGccCompiler(
 						peakMemoryBytes: linked.peakMemoryBytes
 					});
 					if (linked.exitCode !== 0)
-						return { exitCode: linked.exitCode, stdout, stderr, stages: results };
+						return {
+							exitCode: linked.exitCode,
+							stdout,
+							stderr,
+							stages: results,
+							...(linkedInputs ? { linkInputs: linkedInputs } : {})
+						};
 					wasmInspection = await inspectOutput(linked.output!, 'executable');
 					workspace.set(stage.output, linked.output!);
 					continue;
@@ -357,7 +395,39 @@ export async function createGccCompiler(
 					milliseconds: performance.now() - start,
 					peakMemoryBytes: module.HEAPU8.byteLength
 				});
-				if (exitCode !== 0) return { exitCode, stdout, stderr, stages: results };
+				if (exitCode !== 0)
+					return {
+						exitCode,
+						stdout,
+						stderr,
+						stages: results,
+						...(linkedInputs ? { linkInputs: linkedInputs } : {})
+					};
+				if (stage.coverageNote) {
+					const path = `/workspace/${stage.coverageNote.path}`;
+					if (typeof module.FS.stat !== 'function')
+						throw new Error('GCC coverage requires an Emscripten filesystem with stat');
+					const { size } = module.FS.stat(path);
+					if (
+						!Number.isSafeInteger(size) ||
+						size < 1 ||
+						size > maxCoverageNoteBytes ||
+						coverageNotesBytes + size > maxCoverageNotesBytes
+					)
+						throw new Error(
+							'GCC coverage notes exceed 16 MiB per file or 64 MiB total, or are empty'
+						);
+					const contents = module.FS.readFile(path);
+					if (!(contents instanceof Uint8Array) || contents.byteLength !== size)
+						throw new Error('GCC coverage notes have an invalid filesystem size');
+					coverageNotesBytes += size;
+					// Each frontend owns a fresh FS. Save raw notes before it is discarded,
+					// without mounting them into later stages or sharing module-owned bytes.
+					coverageNotes.push({
+						...stage.coverageNote,
+						contents: Uint8Array.from(contents)
+					});
+				}
 				const output = Uint8Array.from(module.FS.readFile(stage.output));
 				if (manifest.target === 'wasm32-wasi' && stage.tool === 'as')
 					wasmInspection = await inspectOutput(output, 'object');
@@ -372,7 +442,16 @@ export async function createGccCompiler(
 					);
 				workspace.set(stage.output, output);
 			}
-			return { exitCode: 0, stdout, stderr, stages: results, workspace, wasmInspection };
+			return {
+				exitCode: 0,
+				stdout,
+				stderr,
+				stages: results,
+				workspace,
+				wasmInspection,
+				...(coverageNotes.length ? { coverageNotes } : {}),
+				...(linkedInputs ? { linkInputs: linkedInputs } : {})
+			};
 		} catch (error) {
 			// Worker transport forwards only the error message. Preserve diagnostics
 			// printed before an unexpected host abort, without turning it into a
@@ -495,12 +574,52 @@ export async function createGccCompiler(
 				plan.files,
 				manifest.target === 'wasm32-wasi' &&
 					manifest.capabilities.simd &&
-					(request as WasiGccCompileRequest).simd === true
+					(request as WasiGccCompileRequest).simd === true,
+				'linkInputs' in plan ? plan.linkInputs : [],
+				'language' in plan ? plan.language : 'cpp',
+				'rtti' in plan && plan.rtti
 			);
 			if (!result.workspace) return result;
-			const { workspace, wasmInspection, ...completed } = result;
+			const { workspace, wasmInspection, coverageNotes, ...completed } = result;
+			const bytes = workspace.get(`/workspace/${plan.fileName}`)!;
+			const linkInput: WasiGccLinkInputReceipt | undefined =
+				manifest.target === 'wasm32-wasi' && plan.emit === 'object'
+					? Object.freeze({
+							format: 'wasm-object',
+							sha256: await gccLinkDigest(bytes),
+							profile: Object.freeze({
+								target: 'wasm32-wasi',
+								abi: 'wasm32-wasi-preview1',
+								simd: 'simd' in plan && plan.simd,
+								...('coverage' in plan && plan.coverage ? { coverage: true } : {}),
+								// Preserve legacy false-bundle receipt shapes. New bundles
+								// distinguish pure C from both C++ RTTI profiles.
+								...(manifest.capabilities.rtti && 'language' in plan
+									? {
+											language: plan.language,
+											...(plan.language === 'cpp' ? { rtti: plan.rtti } : {})
+										}
+									: {}),
+								compatibility: Object.freeze({
+									kind: 'gcc-bundle',
+									manifestSha256,
+									sysrootSha256: manifest.assets.sysroot.sha256
+								})
+							})
+						})
+					: undefined;
 			return {
 				...completed,
+				...(manifest.target === 'wasm32-wasi' && coverageNotes
+					? {
+							coverage: {
+								format: 'gcc-gcov' as const,
+								compilerVersion: manifest.compiler.version,
+								compilerCommit: manifest.compiler.commit,
+								notes: coverageNotes
+							}
+						}
+					: {}),
 				artifact: {
 					compiler: 'gcc',
 					compilerHost: manifest.host,
@@ -516,9 +635,19 @@ export async function createGccCompiler(
 									? 'elf-object'
 									: 'elf-executable',
 					fileName: plan.fileName,
-					bytes: workspace.get(`/workspace/${plan.fileName}`)!,
+					bytes,
 					cpu: plan.cpu,
-					...(wasmInspection ? { wasm: wasmInspection } : {})
+					...(linkInput ? { linkInput } : {}),
+					...(wasmInspection ? { wasm: wasmInspection } : {}),
+					...(plan.emit === 'executable' && coverageNotes
+						? {
+								coverage: {
+									format: 'gcc-gcov' as const,
+									directory: '/profile' as const,
+									dataPaths: coverageNotes.map((note) => note.dataPath)
+								}
+							}
+						: {})
 				}
 			};
 		},

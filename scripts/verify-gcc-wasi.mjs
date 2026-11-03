@@ -9,6 +9,7 @@ import path from 'node:path';
 import { createGzip } from 'node:zlib';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
+	assertFileSnapshot,
 	digest,
 	inspectWasm,
 	measureBundle,
@@ -85,6 +86,63 @@ for (const fixture of cases) {
 		typeof fixture.stdin === 'string' && typeof fixture.stdout === 'string',
 		'Missing fixture IO'
 	);
+	if (fixture.runOptions || fixture.expectedFiles)
+		assert(
+			options.manifest,
+			'Filesystem fixtures require the real SDK compiler and Worker --manifest path'
+		);
+	if (fixture.expectedFiles)
+		assert(Array.isArray(fixture.expectedFiles), 'expectedFiles must be an array');
+	assert(
+		Number.isSafeInteger(fixture.repeatRuns ?? 1) &&
+			(fixture.repeatRuns ?? 1) >= 1 &&
+			(fixture.repeatRuns ?? 1) <= 10,
+		'Invalid fixture repeatRuns'
+	);
+	if (fixture.nodeWasiUnsupported) {
+		assert(
+			typeof fixture.nodeWasiUnsupported === 'string',
+			'Node WASI exclusion needs a reason'
+		);
+		assert(
+			fixture.runOptions?.filesystemLimits ||
+				fixture.runOptions?.preopens?.some((mount) => mount.readonly),
+			'Only SDK read-only/quota policies may exclude the independent Node WASI oracle'
+		);
+	}
+}
+function serializableFixture(fixture) {
+	const files = (entries) =>
+		entries?.map((file) => ({
+			...file,
+			contents: typeof file.contents === 'string' ? file.contents : [...file.contents]
+		}));
+	return {
+		...fixture,
+		...(fixture.request.linkInputs
+			? {
+					request: {
+						...fixture.request,
+						linkInputs: fixture.request.linkInputs.map((input) => ({
+							...input,
+							bytes: Array.from(input.bytes)
+						}))
+					}
+				}
+			: {}),
+		...(fixture.runOptions
+			? {
+					runOptions: {
+						...fixture.runOptions,
+						preopens: fixture.runOptions.preopens?.map((mount) => ({
+							...mount,
+							files: files(mount.files)
+						}))
+					}
+				}
+			: {}),
+		...(fixture.expectedFiles ? { expectedFiles: files(fixture.expectedFiles) } : {})
+	};
 }
 const fixtures = selectCases(options.cases, cases);
 const output = path.resolve(options.output || `out/gcc-wasi-qualification-${Date.now()}`);
@@ -107,7 +165,8 @@ const report = {
 	fixtures: fixtures.map((fixture) => ({
 		id: fixture.id,
 		sha256: digest(JSON.stringify(fixture)),
-		features: fixture.features
+		features: fixture.features,
+		...(fixture.expectedFiles ? { filesystemContract: serializableFixture(fixture) } : {})
 	})),
 	cases: fixtures.map((fixture) => ({
 		id: fixture.id,
@@ -377,7 +436,7 @@ try {
 				const { artifact, ...compilation } = result;
 				return { compilation, ...(artifact ? { bytes: [...artifact.bytes] } : {}) };
 			},
-			{ ...fixtures[0].request, sources: undefined }
+			{ ...fixtures[0].request, sources: undefined, linkInputs: undefined }
 		);
 		assert.equal(
 			object.compilation.exitCode,
@@ -390,22 +449,98 @@ try {
 			compilation: object.compilation
 		};
 		await fs.writeFile(path.join(output, 'object-milestone.o'), objectBytes);
+		if (fixtures.some((fixture) => fixture.request.linkInputs?.length)) {
+			const roundtripFixture = {
+				id: 'public-link-input-roundtrip',
+				stdin: '41\n',
+				stdout: 'roundtrip 42\n'
+			};
+			const roundtrip = await page.evaluate(async (fixture) => {
+				const compiler = globalThis.gccWasiQualification;
+				const provider = await compiler.compile(
+					{
+						code: 'int external_increment(int n) { return n + 1; }\n',
+						language: 'c',
+						optimization: '2',
+						emit: 'object'
+					},
+					{ signal: AbortSignal.timeout(600_000) }
+				);
+				if (provider.exitCode || !provider.artifact?.linkInput)
+					throw new Error(`Object receipt missing: ${provider.stderr}`);
+				const { artifact: object, ...providerCompilation } = provider;
+				const result = await compiler.compile(
+					{
+						code: '#include <stdio.h>\nint external_increment(int); int main(void) { int n; if (scanf("%d", &n) != 1) return 1; printf("roundtrip %d\\n", external_increment(n)); return 0; }\n',
+						language: 'c',
+						optimization: '2',
+						linkInputs: [
+							{ path: 'increment.o', bytes: object.bytes, ...object.linkInput }
+						]
+					},
+					{ signal: AbortSignal.timeout(600_000) }
+				);
+				if (result.exitCode || !result.artifact) throw new Error(result.stderr);
+				const { artifact, ...compilation } = result;
+				const execution = await compiler.run(artifact, {
+					stdin: fixture.stdin,
+					signal: AbortSignal.timeout(30_000)
+				});
+				return {
+					providerCompilation,
+					receipt: object.linkInput,
+					objectBytes: Array.from(object.bytes),
+					compilation,
+					execution,
+					bytes: Array.from(artifact.bytes)
+				};
+			}, roundtripFixture);
+			const { bytes, objectBytes, ...proof } = roundtrip;
+			const objectData = Uint8Array.from(objectBytes),
+				programData = Uint8Array.from(bytes);
+			assert.equal(proof.receipt.sha256, digest(objectData));
+			assert.equal(proof.receipt.profile.compatibility.manifestSha256, report.manifestSha256);
+			assert.equal(proof.execution.exitCode, 0);
+			assert.equal(proof.execution.stdout, roundtripFixture.stdout);
+			assert.equal(proof.execution.stderr, '');
+			await fs.writeFile(path.join(output, 'link-input-roundtrip.o'), objectData);
+			const programPath = path.join(output, 'link-input-roundtrip.wasm');
+			await fs.writeFile(programPath, programData);
+			report.linkInputRoundtrip = {
+				...proof,
+				object: inspectWasm(objectData, { object: true }),
+				program: inspectWasm(programData),
+				node: runNodeWasi(programPath, roundtripFixture),
+				status: 'passed'
+			};
+		}
 	}
 	for (const fixture of fixtures) {
 		const entry = report.cases.find((candidate) => candidate.id === fixture.id);
 		entry.status = 'running';
 		let bytes;
 		let execution;
+		let repeatedExecutions = [];
 		if (manifest) {
 			const actual = await page.evaluate(
 				async ({ fixture, saveIntermediates }) => {
 					const compiler = globalThis.gccWasiQualification;
+					if (fixture.request.linkInputs)
+						fixture.request.linkInputs = fixture.request.linkInputs.map((input) => ({
+							...input,
+							bytes: Uint8Array.from(input.bytes)
+						}));
 					const started = performance.now();
 					const intermediates = [];
 					if (saveIntermediates) {
 						for (const emit of ['assembly', 'object']) {
 							const capture = await compiler.compile(
-								{ ...fixture.request, sources: undefined, emit },
+								{
+									...fixture.request,
+									sources: undefined,
+									linkInputs: undefined,
+									emit
+								},
 								{ signal: AbortSignal.timeout(600_000) }
 							);
 							const { artifact, ...compilation } = capture;
@@ -438,11 +573,52 @@ try {
 					for (let offset = 0; offset < bytes.length; offset += 32768)
 						chunks.push(String.fromCharCode(...bytes.subarray(offset, offset + 32768)));
 					let execution;
+					const repeatedExecutions = [];
 					try {
-						execution = await compiler.run(artifact, {
-							stdin: fixture.stdin,
-							signal: AbortSignal.timeout(30_000)
-						});
+						const runOptions = {
+							...fixture.runOptions,
+							...(fixture.runOptions?.preopens
+								? {
+										preopens: fixture.runOptions.preopens.map((mount) => ({
+											...mount,
+											files: mount.files?.map((file) => ({
+												...file,
+												contents:
+													typeof file.contents === 'string'
+														? file.contents
+														: Uint8Array.from(file.contents)
+											}))
+										}))
+									}
+								: {})
+						};
+						const originalInputs = JSON.stringify(runOptions);
+						for (let run = 0; run < (fixture.repeatRuns ?? 1); run++) {
+							const result = await compiler.run(artifact, {
+								...runOptions,
+								stdin: fixture.stdin,
+								signal: AbortSignal.timeout(30_000)
+							});
+							if (JSON.stringify(runOptions) !== originalInputs)
+								throw new Error('GCC run mutated caller filesystem inputs');
+							if (fixture.expectedFiles) {
+								if (
+									!Array.isArray(result.files) ||
+									result.files.some(
+										(file) => !(file.contents instanceof Uint8Array)
+									)
+								)
+									throw new Error(
+										'GCC run did not return Uint8Array file snapshots'
+									);
+								result.files = result.files.map((file) => ({
+									...file,
+									contents: [...file.contents]
+								}));
+							}
+							if (run === 0) execution = result;
+							else repeatedExecutions.push(result);
+						}
 					} catch (error) {
 						// Preserve the compiler stages and executable even if the guest
 						// traps; Node execution can then distinguish codegen from host bugs.
@@ -453,12 +629,30 @@ try {
 						intermediates,
 						artifact: { ...metadata, base64: btoa(chunks.join('')) },
 						execution,
+						repeatedExecutions,
 						elapsedMs: performance.now() - started
 					};
 				},
-				{ fixture, saveIntermediates: Boolean(options.saveIntermediates) }
+				{
+					fixture: serializableFixture(fixture),
+					saveIntermediates: Boolean(options.saveIntermediates)
+				}
 			);
 			entry.compilation = actual.compilation;
+			if (fixture.request.linkInputs)
+				assert.deepEqual(
+					actual.compilation.linkInputs?.map(({ path, sha256, profile }) => ({
+						path,
+						sha256,
+						profile
+					})),
+					fixture.request.linkInputs.map(({ path, sha256, profile }) => ({
+						path,
+						sha256,
+						profile
+					})),
+					`${fixture.id}: ordered external input identity receipt differs`
+				);
 			entry.elapsedMs = actual.elapsedMs;
 			if (options.saveIntermediates) {
 				entry.intermediates = [];
@@ -543,6 +737,7 @@ try {
 				);
 			bytes = Buffer.from(actual.artifact.base64, 'base64');
 			execution = actual.execution;
+			repeatedExecutions = actual.repeatedExecutions;
 		} else {
 			const receipt = provenance.programs?.[fixture.id];
 			assert(receipt, `Native receipt does not bind ${fixture.id}`);
@@ -589,11 +784,25 @@ try {
 		const file = path.join(output, `${fixture.id}.wasm`);
 		await fs.writeFile(file, bytes);
 		entry.chromiumWorker = execution;
-		entry.node = runNodeWasi(file, fixture);
+		if (repeatedExecutions.length) entry.repeatedChromiumWorkers = repeatedExecutions;
+		entry.node = fixture.nodeWasiUnsupported
+			? { status: 'not-applicable', reason: fixture.nodeWasiUnsupported }
+			: runNodeWasi(file, fixture);
 		assert(!execution.error, `${fixture.id}: Chromium Worker failed: ${execution.error}`);
-		assert.equal(execution.exitCode, 0, `${fixture.id}: Chromium Worker exit status`);
-		assert.equal(execution.stdout, fixture.stdout, `${fixture.id}: Chromium Worker stdout`);
-		assert.equal(execution.stderr, '', `${fixture.id}: Chromium Worker stderr`);
+		assert.equal(
+			repeatedExecutions.length,
+			(fixture.repeatRuns ?? 1) - 1,
+			`${fixture.id}: repeat run count`
+		);
+		for (const [index, result] of [execution, ...repeatedExecutions].entries()) {
+			const label = `${fixture.id}: Chromium Worker run ${index + 1}`;
+			assert(!result.error, `${label}: ${result.error}`);
+			assert.equal(result.exitCode, 0, `${label}: exit status`);
+			assert.equal(result.stdout, fixture.stdout, `${label}: stdout`);
+			assert.equal(result.stderr, '', `${label}: stderr`);
+			if (fixture.expectedFiles)
+				assertFileSnapshot(result.files, fixture.expectedFiles, `${label}: files`);
+		}
 		entry.success = true;
 		entry.status = 'passed';
 		await fs.writeFile(
@@ -604,12 +813,12 @@ try {
 	}
 	if (manifest) {
 		report.unsupportedFeatures = await page.evaluate(
-			async ({ request, simdSupported }) => {
+			async ({ request, simdSupported, rttiSupported }) => {
 				const compiler = globalThis.gccWasiQualification;
 				const results = [];
 				for (const feature of [
 					'exceptions',
-					'rtti',
+					...(rttiSupported ? [] : ['rtti']),
 					'threads',
 					'dynamicLinking',
 					...(simdSupported ? [] : ['simd']),
@@ -638,7 +847,11 @@ try {
 				});
 				return results;
 			},
-			{ request: defaultCases[0].request, simdSupported: manifest.capabilities.simd }
+			{
+				request: defaultCases[0].request,
+				simdSupported: manifest.capabilities.simd,
+				rttiSupported: manifest.capabilities.rtti
+			}
 		);
 		assert(
 			report.unsupportedFeatures.every((feature) => feature.rejected && feature.diagnostic),
