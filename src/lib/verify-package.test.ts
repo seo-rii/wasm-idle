@@ -191,7 +191,7 @@ describe('package install budgets', () => {
 				maxPackages: 6
 			},
 			'@wasm-idle/gcc install': {
-				maxBytes: 2.5 * MiB + 108 * 1024,
+				maxBytes: 2.5 * MiB + 112 * 1024,
 				maxFiles: 190,
 				maxPackages: 4
 			},

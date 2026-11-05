@@ -115,7 +115,9 @@ export const scenarios = [
 		// Integrating main's lazy receipt lookup and #358/#361 adds 6,907 bytes and six files.
 		// The combined 2,730,464-byte / 188-file install needs another 7 KiB to retain
 		// at least 1 KiB of headroom (1,568 bytes); dependencies remain unchanged.
-		budget: { maxBytes: 2.5 * MiB + 108 * 1024, maxFiles: 190, maxPackages: 4 },
+		// C++26 debugger contracts measure 2,734,175 bytes / 188 files / four packages.
+		// Another 4 KiB covers the 2,143-byte overflow and retains 1,953 bytes of headroom.
+		budget: { maxBytes: 2.5 * MiB + 112 * 1024, maxFiles: 190, maxPackages: 4 },
 		absentPackageNames: [
 			'wasm-idle',
 			'@wasm-idle/llvm-core',
