@@ -44,7 +44,8 @@ export function gccRelativePath(value: unknown): string {
 export function gccCompileInputs(
 	request: CrossGccCompileRequest | WasiGccCompileRequest,
 	targetKeys: readonly string[],
-	additionalReservedNames: readonly string[] = []
+	additionalReservedNames: readonly string[] = [],
+	allowCpp26 = false
 ) {
 	if (!request || typeof request !== 'object' || typeof request.code !== 'string')
 		throw new Error('GCC requires source text');
@@ -106,7 +107,8 @@ export function gccCompileInputs(
 					'c++20',
 					'gnu++20',
 					'c++23',
-					'gnu++23'
+					'gnu++23',
+					...(allowCpp26 ? ['c++26', 'gnu++26'] : [])
 				];
 	if (!standards.includes(standard)) throw new Error('Unsupported GCC language standard');
 	const main = request.preprocessed

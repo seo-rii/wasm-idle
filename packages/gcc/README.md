@@ -94,9 +94,45 @@ Bundle `capabilities` separately records `cpp`, `libc`, `libm`, `libstdcxx` and
 constructs not requiring that library can compile. Global/function-local static
 construction and destruction require `staticInitialization` independently of
 libstdc++. The SDK preserves `qualification.status`.
-The GNU runtime excludes timezone databases, C++26 debugger functions and prebuilt
-`std` modules: their atomics/signals need unsupported interfaces, so use fails at
-compile/link time. Advertising `libstdcxx` requires real STL/iostream qualification.
+The default GNU runtime excludes timezone databases, C++26 debugger functions and
+prebuilt `std` modules, so use fails at compile/link time. C++26 debugger functions
+require the separate optional profile below. Advertising `libstdcxx` requires real
+STL/iostream qualification.
+
+The optional `capabilities.debugger` defaults to `false`. A capable bundle must
+advertise `cpp` and `libstdcxx` and include both
+`/sysroot/lib/wasm32-wasi/libstdc++debugger.a` and
+`/sysroot/lib/wasm32-wasi/libwasi-emulated-signal.a` in `runtimeLibraries`.
+The auxiliary archive contains the pinned GNU implementation of `<debugging>`;
+the ordinary libstdc++ archive stays unchanged. With this capability and
+`qualification.status: 'verified'`, WASI requests may select `standard: 'c++26'`
+or `'gnu++26'`. Older bundles and the x86 API continue to accept C++23 or earlier.
+This bounded profile qualifies the three debugger functions, without promising
+general C++26 library support. It is independent of `capabilities.debug` and
+`debug: true`, which control embedded DWARF information.
+
+The capable link profile adds
+`--export-if-defined=_ZN9__gnu_cxx30debugger_signal_for_breakpointE`.
+If the program uses GNU's debugger functions, this export identifies the address
+of `__gnu_cxx::debugger_signal_for_breakpoint` in linear memory. It is an address
+export, not the mutable C++ integer itself. A cooperating debugger enables CDP
+debugging for the execution Worker, then explicitly registers by writing `-1`
+to that four-byte little-endian integer. The initial and unregistered value is
+`0`. GNU's `std::is_debugger_present()` reads this volatile state on each call;
+`std::breakpoint_if_debugging()` calls `std::breakpoint()` only when it is nonzero.
+Opening DevTools or attaching a protocol client alone does not register an
+observer, and the SDK does not infer attachment or provide a debugger host option.
+
+The observer must clear the integer before an orderly detach. If it loses its
+debugger connection unexpectedly, its controller must terminate the execution
+Worker; an abandoned registered instance must not continue. Clear registration
+when the run ends and use a fresh instance for each run. Positive signal values
+are outside this profile. `std::breakpoint()` uses GNU's `__builtin_trap()` path,
+which becomes a Wasm `unreachable` trap. CDP pause-on-exceptions can expose that
+stop, but continuing the debugger propagates the trap and terminates the guest
+run; execution cannot resume after the C++ call. Native and actual Chromium
+Worker qualification must establish these state transitions and traps before a
+bundle advertises this capability. SDK parser/planner tests do not qualify it.
 
 RTTI is opt-in: `rtti: true` requires a C++ request and a bundle with
 `capabilities.rtti: true`, backed by its qualified GNU libstdc++ runtime. C++ then

@@ -115,7 +115,9 @@ export const scenarios = [
 		// Integrating main's lazy receipt lookup and #358/#361 adds 6,907 bytes and six files.
 		// The combined 2,730,464-byte / 188-file install needs another 7 KiB to retain
 		// at least 1 KiB of headroom (1,568 bytes); dependencies remain unchanged.
-		budget: { maxBytes: 2.5 * MiB + 108 * 1024, maxFiles: 190, maxPackages: 4 },
+		// C++26 debugger contracts measure 2,734,175 bytes / 188 files / four packages.
+		// Another 4 KiB covers the 2,143-byte overflow and retains 1,953 bytes of headroom.
+		budget: { maxBytes: 2.5 * MiB + 112 * 1024, maxFiles: 190, maxPackages: 4 },
 		absentPackageNames: [
 			'wasm-idle',
 			'@wasm-idle/llvm-core',
@@ -415,7 +417,10 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// the lazy-only 624 KiB allowance; main's measured 42,586,341-byte install
 		// retains 1,819 bytes of headroom with no additional files or dependencies.
 		// Add main's 18 KiB / six-file increase to GCC's existing 700 KiB / 3,396 files.
-		budget: { maxBytes: 40 * MiB + 718 * 1024, maxFiles: 3_402, maxPackages: 70 },
+		// Fresh CI job 127268208234 measures 42,794,687 bytes / 3,402 files / 66 packages
+		// with currently allowed Svelte 5.57.3, @babel/types 7.29.11 and Vue compiler 3.5.45.
+		// Another 115 KiB covers the 116,415-byte overflow and retains 1,345 bytes of headroom.
+		budget: { maxBytes: 40 * MiB + 833 * 1024, maxFiles: 3_402, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

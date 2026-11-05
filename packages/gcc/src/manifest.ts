@@ -200,7 +200,7 @@ export function parseWasiGccManifest(value: unknown): WasiGccManifest {
 	if (typeof capabilityInput.simd !== 'boolean')
 		throw new Error('Invalid GCC WASI capability: simd');
 	capabilities.simd = capabilityInput.simd;
-	for (const name of ['longDouble', 'int128', 'coverage', 'debug']) {
+	for (const name of ['longDouble', 'int128', 'coverage', 'debug', 'debugger']) {
 		if (capabilityInput[name] !== undefined && typeof capabilityInput[name] !== 'boolean')
 			throw new Error(`Invalid GCC WASI capability: ${name}`);
 		capabilities[name] = (capabilityInput[name] ?? false) as boolean;
@@ -209,6 +209,8 @@ export function parseWasiGccManifest(value: unknown): WasiGccManifest {
 		throw new Error('GCC WASI longDouble requires libc and libm');
 	if (capabilities.coverage && (!capabilities.libc || !capabilities.staticInitialization))
 		throw new Error('GCC WASI coverage requires libc and static initialization');
+	if (capabilities.debugger && (!capabilities.cpp || !capabilities.libstdcxx))
+		throw new Error('GCC WASI debugger requires C++ and a qualified GNU libstdc++ runtime');
 	if (!Array.isArray(input.runtimeLibraries) || input.runtimeLibraries.length > 16)
 		throw new Error('Invalid GCC WASI runtime libraries');
 	const runtimeLibraries = input.runtimeLibraries.map((path: unknown) => {
@@ -222,6 +224,13 @@ export function parseWasiGccManifest(value: unknown): WasiGccManifest {
 			throw new Error('Invalid GCC WASI runtime library path');
 		return path;
 	});
+	if (capabilities.debugger)
+		for (const library of [
+			'/sysroot/lib/wasm32-wasi/libstdc++debugger.a',
+			'/sysroot/lib/wasm32-wasi/libwasi-emulated-signal.a'
+		])
+			if (!runtimeLibraries.includes(library))
+				throw new Error(`GCC WASI debugger requires runtime library: ${library}`);
 	if (record(input.linker, 'WASI linker').host !== 'wasm32-wasi')
 		throw new Error('Unsupported GCC WASI linker host');
 	return Object.freeze({

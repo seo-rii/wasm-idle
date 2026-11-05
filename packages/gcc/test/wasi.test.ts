@@ -54,6 +54,20 @@ function manifestFixture() {
 	};
 }
 
+function debuggerManifestFixture() {
+	const source = manifestFixture();
+	return {
+		...source,
+		runtimeLibraries: [
+			...source.runtimeLibraries,
+			'/sysroot/lib/wasm32-wasi/libstdc++debugger.a',
+			'/sysroot/lib/wasm32-wasi/libwasi-emulated-signal.a'
+		],
+		capabilities: { ...source.capabilities, libstdcxx: true, debugger: true },
+		qualification: { status: 'verified' }
+	};
+}
+
 // Hand-encoded transport/runtime fixture. It does not establish GCC code-generation support.
 function uleb(value: number): number[] {
 	const bytes: number[] = [];
@@ -218,6 +232,111 @@ function instructionFixture(
 }
 
 describe('GCC WASI API contract (synthetic fixtures, not GCC qualification)', () => {
+	it('requires the optional debugger capability to have C++ and both real runtime archives', () => {
+		const source = debuggerManifestFixture();
+		const manifest = parseWasiGccManifest(source);
+		expect(manifest.capabilities.debugger).toBe(true);
+		expect(Object.isFrozen(manifest.capabilities)).toBe(true);
+		expect(manifest.runtimeLibraries).toEqual(source.runtimeLibraries);
+		expect(parseWasiGccManifest(manifestFixture()).capabilities.debugger).toBe(false);
+		expect(
+			parseWasiGccManifest({
+				...manifestFixture(),
+				capabilities: { ...manifestFixture().capabilities, debugger: false }
+			}).capabilities.debugger
+		).toBe(false);
+		for (const debuggerValue of [null, 'true', 0, [], {}])
+			expect(() =>
+				parseWasiGccManifest({
+					...source,
+					capabilities: { ...source.capabilities, debugger: debuggerValue }
+				})
+			).toThrow('Invalid GCC WASI capability: debugger');
+		for (const capabilities of [
+			{ ...source.capabilities, libstdcxx: false },
+			{ ...source.capabilities, cpp: false, libstdcxx: false }
+		])
+			expect(() => parseWasiGccManifest({ ...source, capabilities })).toThrow(
+				'debugger requires C++ and a qualified GNU libstdc++ runtime'
+			);
+		for (const library of source.runtimeLibraries.slice(1))
+			expect(() =>
+				parseWasiGccManifest({
+					...source,
+					runtimeLibraries: source.runtimeLibraries.filter((entry) => entry !== library)
+				})
+			).toThrow(`debugger requires runtime library: ${library}`);
+	});
+
+	it('accepts C++26 only for the qualified WASI debugger profile without changing source', () => {
+		const source = debuggerManifestFixture();
+		const manifest = parseWasiGccManifest(source);
+		const legacy = parseWasiGccManifest(manifestFixture());
+		const code = '#include <debugging>\nint main() { return std::is_debugger_present(); }';
+		for (const standard of ['c++26', 'gnu++26']) {
+			for (const emit of ['assembly', 'object', 'executable'] as const) {
+				const request = { code, standard, emit };
+				const plan = wasiGccCompilePlan(request, manifest);
+				expect(plan.stages[0].argv).toContain(`-std=${standard}`);
+				expect(plan.stages[0].argv).not.toContain('-g');
+				expect(new TextDecoder().decode(plan.files[0].contents)).toBe(code);
+				expect(() => wasiGccCompilePlan(request, legacy)).toThrow(
+					'Unsupported GCC language standard'
+				);
+				expect(() => gccCompilePlan(request, {} as never)).toThrow(
+					'Unsupported GCC language standard'
+				);
+				expect(() => wasiGccCompilePlan({ ...request, language: 'c' }, manifest)).toThrow(
+					'Unsupported GCC language standard'
+				);
+				expect(() =>
+					wasiGccCompilePlan(
+						request,
+						parseWasiGccManifest({ ...source, qualification: { status: 'unverified' } })
+					)
+				).toThrow('C++26 requires a qualified GCC WASI debugger bundle');
+			}
+		}
+	});
+
+	it('exports the GNU observer-state address only for capable WASI bundles', () => {
+		const source = manifestFixture();
+		const legacy = parseWasiGccManifest(source);
+		const disabled = parseWasiGccManifest({
+			...source,
+			capabilities: { ...source.capabilities, debugger: false }
+		});
+		const capableSource = debuggerManifestFixture();
+		const manifest = parseWasiGccManifest(capableSource);
+		const withoutDebugger = parseWasiGccManifest({
+			...capableSource,
+			capabilities: { ...capableSource.capabilities, debugger: false }
+		});
+		const exportFlag = '--export-if-defined=_ZN9__gnu_cxx30debugger_signal_for_breakpointE';
+		for (const language of ['c', 'cpp'] as const) {
+			const request = { code: '/* original source */', language };
+			expect(wasiGccCompilePlan(request, disabled)).toEqual(
+				wasiGccCompilePlan(request, legacy)
+			);
+			expect(wasiGccCompilePlan(request, legacy).stages.at(-1)?.argv).not.toContain(
+				exportFlag
+			);
+			const plan = wasiGccCompilePlan(request, manifest);
+			const link = plan.stages.at(-1)!.argv;
+			expect(link.filter((flag) => flag === exportFlag)).toEqual([exportFlag]);
+			expect(link.slice(-manifest.runtimeLibraries.length)).toEqual(
+				manifest.runtimeLibraries
+			);
+			expect(link).not.toContain('--allow-undefined');
+			expect(plan.stages[0].argv).toEqual(
+				wasiGccCompilePlan(request, withoutDebugger).stages[0].argv
+			);
+			expect(() =>
+				wasiGccCompilePlan({ ...request, debugger: true } as never, manifest)
+			).toThrow('Unsupported GCC option');
+		}
+	});
+
 	it('gates optional debug requests and preserves disabled plans and original sources', () => {
 		const source = manifestFixture();
 		const legacy = parseWasiGccManifest(source);
