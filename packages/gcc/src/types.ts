@@ -185,6 +185,9 @@ export interface WasiGccManifest {
 		coverage?: boolean;
 		/** Qualified embedded DWARF4 source/type/location information at O0. */
 		debug?: boolean;
+		/** Qualified GNU C++26 debugger functions with explicit observer registration.
+		 * Independent of DWARF debug information; std::breakpoint() traps without resumption. */
+		debugger?: boolean;
 		exceptions: false;
 		/** Qualified GNU RTTI runtime; exception-dependent failures remain unsupported. */
 		rtti: boolean;

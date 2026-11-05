@@ -18,8 +18,14 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 					? Array.from({ length: 64 }, (_, i) => `program${i ? `.${i}` : ''}.gcno`)
 					: []),
 				...Array.from({ length: 63 }, (_, i) => `program.${i + 1}.wat`)
-			]
+			],
+			manifest.capabilities.debugger === true
 		);
+	if (
+		(standard === 'c++26' || standard === 'gnu++26') &&
+		manifest.qualification.status !== 'verified'
+	)
+		throw new Error('C++26 requires a qualified GCC WASI debugger bundle');
 	if (request.debug !== undefined && typeof request.debug !== 'boolean')
 		throw new Error('Invalid GCC WASI debug option');
 	const debug = request.debug === true;
@@ -151,6 +157,9 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 			tool: 'ld',
 			argv: [
 				'--fatal-warnings',
+				...(manifest.capabilities.debugger
+					? ['--export-if-defined=_ZN9__gnu_cxx30debugger_signal_for_breakpointE']
+					: []),
 				'-m',
 				'wasm32',
 				'-e',
