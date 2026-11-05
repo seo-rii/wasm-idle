@@ -15,7 +15,10 @@ function receipt(bytes) {
 	return { bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') };
 }
 
-async function fixture(t, { version = '0.16.0', javacRevision = revision } = {}) {
+async function fixture(
+	t,
+	{ version = '0.17.0-dev-3', lockedVersion = '0.17.0-dev-3', javacRevision = revision } = {}
+) {
 	const root = await mkdtemp(path.join(os.tmpdir(), 'teavm-candidate-test-'));
 	t.after(() => rm(root, { recursive: true, force: true }));
 	const source = path.join(root, 'upstream');
@@ -41,9 +44,9 @@ async function fixture(t, { version = '0.16.0', javacRevision = revision } = {})
 	const lock = {
 		format: 'wasm-idle-teavm-candidate-inputs-v1',
 		profileId: 'test-candidate',
-		teavmVersion: '0.16.0',
+		teavmVersion: lockedVersion,
 		source: {
-			revision: '208d4c97a602ba0df055f16e6882059fb69d0122',
+			revision: '76b5b53850f74e510ec8588a56a211cf60e9d496',
 			archive: receipt(await readFile(sourceArchivePath))
 		},
 		openjdk: { revision },
@@ -103,6 +106,32 @@ test('an existing work directory is preserved', async (t) => {
 	assert.equal(await readFile(path.join(inputs.workDir, 'keep.txt'), 'utf8'), 'existing work');
 });
 
+test('preparation accepts an exact released or numbered development version', async (t) => {
+	for (const version of ['0.16.0', '0.17.0-dev-3']) {
+		const inputs = await fixture(t, { version, lockedVersion: version });
+		const prepared = await prepareTeaVmCandidate(inputs);
+		assert.equal(prepared.lock.teavmVersion, version);
+		assert.equal(
+			await readFile(path.join(prepared.sourceDir, 'compiler/marker.txt'), 'utf8'),
+			'compatible\n'
+		);
+	}
+});
+
+test('mutable compiler versions are rejected before creating a work directory', async (t) => {
+	for (const version of [
+		'0.17.0-SNAPSHOT',
+		'0.17.0-dev-SNAPSHOT',
+		'latest',
+		'latest.release',
+		'0.17.+'
+	]) {
+		const inputs = await fixture(t, { version, lockedVersion: version });
+		await assert.rejects(prepareTeaVmCandidate(inputs), /Invalid TeaVM candidate input lock/u);
+		await assert.rejects(access(inputs.workDir));
+	}
+});
+
 test('archive and patch digest drift fail before creating a work directory', async (t) => {
 	for (const field of ['sourceArchivePath', 'patchPath']) {
 		const inputs = await fixture(t);
@@ -113,7 +142,11 @@ test('archive and patch digest drift fail before creating a work directory', asy
 });
 
 test('the source compiler and real javac revision must match the candidate lock', async (t) => {
-	for (const options of [{ version: '0.13.1' }, { javacRevision: '0'.repeat(40) }]) {
+	for (const options of [
+		{ version: '0.16.0' },
+		{ version: '0.17.0-dev-2' },
+		{ javacRevision: '0'.repeat(40) }
+	]) {
 		const inputs = await fixture(t, options);
 		await assert.rejects(
 			prepareTeaVmCandidate(inputs),
@@ -177,17 +210,17 @@ async function completedBuild(t, { readOnly = false } = {}) {
 	const resourceBytes = Buffer.from([0, 97, 115, 109, 1, 0, 0, 0]);
 	await mkdir(path.dirname(path.join(jarRoot, resourcePath)), { recursive: true });
 	await writeFile(path.join(jarRoot, resourcePath), resourceBytes);
-	const jarName = 'teavm-wasm-gc-deobfuscator-0.16.0.jar';
+	const jarName = 'teavm-wasm-gc-deobfuscator-0.17.0-dev-3.jar';
 	const jarPath = path.join(
 		cache,
-		'modules-2/files-2.1/org.teavm/teavm-wasm-gc-deobfuscator/0.16.0/test-digest',
+		'modules-2/files-2.1/org.teavm/teavm-wasm-gc-deobfuscator/0.17.0-dev-3/test-digest',
 		jarName
 	);
 	await mkdir(path.dirname(jarPath), { recursive: true });
 	await execFile('zip', ['-qr', jarPath, '.'], { cwd: jarRoot });
 	const lock = {
 		profileId: 'test-built-candidate',
-		teavmVersion: '0.16.0',
+		teavmVersion: '0.17.0-dev-3',
 		deobfuscator: {
 			artifact: { name: jarName, ...receipt(await readFile(jarPath)) },
 			resource: { path: resourcePath, ...receipt(resourceBytes) }

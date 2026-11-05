@@ -103,16 +103,16 @@ describe('checked-in TeaVM runtime trust root', () => {
 		expect(manifest).toMatchObject({
 			format: TEAVM_MANIFEST_FORMAT,
 			runtime: 'teavm-javac',
-			profileId: 'teavm-javac-0.16.0-208d4c9-integrated-overlay-v1',
+			profileId: 'teavm-javac-0.17.0-dev-3-76b5b53-integrated-overlay-v1',
 			provenanceLevel: 'source-build-and-integrated-overlay-reproduced',
 			source: {
 				repository: 'https://github.com/konsoletyper/teavm-javac.git',
-				revision: '208d4c97a602ba0df055f16e6882059fb69d0122'
+				revision: '76b5b53850f74e510ec8588a56a211cf60e9d496'
 			},
 			components: {
 				teavm: {
-					version: '0.16.0',
-					revision: 'e87d452e4bd70c77b9e19314a46c3d6971c148b6'
+					version: '0.17.0-dev-3',
+					revision: '6df39ceae1897750419abfa2ff8905be8a6145f7'
 				},
 				openjdk: { revision: '6c48f4ed707bf0b15f9b6098de30db8aae6fa40f' }
 			},
@@ -120,8 +120,7 @@ describe('checked-in TeaVM runtime trust root', () => {
 				jdk: { version: '25.0.5+8' },
 				gradle: { version: '9.1.0' },
 				sourcePatches: [
-					{ path: 'scripts/teavm/patches/teavm-javac-0.16.0-compat.patch' },
-					{ path: 'scripts/teavm/patches/teavm-javac-0.16.0-debug-scopes.patch' }
+					{ path: 'scripts/teavm/patches/teavm-javac-0.17.0-dev-3-compat.patch' }
 				],
 				overlay: { mode: 'gradle-source-set' }
 			},
@@ -133,7 +132,12 @@ describe('checked-in TeaVM runtime trust root', () => {
 			}
 		});
 		const overlay = manifest.build.overlay;
-		expect(overlay.sources).toHaveLength(10);
+		expect(overlay.sources.map(({ path }) => path)).toEqual([
+			'compiler/src/classlibOverlay/java/org/teavm/classlib/impl/console/JsConsolePrintStream.java',
+			'compiler/src/classlibOverlay/java/org/teavm/classlib/java/util/TFormatter.java',
+			'compiler/src/classlibOverlay/java/org/teavm/classlib/java/util/TIllegalFormatWidthException.java'
+		]);
+		expect(manifest.build).not.toHaveProperty('compilerOverrides');
 		for (const correspondence of overlay.correspondence.sources) {
 			const source = overlay.sources.find(({ path }) =>
 				path.endsWith(correspondence.sourceEntry)
@@ -199,9 +203,6 @@ describe('checked-in TeaVM runtime trust root', () => {
 				gradle: { verificationMetadata: { path: string; bytes: number; sha256: string } };
 				sourcePatches: Array<{ path: string; bytes: number; sha256: string }>;
 				overlay: { sources: Array<{ path: string; bytes: number; sha256: string }> };
-				compilerOverrides: {
-					sources: Array<{ path: string; bytes: number; sha256: string }>;
-				};
 			};
 			producer: { files: Array<{ path: string; bytes: number; sha256: string }> };
 			legalFiles: Array<{
@@ -221,7 +222,7 @@ describe('checked-in TeaVM runtime trust root', () => {
 			}))
 		];
 
-		// Every overlay and emitter override is a complete file inside the pinned patches.
+		// Every remaining overlay is a complete file inside the pinned compatibility patch.
 		const patch = (
 			await Promise.all(
 				lock.build.sourcePatches.map(({ path }) =>
@@ -229,10 +230,7 @@ describe('checked-in TeaVM runtime trust root', () => {
 				)
 			)
 		).join('\n');
-		for (const source of [
-			...lock.build.overlay.sources,
-			...lock.build.compilerOverrides.sources
-		]) {
+		for (const source of lock.build.overlay.sources) {
 			const section = patch
 				.split(`diff --git a/${source.path} b/${source.path}\n`)[1]
 				?.split('\ndiff --git ')[0];

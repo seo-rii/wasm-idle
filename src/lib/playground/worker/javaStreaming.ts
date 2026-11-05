@@ -85,9 +85,9 @@ export async function loadStreamingJavaCompiler(baseUrl: string, maxAssetBytes: 
 
 /** Transform only the known verified loader, preserving TeaVM imports and exports. */
 export function acceptCompiledTeaVmModule(source: string) {
-	// The complete byte-compilation branch belongs to the receipt-pinned 0.16 loader.
+	// The complete byte-compilation branch belongs to the receipt-pinned 0.17.0-dev-3 loader.
 	// Its minified identifier alone is not a compatibility contract.
-	const anchor = 'async function J(e,t){if(typeof e!=="string"){return await WebAssembly.compile(e,{builtins:["js-string"]})}';
+	const anchor = 'async function C(e,t){if(typeof e!=="string"){return await WebAssembly.compile(e,{builtins:["js-string"]})}';
 	if (source.split(anchor).length !== 2) throw new Error('Unsupported TeaVM loader for compiled-module input');
 	return source.replace(anchor, anchor.replace('{if(', '{if(e instanceof WebAssembly.Module)return e;if('));
 }

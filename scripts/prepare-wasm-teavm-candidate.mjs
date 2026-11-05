@@ -55,7 +55,7 @@ async function buildCommand(args, cwd, env) {
 
 /**
  * Prepare the pinned source and migrated compatibility patches in a new directory.
- * This never publishes runtime assets or changes the existing 0.13.1 output receipts.
+ * This never publishes runtime assets or changes the shipped output receipts.
  */
 export async function prepareTeaVmCandidate({
 	sourceArchivePath,
@@ -68,7 +68,7 @@ export async function prepareTeaVmCandidate({
 		lock.format !== 'wasm-idle-teavm-candidate-inputs-v1' ||
 		!/^[a-f0-9]{40}$/u.test(lock.source?.revision ?? '') ||
 		!/^[a-f0-9]{40}$/u.test(lock.openjdk?.revision ?? '') ||
-		!/^\d+\.\d+\.\d+$/u.test(lock.teavmVersion ?? '') ||
+		!/^\d+\.\d+\.\d+(?:-dev-[1-9]\d*)?$/u.test(lock.teavmVersion ?? '') ||
 		!Array.isArray(lock.sourcePatches) ||
 		lock.sourcePatches.length === 0
 	) {
