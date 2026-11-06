@@ -426,7 +426,9 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Another 115 KiB covers the 116,415-byte overflow and retains 1,345 bytes of headroom.
 		// GCC relaxed-simd CI job 127948998376 measures 42,803,390 bytes / 3,402 files / 66 packages.
 		// Add 9 KiB for this feature while preserving the preceding aggregate headroom.
-		budget: { maxBytes: 40 * MiB + 842 * 1024, maxFiles: 3_402, maxPackages: 70 },
+		// GCC atomics CI job 127950008400 measures 42,843,769 bytes / 3,406 files / 66 packages.
+		// Add 40 KiB for this feature while preserving the preceding aggregate headroom.
+		budget: { maxBytes: 40 * MiB + 882 * 1024, maxFiles: 3_406, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
