@@ -434,7 +434,9 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Add 40 KiB for this feature while preserving the preceding aggregate headroom.
 		// GCC tls CI job 127951159791 measures 42,875,309 bytes / 3,408 files / 66 packages.
 		// Add 31 KiB for this feature while preserving the preceding aggregate headroom.
-		budget: { maxBytes: 40 * MiB + 913 * 1024, maxFiles: 3_408, maxPackages: 70 },
+		// GCC eh CI job 127952182494 measures 42,892,682 bytes / 3,408 files / 66 packages.
+		// Add 17 KiB for this feature while preserving the preceding aggregate headroom.
+		budget: { maxBytes: 40 * MiB + 930 * 1024, maxFiles: 3_408, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
