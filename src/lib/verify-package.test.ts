@@ -216,8 +216,8 @@ describe('package install budgets', () => {
 				maxPackages: 10
 			},
 			'all public packages/adapters aggregate': {
-				maxBytes: 40 * MiB + 882 * 1024,
-				maxFiles: 3_406,
+				maxBytes: 40 * MiB + 913 * 1024,
+				maxFiles: 3_408,
 				maxPackages: 70
 			}
 		});
@@ -227,9 +227,9 @@ describe('package install budgets', () => {
 		const scenario = scenarios.find(
 			(entry) => entry.name === 'all public packages/adapters aggregate'
 		)!;
-		// Actual GitHub packages job 127950008400, including all public adapters.
+		// Actual GitHub packages job 127951159791, including all public adapters.
 		expect(() =>
-			assertInstallBudget(scenario, { bytes: 42_843_769, files: 3_406, packages: 66 })
+			assertInstallBudget(scenario, { bytes: 42_875_309, files: 3_408, packages: 66 })
 		).not.toThrow();
 		const atLimit = {
 			bytes: scenario.budget.maxBytes,
