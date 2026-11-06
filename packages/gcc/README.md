@@ -1,29 +1,26 @@
 # @wasm-idle/gcc
 
-`@wasm-idle/gcc` runs real GCC in a browser Worker. `createGccWorker` selects
-GCC 13.3.0 or 16.2.0/GNU binutils with `target: 'x86_64-linux-gnu'`, or a separate experimental
-GCC 17 Wasm backend with `target: 'wasm32-wasi'`. `createCrossGccWorker` and
-`createCrossGccCompiler` retain the x86 API.
+`createGccWorker` runs real GCC in a browser Worker: GCC 13.3.0/16.2.0 with GNU
+binutils for `target: 'x86_64-linux-gnu'`, or experimental GCC 17 for
+`target: 'wasm32-wasi'`. `createCrossGccWorker` and `createCrossGccCompiler` retain
+the x86 API.
 
-Both compiler hosts are `wasm32-emscripten`. The separate output targets produce
-x86 assembly/ELF for download, or WAT/Wasm objects/WASI Preview 1 executables.
-There is no browser x86 executor; ELF never enters `WebAssembly.compile` or `instantiate`.
+Both hosts use `wasm32-emscripten`, producing x86 assembly/ELF downloads or
+WAT/Wasm objects/WASI Preview 1 executables. ELF never enters WebAssembly execution.
 
-This MIT-licensed JavaScript/TypeScript host depends on `@wasm-idle/core` for assets
-and archives, and `@bjorn3/browser_wasi_shim` 0.4.2 for execution. It has no LLVM
-compiler-package dependency. The producer separately distributes GCC, binutils,
-Emscripten modules and GNU sysroots under their own licenses and obligations.
+The MIT JavaScript/TypeScript host uses `@wasm-idle/core` for assets/archives and
+`@bjorn3/browser_wasi_shim` 0.4.2 for execution, with no LLVM package dependency.
+GCC, binutils, Emscripten modules and GNU sysroots ship separately under their own licenses.
 
-Provide a qualified bundle from `wasm-llvm/producer/gcc-browser` (x86) or
-`producer/gcc-wasi` (Wasm). There is no implicit CDN, fallback compiler or bundled
-binary. V1 requires matching compiler, GNU library and include versions: GCC 13.3.0/13
-or 16.2.0/16. Loading an `unverified` manifest does not qualify its compiler.
+Provide a qualified `wasm-llvm/producer/gcc-browser` (x86) or `producer/gcc-wasi`
+(Wasm) bundle. No implicit CDN, fallback compiler or bundled binary is provided.
+V1 compiler/library/include versions must match: GCC 13.3.0/13 or 16.2.0/16.
+Loading an `unverified` manifest does not qualify its compiler.
 
 ## Explicit WebAssembly output
 
-The separate v2 manifest (`kind: gcc-wasm32-wasi`) pins GCC, patched WABT, LLD and
-wasi-libc revisions, plus every asset's size and SHA-256. Supply its independently
-obtained manifest digest. The existing x86 compiler is unchanged.
+The v2 manifest (`kind: gcc-wasm32-wasi`) pins GCC, patched WABT, LLD and wasi-libc
+revisions and asset sizes/SHA-256. Supply an independently trusted manifest digest.
 
 ```ts
 import { createGccWorker } from '@wasm-idle/gcc';
@@ -90,15 +87,16 @@ The optional `capabilities.int128` flag is for producer-qualified signed/unsigne
 or link override. Native and Worker execution must qualify a bundle before it
 advertises this capability.
 
-Bundle `capabilities` separately records `cpp`, `libc`, `libm`, `libstdcxx` and
-`staticInitialization`. Without `cpp`, C++ requests fail; without `libstdcxx`, only
-constructs not requiring that library can compile. Global/function-local static
-construction and destruction require `staticInitialization` independently of
-libstdc++. The SDK preserves `qualification.status`.
-The default GNU runtime excludes timezone databases, C++26 debugger functions and
-prebuilt `std` modules, so use fails at compile/link time. C++26 debugger functions
-require the separate optional profile below. Advertising `libstdcxx` requires real
-STL/iostream qualification.
+Bundle capabilities distinguish C++, libc, libm, GNU libstdc++ and static
+initialization. C++ requires `cpp`; STL/iostream requires qualified `libstdcxx`;
+global/function-local construction and destruction require `staticInitialization`.
+The SDK preserves `qualification.status`.
+
+Optional `timezoneDatabase` advertises embedded GNU C++20 time zones; provenance
+pins the data version. No compile option, timezone files or network is needed;
+`current_zone()` falls back to UTC. Throwing lookups need `exceptions: true`.
+TLS/shared combinations and prebuilt `std` modules are unqualified. C++26
+debugger functions use the separate profile below.
 
 The optional `capabilities.debugger` defaults to `false`. A capable bundle must
 advertise `cpp` and `libstdcxx` and include both

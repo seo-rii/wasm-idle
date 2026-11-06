@@ -212,14 +212,6 @@ export function parseWasiGccManifest(value: unknown): WasiGccManifest {
 	if (typeof capabilityInput.exceptions !== 'boolean')
 		throw new Error('Invalid GCC WASI capability: exceptions');
 	capabilities.exceptions = capabilityInput.exceptions;
-	if (
-		capabilities.exceptions &&
-		(!capabilities.cpp ||
-			!capabilities.libstdcxx ||
-			!capabilities.libc ||
-			!capabilities.staticInitialization)
-	)
-		throw new Error('GCC exceptions require C++ and the qualified GNU runtime');
 	for (const name of ['threads', 'dynamicLinking']) {
 		if (capabilityInput[name] !== false)
 			throw new Error(`Unsupported GCC WASI capability: ${name}`);
@@ -250,11 +242,21 @@ export function parseWasiGccManifest(value: unknown): WasiGccManifest {
 	if (capabilities.relaxedSimd && !capabilities.simd)
 		throw new Error('GCC WASI relaxed SIMD requires the SIMD capability');
 	// Preserve legacy parsed shapes as well as the absence=false behavior.
-	if (capabilityInput.tls !== undefined) {
-		if (typeof capabilityInput.tls !== 'boolean')
-			throw new Error('Invalid GCC WASI capability: tls');
-		capabilities.tls = capabilityInput.tls;
-	}
+	for (const name of ['tls', 'timezoneDatabase'])
+		if (capabilityInput[name] !== undefined) {
+			if (typeof capabilityInput[name] !== 'boolean')
+				throw new Error(`Invalid GCC WASI capability: ${name}`);
+			capabilities[name] = capabilityInput[name] as boolean;
+		}
+	for (const name of ['exceptions', 'timezoneDatabase'])
+		if (
+			capabilities[name] &&
+			(!capabilities.cpp ||
+				!capabilities.libstdcxx ||
+				!capabilities.libc ||
+				!capabilities.staticInitialization)
+		)
+			throw new Error(`GCC ${name} require C++ and the qualified GNU runtime`);
 	if (capabilities.sharedMemory && !capabilities.atomics)
 		throw new Error('GCC shared memory requires the atomics capability');
 	if (capabilities.longDouble && (!capabilities.libc || !capabilities.libm))
