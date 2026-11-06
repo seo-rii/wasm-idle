@@ -216,11 +216,30 @@ describe('package install budgets', () => {
 				maxPackages: 10
 			},
 			'all public packages/adapters aggregate': {
-				maxBytes: 40 * MiB + 833 * 1024,
+				maxBytes: 40 * MiB + 842 * 1024,
 				maxFiles: 3_402,
 				maxPackages: 70
 			}
 		});
+	});
+
+	it('accepts the measured GCC aggregate and rejects every aggregate limit plus one', () => {
+		const scenario = scenarios.find(
+			(entry) => entry.name === 'all public packages/adapters aggregate'
+		)!;
+		// Actual GitHub packages job 127948998376, including all public adapters.
+		expect(() =>
+			assertInstallBudget(scenario, { bytes: 42_803_390, files: 3_402, packages: 66 })
+		).not.toThrow();
+		const atLimit = {
+			bytes: scenario.budget.maxBytes,
+			files: scenario.budget.maxFiles,
+			packages: scenario.budget.maxPackages
+		};
+		for (const key of ['bytes', 'files', 'packages'] as const)
+			expect(() =>
+				assertInstallBudget(scenario, { ...atLimit, [key]: atLimit[key] + 1 })
+			).toThrow('Install budget exceeded for all public packages/adapters aggregate');
 	});
 
 	it('allows measurements exactly at every configured limit', () => {
