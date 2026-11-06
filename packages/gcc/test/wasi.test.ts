@@ -1197,6 +1197,10 @@ describe('GCC WASI API contract (synthetic fixtures, not GCC qualification)', ()
 				expect(() => gccCompilePlan({ code: '', rtti } as never, existing)).toThrow(
 					'Unsupported GCC option'
 				);
+			for (const exceptions of [false, true])
+				expect(() => gccCompilePlan({ code: '', exceptions } as never, existing)).toThrow(
+					'Unsupported GCC option'
+				);
 		}
 	});
 

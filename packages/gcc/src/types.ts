@@ -188,8 +188,9 @@ export interface WasiGccManifest {
 		/** Qualified GNU C++26 debugger functions with explicit observer registration.
 		 * Independent of DWARF debug information; std::breakpoint() traps without resumption. */
 		debugger?: boolean;
-		exceptions: false;
-		/** Qualified GNU RTTI runtime; exception-dependent failures remain unsupported. */
+		/** Qualified modern Wasm EH and the matching GNU C++ runtime. */
+		exceptions: boolean;
+		/** GNU RTTI; exception-dependent failures require the exception profile. */
 		rtti: boolean;
 		threads: false;
 		dynamicLinking: false;
@@ -215,8 +216,9 @@ export interface CreateGccCompilerOptions extends CreateCrossGccCompilerOptions 
 export interface WasiGccCompileRequest extends Omit<CrossGccCompileRequest, 'cpu'> {
 	/** Baseline Wasm only. An x86 AVX2/FMA profile is not Wasm SIMD. */
 	readonly cpu?: 'wasm32';
-	readonly exceptions?: false;
-	/** Opt in to qualified C++ RTTI. Omitted/false retains -fno-rtti; exceptions stay disabled. */
+	/** Explicit modern Wasm EH for ordinary C++; omitted/false preserves -fno-exceptions. */
+	readonly exceptions?: boolean;
+	/** Opt in to qualified C++ RTTI. Omitted/false retains -fno-rtti. */
 	readonly rtti?: boolean;
 	readonly threads?: false;
 	readonly dynamicLinking?: false;
@@ -244,6 +246,8 @@ export interface WasiGccLinkProfile {
 	readonly target: 'wasm32-wasi';
 	readonly abi: 'wasm32-wasi-preview1';
 	readonly simd: boolean;
+	/** Modern Wasm EH profile. Legacy omission means false. */
+	readonly exceptions?: boolean;
 	/** Relaxed SIMD compilation profile. Legacy omission means false. */
 	readonly relaxedSimd?: boolean;
 	/** Native atomic compilation profile. Legacy omission means false. */
@@ -302,6 +306,8 @@ export interface GccWasmInspection {
 		relaxedSimd: boolean;
 		atomics: boolean;
 		bulkMemory: boolean;
+		/** Actual modern EH instructions, exception references or tag metadata. */
+		exceptions?: boolean;
 		/** Actual TLS object metadata or validated executable TLS ABI; absence means false. */
 		tls?: boolean;
 	}>;
@@ -327,6 +333,8 @@ export interface WasiGccArtifact extends Omit<CrossGccArtifact, 'target' | 'form
 	readonly format: 'assembly' | 'wasm-object' | 'wasm-executable';
 	readonly cpu: 'wasm32';
 	readonly wasm?: GccWasmInspection;
+	/** Retains explicit compile-time modern EH selection for checked execution. */
+	readonly exceptions?: boolean;
 	/** Retains explicit compile-time relaxed SIMD selection for checked execution. */
 	readonly relaxedSimd?: boolean;
 	/** Retains explicit compile-time atomic selection for checked execution. */

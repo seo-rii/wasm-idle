@@ -731,6 +731,43 @@ try {
 				);
 			}
 			entry.sdkInspection = actual.artifact.wasm;
+			assert.equal(
+				actual.artifact.exceptions === true,
+				fixture.request.exceptions === true,
+				`${fixture.id}: exception artifact profile differs from the request`
+			);
+			if (fixture.request.exceptions === true) {
+				assert(
+					manifest.capabilities.exceptions &&
+						manifest.qualification.status === 'verified',
+					'Exception qualification requires a verified capable bundle'
+				);
+				for (const stage of actual.compilation.stages) {
+					if (/^cc1/.test(stage.tool))
+						assert(
+							stage.argv.includes('-mexception-handling') &&
+								stage.argv.includes('-fexceptions') &&
+								!stage.argv.includes('-fno-exceptions'),
+							'Missing explicit GCC exception flags'
+						);
+					if (stage.tool === 'as')
+						assert(
+							stage.argv.includes('--enable-exceptions'),
+							'Missing WABT exception flag'
+						);
+					if (stage.tool === 'ld')
+						for (const name of [
+							'__main_void',
+							'__wasm_call_ctors',
+							'__wasm_call_dtors',
+							'exit'
+						])
+							assert(
+								stage.argv.includes('--wrap=' + name),
+								'Missing GNU exception boundary: ' + name
+							);
+				}
+			}
 			if (manifest.capabilities.relaxedSimd) {
 				const flag = fixture.request.relaxedSimd ? '-mrelaxed-simd' : '-mno-relaxed-simd';
 				assert(
@@ -830,11 +867,17 @@ try {
 	}
 	if (manifest) {
 		report.unsupportedFeatures = await page.evaluate(
-			async ({ request, simdSupported, relaxedSimdSupported, rttiSupported }) => {
+			async ({
+				request,
+				simdSupported,
+				relaxedSimdSupported,
+				rttiSupported,
+				exceptionsSupported
+			}) => {
 				const compiler = globalThis.gccWasiQualification;
 				const results = [];
 				for (const feature of [
-					'exceptions',
+					...(exceptionsSupported ? [] : ['exceptions']),
 					...(rttiSupported ? [] : ['rtti']),
 					'threads',
 					'dynamicLinking',
@@ -870,7 +913,8 @@ try {
 				request: defaultCases[0].request,
 				simdSupported: manifest.capabilities.simd,
 				relaxedSimdSupported: manifest.capabilities.relaxedSimd,
-				rttiSupported: manifest.capabilities.rtti
+				rttiSupported: manifest.capabilities.rtti,
+				exceptionsSupported: manifest.capabilities.exceptions
 			}
 		);
 		assert(

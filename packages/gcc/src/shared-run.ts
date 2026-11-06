@@ -14,6 +14,8 @@ export async function runGccSharedArtifact(
 	manifest: WasiGccManifest
 ): Promise<GccSharedRunResult> {
 	const started = performance.now();
+	if (artifact?.exceptions !== undefined && artifact.exceptions !== false)
+		throw new Error('GCC shared execution does not support exceptions');
 	if (
 		artifact?.target !== 'wasm32-wasi' ||
 		artifact.format !== 'wasm-executable' ||

@@ -123,7 +123,9 @@ export const scenarios = [
 		// The minimum 39 KiB increase covers 38,933 bytes; the new Worker pair needs two more files.
 		// TLS metadata/lifecycle/formatter/errno contracts measure 2,814,616 bytes / 194 files / four packages.
 		// Another 30 KiB covers the 30,360-byte overflow; one metadata helper adds two files.
-		budget: { maxBytes: 2.5 * MiB + 189 * 1024, maxFiles: 194, maxPackages: 4 },
+		// Modern EH admission/receipts/entry wrappers measure 2,832,075 bytes with the same files/dependencies.
+		// Another 17 KiB covers the 17,099-byte overflow and retains 309 bytes of headroom.
+		budget: { maxBytes: 2.5 * MiB + 206 * 1024, maxFiles: 194, maxPackages: 4 },
 		absentPackageNames: [
 			'wasm-idle',
 			'@wasm-idle/llvm-core',

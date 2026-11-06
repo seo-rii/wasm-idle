@@ -48,6 +48,101 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('GCC Worker ownership and cancellation', () => {
+	it('snapshots exception request/receipt/result/run profiles without detaching caller bytes', async () => {
+		const compiler = await createGccWorker({ ...options, target: 'wasm32-wasi' });
+		const transport = FixtureWorker.instances[0];
+		const bytes = Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0);
+		const profile: WasiGccLinkProfile = {
+			target: 'wasm32-wasi',
+			abi: 'wasm32-wasi-preview1',
+			simd: false,
+			language: 'cpp',
+			exceptions: true,
+			compatibility: {
+				kind: 'gcc-bundle',
+				manifestSha256: 'a'.repeat(64),
+				sysrootSha256: 'b'.repeat(64)
+			}
+		};
+		const request = {
+			code: '',
+			language: 'cpp' as const,
+			exceptions: true,
+			linkInputs: [
+				{
+					path: 'eh.o',
+					format: 'wasm-object' as const,
+					bytes,
+					sha256: 'c'.repeat(64),
+					profile
+				}
+			]
+		};
+		const compiling = compiler.compile(request);
+		request.exceptions = false;
+		(profile as { exceptions: boolean }).exceptions = false;
+		const message = transport.messages.at(-1)!;
+		expect(message.request).toMatchObject({
+			exceptions: true,
+			linkInputs: [{ profile: { exceptions: true, language: 'cpp' } }]
+		});
+		expect(bytes.byteLength).toBe(8);
+		const artifact: WasiGccArtifact = {
+			compiler: 'gcc',
+			compilerHost: 'wasm32-emscripten',
+			target: 'wasm32-wasi',
+			format: 'wasm-executable',
+			fileName: 'program.wasm',
+			cpu: 'wasm32',
+			bytes,
+			exceptions: true,
+			wasm: {
+				imports: [],
+				exports: [],
+				hasLinkingMetadata: false,
+				features: {
+					simd128: false,
+					relaxedSimd: false,
+					atomics: false,
+					bulkMemory: false,
+					exceptions: true
+				}
+			}
+		};
+		transport.onmessage?.({
+			data: structuredClone({
+				id: message.id,
+				type: 'result',
+				result: { exitCode: 0, stdout: '', stderr: '', stages: [], artifact }
+			})
+		});
+		const result = await compiling;
+		expect(result.artifact).toEqual(artifact);
+		const running = compiler.run(result.artifact!);
+		const runMessage = transport.messages.at(-1)!;
+		(result.artifact as { exceptions: boolean }).exceptions = false;
+		expect(runMessage.artifact).toMatchObject({
+			exceptions: true,
+			wasm: { features: { exceptions: true } }
+		});
+		transport.onmessage?.({
+			data: {
+				id: runMessage.id,
+				type: 'run-result',
+				result: {
+					exitCode: 0,
+					stdout: '',
+					stderr: '',
+					milliseconds: 0,
+					peakMemoryBytes: 0,
+					files: []
+				}
+			}
+		});
+		await running;
+		compiler.dispose();
+	});
+
 	it('snapshots TLS selection and reserved arena through shared artifact transport', async () => {
 		const compiler = await createGccWorker({ ...options, target: 'wasm32-wasi' });
 		const transport = FixtureWorker.instances[0];

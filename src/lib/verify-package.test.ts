@@ -191,7 +191,7 @@ describe('package install budgets', () => {
 				maxPackages: 6
 			},
 			'@wasm-idle/gcc install': {
-				maxBytes: 2.5 * MiB + 189 * 1024,
+				maxBytes: 2.5 * MiB + 206 * 1024,
 				maxFiles: 194,
 				maxPackages: 4
 			},
@@ -252,6 +252,19 @@ describe('package install budgets', () => {
 				})
 			).not.toThrow();
 		}
+	});
+
+	it('rejects each GCC byte/file/package limit plus one after the EH allowance', () => {
+		const scenario = scenarios.find((entry) => entry.name === '@wasm-idle/gcc install')!;
+		const atLimit = {
+			bytes: scenario.budget.maxBytes,
+			files: scenario.budget.maxFiles,
+			packages: scenario.budget.maxPackages
+		};
+		for (const key of ['bytes', 'files', 'packages'] as const)
+			expect(() =>
+				assertInstallBudget(scenario, { ...atLimit, [key]: atLimit[key] + 1 })
+			).toThrow('Install budget exceeded for @wasm-idle/gcc install');
 	});
 
 	it('reports all exceeded limits and the largest package contributors', () => {
