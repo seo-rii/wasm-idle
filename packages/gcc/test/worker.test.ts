@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createCrossGccWorker, createGccWorker } from '../src/worker.js';
-import type { WasiGccCompileRequest, WasiGccLinkProfile } from '../src/types.js';
+import type { WasiGccArtifact, WasiGccCompileRequest, WasiGccLinkProfile } from '../src/types.js';
 
 /** Synthetic transport fixture only: CPU/compiler correctness belongs to the real bundle probe. */
 class FixtureWorker {
@@ -46,6 +46,98 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('GCC Worker ownership and cancellation', () => {
+	it('retains relaxed SIMD request, link profile, inspection and artifact selection across Worker messages', async () => {
+		const compiler = await createGccWorker({ ...options, target: 'wasm32-wasi' });
+		const transport = FixtureWorker.instances[0];
+		const profile: WasiGccLinkProfile = {
+			target: 'wasm32-wasi',
+			abi: 'wasm32-wasi-preview1',
+			simd: true,
+			relaxedSimd: true,
+			compatibility: {
+				kind: 'gcc-bundle',
+				manifestSha256: 'a'.repeat(64),
+				sysrootSha256: 'b'.repeat(64)
+			}
+		};
+		const request = {
+			code: 'source',
+			simd: true,
+			relaxedSimd: true,
+			linkInputs: [
+				{
+					path: 'relaxed.o',
+					format: 'wasm-object' as const,
+					bytes: Uint8Array.from([0, 97, 115, 109, 1, 0, 0, 0]),
+					sha256: 'c'.repeat(64),
+					profile
+				}
+			]
+		};
+		const compiling = compiler.compile(request);
+		request.relaxedSimd = false;
+		(profile as { relaxedSimd: boolean }).relaxedSimd = false;
+		const message = transport.messages.at(-1)!;
+		expect(message.request).toMatchObject({
+			relaxedSimd: true,
+			linkInputs: [{ profile: { relaxedSimd: true } }]
+		});
+		const artifact: WasiGccArtifact = {
+			compiler: 'gcc',
+			compilerHost: 'wasm32-emscripten',
+			target: 'wasm32-wasi',
+			format: 'wasm-executable',
+			fileName: 'program.wasm',
+			cpu: 'wasm32',
+			bytes: Uint8Array.of(0),
+			relaxedSimd: true,
+			wasm: {
+				imports: [],
+				exports: [],
+				hasLinkingMetadata: false,
+				features: { simd128: true, relaxedSimd: true }
+			}
+		};
+		transport.onmessage?.({
+			data: structuredClone({
+				id: message.id,
+				type: 'result',
+				result: {
+					exitCode: 0,
+					stdout: '',
+					stderr: '',
+					stages: [],
+					artifact
+				}
+			})
+		});
+		const result = await compiling;
+		expect(result.artifact).toEqual(artifact);
+		const running = compiler.run(result.artifact!);
+		const runMessage = transport.messages.at(-1)!;
+		(result.artifact as { relaxedSimd: boolean }).relaxedSimd = false;
+		expect(runMessage.artifact).toMatchObject({
+			relaxedSimd: true,
+			wasm: { features: { relaxedSimd: true } }
+		});
+		transport.onmessage?.({
+			data: {
+				id: runMessage.id,
+				type: 'run-result',
+				result: {
+					exitCode: 0,
+					stdout: '',
+					stderr: '',
+					milliseconds: 0,
+					peakMemoryBytes: 0,
+					files: []
+				}
+			}
+		});
+		await running;
+		compiler.dispose();
+	});
+
 	it('snapshots the coverage opt-in and preserves binary notes and profile metadata in results', async () => {
 		const compiler = await createGccWorker({ ...options, target: 'wasm32-wasi' });
 		const transport = FixtureWorker.instances[0];

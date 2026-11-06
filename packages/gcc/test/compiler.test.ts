@@ -262,8 +262,17 @@ function bundle(
 }
 
 // These byte fixtures exercise host boundaries only, never real GCC code generation.
-function wasiCommand(simd = false) {
-	const body = [0, ...(simd ? [0xfd, 0x0c, ...Array<number>(16).fill(0), 0x1a] : []), 0x0b];
+function wasiCommand(simd = false, relaxedSimd = false) {
+	const vector = [0xfd, 0x0c, ...Array<number>(16).fill(0)];
+	const body = [
+		0,
+		...(relaxedSimd
+			? [...vector, ...vector, 0xfd, 0x80, 2, 0x1a]
+			: simd
+				? [...vector, 0x1a]
+				: []),
+		0x0b
+	];
 	return Uint8Array.from([
 		0,
 		97,
@@ -307,15 +316,67 @@ function wasiCommand(simd = false) {
 	]);
 }
 
-function wasiObject() {
+function wasiObject(relaxedSimd = false) {
 	// Relocatable identity function: exercises host receipts, not GCC semantics.
+	const vector = [0xfd, 0x0c, ...Array<number>(16).fill(0)];
+	const body = [
+		0,
+		...(relaxedSimd ? [...vector, ...vector, 0xfd, 0x80, 2, 0x1a] : []),
+		0x20,
+		0,
+		0x0b
+	];
 	return Uint8Array.from([
-		0, 97, 115, 109, 1, 0, 0, 0, 1, 6, 1, 96, 1, 127, 1, 127, 3, 2, 1, 0, 10, 6, 1, 4, 0, 32, 0,
-		11, 0, 19, 7, 108, 105, 110, 107, 105, 110, 103, 2, 8, 8, 1, 0, 0, 0, 3, 97, 100, 100
+		0,
+		97,
+		115,
+		109,
+		1,
+		0,
+		0,
+		0,
+		1,
+		6,
+		1,
+		96,
+		1,
+		127,
+		1,
+		127,
+		3,
+		2,
+		1,
+		0,
+		10,
+		body.length + 2,
+		1,
+		body.length,
+		...body,
+		0,
+		19,
+		7,
+		108,
+		105,
+		110,
+		107,
+		105,
+		110,
+		103,
+		2,
+		8,
+		8,
+		1,
+		0,
+		0,
+		0,
+		3,
+		97,
+		100,
+		100
 	]);
 }
 
-function wasiBundle(linker = wasiCommand(), rtti = false, coverage = false) {
+function wasiBundle(linker = wasiCommand(), rtti = false, coverage = false, relaxedSimd = false) {
 	const fixture = bundle();
 	fixture.files.delete('gcc-toolchain.v1.json');
 	fixture.files.delete('ld.mjs');
@@ -353,9 +414,10 @@ function wasiBundle(linker = wasiCommand(), rtti = false, coverage = false) {
 			threads: false,
 			dynamicLinking: false,
 			simd: true,
+			...(relaxedSimd ? { relaxedSimd: true } : {}),
 			...(coverage ? { coverage: true } : {})
 		},
-		qualification: { status: 'unverified' },
+		qualification: { status: relaxedSimd ? 'verified' : 'unverified' },
 		assets: Object.fromEntries(
 			[...fixture.files].map(([path, bytes]) => [
 				path === 'sysroot.tar'
@@ -764,10 +826,74 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 				emit: 'object',
 				simd: true
 			});
-			expect(result.artifact?.wasm?.features).toEqual({ simd128: true });
+			expect(result.artifact?.wasm?.features).toEqual({ simd128: true, relaxedSimd: false });
 			expect(result.stages[0].argv).toContain('-msimd128');
 		} finally {
 			compiler.dispose();
+		}
+	});
+
+	it('binds relaxed compilation outputs, link receipts and execution to the opt-in and qualified bundle', async () => {
+		host.output = wasiObject(true);
+		const compiler = await createGccCompiler(wasiBundle(undefined, false, false, true));
+		const legacy = await createGccCompiler(wasiBundle());
+		try {
+			for (const request of [{}, { simd: true }, { simd: true, relaxedSimd: false }])
+				await expect(
+					compiler.compile({ code: 'fixture', emit: 'object', ...request })
+				).rejects.toThrow('requires explicit opt-in');
+			const request = {
+				code: 'fixture',
+				emit: 'object' as const,
+				language: 'c' as const,
+				simd: true,
+				relaxedSimd: true
+			};
+			const count = host.calls.length;
+			await expect(legacy.compile(request)).rejects.toThrow(
+				'bundle does not support relaxed SIMD'
+			);
+			expect(host.calls).toHaveLength(count);
+			const result = await compiler.compile(request);
+			const object = result.artifact!;
+			expect(object.relaxedSimd).toBe(true);
+			expect(object.wasm!.features).toEqual({ simd128: true, relaxedSimd: true });
+			expect(object.linkInput!.profile).toMatchObject({ simd: true, relaxedSimd: true });
+			const input = { ...object.linkInput!, bytes: object.bytes, path: 'provider.o' };
+			await expect(
+				compiler.compile({ code: '', simd: true, linkInputs: [input] })
+			).rejects.toThrow('relaxed SIMD profile differs');
+			const failed = await compiler.compile({
+				code: '!source error',
+				language: 'c',
+				simd: true,
+				relaxedSimd: true,
+				linkInputs: [input]
+			});
+			expect(failed.exitCode).toBe(9);
+			expect(failed.linkInputs![0].profile.relaxedSimd).toBe(true);
+			const executable = {
+				...object,
+				format: 'wasm-executable' as const,
+				bytes: wasiCommand(true, true)
+			};
+			await expect(compiler.run(executable)).resolves.toMatchObject({
+				exitCode: 0,
+				stdout: ''
+			});
+			await expect(compiler.run({ ...executable, relaxedSimd: undefined })).rejects.toThrow(
+				'requires explicit opt-in'
+			);
+			await expect(legacy.run(executable)).rejects.toThrow(
+				'requires a qualified capable bundle'
+			);
+			host.output = wasiObject();
+			const normal = await compiler.compile({ code: '', emit: 'object' });
+			expect(normal.artifact).not.toHaveProperty('relaxedSimd');
+			expect(normal.artifact!.linkInput!.profile).not.toHaveProperty('relaxedSimd');
+		} finally {
+			compiler.dispose();
+			legacy.dispose();
 		}
 	});
 

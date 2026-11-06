@@ -149,7 +149,7 @@ or source-level rejection of every expression that might reach them. Native and
 actual Worker execution of the exact compiler/runtime must establish support;
 SDK parser/planner tests alone do not qualify a bundle.
 
-Requests for exceptions, threads, dynamic linking or relaxed SIMD still fail.
+Requests for exceptions, threads and dynamic linking still fail.
 C++ retains `-fno-exceptions -fuse-cxa-atexit -fno-threadsafe-statics`, preserving
 static destruction in this single-threaded environment.
 `__GCC_WASI_SINGLE_THREAD__=1` selects the producer's `errno` header, which uses
@@ -167,8 +167,36 @@ Patch `0006` adds scalar-count shifts, comparisons, selection and constant shuff
 Patch `0007` adds direct `v128` calls and singleton vector aggregates, qualified
 against pinned Clang with SIMD enabled on both sides. Disabled profiles use indirect
 calls. Check pinned patches and native/browser results: older bundles support
-fewer operations. Automatic vectorization, `wasm_simd128.h`, relaxed SIMD and
+fewer operations. Automatic vectorization, `wasm_simd128.h` and
 arbitrary cross-compiler ABI compatibility are not promised.
+
+Relaxed SIMD is a separate explicit profile: a verified bundle must advertise
+`capabilities.relaxedSimd: true` together with `simd: true`, and the request must
+select both `simd: true` and `relaxedSimd: true`. Missing capabilities and omitted
+request fields mean false. A separate engine probe validates all 20 relaxed
+instructions before compilation. The producer's `wasm_relaxed_simd.h` exposes
+the real GCC builtins; the SDK does not rewrite source or emulate operations.
+Capable bundles receive `-mrelaxed-simd` only when selected, otherwise
+`-mno-relaxed-simd`; older bundles retain their original compiler arguments.
+The assembler enables relaxed SIMD only for selected requests.
+
+Binary inspection detects actual relaxed instructions independently of optional
+`target_features` metadata. Default and SIMD128-only compilation reject them.
+`inspectGccWasm(bytes, kind, { relaxedSimd: true })` explicitly enables inspection
+of this profile; it still requires the real engine. Inspection exposes both
+`features.simd128` and `features.relaxedSimd`. Compiled artifacts retain
+`relaxedSimd: true`, which `run()` accepts only with a qualified capable bundle
+and freshly checked executable bytes. Changing inspection metadata cannot enable
+an unselected artifact. Worker transport retains this selection and object receipts.
+Direct `runGccWasiArtifact(artifact, options, verifiedManifest)` calls require that
+same parsed, independently verified manifest for relaxed artifacts; the compiler's
+`run()` supplies its own pinned manifest. Existing two-argument calls retain the
+baseline and SIMD128 execution profile.
+
+Relaxed operations permit multiple results for certain inputs, including NaNs,
+out-of-range conversions, fused arithmetic and selection masks. Qualification
+must record actual native and Worker outputs and check each against the allowed
+result set; the two engines need not choose identical permitted results.
 
 ## Explicit static link inputs
 
@@ -177,6 +205,11 @@ WASI executable requests accept ordered `linkInputs`, separately from `files` an
 `'wasm-archive'`, `Uint8Array` `bytes`, lowercase SHA-256, and a typed
 `WasiGccLinkProfile`. Source-generated objects precede these inputs; runtime
 libraries follow them. Entries retain their listed order, including archives.
+The optional `profile.relaxedSimd` defaults to false and must exactly match the
+compilation request. True requires `profile.simd: true` and the same qualified
+GCC bundle; the existing `clang-c-scalar-v1` contract does not qualify relaxed SIMD.
+Every archive member's actual instructions and declared `target_features` are
+checked before compilation, including members the linker would leave unused.
 Archives use ordinary lazy member extraction; this API adds no `--whole-archive`,
 library search flags, dynamic linking, or arbitrary linker options.
 
@@ -537,7 +570,7 @@ Compilation has no result cache. Compiled modules belong to the current instance
 identified by manifest/sysroot digests, GCC version, host and target. Consumer
 caches must also key source/files, ordered `sources`, language/standard,
 preprocessing, defines, ordered link-input receipts, output kind, optimization and
-CPU/SIMD/RTTI settings. Failures never return
+CPU/SIMD/relaxed-SIMD/RTTI settings. Failures never return
 old artifacts; the example clears its download when compilation starts.
 
 Results include stage argv, exit codes, milliseconds and peak linear-memory
