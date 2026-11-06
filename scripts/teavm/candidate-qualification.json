@@ -1,64 +1,76 @@
 {
 	"format": "wasm-idle-teavm-qualification-v2",
-	"date": "2026-10-27",
+	"date": "2026-11-06",
 	"status": "qualified-for-checked-in-runtime",
-	"profileId": "teavm-javac-0.16.0-208d4c9-integrated-overlay-v1",
-	"fingerprint": "7583fd8040be494e926ab2fe6dfe3a4d2352103b2011d0f991fa9fa743ad49ee",
+	"profileId": "teavm-javac-0.17.0-dev-3-76b5b53-integrated-overlay-v1",
+	"fingerprint": "c8b59650cdd3df0524cd7bd7b26a47a56ad4cda4157573e9775c890fc03ff8fd",
 	"inputs": {
 		"path": "scripts/teavm/candidate-inputs.lock.json",
-		"bytes": 7001,
-		"sha256": "dc7dd12d6a2034523870e6a797d1779f63fc09c57b8e13226b9b25cd5ffd7bf7"
+		"bytes": 3865,
+		"sha256": "047299009568e4cab86169079f18fcf107e10421ba18116f59a5987a65444a6c"
 	},
 	"publicationLock": {
 		"path": "scripts/wasm-teavm-assets.lock.json",
-		"bytes": 13502,
-		"sha256": "7eddaad86028cc94da04ff5ece27ac840ce16cc57d3ddfc78c580a006b537c6a"
+		"bytes": 10508,
+		"sha256": "9974e7f54824038c4ec80496b9694734daf8335aa7e9c4b8a3bc5b2bb46d6d4c"
 	},
 	"source": {
 		"repository": "https://github.com/konsoletyper/teavm-javac",
-		"revision": "208d4c97a602ba0df055f16e6882059fb69d0122",
+		"revision": "76b5b53850f74e510ec8588a56a211cf60e9d496",
 		"archive": {
-			"url": "https://codeload.github.com/konsoletyper/teavm-javac/tar.gz/208d4c97a602ba0df055f16e6882059fb69d0122",
-			"bytes": 99644,
-			"sha256": "ad893ca727081e72ab7ffb9f270956c76d4222b09c6bd1196a13c58c7f81ad2e"
+			"url": "https://codeload.github.com/konsoletyper/teavm-javac/tar.gz/76b5b53850f74e510ec8588a56a211cf60e9d496",
+			"bytes": 99064,
+			"sha256": "6076f1945703a0c62207c6c8ced7c0910d64658f144e6de6907a8287db0b477a"
 		}
 	},
 	"sourcePatches": [
 		{
-			"path": "scripts/teavm/patches/teavm-javac-0.16.0-compat.patch",
-			"bytes": 187792,
-			"sha256": "acbbaee1cee35619f004d2d5a49776a916c87558aa02c47f0cf24f25c5f5c2cd"
-		},
-		{
-			"path": "scripts/teavm/patches/teavm-javac-0.16.0-debug-scopes.patch",
-			"bytes": 72491,
-			"sha256": "10459fdf93377e71aedb250135d7816e32aa9c5eb6738eeb1a3ffb64be50af14"
+			"path": "scripts/teavm/patches/teavm-javac-0.17.0-dev-3-compat.patch",
+			"bytes": 88600,
+			"sha256": "c534a7a2e325058b54e8e0dda2ec0e86ac48ba4b7733cefe38a9fca06e2f6a67"
 		}
 	],
-	"compilerOverrides": {
-		"version": "0.16.0",
-		"sourceJar": {
-			"url": "https://repo.maven.apache.org/maven2/org/teavm/teavm-core/0.16.0/teavm-core-0.16.0-sources.jar",
-			"bytes": 1670879,
-			"sha256": "687cabf23e0d17a15be30fbc070809c2931714340aca224120fe31579f95519b"
-		},
-		"sources": [
+	"teavm": {
+		"version": "0.17.0-dev-3",
+		"repository": "https://github.com/konsoletyper/teavm.git",
+		"revision": "6df39ceae1897750419abfa2ff8905be8a6145f7",
+		"artifacts": [
 			{
-				"path": "compiler/src/main/java/org/teavm/backend/wasm/render/WasmBinaryRenderer.java",
-				"sourceEntry": "org/teavm/backend/wasm/render/WasmBinaryRenderer.java",
-				"upstreamSha256": "a15d251d9fc1bd7e2a9668677c3e45e6604d4072d2c631408d0c4b2f0fb60b46",
-				"bytes": 25905,
-				"sha256": "52c766f5027cc9b96c7bdd8138d1b81a313061dde369c6bd9dd0e692a2dbeb25"
+				"name": "teavm-wasm-gc-deobfuscator-0.17.0-dev-3.jar",
+				"url": "https://teavm.org/maven/repository/org/teavm/teavm-wasm-gc-deobfuscator/0.17.0-dev-3/teavm-wasm-gc-deobfuscator-0.17.0-dev-3.jar",
+				"bytes": 23178,
+				"sha256": "de65078907d2717c6d9869bcbf6d967a21352efaffe41d029cc2a4f56e1b4f79"
 			},
 			{
-				"path": "compiler/src/main/java/org/teavm/backend/wasm/render/WasmBinaryRenderingVisitor.java",
-				"sourceEntry": "org/teavm/backend/wasm/render/WasmBinaryRenderingVisitor.java",
-				"upstreamSha256": "3ca9b19463d6013216d0b41f2d7a59cf3f91629c2abf77b66c8835cee9dd3d62",
-				"bytes": 43454,
-				"sha256": "855393381c5005ba6730918bd8075e75b1ee9624baa60ed0fd44e6204b837410"
+				"name": "teavm-bootstrap-compiler-0.17.0-dev-3.jar",
+				"url": "https://teavm.org/maven/repository/org/teavm/teavm-bootstrap-compiler/0.17.0-dev-3/teavm-bootstrap-compiler-0.17.0-dev-3.jar",
+				"bytes": 2382314,
+				"sha256": "1ddc6702fe043c3699f3c1b8b4ea9c88b96f855bb54372bcf36e2ba01fb0bf2f"
+			},
+			{
+				"name": "teavm-core-0.17.0-dev-3-sources.jar",
+				"url": "https://teavm.org/maven/repository/org/teavm/teavm-core/0.17.0-dev-3/teavm-core-0.17.0-dev-3-sources.jar",
+				"bytes": 1740967,
+				"sha256": "342bc2b8fe91c90916dcaa31d906488339eae113cb12d34c6d921784fc9ff34a"
+			},
+			{
+				"name": "teavm-classlib-0.17.0-dev-3-sources.jar",
+				"url": "https://teavm.org/maven/repository/org/teavm/teavm-classlib/0.17.0-dev-3/teavm-classlib-0.17.0-dev-3-sources.jar",
+				"bytes": 1836721,
+				"sha256": "ae64ea5a3dd7fcc13f1a69dd0ac73550d1be8b36b2905e737e39afc0bca87ce2"
+			},
+			{
+				"name": "teavm-bootstrap-compiler-0.17.0-dev-3-sources.jar",
+				"url": "https://teavm.org/maven/repository/org/teavm/teavm-bootstrap-compiler/0.17.0-dev-3/teavm-bootstrap-compiler-0.17.0-dev-3-sources.jar",
+				"bytes": 8864,
+				"sha256": "f1a139446d4ef82031a1b29d8ae800175024f0d993aa149e7bbd458e7e7666a9"
 			}
 		],
-		"classpath": "main output precedes dependency JARs in generateWasmGC"
+		"archive": {
+			"url": "https://codeload.github.com/konsoletyper/teavm/tar.gz/6df39ceae1897750419abfa2ff8905be8a6145f7",
+			"bytes": 18705120,
+			"sha256": "0c0bb87466f7d36c34ab80c798a28d92c002d74a4ca58560e5ea2a383cd88fa3"
+		}
 	},
 	"jdk": {
 		"version": "25.0.5+8",
@@ -76,30 +88,99 @@
 	},
 	"gradleVerification": {
 		"path": "scripts/teavm/candidate-gradle-verification-metadata.xml",
-		"bytes": 132259,
-		"sha256": "c3779dda8a80c0b28355f2e656f24ec424d2641d275e432e70c02ab7b02674ba",
-		"components": 290,
-		"artifacts": 505,
-		"enforcedDuringBuild": true,
+		"bytes": 135282,
+		"sha256": "e66d8583a22e7a9d014f443cd5f0cd5a848ae7a5166d89fa48eac7446619d1c1",
+		"components": 294,
+		"artifacts": 515,
 		"mode": "strict",
-		"unchangedAcrossBuilds": true
+		"enforcedDuringIndependentBuild": true,
+		"initialObservation": {
+			"bytes": 133871,
+			"sha256": "7e9fb501342c4ed4d0f69065f6b182382bc9e2c402658aeb920137600dc168ee"
+		},
+		"coldCacheReview": {
+			"command": "./gradlew --no-daemon --refresh-dependencies --write-verification-metadata sha256 help",
+			"freshGradleUserHome": true,
+			"readOnlyDependencyCacheReused": false,
+			"commandExitCode": 0,
+			"existingArtifactHashesChanged": 0,
+			"removedArtifacts": 0,
+			"reviewedAdditionalArtifacts": [
+				{
+					"coordinates": "com.fasterxml.jackson:jackson-base:2.14.2",
+					"artifact": "jackson-base-2.14.2.pom",
+					"sha256": ["3ae245b9df95127321f1f905f703bd32774fe557158a9d3a9e507d82b2bc4ed4"],
+					"url": "https://repo.maven.apache.org/maven2/com/fasterxml/jackson/jackson-base/2.14.2/jackson-base-2.14.2.pom",
+					"parent": {
+						"groupId": "com.fasterxml.jackson",
+						"artifactId": "jackson-bom",
+						"version": "2.14.2"
+					}
+				},
+				{
+					"coordinates": "org.junit:junit-bom:5.11.4",
+					"artifact": "junit-bom-5.11.4.pom",
+					"sha256": ["19d4b747b204805325b6334553296f986562277a4ac1cb5e593a5e4c4f5e4115"],
+					"url": "https://repo.maven.apache.org/maven2/org/junit/junit-bom/5.11.4/junit-bom-5.11.4.pom",
+					"parent": {
+						"groupId": null,
+						"artifactId": null,
+						"version": null
+					}
+				},
+				{
+					"coordinates": "org.junit:junit-bom:5.7.1",
+					"artifact": "junit-bom-5.7.1.module",
+					"sha256": ["9854e3894d64b2485207e0046bca07b3d42d169e782f4fa8c9ce229a78faee04"],
+					"url": "https://repo.maven.apache.org/maven2/org/junit/junit-bom/5.7.1/junit-bom-5.7.1.module",
+					"pomConstraintMatches": 15
+				},
+				{
+					"coordinates": "org.junit:junit-bom:6.0.3",
+					"artifact": "junit-bom-6.0.3.module",
+					"sha256": ["280e3c34855f2a13de24121937e4cf97e4b9eb9206e60f891e4f0a1cf0e7aba1"],
+					"url": "https://repo.maven.apache.org/maven2/org/junit/junit-bom/6.0.3/junit-bom-6.0.3.module",
+					"pomConstraintMatches": 15
+				},
+				{
+					"coordinates": "tools.jackson:jackson-base:3.1.4",
+					"artifact": "jackson-base-3.1.4.pom",
+					"sha256": ["7d91ab741bc84ec8ea4612308113a404f45dd71b91433985dd2c4c784af05479"],
+					"url": "https://repo.maven.apache.org/maven2/tools/jackson/jackson-base/3.1.4/jackson-base-3.1.4.pom",
+					"parent": {
+						"groupId": "tools.jackson",
+						"artifactId": "jackson-bom",
+						"version": "3.1.4"
+					}
+				}
+			],
+			"verificationMetadataSha256": "e66d8583a22e7a9d014f443cd5f0cd5a848ae7a5166d89fa48eac7446619d1c1",
+			"priorReviewedAdditionalArtifacts": [
+				{
+					"coordinates": "org.junit:junit-bom:5.13.4",
+					"artifact": "junit-bom-5.13.4.module",
+					"sha256": "e959288fde1b1b050d9bc082fc786789128da5d2853091468fca504104bdf400",
+					"url": "https://repo.maven.apache.org/maven2/org/junit/junit-bom/5.13.4/junit-bom-5.13.4.module",
+					"pomConstraintMatches": 18
+				}
+			]
+		}
 	},
 	"builds": [
 		{
-			"id": "independent-strict",
-			"sourceCommit": "1e3addeadf33a91e003cca1fe6b8c9145af8286b",
+			"id": "candidate-observed",
+			"command": "node scripts/prepare-wasm-teavm-candidate.mjs <pinned-source-archive> <new-candidate-dir> <pinned-jdk-archive>",
 			"commandExitCode": 0,
-			"buildReceiptSha256": "ba635d7ae29b48bc28374c9420fbd2e8f8e948493834e2f1f8a24d6020e0874d"
+			"buildReceiptSha256": "517e53e109c127fd27aab66f47c8321146f7069d835e5e3ecd03c7590207ad74"
 		},
 		{
-			"id": "publication-strict",
-			"sourceCommit": "7b58988f3acfd460df7fe1fe3f65ac20641412af",
-			"command": "pnpm run sync:wasm-teavm <pinned-source-checkout> <pinned-jdk-archive>",
+			"id": "independent-strict",
+			"command": "produceWasmTeaVmAssets({ sourceDir: <pinned-source-checkout>, jdkArchivePath: <pinned-jdk-archive>, targetDir: <isolated-static-dir>, coreGeneratedModulePath: <isolated-core-module>, wrapperGeneratedModulePath: <isolated-wrapper-module> })",
 			"commandExitCode": 0,
 			"manifest": {
 				"path": "static/teavm/runtime-manifest.v2.json",
-				"bytes": 13573,
-				"sha256": "3c39d7eb7ee84f825d47b9dfdaef5d7ad51a24810c85b0e0c13ce3a7cdff0884"
+				"bytes": 10579,
+				"sha256": "744d548061f63cd02c96df0c1cff3f0b9e670601492003cc55c228e3eba5709c"
 			}
 		}
 	],
@@ -113,28 +194,28 @@
 		"outputs": [
 			{
 				"path": "compiler.wasm-runtime.js",
-				"bytes": 16425,
-				"sha256": "d4fc035b410f444f79f49e3890643b8bfd644a02dcfc597e3fcaa8a07bafca08"
+				"bytes": 17358,
+				"sha256": "f93b235747aa178cff6f28101b507d4956ea740c36a5987f642c1e457e8d6b8e"
 			},
 			{
 				"path": "compiler.wasm",
-				"bytes": 4746215,
-				"sha256": "96291b9bf94d3ff3422ed35ff2305ec7c9d8052c9150f5a41b8ea6bc63bbd0de"
+				"bytes": 4758621,
+				"sha256": "c4591010aa649660abe547728076ba395dbc97f47d67527fd2dc99f85b510dbf"
 			},
 			{
 				"path": "compiler.wasm-deobfuscator.wasm",
-				"bytes": 48410,
-				"sha256": "d64d18b9d003c0ced4191133fadb870be4b532f54a2de25f094bc0de61223654"
+				"bytes": 48583,
+				"sha256": "6462127c5e078700d08f06956545750b7db7f6055bb4a92bf4bf60925b413aa4"
 			},
 			{
 				"path": "compile-classlib-teavm.bin",
-				"bytes": 215642,
-				"sha256": "bbf8f130a711847df4822c7f8de88e622e25d5f6b89530d2f441096cebc617ed"
+				"bytes": 211725,
+				"sha256": "b7724b0d1e730f7cade5fa06e64a291bc8c530199ef1a2b1f2fb8f932ff0757b"
 			},
 			{
 				"path": "runtime-classlib-teavm.bin",
-				"bytes": 2300137,
-				"sha256": "05896413a99b04c70e818a5616b94e9ac3cc39a9d87de99c79661f164cff86d1"
+				"bytes": 2415541,
+				"sha256": "d0d9ecb456ae91efbbe6888430010e9c0da93497a8c47c2c92dfb498f140c761"
 			}
 		]
 	},
@@ -142,21 +223,12 @@
 		"path": "scripts/teavm/DebugScopesRegression.java",
 		"bytes": 4115,
 		"sha256": "70763b8251a05130b591b3f259b8a1673053cc652a4b941f2aa24e52e338a970",
-		"upstreamExitCode": 1,
-		"patchedExitCode": 0,
+		"upstreamExitCode": 0,
+		"sourceOverrides": false,
 		"scopeStarts": 4,
 		"scopeEnds": 4,
 		"sequences": 2,
 		"nestedInlineFrames": 3
-	},
-	"classpathRegression": {
-		"path": "scripts/teavm/DebugClasspathRegression.gradle",
-		"bytes": 1223,
-		"sha256": "502c22b55618ecd50ceaf7da7cd5c30efe41f8fe3bd3d4e3fa51761674a4e6cd",
-		"command": "./gradlew --dependency-verification strict -I <regression-script> :compiler:verifyEmitterClasspath",
-		"exitCode": 0,
-		"mainOutputsPrecedeDependencyJars": true,
-		"patchedClassesPresent": true
 	},
 	"browser": {
 		"engine": "chromium",
@@ -172,7 +244,7 @@
 			"src/lib/playground/javaRuntimeStdin.ts": "60567d91890de2456a0e98e3b610204226eb893d2be601823e10555fc1d7c51e"
 		},
 		"runs": 1,
-		"casesPerRun": 24,
+		"casesPerRun": 29,
 		"pageErrors": [],
 		"stdinChunkBytes": 7,
 		"cases": [
@@ -182,8 +254,8 @@
 				"stdoutMatches": true,
 				"stderr": "",
 				"debugScopes": {
-					"starts": 309,
-					"ends": 309
+					"starts": 406,
+					"ends": 406
 				}
 			},
 			{
@@ -192,8 +264,8 @@
 				"stdoutMatches": true,
 				"stderr": "",
 				"debugScopes": {
-					"starts": 298,
-					"ends": 298
+					"starts": 378,
+					"ends": 378
 				}
 			},
 			{
@@ -202,8 +274,8 @@
 				"stdoutMatches": true,
 				"stderr": "",
 				"debugScopes": {
-					"starts": 350,
-					"ends": 350
+					"starts": 435,
+					"ends": 435
 				}
 			},
 			{
@@ -212,8 +284,8 @@
 				"stdoutMatches": true,
 				"stderr": "",
 				"debugScopes": {
-					"starts": 351,
-					"ends": 351
+					"starts": 434,
+					"ends": 434
 				}
 			},
 			{
@@ -222,8 +294,8 @@
 				"stdoutMatches": true,
 				"stderr": "",
 				"debugScopes": {
-					"starts": 669,
-					"ends": 669
+					"starts": 1131,
+					"ends": 1131
 				}
 			},
 			{
@@ -232,8 +304,8 @@
 				"stdoutMatches": true,
 				"stderr": "",
 				"debugScopes": {
-					"starts": 674,
-					"ends": 674
+					"starts": 1133,
+					"ends": 1133
 				}
 			},
 			{
@@ -242,8 +314,8 @@
 				"stdoutMatches": true,
 				"stderr": "",
 				"debugScopes": {
-					"starts": 648,
-					"ends": 648
+					"starts": 1111,
+					"ends": 1111
 				}
 			},
 			{
@@ -252,8 +324,8 @@
 				"stdoutMatches": true,
 				"stderr": "",
 				"debugScopes": {
-					"starts": 382,
-					"ends": 382
+					"starts": 476,
+					"ends": 476
 				}
 			},
 			{
@@ -262,8 +334,8 @@
 				"stdoutMatches": true,
 				"stderr": "",
 				"debugScopes": {
-					"starts": 259,
-					"ends": 259
+					"starts": 286,
+					"ends": 286
 				}
 			},
 			{
@@ -272,8 +344,8 @@
 				"stdoutMatches": true,
 				"stderr": "",
 				"debugScopes": {
-					"starts": 242,
-					"ends": 242
+					"starts": 275,
+					"ends": 275
 				}
 			},
 			{
@@ -282,8 +354,8 @@
 				"stdoutMatches": true,
 				"stderr": "",
 				"debugScopes": {
-					"starts": 221,
-					"ends": 221
+					"starts": 229,
+					"ends": 229
 				}
 			},
 			{
@@ -292,8 +364,8 @@
 				"stdoutMatches": true,
 				"stderr": "",
 				"debugScopes": {
-					"starts": 157,
-					"ends": 157
+					"starts": 164,
+					"ends": 164
 				}
 			},
 			{
@@ -302,8 +374,8 @@
 				"stdoutMatches": true,
 				"stderr": "",
 				"debugScopes": {
-					"starts": 243,
-					"ends": 243
+					"starts": 247,
+					"ends": 247
 				}
 			},
 			{
@@ -312,8 +384,8 @@
 				"stdoutMatches": true,
 				"stderr": "",
 				"debugScopes": {
-					"starts": 1808,
-					"ends": 1808
+					"starts": 1682,
+					"ends": 1682
 				}
 			},
 			{
@@ -322,8 +394,28 @@
 				"stdoutMatches": true,
 				"stderr": "",
 				"debugScopes": {
-					"starts": 264,
-					"ends": 264
+					"starts": 305,
+					"ends": 305
+				}
+			},
+			{
+				"name": "upstream/annotations",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": "",
+				"debugScopes": {
+					"starts": 203,
+					"ends": 203
+				}
+			},
+			{
+				"name": "upstream/array-clone",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": "",
+				"debugScopes": {
+					"starts": 238,
+					"ends": 238
 				}
 			},
 			{
@@ -332,8 +424,8 @@
 				"stdoutMatches": true,
 				"stderr": "",
 				"debugScopes": {
-					"starts": 619,
-					"ends": 619
+					"starts": 682,
+					"ends": 682
 				}
 			},
 			{
@@ -342,8 +434,8 @@
 				"stdoutMatches": true,
 				"stderr": "",
 				"debugScopes": {
-					"starts": 178,
-					"ends": 178
+					"starts": 192,
+					"ends": 192
 				}
 			},
 			{
@@ -362,8 +454,8 @@
 				"stdoutMatches": true,
 				"stderr": "",
 				"debugScopes": {
-					"starts": 144,
-					"ends": 144
+					"starts": 145,
+					"ends": 145
 				}
 			},
 			{
@@ -372,8 +464,28 @@
 				"stdoutMatches": true,
 				"stderr": "",
 				"debugScopes": {
-					"starts": 229,
-					"ends": 229
+					"starts": 239,
+					"ends": 239
+				}
+			},
+			{
+				"name": "upstream/local-variable-annotation",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": "",
+				"debugScopes": {
+					"starts": 190,
+					"ends": 190
+				}
+			},
+			{
+				"name": "upstream/member-classes",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": "",
+				"debugScopes": {
+					"starts": 374,
+					"ends": 374
 				}
 			},
 			{
@@ -382,8 +494,8 @@
 				"stdoutMatches": true,
 				"stderr": "",
 				"debugScopes": {
-					"starts": 261,
-					"ends": 261
+					"starts": 278,
+					"ends": 278
 				}
 			},
 			{
@@ -392,8 +504,8 @@
 				"stdoutMatches": true,
 				"stderr": "",
 				"debugScopes": {
-					"starts": 172,
-					"ends": 172
+					"starts": 175,
+					"ends": 175
 				}
 			},
 			{
@@ -402,8 +514,18 @@
 				"stdoutMatches": true,
 				"stderr": "",
 				"debugScopes": {
-					"starts": 267,
-					"ends": 267
+					"starts": 282,
+					"ends": 282
+				}
+			},
+			{
+				"name": "upstream/runtime-checks",
+				"status": "ok",
+				"stdoutMatches": true,
+				"stderr": "",
+				"debugScopes": {
+					"starts": 150,
+					"ends": 150
 				}
 			},
 			{
@@ -412,140 +534,171 @@
 				"stdoutMatches": true,
 				"stderr": "",
 				"debugScopes": {
-					"starts": 1394,
-					"ends": 1394
+					"starts": 1184,
+					"ends": 1184
 				}
 			}
 		]
 	},
 	"applicationWorker": {
-		"engine": "chromium",
-		"version": "153.0.8010.12",
-		"command": "node scripts/probe-teavm-worker.mjs",
+		"command": "WASM_IDLE_TEAVM_WORKER_RECEIPT=<report.json> node scripts/probe-teavm-worker.mjs",
+		"commandExitCode": 0,
 		"probeSha256": "9bd63731853ff25aef92d31c95e0c521453266dd99546e9ef9fb1e3e98c0efeb",
-		"workerSha256": "775df29f68a274618554bbcb8cc6d8371ed58895923f4c1ae4ade8e1fe2899b2",
-		"manifestSha256": "3c39d7eb7ee84f825d47b9dfdaef5d7ad51a24810c85b0e0c13ce3a7cdff0884",
-		"cases": 14,
+		"format": "wasm-idle-teavm-worker-acceptance-v1",
+		"profileId": "teavm-javac-0.17.0-dev-3-76b5b53-integrated-overlay-v1",
+		"chromiumVersion": "153.0.8010.12",
+		"workerSha256": "7b90c63892e2f786d312f6d369f70eaf95e6df010aaf6853dc83fa78fe018d53",
+		"manifestSha256": "744d548061f63cd02c96df0c1cff3f0b9e670601492003cc55c228e3eba5709c",
 		"consoleWarnings": [],
 		"results": [
 			{
-				"loading": "buffered",
+				"streamCompiler": false,
 				"fixture": "shared-stdin",
-				"status": "passed",
-				"stdinRequests": 2,
-				"sourceThrowFrameVerified": false
+				"output": "21\n",
+				"diagnostics": [],
+				"inputRequests": 2,
+				"assetProgress": [],
+				"error": null
 			},
 			{
-				"loading": "buffered",
+				"streamCompiler": false,
 				"fixture": "utf8-eof",
-				"status": "passed",
-				"stdinRequests": 3,
-				"sourceThrowFrameVerified": false
+				"output": "\ud55c\uae00 42",
+				"diagnostics": [],
+				"inputRequests": 3,
+				"assetProgress": [],
+				"error": null
 			},
 			{
-				"loading": "buffered",
+				"streamCompiler": false,
 				"fixture": "formatting",
-				"status": "passed",
-				"stdinRequests": 1,
-				"sourceThrowFrameVerified": false
+				"output": "3.14 %\n",
+				"diagnostics": [],
+				"inputRequests": 1,
+				"assetProgress": [],
+				"error": null
 			},
 			{
-				"loading": "buffered",
+				"streamCompiler": false,
 				"fixture": "caught-stack",
-				"status": "passed",
-				"stdinRequests": 0,
-				"sourceThrowFrameVerified": true
+				"output": "java.lang.IllegalStateException: caught\n\tat Main.fail(Main.java:2)\n\tat WasmIdleJavaEntryPoint$program$lambda$_1_0.run(Unknown Source)\n\tat WasmIdleJavaExceptionBridge.main(WasmIdleJavaExceptionBridge.java:25)\n\tat org.teavm.runtime.Fiber.lambda$startMain$0(Unknown Source)\n\tat org.teavm.runtime.Fiber$startMain$lambda$_38_0.run(Fiber.java:338)\n\tat org.teavm.runtime.Fiber.start(Fiber.java:347)\n\tat org.teavm.runtime.Fiber.start(Fiber.java:334)\n\tat org.teavm.runtime.Fiber.startMain(Fiber.java:338)\n\tat WasmIdleJavaExceptionBridge.main_$caller$exported$1(Unknown Source)\n",
+				"diagnostics": [],
+				"inputRequests": 0,
+				"assetProgress": [],
+				"error": null
 			},
 			{
-				"loading": "buffered",
+				"streamCompiler": false,
 				"fixture": "uncaught-stack",
-				"status": "passed",
-				"stdinRequests": 0,
-				"sourceThrowFrameVerified": true
+				"output": "",
+				"diagnostics": [],
+				"inputRequests": 0,
+				"assetProgress": [],
+				"error": "java.lang.IllegalArgumentException: uncaught\n\tat Main.fail(Main.java:2)\n\tat Main.main(Main.java:3)\n\tat WasmIdleJavaEntryPoint$program$lambda$_1_0.run(WasmIdleJavaEntryPoint.java:3)\n\tat WasmIdleJavaExceptionBridge.main(WasmIdleJavaExceptionBridge.java:25)\n\tat org.teavm.runtime.Fiber.lambda$startMain$0(Unknown Source)\n\tat org.teavm.runtime.Fiber$startMain$lambda$_38_0.run(Fiber.java:338)\n\tat org.teavm.runtime.Fiber.start(Fiber.java:347)\n\tat org.teavm.runtime.Fiber.start(Fiber.java:334)\n\tat org.teavm.runtime.Fiber.startMain(Fiber.java:338)\n\tat WasmIdleJavaExceptionBridge.main_$caller$exported$1(Unknown Source)\n"
 			},
 			{
-				"loading": "buffered",
+				"streamCompiler": false,
 				"fixture": "diagnostic",
-				"status": "passed",
-				"stdinRequests": 0,
-				"sourceThrowFrameVerified": false
+				"output": "",
+				"diagnostics": [
+					{
+						"fileName": "Main.java",
+						"lineNumber": 1,
+						"columnNumber": 62,
+						"severity": "error",
+						"message": "cannot find symbol\n  symbol:   method missingSymbol()\n  location: class Main"
+					}
+				],
+				"inputRequests": 0,
+				"assetProgress": [],
+				"error": "Main.java:1:62: error: cannot find symbol\n  symbol:   method missingSymbol()\n  location: class Main"
 			},
 			{
-				"loading": "buffered",
+				"streamCompiler": false,
 				"fixture": "recovery",
-				"status": "passed",
-				"stdinRequests": 0,
-				"sourceThrowFrameVerified": false
+				"output": "fresh\n",
+				"diagnostics": [],
+				"inputRequests": 0,
+				"assetProgress": [],
+				"error": null
 			},
 			{
-				"loading": "streaming",
+				"streamCompiler": true,
 				"fixture": "shared-stdin",
-				"status": "passed",
-				"stdinRequests": 2,
-				"sourceThrowFrameVerified": false
+				"output": "21\n",
+				"diagnostics": [],
+				"inputRequests": 2,
+				"assetProgress": [],
+				"error": null
 			},
 			{
-				"loading": "streaming",
+				"streamCompiler": true,
 				"fixture": "utf8-eof",
-				"status": "passed",
-				"stdinRequests": 3,
-				"sourceThrowFrameVerified": false
+				"output": "\ud55c\uae00 42",
+				"diagnostics": [],
+				"inputRequests": 3,
+				"assetProgress": [],
+				"error": null
 			},
 			{
-				"loading": "streaming",
+				"streamCompiler": true,
 				"fixture": "formatting",
-				"status": "passed",
-				"stdinRequests": 1,
-				"sourceThrowFrameVerified": false
+				"output": "3.14 %\n",
+				"diagnostics": [],
+				"inputRequests": 1,
+				"assetProgress": [],
+				"error": null
 			},
 			{
-				"loading": "streaming",
+				"streamCompiler": true,
 				"fixture": "caught-stack",
-				"status": "passed",
-				"stdinRequests": 0,
-				"sourceThrowFrameVerified": true
+				"output": "java.lang.IllegalStateException: caught\n\tat Main.fail(Main.java:2)\n\tat WasmIdleJavaEntryPoint$program$lambda$_1_0.run(Unknown Source)\n\tat WasmIdleJavaExceptionBridge.main(WasmIdleJavaExceptionBridge.java:25)\n\tat org.teavm.runtime.Fiber.lambda$startMain$0(Unknown Source)\n\tat org.teavm.runtime.Fiber$startMain$lambda$_38_0.run(Fiber.java:338)\n\tat org.teavm.runtime.Fiber.start(Fiber.java:347)\n\tat org.teavm.runtime.Fiber.start(Fiber.java:334)\n\tat org.teavm.runtime.Fiber.startMain(Fiber.java:338)\n\tat WasmIdleJavaExceptionBridge.main_$caller$exported$1(Unknown Source)\n",
+				"diagnostics": [],
+				"inputRequests": 0,
+				"assetProgress": [],
+				"error": null
 			},
 			{
-				"loading": "streaming",
+				"streamCompiler": true,
 				"fixture": "uncaught-stack",
-				"status": "passed",
-				"stdinRequests": 0,
-				"sourceThrowFrameVerified": true
+				"output": "",
+				"diagnostics": [],
+				"inputRequests": 0,
+				"assetProgress": [],
+				"error": "java.lang.IllegalArgumentException: uncaught\n\tat Main.fail(Main.java:2)\n\tat Main.main(Main.java:3)\n\tat WasmIdleJavaEntryPoint$program$lambda$_1_0.run(WasmIdleJavaEntryPoint.java:3)\n\tat WasmIdleJavaExceptionBridge.main(WasmIdleJavaExceptionBridge.java:25)\n\tat org.teavm.runtime.Fiber.lambda$startMain$0(Unknown Source)\n\tat org.teavm.runtime.Fiber$startMain$lambda$_38_0.run(Fiber.java:338)\n\tat org.teavm.runtime.Fiber.start(Fiber.java:347)\n\tat org.teavm.runtime.Fiber.start(Fiber.java:334)\n\tat org.teavm.runtime.Fiber.startMain(Fiber.java:338)\n\tat WasmIdleJavaExceptionBridge.main_$caller$exported$1(Unknown Source)\n"
 			},
 			{
-				"loading": "streaming",
+				"streamCompiler": true,
 				"fixture": "diagnostic",
-				"status": "passed",
-				"stdinRequests": 0,
-				"sourceThrowFrameVerified": false
+				"output": "",
+				"diagnostics": [
+					{
+						"fileName": "Main.java",
+						"lineNumber": 1,
+						"columnNumber": 62,
+						"severity": "error",
+						"message": "cannot find symbol\n  symbol:   method missingSymbol()\n  location: class Main"
+					}
+				],
+				"inputRequests": 0,
+				"assetProgress": [],
+				"error": "Main.java:1:62: error: cannot find symbol\n  symbol:   method missingSymbol()\n  location: class Main"
 			},
 			{
-				"loading": "streaming",
+				"streamCompiler": true,
 				"fixture": "recovery",
-				"status": "passed",
-				"stdinRequests": 0,
-				"sourceThrowFrameVerified": false
+				"output": "fresh\n",
+				"diagnostics": [],
+				"inputRequests": 0,
+				"assetProgress": [],
+				"error": null
 			}
 		]
 	},
-	"scopedChecks": {
-		"vitestFiles": 9,
-		"vitestTests": 99,
-		"skipped": 0,
-		"realNodeStreamingExecution": true,
-		"candidatePreparerTests": 8,
-		"coreTypeScriptBuild": true,
-		"runtimeWrapperTypecheck": true,
-		"eslint": true
-	},
-	"knownLimitations": [
-		{
-			"name": "inlined-caller-frame",
-			"description": "The identical optimized launcher retains Main.fail(Main.java:2) but omits the inlined Main.main(Main.java:3) frame in 0.16.0. The previous 0.13.1 runtime retained both. The acceptance probe requires the original throw site and rejects raw Wasm/FakeClass frames; complete inlined caller recovery remains a follow-up.",
-			"comparisonReceiptSha256": "95d97384755b46f48e4f2fc550a54cfabbc698e8db1aa17a4f4aa086b1b588d3",
-			"exceptionBridgeSourceSha256": "9796d7c4ef4177a806594575700f6632cfd4b633b3f7cf9151e3db4dbb8c3de9",
-			"previousRuntimeVersion": "0.13.1",
-			"currentRuntimeVersion": "0.16.0"
-		}
-	]
+	"focusedValidation": {
+		"candidateTests": 10,
+		"assetStreamingSyncAndGeneratorTests": 74,
+		"runtimeWrapperTypeScriptBuildExitCode": 0,
+		"staticAssetBudgetExitCode": 0
+	}
 }

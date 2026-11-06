@@ -112,7 +112,7 @@ describe('verified Java compiler streaming', () => {
 	});
 	it('transforms only one exact known loader anchor', () => {
 		const anchor =
-			'async function J(e,t){if(typeof e!=="string"){return await WebAssembly.compile(e,{builtins:["js-string"]})}';
+			'async function C(e,t){if(typeof e!=="string"){return await WebAssembly.compile(e,{builtins:["js-string"]})}';
 		expect(acceptCompiledTeaVmModule(anchor)).toContain('e instanceof WebAssembly.Module');
 		const bundled = readFileSync(
 			new URL('../../../../static/teavm/compiler.wasm-runtime.js', import.meta.url),
@@ -121,7 +121,7 @@ describe('verified Java compiler streaming', () => {
 		expect(acceptCompiledTeaVmModule(bundled)).toContain('e instanceof WebAssembly.Module');
 		expect(() => acceptCompiledTeaVmModule('changed')).toThrow('Unsupported');
 		expect(() => acceptCompiledTeaVmModule(anchor + anchor)).toThrow('Unsupported');
-		expect(() => acceptCompiledTeaVmModule(anchor.replace('J(e,t)', 'b(e,t)'))).toThrow(
+		expect(() => acceptCompiledTeaVmModule(anchor.replace('C(e,t)', 'J(e,t)'))).toThrow(
 			'Unsupported'
 		);
 		expect(() => acceptCompiledTeaVmModule(anchor.replace('js-string', 'changed'))).toThrow(

@@ -84,8 +84,8 @@ async function createFixture() {
 	});
 	const lock = {
 		schemaVersion: 1,
-		profileId: 'teavm-fixture-0.13.1',
-		provenanceLevel: 'source-build-and-overlay-reproduced',
+		profileId: 'teavm-fixture-0.17.0-dev-3',
+		provenanceLevel: 'source-build-and-integrated-overlay-reproduced',
 		licenseExpression: 'Apache-2.0 AND GPL-2.0-only WITH Classpath-exception-2.0',
 		source: {
 			repository: 'https://example.com/teavm-javac.git',
@@ -99,7 +99,7 @@ async function createFixture() {
 		},
 		components: {
 			teavm: {
-				version: '0.13.1',
+				version: '0.17.0-dev-3',
 				repository: 'https://example.com/teavm.git',
 				revision: '4'.repeat(40),
 				artifacts: []
@@ -133,26 +133,21 @@ async function createFixture() {
 			},
 			node: { version: process.versions.node, zlib: process.versions.zlib },
 			commands: ['clean :javac:downloadJDK', ':compiler:createDist'],
+			sourcePatches: [
+				{
+					path: 'scripts/teavm/patches/teavm-javac-0.17.0-dev-3-compat.patch',
+					bytes: 1,
+					sha256: 'a'.repeat(64)
+				}
+			],
 			overlay: {
-				utilityPath: 'scripts/teavm/ApplyRuntimeClasslibOverlay.java',
-				utilityBytes: 1,
-				utilitySha256: 'a'.repeat(64),
-				release: 17,
-				canonicalRuntime: { bytes: 1, sha256: 'c'.repeat(64) },
-				classpath: [],
+				mode: 'gradle-source-set',
+				sourceRoot: 'compiler/src/classlibOverlay/java',
 				sources: [
 					{
-						sourcePath: 'scripts/teavm/TByteBuffer.java',
-						sourceBytes: 1,
-						sourceSha256: '9'.repeat(64),
-						transforms: [{ from: 'a', to: 'b', expectedOccurrences: 1 }]
-					}
-				],
-				classes: [
-					{
-						targetEntry: 'org/teavm/classlib/java/nio/TByteBuffer.class',
-						classBytes: 1,
-						classSha256: 'b'.repeat(64)
+						path: 'compiler/src/classlibOverlay/java/org/teavm/classlib/java/util/TFormatter.java',
+						bytes: 1,
+						sha256: '9'.repeat(64)
 					}
 				]
 			}

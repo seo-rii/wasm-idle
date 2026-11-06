@@ -2,17 +2,18 @@
 
 This notice accompanies the browser TeaVM compiler and class-library assets generated from
 `konsoletyper/teavm-javac` revision
-`208d4c97a602ba0df055f16e6882059fb69d0122` with TeaVM 0.16.0.
+`76b5b53850f74e510ec8588a56a211cf60e9d496` with TeaVM 0.17.0-dev-3
+(source revision `6df39ceae1897750419abfa2ff8905be8a6145f7`).
 
 Corresponding source references and byte receipts are recorded in
 `scripts/wasm-teavm-assets.lock.json`. The source patch
-`scripts/teavm/patches/teavm-javac-0.16.0-compat.patch` carries the modified TeaVM byte I/O,
-Formatter, reflection, annotation, cloning, ServiceLoader and class-library supplement sources.
-It includes modified `TypeSet` and `TagRegistry` classes used only by the build to make compiler
-output reproducible. The runtime overlays are compiled and assembled inside the Gradle source
-set. `teavm-javac-0.16.0-debug-scopes.patch` carries modified TeaVM `WasmBinaryRenderer` and
-`WasmBinaryRenderingVisitor` sources that close inline debug scopes at function boundaries.
-`TIllegalFormatWidthException` is a wasm-idle addition. No warranty is provided.
+`scripts/teavm/patches/teavm-javac-0.17.0-dev-3-compat.patch` carries the remaining
+modified TeaVM console byte I/O and Formatter sources, primitive-array clone dependency
+listener, class-library supplements and archive integration. The runtime overlays are
+compiled in a Gradle source set and applied to the original bootstrap compiler class-library
+archive. `TIllegalFormatWidthException` is a wasm-idle addition. TeaVM's upstream bootstrap
+compiler, NIO buffers, dependency registration, deterministic traversal and debug emitter
+are used without local source replacements. No warranty is provided.
 
 ## TeaVM and teavm-javac
 
