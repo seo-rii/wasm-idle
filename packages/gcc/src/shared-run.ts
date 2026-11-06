@@ -33,6 +33,10 @@ export async function runGccSharedArtifact(
 		throw new Error('Invalid GCC artifact relaxed SIMD profile');
 	if (artifact.relaxedSimd && !trusted.capabilities.relaxedSimd)
 		throw new Error('GCC shared relaxed SIMD requires a qualified capable bundle');
+	if (artifact.tls !== undefined && typeof artifact.tls !== 'boolean')
+		throw new Error('Invalid GCC artifact TLS profile');
+	if (artifact.tls && !trusted.capabilities.tls)
+		throw new Error('GCC shared TLS requires a qualified capable bundle');
 	if (artifact.coverage !== undefined)
 		throw new Error('GCC shared execution does not support coverage');
 	if (
@@ -87,6 +91,7 @@ export async function runGccSharedArtifact(
 	const { module, inspection } = await compileGccWasm(artifact.bytes, 'executable', {
 		atomics: true,
 		relaxedSimd: artifact.relaxedSimd === true,
+		tls: artifact.tls === true,
 		sharedMemory: profile
 	});
 	signal?.throwIfAborted();
@@ -94,15 +99,29 @@ export async function runGccSharedArtifact(
 	if (argumentsByWorker.some((row) => row.length !== entry.parameterCount))
 		throw new Error('GCC shared Worker arguments differ from the entry signature');
 	const memoryBytes = profile.initialPages * 65536;
-	let cursor = Math.ceil((entry.heapBase + 16) / 16) * 16;
+	let cursor = entry.tls?.reservedLow ?? entry.heapBase;
+	const tlsRegions = entry.tls
+		? argumentsByWorker.map(() => {
+				const alignment = entry.tls!.alignment,
+					low = Math.ceil((cursor + 16) / alignment) * alignment,
+					high = low + entry.tls!.size;
+				cursor = high + 16;
+				return Object.freeze({ low, high, alignment });
+			})
+		: undefined;
+	cursor = Math.ceil((cursor + 16) / 16) * 16;
 	const stackRegions = argumentsByWorker.map(() => {
 		const low = cursor,
 			high = low + stackBytes;
 		cursor = high + 32;
 		return Object.freeze({ low, high });
 	});
-	if (cursor - 16 > memoryBytes)
-		throw new Error('GCC shared memory cannot fit the Worker stacks and data');
+	if (cursor - 16 > (entry.tls?.reservedHigh ?? memoryBytes))
+		throw new Error(
+			entry.tls
+				? 'GCC shared TLS reservedBytes cannot fit the Worker TLS blocks, stacks and guards'
+				: 'GCC shared memory cannot fit the Worker stacks and data'
+		);
 	const remaining = timeoutMs - (performance.now() - started);
 	if (remaining <= 0) throw new DOMException('GCC shared execution timed out', 'TimeoutError');
 	let memory: WebAssembly.Memory | undefined = new WebAssembly.Memory({
@@ -111,7 +130,8 @@ export async function runGccSharedArtifact(
 		shared: true
 	});
 	const bytes = new Uint8Array(memory.buffer);
-	for (const region of stackRegions)
+	const guardedRegions = [...(tlsRegions ?? []), ...stackRegions];
+	for (const region of guardedRegions)
 		for (const offset of [region.low - 16, region.high]) bytes.fill(0xa5, offset, offset + 16);
 	const gate = new SharedArrayBuffer(4);
 	return new Promise<GccSharedRunResult>((resolve, reject) => {
@@ -195,7 +215,7 @@ export async function runGccSharedArtifact(
 						values[id] = data.value;
 						phases[id] = 'done';
 						if (phases.every((phase) => phase === 'done')) {
-							for (const region of stackRegions)
+							for (const region of guardedRegions)
 								for (const offset of [region.low - 16, region.high])
 									if (
 										!bytes
@@ -203,7 +223,7 @@ export async function runGccSharedArtifact(
 											.every((value) => value === 0xa5)
 									)
 										throw new Error(
-											'GCC shared Worker exceeded its stack reservation'
+											'GCC shared Worker exceeded its stack or TLS reservation'
 										);
 							const snapshot = Uint8Array.from(bytes);
 							close();
@@ -211,6 +231,7 @@ export async function runGccSharedArtifact(
 								values: Object.freeze([...values]),
 								memory: snapshot,
 								stackRegions: Object.freeze(stackRegions),
+								...(tlsRegions ? { tlsRegions: Object.freeze(tlsRegions) } : {}),
 								milliseconds: performance.now() - started,
 								peakMemoryBytes: memoryBytes
 							});
@@ -229,6 +250,7 @@ export async function runGccSharedArtifact(
 					stackTop: stackRegions[id].high,
 					heapBase: entry.heapBase,
 					dataEnd: entry.dataEnd,
+					...(entry.tls ? { tls: { ...entry.tls, base: tlsRegions![id].low } } : {}),
 					memoryBytes,
 					timeoutMs: Math.ceil(remaining)
 				});

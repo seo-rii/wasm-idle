@@ -121,7 +121,9 @@ export const scenarios = [
 		// Another 8 KiB covers the 6,948-byte overflow and retains 1,244 bytes of headroom.
 		// Atomic/shared-entry contracts measure 2,783,253 bytes / 192 files / four packages.
 		// The minimum 39 KiB increase covers 38,933 bytes; the new Worker pair needs two more files.
-		budget: { maxBytes: 2.5 * MiB + 159 * 1024, maxFiles: 192, maxPackages: 4 },
+		// TLS metadata/lifecycle/formatter/errno contracts measure 2,814,616 bytes / 194 files / four packages.
+		// Another 30 KiB covers the 30,360-byte overflow; one metadata helper adds two files.
+		budget: { maxBytes: 2.5 * MiB + 189 * 1024, maxFiles: 194, maxPackages: 4 },
 		absentPackageNames: [
 			'wasm-idle',
 			'@wasm-idle/llvm-core',

@@ -1,13 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runGccSharedArtifact } from '../src/shared-run.js';
 import { qualifiedAtomicManifest, sharedArtifact } from './atomic-fixtures.js';
+import { tlsSharedArtifact } from './tls-fixtures.js';
 
 // Transport stand-in around real WebAssembly instantiation, not a compiler or parallel-engine proof.
 class ProtocolWorker {
 	static instances: ProtocolWorker[] = [];
 	static mode:
-		'normal' | 'hang' | 'trap' | 'malformed' | 'creation-failure' | 'guard' | 'early-result' =
-		'normal';
+		| 'normal'
+		| 'hang'
+		| 'trap'
+		| 'malformed'
+		| 'creation-failure'
+		| 'guard'
+		| 'tls-guard'
+		| 'early-result' = 'normal';
 	onmessage: ((event: { data: unknown }) => void) | null = null;
 	onerror: unknown = null;
 	onmessageerror: unknown = null;
@@ -26,6 +33,7 @@ class ProtocolWorker {
 			});
 			if (this.terminated) return;
 			(instance.exports.__stack_pointer as WebAssembly.Global).value = message.stackTop;
+			if (message.tls) (instance.exports.__wasm_init_tls as Function)(message.tls.base);
 			this.onmessage?.({ data: { id: message.id, type: 'ready' } });
 			if (ProtocolWorker.mode === 'early-result') {
 				this.onmessage?.({ data: { id: message.id, type: 'result', value: 1 } });
@@ -40,22 +48,27 @@ class ProtocolWorker {
 				}
 				if (ProtocolWorker.mode === 'guard')
 					new Uint8Array(message.memory.buffer)[message.stackTop] = 0;
+				if (ProtocolWorker.mode === 'tls-guard')
+					new Uint8Array(message.memory.buffer)[message.tls.base - 1] = 0;
 				if (ProtocolWorker.mode === 'trap')
 					this.onmessage?.({
 						data: { id: message.id, type: 'error', message: 'unreachable' }
 					});
 				else if (ProtocolWorker.mode === 'malformed')
 					this.onmessage?.({ data: { id: 999, type: 'result', value: 1 } });
-				else
+				else {
+					const value = (instance.exports[message.entry] as Function)(
+						...message.arguments
+					);
+					if (message.tls) (instance.exports.__wasm_call_thread_dtors as Function)();
 					this.onmessage?.({
 						data: {
 							id: message.id,
 							type: 'result',
-							value: (instance.exports[message.entry] as Function)(
-								...message.arguments
-							)
+							value
 						}
 					});
+				}
 			};
 			setTimeout(finish, 0);
 		})();
@@ -75,6 +88,53 @@ afterEach(() => vi.unstubAllGlobals());
 const options = () => ({ workerArguments: [[11], [22]], stackBytes: 4096 });
 
 describe('owned shared Worker cohort', () => {
+	it('allocates TLS and stacks below the real allocator heap, returning a copy after cleanup', async () => {
+		const manifest = qualifiedAtomicManifest();
+		const result = await runGccSharedArtifact(tlsSharedArtifact(), options(), {
+			...manifest,
+			capabilities: { ...manifest.capabilities, tls: true }
+		});
+		expect(result.tlsRegions).toHaveLength(2);
+		const regions = [...result.tlsRegions!, ...result.stackRegions];
+		for (const region of regions) {
+			expect(region.low).toBeGreaterThanOrEqual(1040);
+			expect(region.high).toBeLessThan(33808);
+		}
+		for (let i = 1; i < regions.length; i++)
+			expect(regions[i].low).toBeGreaterThan(regions[i - 1].high);
+		for (const region of result.tlsRegions!) {
+			expect(region.low % region.alignment).toBe(0);
+			expect(new DataView(result.memory.buffer).getUint32(region.low, true)).toBe(99);
+		}
+		expect(result.values).toEqual(result.tlsRegions!.map((region) => region.low));
+		expect(ProtocolWorker.instances.every((worker) => worker.terminated === 1)).toBe(true);
+	});
+	it('discards every Worker if a TLS guard is damaged', async () => {
+		ProtocolWorker.mode = 'tls-guard';
+		const manifest = qualifiedAtomicManifest();
+		await expect(
+			runGccSharedArtifact(tlsSharedArtifact(), options(), {
+				...manifest,
+				capabilities: { ...manifest.capabilities, tls: true }
+			})
+		).rejects.toThrow(/TLS reservation/);
+		expect(ProtocolWorker.instances).toHaveLength(2);
+		expect(ProtocolWorker.instances.every((worker) => worker.terminated === 1)).toBe(true);
+	});
+	it('rejects insufficient TLS reservation or missing capability before creating Workers', async () => {
+		const manifest = qualifiedAtomicManifest();
+		await expect(
+			runGccSharedArtifact(tlsSharedArtifact(), options(), manifest)
+		).rejects.toThrow(/TLS.*qualified/);
+		await expect(
+			runGccSharedArtifact(
+				tlsSharedArtifact(),
+				{ ...options(), stackBytes: 32768 },
+				{ ...manifest, capabilities: { ...manifest.capabilities, tls: true } }
+			)
+		).rejects.toThrow(/reservedBytes cannot fit/);
+		expect(ProtocolWorker.instances).toHaveLength(0);
+	});
 	it('runs the exact inspected module with disjoint stack globals and returns only copied memory', async () => {
 		const result = await runGccSharedArtifact(
 			sharedArtifact(),

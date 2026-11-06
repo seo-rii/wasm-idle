@@ -1,7 +1,13 @@
 import { verifyRuntimeAssetIntegrity } from '@wasm-idle/core';
 import untar from '@wasm-idle/core/runtime-tar';
 import { readBuffer } from '@wasm-idle/core/runtime-asset-loader';
-import { gccDigest, parseCrossGccManifest, parseWasiGccManifest } from './manifest.js';
+import {
+	gccDigest,
+	gccTlsIncludePath,
+	gccTlsRuntimePaths,
+	parseCrossGccManifest,
+	parseWasiGccManifest
+} from './manifest.js';
 import { loadGccModuleFactory, type GccModuleFactory } from './module-loader.js';
 import { gccCompilePlan, gccRelativePath } from './plan.js';
 import { gccSysrootTree, mountGccSysroot, type GccSysrootDirectory } from './sysroot-fs.js';
@@ -187,6 +193,17 @@ export async function createGccCompiler(
 		!sysroot.get('/sysroot/lib/wasm32-wasi/libatomic.a')?.byteLength
 	)
 		throw new Error('GCC atomic bundle is missing its qualified libatomic archive');
+	if (manifest.target === 'wasm32-wasi' && manifest.capabilities.tls) {
+		if (!sysroot.get(`${gccTlsIncludePath}/__errno.h`)?.byteLength)
+			throw new Error('GCC TLS bundle is missing its qualified errno header');
+		for (const path of Object.values(gccTlsRuntimePaths))
+			if (
+				(path !== gccTlsRuntimePaths.ordinaryLongDouble ||
+					manifest.capabilities.longDouble) &&
+				!sysroot.get(path)?.byteLength
+			)
+				throw new Error('GCC TLS bundle is missing its qualified runtime archive: ' + path);
+	}
 	const sysrootTree = gccSysrootTree(sysroot, directories, '/sysroot');
 	const factories = new Map<
 		CrossGccTool,
@@ -241,7 +258,8 @@ export async function createGccCompiler(
 		rttiEnabled = false,
 		relaxedSimdEnabled = false,
 		atomicsEnabled = false,
-		sharedMemory?: GccSharedMemoryProfile
+		sharedMemory?: GccSharedMemoryProfile,
+		tlsEnabled = false
 	): Promise<{
 		exitCode: number;
 		stdout: string;
@@ -265,6 +283,7 @@ export async function createGccCompiler(
 			const inspection = await inspectGccWasm(bytes, emit, {
 				relaxedSimd: relaxedSimdEnabled,
 				atomics: atomicsEnabled,
+				tls: tlsEnabled,
 				...(emit === 'executable' && sharedMemory ? { sharedMemory } : {})
 			});
 			if (inspection.features.simd128 && !simdEnabled)
@@ -294,7 +313,8 @@ export async function createGccCompiler(
 					language,
 					rttiEnabled,
 					relaxedSimdEnabled,
-					atomicsEnabled
+					atomicsEnabled,
+					tlsEnabled
 				);
 			for (const stage of stages) {
 				if (disposed) throw new Error('GCC compiler is disposed');
@@ -596,7 +616,8 @@ export async function createGccCompiler(
 				'rtti' in plan && plan.rtti,
 				'relaxedSimd' in plan && plan.relaxedSimd,
 				'atomics' in plan && plan.atomics,
-				'sharedMemory' in plan ? plan.sharedMemory : undefined
+				'sharedMemory' in plan ? plan.sharedMemory : undefined,
+				'tls' in plan && plan.tls === true
 			);
 			if (!result.workspace) return result;
 			const { workspace, wasmInspection, coverageNotes, ...completed } = result;
@@ -614,6 +635,7 @@ export async function createGccCompiler(
 									? { relaxedSimd: true }
 									: {}),
 								...('atomics' in plan && plan.atomics ? { atomics: true } : {}),
+								...('tls' in plan && plan.tls ? { tls: true } : {}),
 								...('coverage' in plan && plan.coverage ? { coverage: true } : {}),
 								// Preserve legacy false-bundle receipt shapes. New bundles
 								// distinguish pure C from both C++ RTTI profiles.
@@ -664,6 +686,7 @@ export async function createGccCompiler(
 					...(wasmInspection ? { wasm: wasmInspection } : {}),
 					...('relaxedSimd' in plan && plan.relaxedSimd ? { relaxedSimd: true } : {}),
 					...('atomics' in plan && plan.atomics ? { atomics: true } : {}),
+					...('tls' in plan && plan.tls ? { tls: true } : {}),
 					...('sharedMemory' in plan && plan.sharedMemory
 						? { sharedMemory: plan.sharedMemory }
 						: {}),

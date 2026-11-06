@@ -217,13 +217,15 @@ freestanding C or C++ executable contract. Both page counts must be equal, betwe
 1 and 8192; each page is 65536 bytes. There is no WASI command CRT or `_start`.
 The exported entry takes only `i32` arguments and returns one `i32`; use
 `extern "C"` for a C++ entry. The SDK does not link libstdc++, enable RTTI or
-coverage, or provide pthreads, TLS, dynamic constructors, stdio or allocation in
-this profile. Pure libc memory routines may resolve libatomic's dependencies.
+coverage, or provide pthreads, dynamic global constructors or stdio in this
+profile. Without `tls: true`, it also excludes TLS and allocation. The explicit
+TLS runtime extension is described below. Pure libc memory routines may resolve
+libatomic's dependencies.
 Use `sources` for additional translation units; every unit receives the same
 freestanding flags. External `linkInputs` are rejected in shared mode because
 their existing object/archive receipts do not attest shared-safe static
 initialization. The ordinary atomic command profile still accepts those inputs.
-The final executable may import only `env.memory`. C++ atomic builtins and
+Without TLS the final executable may import only `env.memory`. C++ atomic builtins and
 separately qualified header operations do not establish general C++ runtime
 thread safety.
 
@@ -274,6 +276,77 @@ Use this standalone runner for shared artifacts; ordinary `compiler.run()` and
 `runGccWasiArtifact()` reject them. Atomic WASI artifacts also require their
 qualified manifest when passed directly to `runGccWasiArtifact()`.
 
+## Thread-local storage
+
+`capabilities.tls` is optional and defaults to false. The explicit `tls: true`
+request selects qualified local-exec TLS for C `_Thread_local`/`__thread` and C++
+`thread_local`. It selects GCC `-mtls`; capable bundles use `-mno-tls` otherwise,
+and older bundle arguments remain unchanged. Native atomic instruction lowering
+is selected separately by `atomics`. TLS and `debug` cannot be combined: this
+profile does not qualify TLS DWARF relocations.
+
+TLS object symbols, segment flags and relocations are inspected together, and
+object receipts preserve `profile.tls`. Their LLD ABI requires atomics and
+bulk-memory feature metadata even when the final private-memory executable has
+no atomic instructions. The SDK reports actual atomic instructions separately
+from `features.tls`. Qualified TLS runtime libraries may contribute atomic
+instructions to the final executable even with `atomics: false`; their execution
+requires actual atomic engine support. User-generated and external objects still
+require `atomics: true` for atomic instructions. TLS metadata requires explicit opt-in and a matching
+qualified GCC bundle; `clang-c-scalar-v1` does not qualify TLS inputs.
+
+TLS requests select the integrity-bound
+`/sysroot/include/wasm32-wasi-tls/__errno.h` before the ordinary include paths.
+It declares real C `_Thread_local` or C++ `thread_local` `errno`, matching the
+selected libc; requests without TLS retain the existing headers.
+
+Ordinary WASI TLS uses the existing command runner, private memory and the real
+TLS libc. Its
+qualified GNU TLS archive is
+`/sysroot/lib/wasm32-wasi-tls/libgcc-wasi-tls.a`. TLS-only exit wrappers run C++
+thread-local destructors before process `atexit` handlers and static destructors
+on normal main return or `std::exit`. `abort`, `_Exit` and `quick_exit` retain
+their separate termination behavior. Direct `runGccWasiArtifact` execution of a
+TLS artifact requires its qualified manifest. This profile selects its qualified
+`libc.a`, `libm.a` and `libclang_rt.builtins-wasm32.a` from the same
+`/sysroot/lib/wasm32-wasi-tls` directory. Its libc retains the original
+single-thread stdio and allocator implementations while using real TLS for
+`errno`. Private-memory executables containing `atomic.wait` remain rejected.
+When the bundle also supports binary128 `long double`, TLS commands select the
+matching `libc-printscan-long-double.a` from that directory before libc, preserving
+the formatter/scanner's TLS `errno` ABI.
+
+Shared TLS additionally requires `atomics: true` and
+`sharedMemory: { entry, initialPages, maximumPages, reservedBytes }`.
+`reservedBytes` must be a positive multiple of 16. LLD reserves this many bytes
+between the aligned end of static data and the allocator heap. This reservation
+must fit every Worker's TLS image, alignment padding, stack and guard regions.
+For example, `reservedBytes: 262144` accommodates two 65536-byte stacks and small
+TLS images; the SDK checks actual linked sizes before creating any Worker.
+The normal fixed initial/maximum memory limits still apply.
+
+The SDK validates LLD's exact one-time initializer, retained TLS template,
+`__wasm_init_tls` body, exported TLS alignment and size, and stack/heap bounds.
+It allocates disjoint TLS blocks and stacks below `__heap_base`. Each Worker sets
+its local stack pointer and initializes its TLS block before the all-ready
+barrier. After a normal entry return it calls `__wasm_call_thread_dtors` before
+reporting success. The result includes copied memory and `tlsRegions`; it exposes
+no live TLS address handle. A trap, cancellation or cleanup failure discards the
+whole cohort, without a destructor guarantee or memory reuse.
+
+Shared TLS selects
+`/sysroot/lib/wasm32-wasi-threads/libgcc-wasi-tls-shared.a` and the matching
+`libc.a`, `libm.a` and `libclang_rt.builtins-wasm32.a`. Hosted GNU headers expose
+`std::malloc` and `std::strtol`; linking supplies GNU TLS cleanup/new/delete and
+threads libc, without the full shared `libstdc++.a`. Compiler builtins stay off.
+Libc supplies private `errno` and a shared allocator for GNU destructor records.
+Its heap begins at `__heap_base`, above TLS/stacks; fixed maximum memory prevents
+growth, so exhaustion returns allocation failure. Imports permit only
+`env.memory` and optional `wasi_snapshot_preview1.sched_yield: () -> i32`, which
+yields through a private Worker control word. This enables neither pthreads,
+`std::thread`, shared stdio nor general C++ library thread safety. These
+integrity-bound providers cannot enter the default runtime-library list.
+
 ## Explicit static link inputs
 
 WASI executable requests accept ordered `linkInputs`, separately from `files` and
@@ -287,7 +360,8 @@ GCC bundle; the existing `clang-c-scalar-v1` contract does not qualify relaxed S
 Likewise, optional `profile.atomics` defaults to false and must exactly match the
 request. Atomic object instructions require a `+atomics` target feature and the
 same qualified GCC bundle; `clang-c-scalar-v1` does not qualify atomics. Object
-receipts and compile Worker transport preserve both selections.
+receipts and compile Worker transport preserve these selections, including the
+optional TLS profile described above.
 Every archive member's actual instructions and declared `target_features` are
 checked before compilation, including members the linker would leave unused.
 Archives use ordinary lazy member extraction; this API adds no `--whole-archive`,
@@ -352,9 +426,9 @@ The host copies bytes and profile fields before asynchronous validation or Worke
 transport, without detaching caller buffers. Inputs live under a separate
 `/link-inputs` namespace. Limits are 128 inputs, 64 MiB combined, and 4,096 members
 per archive. Supported archives are regular GNU `ar`, including GNU long names
-and the 32-bit symbol index. Thin/nested archives, LLVM bitcode, ELF, common/TLS
-symbols, and unsupported relocation/features are rejected with the input/member
-name. Archive members are all checked, even when the linker would not select them.
+and the 32-bit symbol index. Thin/nested archives, LLVM bitcode, ELF, common
+symbols, TLS symbols without an explicit qualified TLS profile, and unsupported
+relocations/features are rejected with the input/member name. Archive members are all checked, even when the linker would not select them.
 
 Validation requires WebAssembly version 1, linking metadata version 2 and a symbol
 table. It checks symbol/segment/constructor indices, COMDATs, relocation target

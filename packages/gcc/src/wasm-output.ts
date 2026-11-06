@@ -1,4 +1,5 @@
 import type { GccSharedMemoryProfile, GccWasmInspection } from './types.js';
+import { inspectGccTlsMetadata } from './wasm-tls-metadata.js';
 
 export function supportsGccWasmAtomics(): boolean {
 	const body = [0, 0x41, 0, 0x41, 1, 0xfe, 0x1e, 2, 0, 0x1a, 0xfe, 3, 0, 0x0b];
@@ -42,18 +43,32 @@ export function snapshotGccSharedMemory(value: unknown): GccSharedMemoryProfile 
 	const input = value as Record<string, unknown>;
 	if (
 		Object.keys(input).some(
-			(key) => !['entry', 'initialPages', 'maximumPages'].includes(key)
+			(key) => !['entry', 'initialPages', 'maximumPages', 'reservedBytes'].includes(key)
 		) ||
 		typeof input.entry !== 'string' ||
 		!/^[A-Za-z_][A-Za-z0-9_]{0,127}$/u.test(input.entry) ||
 		input.entry.startsWith('__wasm_') ||
-		['_start', 'memory', '__stack_pointer', '__heap_base', '__data_end', '__tls_size'].includes(
-			input.entry
-		) ||
+		[
+			'_start',
+			'memory',
+			'__stack_pointer',
+			'__stack_low',
+			'__stack_high',
+			'__heap_base',
+			'__data_end',
+			'__tls_size',
+			'__tls_align',
+			'__tls_base'
+		].includes(input.entry) ||
 		!Number.isSafeInteger(input.initialPages) ||
 		(input.initialPages as number) < 1 ||
 		(input.initialPages as number) > 8192 ||
-		input.maximumPages !== input.initialPages
+		input.maximumPages !== input.initialPages ||
+		(input.reservedBytes !== undefined &&
+			(!Number.isSafeInteger(input.reservedBytes) ||
+				(input.reservedBytes as number) < 16 ||
+				(input.reservedBytes as number) % 16 ||
+				(input.reservedBytes as number) > (input.initialPages as number) * 65536 - 1024))
 	)
 		throw new Error(
 			'GCC shared memory requires an explicit entry and equal bounded initial/maximum pages'
@@ -61,13 +76,17 @@ export function snapshotGccSharedMemory(value: unknown): GccSharedMemoryProfile 
 	return Object.freeze({
 		entry: input.entry,
 		initialPages: input.initialPages as number,
-		maximumPages: input.maximumPages as number
+		maximumPages: input.maximumPages as number,
+		...(input.reservedBytes === undefined
+			? {}
+			: { reservedBytes: input.reservedBytes as number })
 	});
 }
 
 type InspectionOptions = Readonly<{
 	relaxedSimd?: boolean;
 	atomics?: boolean;
+	tls?: boolean;
 	sharedMemory?: GccSharedMemoryProfile;
 }>;
 
@@ -173,10 +192,11 @@ export async function compileGccWasm(
 		!options ||
 		typeof options !== 'object' ||
 		Object.keys(options).some(
-			(key) => !['relaxedSimd', 'atomics', 'sharedMemory'].includes(key)
+			(key) => !['relaxedSimd', 'atomics', 'tls', 'sharedMemory'].includes(key)
 		) ||
 		(options.relaxedSimd !== undefined && typeof options.relaxedSimd !== 'boolean') ||
-		(options.atomics !== undefined && typeof options.atomics !== 'boolean')
+		(options.atomics !== undefined && typeof options.atomics !== 'boolean') ||
+		(options.tls !== undefined && typeof options.tls !== 'boolean')
 	)
 		throw new Error('Invalid GCC WebAssembly inspection options');
 	const sharedMemory =
@@ -185,12 +205,21 @@ export async function compileGccWasm(
 			: snapshotGccSharedMemory(options.sharedMemory);
 	if (sharedMemory && (options.atomics !== true || emit !== 'executable'))
 		throw new Error('GCC shared memory requires an opted-in atomic executable');
+	if (sharedMemory && (options.tls === true) !== (sharedMemory.reservedBytes !== undefined))
+		throw new Error('GCC shared TLS requires an explicit reservedBytes reservation');
 	const bytes = Uint8Array.from(input);
 	if (bytes.length < 8 || ![0, 97, 115, 109, 1, 0, 0, 0].every((byte, i) => bytes[i] === byte))
 		throw new Error('GCC did not produce a WebAssembly 1 binary');
 	let position = 8;
-	const features = { simd128: false, relaxedSimd: false, atomics: false, bulkMemory: false };
+	const features: {
+		simd128: boolean;
+		relaxedSimd: boolean;
+		atomics: boolean;
+		bulkMemory: boolean;
+		tls?: boolean;
+	} = { simd128: false, relaxedSimd: false, atomics: false, bulkMemory: false };
 	let atomicWait = false;
+	const i32ConstantOffsets = new Set<number>();
 	function byte(end: number) {
 		if (position >= end) throw new Error('Truncated GCC WebAssembly section');
 		return bytes[position++];
@@ -267,7 +296,10 @@ export async function compileGccWasm(
 			for (let remaining = count(end); remaining > 0; remaining--) valueType(end);
 		} else if (opcode >= 0x28 && opcode <= 0x3e) {
 			memoryArgument(end);
-		} else if (opcode === 0x41 || opcode === 0xd0) signed(end, 5);
+		} else if (opcode === 0x41) {
+			i32ConstantOffsets.add(position);
+			signed(end, 5);
+		} else if (opcode === 0xd0) signed(end, 5);
 		else if (opcode === 0x42) signed(end, 10);
 		else if (opcode === 0x43) skip(4, end);
 		else if (opcode === 0x44) skip(8, end);
@@ -305,7 +337,9 @@ export async function compileGccWasm(
 			if ((extended >= 0x15 && extended <= 0x22) || (extended >= 0x54 && extended <= 0x5b))
 				skip(1, end);
 		} else if (opcode === 0xfe) {
-			if (options.atomics !== true)
+			// User/generated objects still require -matomics. A qualified TLS runtime
+			// may contribute atomic instructions only during final executable linking.
+			if (options.atomics !== true && !(emit === 'executable' && options.tls === true))
 				throw new Error('GCC atomic instructions require explicit opt-in');
 			const extended = unsigned(end);
 			if (extended > 0x4e || (extended > 3 && extended < 0x10))
@@ -499,6 +533,14 @@ export async function compileGccWasm(
 		}
 		position = end;
 	}
+	if (
+		emit === 'object' &&
+		linkingSections === 1 &&
+		inspectGccTlsMetadata(bytes, i32ConstantOffsets)
+	) {
+		if (options.tls !== true) throw new Error('GCC TLS requires explicit opt-in');
+		features.tls = true;
+	}
 	if (features.simd128 && !supportsGccWasmSimd())
 		throw new Error('This WebAssembly engine does not support Wasm SIMD');
 	if (features.relaxedSimd && !supportsGccWasmRelaxedSimd())
@@ -528,13 +570,31 @@ export async function compileGccWasm(
 			memory.maximumPages !== sharedMemory.maximumPages
 		)
 			throw new Error('GCC shared memory limits differ from the explicit profile');
+		const memoryImports = imports.filter(
+			(entry) => entry.kind === 'memory' && entry.module === 'env' && entry.name === 'memory'
+		);
+		const otherImports = imports.filter((entry) => !memoryImports.includes(entry));
 		if (
-			imports.length !== 1 ||
-			imports[0].kind !== 'memory' ||
-			imports[0].module !== 'env' ||
-			imports[0].name !== 'memory'
+			memoryImports.length !== 1 ||
+			(options.tls === true
+				? otherImports.length > 1 ||
+					otherImports.some(
+						(entry) =>
+							entry.kind !== 'function' ||
+							entry.module !== 'wasi_snapshot_preview1' ||
+							entry.name !== 'sched_yield'
+					) ||
+					(otherImports.length === 1 &&
+						(types[functions[0]].parameters.length !== 0 ||
+							types[functions[0]].results.length !== 1 ||
+							types[functions[0]].results[0] !== 0x7f))
+				: otherImports.length !== 0)
 		)
-			throw new Error('GCC shared entry permits only the env.memory import');
+			throw new Error(
+				options.tls === true
+					? 'GCC shared TLS permits only env.memory and sched_yield () -> i32 imports'
+					: 'GCC shared entry permits only the env.memory import'
+			);
 		if (exportedIndices.get('memory')?.kind !== 2 || startFunction !== undefined)
 			throw new Error('GCC shared entry must export memory without WASI _start');
 		const entry = exportedIndices.get(sharedMemory.entry);
@@ -567,21 +627,64 @@ export async function compileGccWasm(
 			heapBase > memory.initialPages * 65536
 		)
 			throw new Error('Invalid GCC shared entry data/stack bounds');
-		if (exportedGlobal('__tls_size', 0) !== 0)
-			throw new Error('GCC shared entry does not support TLS');
+		const tlsSize = exportedGlobal('__tls_size', 0);
+		let tls: NonNullable<GccWasmInspection['sharedEntry']>['tls'];
+		let tlsBaseIndex: number | undefined,
+			tlsInitializer: { start: number; end: number; localDeclarations: number } | undefined,
+			tlsSegment: number | undefined;
+		if (options.tls === true) {
+			const alignment = exportedGlobal('__tls_align', 0),
+				reservedLow = exportedGlobal('__stack_low', 0),
+				reservedHigh = exportedGlobal('__stack_high', 0);
+			if (
+				exportedGlobal('__tls_base', 1) !== 0 ||
+				alignment < 1 ||
+				!Number.isInteger(Math.log2(alignment)) ||
+				alignment > memory.initialPages * 65536 ||
+				tlsSize > sharedMemory.reservedBytes! ||
+				reservedLow !== Math.ceil(dataEnd / 16) * 16 ||
+				reservedHigh !== heapBase ||
+				reservedHigh - reservedLow !== sharedMemory.reservedBytes
+			)
+				throw new Error('Invalid GCC shared TLS size, alignment or reserved bounds');
+			for (const [name, parameters] of [
+				['__wasm_init_tls', [0x7f]],
+				['__wasm_call_thread_dtors', []]
+			] as const) {
+				const exported = exportedIndices.get(name),
+					signature = exported?.kind === 0 ? types[functions[exported.index]] : undefined;
+				if (
+					!signature ||
+					signature.results.length ||
+					signature.parameters.length !== parameters.length ||
+					signature.parameters.some((value, index) => value !== parameters[index])
+				)
+					throw new Error('Invalid GCC shared TLS runtime function: ' + name);
+				if (name === '__wasm_init_tls') tlsInitializer = bodies.get(exported!.index);
+			}
+			tlsBaseIndex = exportedIndices.get('__tls_base')!.index;
+			tls = Object.freeze({ size: tlsSize, alignment, reservedLow, reservedHigh });
+			if (tlsSize) features.tls = true;
+		} else if (
+			tlsSize !== 0 ||
+			exportedIndices.has('__tls_base') ||
+			exportedIndices.has('__wasm_init_tls')
+		)
+			throw new Error('GCC shared TLS requires explicit opt-in');
 		const constructors = exportedIndices.get('__wasm_call_ctors');
 		if (constructors?.kind !== 0 || !bodies.get(constructors.index)?.empty)
 			throw new Error('GCC shared entry does not support dynamic constructors');
 		if (passiveDataSegments.length && moduleStartFunction === undefined)
 			throw new Error('GCC shared passive data requires a one-time memory initializer');
-		if (moduleStartFunction !== undefined) {
-			const startup = bodies.get(moduleStartFunction);
+		if (moduleStartFunction !== undefined || tls) {
+			const startup =
+				moduleStartFunction === undefined ? undefined : bodies.get(moduleStartFunction);
 			const invalid = () =>
 				new Error('GCC shared startup must be the guarded one-time memory initializer');
-			if (!startup || startup.localDeclarations !== 0) throw invalid();
-			const savedPosition = position,
-				end = startup.end;
-			position = startup.start;
+			if (moduleStartFunction !== undefined && (!startup || startup.localDeclarations !== 0))
+				throw invalid();
+			const savedPosition = position;
+			let end = startup?.end ?? 0;
 			try {
 				const expectBytes = (...expected: number[]) => {
 					for (const value of expected) if (byte(end) !== value) throw invalid();
@@ -608,71 +711,115 @@ export async function compileGccWasm(
 					if (unsigned(end) !== opcode || unsigned(end) !== 2 || unsigned(end) !== 0)
 						throw invalid();
 				};
-				// Pinned LLD's three blocks route guard states 0/1/2 to the
-				// initializer, waiter and completed paths respectively. An opcode
-				// allowlist cannot establish this ownership/control-flow contract.
-				expectBytes(0x02, 0x40, 0x02, 0x40, 0x02, 0x40);
-				const guard = Number(constant());
-				if (guard < 1024 || guard % 4 || guard + 4 > dataEnd) throw invalid();
-				expectConstant(0);
-				expectConstant(1);
-				atomic(0x48);
-				expectBytes(0x0e);
-				for (const value of [2, 0, 1, 2]) if (unsigned(end) !== value) throw invalid();
-				expectBytes(0x0b);
-				const initialized = new Set<number>(),
-					ranges: [number, number][] = [[guard, guard + 4]];
-				for (;;) {
-					const destination = Number(constant()),
-						value = Number(constant());
-					if (bytes[position] === 0xfe) {
-						if (destination !== guard || value !== 2) throw invalid();
-						atomic(0x17);
-						break;
-					}
-					if (value !== 0) throw invalid();
-					const length = Number(constant()),
-						high = destination + length;
-					if (
-						destination < 1024 ||
-						high > dataEnd ||
-						ranges.some(([low, end]) => destination < end && high > low)
-					)
-						throw invalid();
-					ranges.push([destination, high]);
-					expectBytes(0xfc);
-					const opcode = unsigned(end);
-					if (opcode === 8) {
-						const segment = unsigned(end);
-						if (initialized.has(segment) || passiveDataSegments[segment] !== length)
+				if (tls) {
+					if (!tlsInitializer || tlsInitializer.localDeclarations !== 0) throw invalid();
+					position = tlsInitializer.start;
+					end = tlsInitializer.end;
+					if (tls.size) {
+						expectBytes(0x20, 0, 0x24);
+						if (unsigned(end) !== tlsBaseIndex) throw invalid();
+						expectBytes(0x20, 0);
+						expectConstant(0);
+						expectConstant(tls.size);
+						expectBytes(0xfc);
+						if (unsigned(end) !== 8) throw invalid();
+						tlsSegment = unsigned(end);
+						if (passiveDataSegments[tlsSegment] !== tls.size || unsigned(end) !== 0)
 							throw invalid();
-						initialized.add(segment);
-					} else if (opcode !== 11) throw invalid();
-					if (unsigned(end) !== 0) throw invalid();
+					} else if (tls.alignment !== 1) throw invalid();
+					expectBytes(0x0b);
+					if (position !== end) throw invalid();
 				}
-				if (initialized.size !== passiveDataSegments.length) throw invalid();
-				expectConstant(guard);
-				expectConstant(0xffffffff);
-				atomic(0);
-				expectBytes(0x1a, 0x0c);
-				if (unsigned(end) !== 1) throw invalid();
-				expectBytes(0x0b);
-				expectConstant(guard);
-				expectConstant(1);
-				if (constant(64) !== 0xffffffffffffffffn) throw invalid();
-				atomic(1);
-				expectBytes(0x1a, 0x0b);
-				for (let segment = 0; segment < passiveDataSegments.length; segment++) {
-					expectBytes(0xfc);
-					if (unsigned(end) !== 9 || unsigned(end) !== segment) throw invalid();
+				if (startup) {
+					position = startup.start;
+					end = startup.end;
+					// Pinned LLD's three blocks route guard states 0/1/2 to the
+					// initializer, waiter and completed paths respectively. An opcode
+					// allowlist cannot establish this ownership/control-flow contract.
+					expectBytes(0x02, 0x40, 0x02, 0x40, 0x02, 0x40);
+					const guard = Number(constant());
+					if (guard < 1024 || guard % 4 || guard + 4 > dataEnd) throw invalid();
+					expectConstant(0);
+					expectConstant(1);
+					atomic(0x48);
+					expectBytes(0x0e);
+					for (const value of [2, 0, 1, 2]) if (unsigned(end) !== value) throw invalid();
+					expectBytes(0x0b);
+					const initialized = new Set<number>(),
+						ranges: [number, number][] = [[guard, guard + 4]];
+					let initializedTls = false;
+					for (;;) {
+						const destination = Number(constant());
+						let value = Number(constant()),
+							setsTlsBase = false;
+						if (bytes[position] === 0x24) {
+							if (
+								!tls ||
+								!tls.size ||
+								initializedTls ||
+								value !== destination ||
+								destination % tls.alignment
+							)
+								throw invalid();
+							expectBytes(0x24);
+							if (unsigned(end) !== tlsBaseIndex) throw invalid();
+							setsTlsBase = true;
+							value = Number(constant());
+						}
+						if (bytes[position] === 0xfe) {
+							if (setsTlsBase || destination !== guard || value !== 2)
+								throw invalid();
+							atomic(0x17);
+							break;
+						}
+						if (value !== 0) throw invalid();
+						const length = Number(constant()),
+							high = destination + length;
+						if (
+							destination < 1024 ||
+							high > dataEnd ||
+							ranges.some(([low, end]) => destination < end && high > low)
+						)
+							throw invalid();
+						ranges.push([destination, high]);
+						expectBytes(0xfc);
+						const opcode = unsigned(end);
+						if (opcode === 8) {
+							const segment = unsigned(end);
+							if (initialized.has(segment) || passiveDataSegments[segment] !== length)
+								throw invalid();
+							if (setsTlsBase !== (segment === tlsSegment)) throw invalid();
+							if (setsTlsBase) initializedTls = true;
+							initialized.add(segment);
+						} else if (opcode !== 11 || setsTlsBase) throw invalid();
+						if (unsigned(end) !== 0) throw invalid();
+					}
+					if (initialized.size !== passiveDataSegments.length) throw invalid();
+					if (tls?.size && !initializedTls) throw invalid();
+					expectConstant(guard);
+					expectConstant(0xffffffff);
+					atomic(0);
+					expectBytes(0x1a, 0x0c);
+					if (unsigned(end) !== 1) throw invalid();
+					expectBytes(0x0b);
+					expectConstant(guard);
+					expectConstant(1);
+					if (constant(64) !== 0xffffffffffffffffn) throw invalid();
+					atomic(1);
+					expectBytes(0x1a, 0x0b);
+					for (let segment = 0; segment < passiveDataSegments.length; segment++) {
+						if (segment === tlsSegment) continue;
+						expectBytes(0xfc);
+						if (unsigned(end) !== 9 || unsigned(end) !== segment) throw invalid();
+					}
+					expectBytes(0x0b);
+					if (position !== end) throw invalid();
 				}
-				expectBytes(0x0b);
-				if (position !== end) throw invalid();
 			} finally {
 				position = savedPosition;
 			}
 		}
-		if ([...bodies.values()].some((body) => body.instructions.includes(0x40)))
+		if (!tls && [...bodies.values()].some((body) => body.instructions.includes(0x40)))
 			throw new Error(
 				'GCC shared entry does not support memory growth or allocator runtimes'
 			);
@@ -680,7 +827,8 @@ export async function compileGccWasm(
 			name: sharedMemory.entry,
 			parameterCount: type.parameters.length,
 			dataEnd,
-			heapBase
+			heapBase,
+			...(tls ? { tls } : {})
 		});
 	} else {
 		if (

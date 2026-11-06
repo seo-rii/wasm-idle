@@ -34,6 +34,7 @@ function profileSnapshot(value: unknown): WasiGccLinkProfile {
 			'simd',
 			'relaxedSimd',
 			'atomics',
+			'tls',
 			'language',
 			'rtti',
 			'coverage',
@@ -53,6 +54,8 @@ function profileSnapshot(value: unknown): WasiGccLinkProfile {
 		throw new Error('Relaxed SIMD link inputs require a SIMD profile');
 	if (profile.atomics !== undefined && typeof profile.atomics !== 'boolean')
 		throw new Error('Invalid GCC link input atomic profile');
+	if (profile.tls !== undefined && typeof profile.tls !== 'boolean')
+		throw new Error('Invalid GCC link input TLS profile');
 	const language = profile.language,
 		rtti = profile.rtti;
 	if (language !== undefined && language !== 'c' && language !== 'cpp')
@@ -88,6 +91,7 @@ function profileSnapshot(value: unknown): WasiGccLinkProfile {
 		if (profile.relaxedSimd === true)
 			throw new Error('clang-c-scalar-v1 does not qualify relaxed SIMD');
 		if (profile.atomics === true) throw new Error('clang-c-scalar-v1 does not qualify atomics');
+		if (profile.tls === true) throw new Error('clang-c-scalar-v1 does not qualify TLS');
 		contract = {
 			kind: 'clang-c-scalar-v1',
 			compilerVersion: '22.1.0',
@@ -101,6 +105,7 @@ function profileSnapshot(value: unknown): WasiGccLinkProfile {
 		simd: profile.simd,
 		...(profile.relaxedSimd === undefined ? {} : { relaxedSimd: profile.relaxedSimd }),
 		...(profile.atomics === undefined ? {} : { atomics: profile.atomics }),
+		...(profile.tls === undefined ? {} : { tls: profile.tls }),
 		...(language === undefined ? {} : { language }),
 		...(rtti === undefined ? {} : { rtti }),
 		...(profile.coverage === undefined ? {} : { coverage: profile.coverage }),
@@ -222,7 +227,8 @@ async function inspectObject(
 ) {
 	const inspection = await inspectGccWasm(bytes, 'object', {
 		relaxedSimd: profile.relaxedSimd === true,
-		atomics: profile.atomics === true
+		atomics: profile.atomics === true,
+		tls: profile.tls === true
 	});
 	if (inspection.features.simd128 && !profile.simd)
 		throw new Error('Object contains SIMD outside its declared profile');
@@ -374,9 +380,14 @@ async function inspectObject(
 		const kind = sr.byte(),
 			flags = sr.uint(),
 			undefinedSymbol = Boolean(flags & 0x10);
-		if (flags & ~0xf7 || (flags & 3) === 3 || (undefinedSymbol && (flags & 3) === 2))
+		if (
+			flags & ~(profile.tls === true ? 0x1f7 : 0xf7) ||
+			(flags & 3) === 3 ||
+			(undefinedSymbol && (flags & 3) === 2) ||
+			(flags & 0x100 && kind !== 1)
+		)
 			throw new Error(
-				'Unsupported object symbol flags (TLS/common/absolute are not supported)'
+				'Unsupported object symbol flags (TLS requires opt-in; common/absolute are not supported)'
 			);
 		const symbol: Symbol = { kind, flags };
 		if (kind === 0 || kind === 2 || kind === 5) {
@@ -425,7 +436,7 @@ async function inspectObject(
 		if (size !== segments.length) throw new Error('Object segment metadata count mismatch');
 		for (let n = size; n > 0; n--) {
 			segmentInfo.name();
-			if (segmentInfo.uint() > 31 || segmentInfo.uint() & ~5)
+			if (segmentInfo.uint() > 31 || segmentInfo.uint() & ~(profile.tls === true ? 7 : 5))
 				throw new Error('Unsupported object segment flags/alignment');
 		}
 		segmentInfo.done();
@@ -506,7 +517,7 @@ async function inspectObject(
 				'sign-ext',
 				'simd128',
 				...(profile.relaxedSimd === true ? ['relaxed-simd'] : []),
-				...(profile.atomics === true ? ['atomics'] : [])
+				...(profile.atomics === true || profile.tls === true ? ['atomics'] : [])
 			];
 			if (prefix === 43 && (!allowed.includes(name) || (name === 'simd128' && !profile.simd)))
 				throw new Error(`Unsupported object target feature: ${name}`);
@@ -514,7 +525,11 @@ async function inspectObject(
 				throw new Error('Object prohibits requested SIMD profile');
 			if (prefix === 45 && name === 'relaxed-simd' && profile.relaxedSimd === true)
 				throw new Error('Object prohibits requested relaxed SIMD profile');
-			if (prefix === 45 && name === 'atomics' && profile.atomics === true)
+			if (
+				prefix === 45 &&
+				name === 'atomics' &&
+				(profile.atomics === true || inspection.features.tls)
+			)
 				throw new Error('Object prohibits requested atomic profile');
 		}
 		r.done();
@@ -553,6 +568,7 @@ async function inspectObject(
 				[9, 3],
 				[13, 2],
 				[20, 5],
+				...(profile.tls === true ? [[21, 1] as const] : []),
 				[23, 1],
 				[26, 0]
 			]);
@@ -564,8 +580,10 @@ async function inspectObject(
 				throw new Error(
 					'Unsupported relocation type or invalid relocation symbol/type index'
 				);
-			if ([3, 4, 5, 8, 9, 23].includes(type)) r.signed();
-			const leb = [0, 1, 3, 4, 6, 7, 20].includes(type),
+			if (type === 21 && !(symbols[index].flags & 0x100))
+				throw new Error('TLS relocation requires a TLS data symbol');
+			if ([3, 4, 5, 8, 9, 21, 23].includes(type)) r.signed();
+			const leb = [0, 1, 3, 4, 6, 7, 20, 21].includes(type),
 				width = leb ? 5 : 4;
 			// Custom relocation offsets exclude the encoded section name. Standard
 			// code/data offsets retain their section-payload base and chunk bounds.
@@ -580,7 +598,7 @@ async function inspectObject(
 			previousEnd = offset + width;
 			if (leb) {
 				const last = bytes[end - 1],
-					signed = type === 1 || type === 4;
+					signed = type === 1 || type === 4 || type === 21;
 				if (
 					![0, 1, 2, 3].every((i) => bytes[start + i] >= 128) ||
 					last >= 128 ||
@@ -684,7 +702,8 @@ export async function validateWasiGccLinkInputs(
 	language: 'c' | 'cpp',
 	rtti = false,
 	relaxedSimd = false,
-	atomics = false
+	atomics = false,
+	tls = false
 ): Promise<readonly WasiGccLinkedInput[]> {
 	if (rtti && (language !== 'cpp' || !manifest.capabilities.rtti))
 		throw new Error('RTTI link validation requires a capable bundle and C++ source request');
@@ -692,6 +711,8 @@ export async function validateWasiGccLinkInputs(
 		throw new Error('Relaxed SIMD link validation requires a capable bundle and SIMD request');
 	if (atomics && (!manifest.capabilities.atomics || manifest.qualification.status !== 'verified'))
 		throw new Error('Atomic link validation requires a qualified capable bundle');
+	if (tls && (!manifest.capabilities.tls || manifest.qualification.status !== 'verified'))
+		throw new Error('TLS link validation requires a qualified capable bundle');
 	const identities: WasiGccLinkedInput[] = [];
 	for (const input of inputs) {
 		try {
@@ -707,6 +728,8 @@ export async function validateWasiGccLinkInputs(
 				);
 			if ((profile.atomics === true) !== atomics)
 				throw new Error('Link input atomic profile differs from the compilation request');
+			if ((profile.tls === true) !== tls)
+				throw new Error('Link input TLS profile differs from the compilation request');
 			if (compatibility.sysrootSha256 !== manifest.assets.sysroot.sha256)
 				throw new Error('Link input sysroot identity mismatch');
 			if (

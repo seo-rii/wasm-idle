@@ -19,6 +19,22 @@ export const gccAssetPaths = Object.freeze({
 	sysroot: 'sysroot.tar'
 } satisfies Record<CrossGccAssetName, string>);
 
+export const gccTlsIncludePath = '/sysroot/include/wasm32-wasi-tls';
+
+// These opt-in providers are inside the integrity-bound sysroot, never in the
+// global runtimeLibraries list used by legacy/default compilation.
+export const gccTlsRuntimePaths = Object.freeze({
+	ordinary: '/sysroot/lib/wasm32-wasi-tls/libgcc-wasi-tls.a',
+	ordinaryLibc: '/sysroot/lib/wasm32-wasi-tls/libc.a',
+	ordinaryLibm: '/sysroot/lib/wasm32-wasi-tls/libm.a',
+	ordinaryBuiltins: '/sysroot/lib/wasm32-wasi-tls/libclang_rt.builtins-wasm32.a',
+	ordinaryLongDouble: '/sysroot/lib/wasm32-wasi-tls/libc-printscan-long-double.a',
+	shared: '/sysroot/lib/wasm32-wasi-threads/libgcc-wasi-tls-shared.a',
+	libc: '/sysroot/lib/wasm32-wasi-threads/libc.a',
+	libm: '/sysroot/lib/wasm32-wasi-threads/libm.a',
+	builtins: '/sysroot/lib/wasm32-wasi-threads/libclang_rt.builtins-wasm32.a'
+});
+
 const fixed = {
 	schemaVersion: 1,
 	kind: 'gcc-x86_64-linux-gnu',
@@ -216,6 +232,12 @@ export function parseWasiGccManifest(value: unknown): WasiGccManifest {
 	}
 	if (capabilities.relaxedSimd && !capabilities.simd)
 		throw new Error('GCC WASI relaxed SIMD requires the SIMD capability');
+	// Preserve legacy parsed shapes as well as the absence=false behavior.
+	if (capabilityInput.tls !== undefined) {
+		if (typeof capabilityInput.tls !== 'boolean')
+			throw new Error('Invalid GCC WASI capability: tls');
+		capabilities.tls = capabilityInput.tls;
+	}
 	if (capabilities.sharedMemory && !capabilities.atomics)
 		throw new Error('GCC shared memory requires the atomics capability');
 	if (capabilities.longDouble && (!capabilities.libc || !capabilities.libm))
@@ -238,6 +260,16 @@ export function parseWasiGccManifest(value: unknown): WasiGccManifest {
 		return path;
 	});
 	const atomicLibraries = runtimeLibraries.filter((path) => path.endsWith('/libatomic.a'));
+	if (
+		runtimeLibraries.some(
+			(path) =>
+				/\/wasm32-wasi-(?:tls|threads)\//u.test(path) ||
+				/\/libgcc-wasi-tls(?:-shared)?\.a$/u.test(path)
+		)
+	)
+		throw new Error(
+			'GCC TLS runtime providers must remain separate from default runtimeLibraries'
+		);
 	if (
 		capabilities.atomics
 			? atomicLibraries.length !== 1 ||
