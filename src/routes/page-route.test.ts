@@ -819,7 +819,7 @@ describe('example route debug actions', () => {
 			/const sharedBufferAvailable = \$derived\(\s*!browser \|\| isSharedArrayBufferAvailable\(\)\s*\);/s
 		);
 		expect(source).toMatch(
-			/const preloadedStdinLanguages = new Set<PlaygroundLanguage>\(\['BASH', 'POSTGRESQL', 'SCALA'\]\);/
+			/const preloadedStdinLanguages = new Set<PlaygroundLanguage>\(\[\s*'BASH',\s*'POSTGRESQL',\s*'SCALA',\s*'CSHARP',\s*'FSHARP',\s*'VBNET'\s*\]\);/
 		);
 		expect(source).toMatch(
 			/const preloadedStdin =\s+sharedBufferAvailable && !preloadedStdinLanguages\.has\(language\)\s+\? undefined\s+: stdinInput;/s
@@ -833,6 +833,28 @@ describe('example route debug actions', () => {
 			/disabled=\{!!runningMode \|\|\s+!debugLanguage \|\|\s+!sharedBufferAvailable \|\|\s+!debugTargetAvailable\}/s
 		);
 	});
+
+	it.each(['CSHARP', 'FSHARP', 'VBNET'])(
+		'passes preloaded %s input and empty EOF without waiting for terminal input',
+		(language) => {
+			const languages = source.match(
+				/const preloadedStdinLanguages = new Set<PlaygroundLanguage>\(([\s\S]*?)\);/
+			)?.[1];
+			const inputSelection = source.match(/const preloadedStdin =([\s\S]*?);/)?.[1];
+			expect(languages).toBeTruthy();
+			expect(inputSelection).toBeTruthy();
+			for (const sharedBufferAvailable of [true, false]) {
+				for (const stdinInput of ['12 34\n56 78\n', '']) {
+					const stdin = runInNewContext(
+						`const preloadedStdinLanguages = new Set(${languages}); ${inputSelection}`,
+						{ language, sharedBufferAvailable, stdinInput }
+					);
+					expect(stdin).toBe(stdinInput);
+				}
+			}
+			expect(source).toContain('C#, F#, and VB.NET read all stdin when the program starts.');
+		}
+	);
 
 	it('derives non-debug runtime assets from the deployed application base', () => {
 		expect(source).toContain("from '$lib/playground/applicationAssets';");

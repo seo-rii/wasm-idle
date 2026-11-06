@@ -244,16 +244,11 @@ describe('runtime failure and Stop recovery', () => {
 				);
 				const overflow = await settle(page, 'failed');
 				expect(overflow.error).toContain('output exceeded');
+				await page.getByRole('textbox', { name: 'Preloaded stdin', exact: true }).fill('');
 				await beginRun(
 					page,
 					'using System; class Program { static void Main() { Console.WriteLine(Console.ReadLine() ?? "eof-recovered"); } }'
 				);
-				await page.waitForFunction(
-					() =>
-						(globalThis as any).__wasmIdleDebug.getExecutionState().status ===
-						'waiting-input'
-				);
-				await page.getByRole('button', { name: 'Send EOF', exact: true }).click();
 				await settle(page, 'completed', 'eof-recovered');
 			});
 		}

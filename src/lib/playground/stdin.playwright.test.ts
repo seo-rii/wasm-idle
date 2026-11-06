@@ -615,7 +615,7 @@ describe('wasm-idle browser stdin connection', () => {
 					expectedOutput: 'main=73',
 					language: 'CSHARP',
 					runTimeoutMs: Number(process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || '600000'),
-					sendEof: true,
+					preloadStdin: true,
 					source: csharpStdinSource,
 					stdinText: '73\n'
 				});
@@ -646,7 +646,7 @@ describe('wasm-idle browser stdin connection', () => {
 					expectedOutput: 'main=73',
 					language: 'FSHARP',
 					runTimeoutMs: Number(process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || '600000'),
-					sendEof: true,
+					preloadStdin: true,
 					source: fsharpStdinSource,
 					stdinText: '73\n'
 				});
@@ -1146,7 +1146,7 @@ int main() {
 					expectedOutput: 'main=73',
 					language: 'VBNET',
 					runTimeoutMs: Number(process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || '600000'),
-					sendEof: true,
+					preloadStdin: true,
 					source: vbnetStdinSource,
 					stdinText: '73\n'
 				});
