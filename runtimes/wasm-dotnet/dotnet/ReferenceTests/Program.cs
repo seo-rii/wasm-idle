@@ -79,6 +79,57 @@ internal static class ReferenceTests
         Check(debugRun.GetProperty("stdout").GetString()?.Replace("\r\n","\n")=="12\n",debugRun.ToString());
         var invalidPath=Parse(await CompilerHost.Compile(JsonSerializer.Serialize(new {source,language,referenceSetId=id,debug=true,sourcePath="/workspace/../outside.cs"})));
         Check(!invalidPath.GetProperty("success").GetBoolean(),"Traversal source paths must be rejected");
+#if WASM_DOTNET_CSHARP
+        await CheckCSharpRegressions(id!);
+#endif
         Console.WriteLine($"{language}: {assertions} assertions passed with actual compiler and stdin/stdout");
     }
+
+#if WASM_DOTNET_CSHARP
+    static async Task CheckCSharpRegressions(string referenceSetId)
+    {
+        const string path = "/workspace/nested/ArrayProgram.cs";
+        var cases = new[]
+        {
+            (Source: "using System; class MainClass { static void Main() { var values = Array.ConvertAll(Console.ReadLine()!.Split(), int.Parse); Console.WriteLine(values[0] + values[1]); } }", Expected: "42\n"),
+            (Source: "var values = Array.ConvertAll(Console.ReadLine()!.Split(), int.Parse);\nConsole.Write(values[0] + values[1]);", Expected: "42"),
+            (Source: "class MainClass { static void Main() { var values = new[] { 20, 2, 10 }; Array.Sort(values); Array.Reverse(values); Console.WriteLine(string.Join(\",\", values)); } }", Expected: "20,10,2\n")
+        };
+        foreach (var fixture in cases)
+        {
+            var compile = Parse(await CompilerHost.Compile(JsonSerializer.Serialize(new
+            {
+                source = fixture.Source, language = "csharp", referenceSetId, debug = true, sourcePath = path
+            })));
+            Check(compile.GetProperty("success").GetBoolean(), compile.ToString());
+            var run = Parse(await CompilerHost.Run(JsonSerializer.Serialize(new
+            {
+                assemblyId = compile.GetProperty("assemblyId").GetString(), stdin = "19 23\n"
+            })));
+            Check(run.GetProperty("exitCode").GetInt32() == 0, run.ToString());
+            Check(run.GetProperty("stdout").GetString()?.Replace("\r\n", "\n") == fixture.Expected, run.ToString());
+            Check(run.GetProperty("stderr").GetString() == "", run.ToString());
+
+            if (fixture.Source.StartsWith("var values"))
+            {
+                using var symbols = new MemoryStream(Convert.FromBase64String(compile.GetProperty("debug").GetProperty("symbolsBytesBase64").GetString()!));
+                using var provider = MetadataReaderProvider.FromPortablePdbStream(symbols);
+                var metadata = provider.GetMetadataReader();
+                Check(metadata.Documents.Select(handle => metadata.GetString(metadata.GetDocument(handle).Name)).Contains(path), "Implicit imports must preserve the original PDB source document");
+                var lines = metadata.MethodDebugInformation.SelectMany(handle => metadata.GetMethodDebugInformation(handle).GetSequencePoints()).Where(point => !point.IsHidden).Select(point => point.StartLine).ToArray();
+                Check(lines.Contains(1) && lines.Contains(2) && lines.All(line => line <= 2), "Implicit imports must preserve original PDB source lines");
+            }
+        }
+
+        var invalid = Parse(await CompilerHost.Compile(JsonSerializer.Serialize(new
+        {
+            source = "Console.WriteLine(1);\nMissingName();", language = "csharp", referenceSetId, sourcePath = path
+        })));
+        Check(!invalid.GetProperty("success").GetBoolean(), "An unrelated unknown name must still fail");
+        var errors = invalid.GetProperty("diagnostics").EnumerateArray().Where(diagnostic => diagnostic.GetProperty("severity").GetString() == "error").ToArray();
+        Check(errors.Length == 1, invalid.ToString());
+        Check(errors[0].GetProperty("fileName").GetString() == path && errors[0].GetProperty("lineNumber").GetInt32() == 2 && errors[0].GetProperty("columnNumber").GetInt32() == 1, "Implicit imports must preserve diagnostic source coordinates");
+        Check(errors[0].GetProperty("message").GetString()!.Contains("CS0103"), invalid.ToString());
+    }
+#endif
 }
