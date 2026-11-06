@@ -37,6 +37,15 @@ Roslyn with concurrent builds disabled. All three languages rewrite `Console` in
 buffered browser stdin shim before compilation. The shim is a compiler-independent assembly shared
 by all three bundles.
 
+C# source receives an implicit `global using System;` in a separate generated document, so both
+top-level statements and explicit `Main` methods can use `Console` and `Array` without changing
+user-source diagnostic or debugger line numbers. Other namespaces still need explicit imports.
+The host preserves the public `Array` methods and `Converter<TInput, TOutput>` during trimming:
+user code such as `Array.ConvertAll(values, int.Parse)` is compiled only after the runtime is built.
+The playground provides an input field for all three .NET languages and passes its contents,
+including empty input, before execution. Direct sandbox callers can pass `options.stdin`; callers
+using `write()` must finish their buffered input with `eof()`.
+
 The playground executes the threaded runtime in a dedicated host Worker so cancellation can
 terminate compilation and user code. The host sets `dotnetSidecar`; the runtime patcher ensures
 Emscripten reads `ENVIRONMENT_IS_WORKER` after .NET initializes its replacements. This identifies

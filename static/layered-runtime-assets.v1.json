@@ -3,9 +3,9 @@
   "maxLayerBytes": 16777216,
   "layers": {
     "wasm-dotnet/runtime/layers/csharp-00.pack.gz": {
-      "length": 16688991,
-      "compressedLength": 4534899,
-      "sha256": "c23fa949d00cac2eeee72b6a707bceddf2b13ba88445804907135165fb0d3a0c"
+      "length": 16730463,
+      "compressedLength": 4542609,
+      "sha256": "17fa18ea55f1f350cef28bf17bdbc835aca83ee90ae14d47f537922edfe551a1"
     },
     "wasm-dotnet/runtime/layers/csharp-01.pack.gz": {
       "length": 424490,
@@ -62,326 +62,326 @@
     "wasm-dotnet/runtime/csharp/System.Collections.Specialized.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
       "offset": 6486381,
-      "length": 9493
+      "length": 10517
     },
     "wasm-dotnet/runtime/csharp/System.Collections.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 6495874,
-      "length": 31509
+      "offset": 6496898,
+      "length": 32021
     },
     "wasm-dotnet/runtime/csharp/System.ComponentModel.Primitives.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 6527383,
+      "offset": 6528919,
       "length": 6933
     },
     "wasm-dotnet/runtime/csharp/System.ComponentModel.TypeConverter.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 6534316,
+      "offset": 6535852,
       "length": 45333
     },
     "wasm-dotnet/runtime/csharp/System.ComponentModel.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 6579649,
+      "offset": 6581185,
       "length": 4885
     },
     "wasm-dotnet/runtime/csharp/System.Console.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 6584534,
+      "offset": 6586070,
       "length": 30997
     },
     "wasm-dotnet/runtime/csharp/System.Diagnostics.DiagnosticSource.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 6615531,
+      "offset": 6617067,
       "length": 18197
     },
     "wasm-dotnet/runtime/csharp/System.Globalization.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 6633728,
+      "offset": 6635264,
       "length": 4373
     },
     "wasm-dotnet/runtime/csharp/System.IO.Compression.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 6638101,
-      "length": 24853
+      "offset": 6639637,
+      "length": 25365
     },
     "wasm-dotnet/runtime/csharp/System.IO.MemoryMappedFiles.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 6662954,
+      "offset": 6665002,
       "length": 24341
     },
     "wasm-dotnet/runtime/csharp/System.IO.Pipelines.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 6687295,
+      "offset": 6689343,
       "length": 5909
     },
     "wasm-dotnet/runtime/csharp/System.Linq.Expressions.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 6693204,
+      "offset": 6695252,
       "length": 7445
     },
     "wasm-dotnet/runtime/csharp/System.Linq.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 6700649,
+      "offset": 6702697,
       "length": 46869
     },
     "wasm-dotnet/runtime/csharp/System.Memory.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 6747518,
+      "offset": 6749566,
       "length": 14101
     },
     "wasm-dotnet/runtime/csharp/System.Net.Http.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 6761619,
+      "offset": 6763667,
       "length": 138517
     },
     "wasm-dotnet/runtime/csharp/System.Net.Primitives.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 6900136,
+      "offset": 6902184,
       "length": 7445
     },
     "wasm-dotnet/runtime/csharp/System.ObjectModel.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 6907581,
+      "offset": 6909629,
       "length": 5909
     },
     "wasm-dotnet/runtime/csharp/System.Private.CoreLib.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 6913490,
-      "length": 1633557
+      "offset": 6915538,
+      "length": 1659157
     },
     "wasm-dotnet/runtime/csharp/System.Private.Uri.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 8547047,
-      "length": 64277
+      "offset": 8574695,
+      "length": 64789
     },
     "wasm-dotnet/runtime/csharp/System.Private.Xml.Linq.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 8611324,
+      "offset": 8639484,
       "length": 44309
     },
     "wasm-dotnet/runtime/csharp/System.Private.Xml.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 8655633,
-      "length": 530197
+      "offset": 8683793,
+      "length": 530709
     },
     "wasm-dotnet/runtime/csharp/System.Reflection.Metadata.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 9185830,
+      "offset": 9214502,
       "length": 257813
     },
     "wasm-dotnet/runtime/csharp/System.Runtime.InteropServices.JavaScript.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 9443643,
+      "offset": 9472315,
       "length": 59157
     },
     "wasm-dotnet/runtime/csharp/System.Runtime.Numerics.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 9502800,
+      "offset": 9531472,
       "length": 80661
     },
     "wasm-dotnet/runtime/csharp/System.Runtime.Serialization.Primitives.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 9583461,
+      "offset": 9612133,
       "length": 5909
     },
     "wasm-dotnet/runtime/csharp/System.Security.Cryptography.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 9589370,
+      "offset": 9618042,
       "length": 23829
     },
     "wasm-dotnet/runtime/csharp/System.Text.Encodings.Web.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 9613199,
+      "offset": 9641871,
       "length": 29461
     },
     "wasm-dotnet/runtime/csharp/System.Text.Json.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 9642660,
-      "length": 197909
+      "offset": 9671332,
+      "length": 198421
     },
     "wasm-dotnet/runtime/csharp/System.Text.RegularExpressions.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 9840569,
-      "length": 235797
+      "offset": 9869753,
+      "length": 236821
     },
     "wasm-dotnet/runtime/csharp/System.Threading.Channels.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 10076366,
+      "offset": 10106574,
       "length": 20757
     },
     "wasm-dotnet/runtime/csharp/System.Threading.Tasks.Parallel.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 10097123,
+      "offset": 10127331,
       "length": 15637
     },
     "wasm-dotnet/runtime/csharp/System.Xml.Linq.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 10112760,
+      "offset": 10142968,
       "length": 4373
     },
     "wasm-dotnet/runtime/csharp/System.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 10117133,
+      "offset": 10147341,
       "length": 4373
     },
     "wasm-dotnet/runtime/csharp/WasmDotnet.Compiler.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 10121506,
-      "length": 69909
+      "offset": 10151714,
+      "length": 81173
     },
     "wasm-dotnet/runtime/csharp/WasmDotnet.Stdin.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 10191415,
+      "offset": 10232887,
       "length": 3861
     },
     "wasm-dotnet/runtime/csharp/blazor.boot.json": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 10195276,
+      "offset": 10236748,
       "length": 7774
     },
     "wasm-dotnet/runtime/csharp/cs/Microsoft.CodeAnalysis.CSharp.resources.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 10203050,
+      "offset": 10244522,
       "length": 430869
     },
     "wasm-dotnet/runtime/csharp/cs/Microsoft.CodeAnalysis.resources.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 10633919,
+      "offset": 10675391,
       "length": 37653
     },
     "wasm-dotnet/runtime/csharp/de/Microsoft.CodeAnalysis.CSharp.resources.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 10671572,
+      "offset": 10713044,
       "length": 461077
     },
     "wasm-dotnet/runtime/csharp/de/Microsoft.CodeAnalysis.resources.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 11132649,
+      "offset": 11174121,
       "length": 39701
     },
     "wasm-dotnet/runtime/csharp/dotnet.js": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 11172350,
+      "offset": 11213822,
       "length": 42864
     },
     "wasm-dotnet/runtime/csharp/dotnet.native.js": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 11215214,
+      "offset": 11256686,
       "length": 148537
     },
     "wasm-dotnet/runtime/csharp/dotnet.native.worker.mjs": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 11363751,
+      "offset": 11405223,
       "length": 2854
     },
     "wasm-dotnet/runtime/csharp/dotnet.runtime.js": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 11366605,
+      "offset": 11408077,
       "length": 232671
     },
     "wasm-dotnet/runtime/csharp/es/Microsoft.CodeAnalysis.CSharp.resources.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 11599276,
+      "offset": 11640748,
       "length": 450837
     },
     "wasm-dotnet/runtime/csharp/es/Microsoft.CodeAnalysis.resources.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 12050113,
+      "offset": 12091585,
       "length": 39189
     },
     "wasm-dotnet/runtime/csharp/fr/Microsoft.CodeAnalysis.CSharp.resources.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 12089302,
+      "offset": 12130774,
       "length": 463125
     },
     "wasm-dotnet/runtime/csharp/fr/Microsoft.CodeAnalysis.resources.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 12552427,
+      "offset": 12593899,
       "length": 39701
     },
     "wasm-dotnet/runtime/csharp/it/Microsoft.CodeAnalysis.CSharp.resources.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 12592128,
+      "offset": 12633600,
       "length": 457493
     },
     "wasm-dotnet/runtime/csharp/it/Microsoft.CodeAnalysis.resources.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 13049621,
+      "offset": 13091093,
       "length": 39701
     },
     "wasm-dotnet/runtime/csharp/ja/Microsoft.CodeAnalysis.CSharp.resources.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 13089322,
+      "offset": 13130794,
       "length": 504597
     },
     "wasm-dotnet/runtime/csharp/ja/Microsoft.CodeAnalysis.resources.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 13593919,
+      "offset": 13635391,
       "length": 43285
     },
     "wasm-dotnet/runtime/csharp/ko/Microsoft.CodeAnalysis.CSharp.resources.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 13637204,
+      "offset": 13678676,
       "length": 462613
     },
     "wasm-dotnet/runtime/csharp/ko/Microsoft.CodeAnalysis.resources.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 14099817,
+      "offset": 14141289,
       "length": 39701
     },
     "wasm-dotnet/runtime/csharp/pl/Microsoft.CodeAnalysis.CSharp.resources.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 14139518,
+      "offset": 14180990,
       "length": 463637
     },
     "wasm-dotnet/runtime/csharp/pl/Microsoft.CodeAnalysis.resources.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 14603155,
+      "offset": 14644627,
       "length": 39701
     },
     "wasm-dotnet/runtime/csharp/pt-BR/Microsoft.CodeAnalysis.CSharp.resources.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 14642856,
+      "offset": 14684328,
       "length": 443157
     },
     "wasm-dotnet/runtime/csharp/pt-BR/Microsoft.CodeAnalysis.resources.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 15086013,
+      "offset": 15127485,
       "length": 38677
     },
     "wasm-dotnet/runtime/csharp/ru/Microsoft.CodeAnalysis.CSharp.resources.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 15124690,
+      "offset": 15166162,
       "length": 610581
     },
     "wasm-dotnet/runtime/csharp/ru/Microsoft.CodeAnalysis.resources.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 15735271,
+      "offset": 15776743,
       "length": 49941
     },
     "wasm-dotnet/runtime/csharp/supportFiles/0_runtimeconfig.bin": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 15785212,
+      "offset": 15826684,
       "length": 1551
     },
     "wasm-dotnet/runtime/csharp/tr/Microsoft.CodeAnalysis.CSharp.resources.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 15786763,
+      "offset": 15828235,
       "length": 439061
     },
     "wasm-dotnet/runtime/csharp/tr/Microsoft.CodeAnalysis.resources.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 16225824,
+      "offset": 16267296,
       "length": 38165
     },
     "wasm-dotnet/runtime/csharp/zh-Hans/Microsoft.CodeAnalysis.CSharp.resources.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 16263989,
+      "offset": 16305461,
       "length": 390421
     },
     "wasm-dotnet/runtime/csharp/zh-Hans/Microsoft.CodeAnalysis.resources.wasm": {
       "layer": "wasm-dotnet/runtime/layers/csharp-00.pack.gz",
-      "offset": 16654410,
+      "offset": 16695882,
       "length": 34581
     },
     "wasm-dotnet/runtime/csharp/zh-Hant/Microsoft.CodeAnalysis.CSharp.resources.wasm": {

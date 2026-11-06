@@ -95,6 +95,10 @@ public static partial class CompilerHost
     [DynamicDependency(DynamicallyAccessedMemberTypes.PublicMethods | DynamicallyAccessedMemberTypes.PublicProperties, typeof(Environment))]
     [DynamicDependency(DynamicallyAccessedMemberTypes.PublicMethods | DynamicallyAccessedMemberTypes.PublicProperties, typeof(int))]
     [DynamicDependency(DynamicallyAccessedMemberTypes.PublicMethods | DynamicallyAccessedMemberTypes.PublicProperties, typeof(string))]
+    // User assemblies are compiled after trimming. Preserve array APIs and the
+    // delegate used by Array.ConvertAll, including compiler-generated method groups.
+    [DynamicDependency(DynamicallyAccessedMemberTypes.PublicMethods, typeof(Array))]
+    [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(Converter<,>))]
     public static void Main()
     {
     }
@@ -252,9 +256,12 @@ public static partial class CompilerHost
         using var stream = new MemoryStream();
         using var symbols = new MemoryStream();
         var syntaxTree = CSharpSyntaxTree.ParseText(SourceText.From(RewriteCSharpSource(source), Encoding.UTF8), path: sourcePath);
+        // Keep the implicit import in its own document so diagnostics and PDB
+        // sequence points retain the line numbers of the user's source.
+        var implicitUsings = CSharpSyntaxTree.ParseText(SourceText.From("global using System;", Encoding.UTF8), path: "/__wasm_dotnet__/ImplicitUsings.g.cs");
         var compilation = CSharpCompilation.Create(
             $"WasmIdleCSharp_{Guid.NewGuid():N}",
-            [syntaxTree],
+            [syntaxTree, implicitUsings],
             MetadataReferences(references),
             new CSharpCompilationOptions(OutputKind.ConsoleApplication)
                 .WithOptimizationLevel(OptimizationLevel.Debug)
