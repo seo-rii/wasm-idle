@@ -119,7 +119,9 @@ export const scenarios = [
 		// Another 4 KiB covers the 2,143-byte overflow and retains 1,953 bytes of headroom.
 		// Relaxed SIMD contracts measure 2,743,076 bytes with the same files/dependencies.
 		// Another 8 KiB covers the 6,948-byte overflow and retains 1,244 bytes of headroom.
-		budget: { maxBytes: 2.5 * MiB + 120 * 1024, maxFiles: 190, maxPackages: 4 },
+		// Atomic/shared-entry contracts measure 2,783,253 bytes / 192 files / four packages.
+		// The minimum 39 KiB increase covers 38,933 bytes; the new Worker pair needs two more files.
+		budget: { maxBytes: 2.5 * MiB + 159 * 1024, maxFiles: 192, maxPackages: 4 },
 		absentPackageNames: [
 			'wasm-idle',
 			'@wasm-idle/llvm-core',

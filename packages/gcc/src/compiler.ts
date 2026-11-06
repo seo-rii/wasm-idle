@@ -22,6 +22,7 @@ import type {
 	CrossGccStageResult,
 	CrossGccTool,
 	GccWasmInspection,
+	GccSharedMemoryProfile,
 	WasiGccArtifact,
 	WasiGccCompileRequest,
 	WasiGccCompiler,
@@ -180,6 +181,12 @@ export async function createGccCompiler(
 		}
 	});
 	if (!sysroot.size) throw new Error('GCC sysroot is empty');
+	if (
+		manifest.target === 'wasm32-wasi' &&
+		manifest.capabilities.atomics &&
+		!sysroot.get('/sysroot/lib/wasm32-wasi/libatomic.a')?.byteLength
+	)
+		throw new Error('GCC atomic bundle is missing its qualified libatomic archive');
 	const sysrootTree = gccSysrootTree(sysroot, directories, '/sysroot');
 	const factories = new Map<
 		CrossGccTool,
@@ -232,7 +239,9 @@ export async function createGccCompiler(
 		linkInputs: readonly WasiGccLinkInput[] = [],
 		language: 'c' | 'cpp' = 'cpp',
 		rttiEnabled = false,
-		relaxedSimdEnabled = false
+		relaxedSimdEnabled = false,
+		atomicsEnabled = false,
+		sharedMemory?: GccSharedMemoryProfile
 	): Promise<{
 		exitCode: number;
 		stdout: string;
@@ -254,7 +263,9 @@ export async function createGccCompiler(
 		let linkedInputs: readonly WasiGccLinkedInput[] | undefined;
 		async function inspectOutput(bytes: Uint8Array, emit: 'object' | 'executable') {
 			const inspection = await inspectGccWasm(bytes, emit, {
-				relaxedSimd: relaxedSimdEnabled
+				relaxedSimd: relaxedSimdEnabled,
+				atomics: atomicsEnabled,
+				...(emit === 'executable' && sharedMemory ? { sharedMemory } : {})
 			});
 			if (inspection.features.simd128 && !simdEnabled)
 				throw new Error(
@@ -282,7 +293,8 @@ export async function createGccCompiler(
 					simdEnabled,
 					language,
 					rttiEnabled,
-					relaxedSimdEnabled
+					relaxedSimdEnabled,
+					atomicsEnabled
 				);
 			for (const stage of stages) {
 				if (disposed) throw new Error('GCC compiler is disposed');
@@ -582,7 +594,9 @@ export async function createGccCompiler(
 				'linkInputs' in plan ? plan.linkInputs : [],
 				'language' in plan ? plan.language : 'cpp',
 				'rtti' in plan && plan.rtti,
-				'relaxedSimd' in plan && plan.relaxedSimd
+				'relaxedSimd' in plan && plan.relaxedSimd,
+				'atomics' in plan && plan.atomics,
+				'sharedMemory' in plan ? plan.sharedMemory : undefined
 			);
 			if (!result.workspace) return result;
 			const { workspace, wasmInspection, coverageNotes, ...completed } = result;
@@ -599,6 +613,7 @@ export async function createGccCompiler(
 								...('relaxedSimd' in plan && plan.relaxedSimd
 									? { relaxedSimd: true }
 									: {}),
+								...('atomics' in plan && plan.atomics ? { atomics: true } : {}),
 								...('coverage' in plan && plan.coverage ? { coverage: true } : {}),
 								// Preserve legacy false-bundle receipt shapes. New bundles
 								// distinguish pure C from both C++ RTTI profiles.
@@ -648,6 +663,10 @@ export async function createGccCompiler(
 					...(linkInput ? { linkInput } : {}),
 					...(wasmInspection ? { wasm: wasmInspection } : {}),
 					...('relaxedSimd' in plan && plan.relaxedSimd ? { relaxedSimd: true } : {}),
+					...('atomics' in plan && plan.atomics ? { atomics: true } : {}),
+					...('sharedMemory' in plan && plan.sharedMemory
+						? { sharedMemory: plan.sharedMemory }
+						: {}),
 					...(plan.emit === 'executable' && coverageNotes
 						? {
 								coverage: {

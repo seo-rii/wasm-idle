@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createCrossGccWorker, createGccWorker } from '../src/worker.js';
 import type { WasiGccArtifact, WasiGccCompileRequest, WasiGccLinkProfile } from '../src/types.js';
+import { sharedArtifact, sharedProfile } from './atomic-fixtures.js';
 
 /** Synthetic transport fixture only: CPU/compiler correctness belongs to the real bundle probe. */
 class FixtureWorker {
@@ -46,6 +47,34 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('GCC Worker ownership and cancellation', () => {
+	it('snapshots atomic and shared-entry selection through compile Worker transport', async () => {
+		const compiler = await createGccWorker({ ...options, target: 'wasm32-wasi' });
+		const transport = FixtureWorker.instances[0];
+		const request = {
+			code: 'source',
+			atomics: true,
+			sharedMemory: { entry: 'entry', initialPages: 1, maximumPages: 1 }
+		};
+		const pending = compiler.compile(request);
+		request.atomics = false;
+		request.sharedMemory.initialPages = 9;
+		const message = transport.messages.at(-1)!;
+		expect(message.request).toMatchObject({ atomics: true, sharedMemory: sharedProfile });
+		const artifact = sharedArtifact();
+		transport.onmessage?.({
+			data: structuredClone({
+				id: message.id,
+				type: 'result',
+				result: { exitCode: 0, stdout: '', stderr: '', stages: [], artifact }
+			})
+		});
+		const result = await pending;
+		expect(result.artifact).toEqual(artifact);
+		expect(result.artifact!.bytes).not.toBe(artifact.bytes);
+		expect(result.artifact!.sharedMemory).not.toBe(artifact.sharedMemory);
+		compiler.dispose();
+	});
+
 	it('retains relaxed SIMD request, link profile, inspection and artifact selection across Worker messages', async () => {
 		const compiler = await createGccWorker({ ...options, target: 'wasm32-wasi' });
 		const transport = FixtureWorker.instances[0];
@@ -95,7 +124,7 @@ describe('GCC Worker ownership and cancellation', () => {
 				imports: [],
 				exports: [],
 				hasLinkingMetadata: false,
-				features: { simd128: true, relaxedSimd: true }
+				features: { simd128: true, relaxedSimd: true, atomics: false, bulkMemory: false }
 			}
 		};
 		transport.onmessage?.({

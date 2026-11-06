@@ -262,10 +262,11 @@ function bundle(
 }
 
 // These byte fixtures exercise host boundaries only, never real GCC code generation.
-function wasiCommand(simd = false, relaxedSimd = false) {
+function wasiCommand(simd = false, relaxedSimd = false, atomics = false) {
 	const vector = [0xfd, 0x0c, ...Array<number>(16).fill(0)];
 	const body = [
 		0,
+		...(atomics ? [0xfe, 3, 0] : []),
 		...(relaxedSimd
 			? [...vector, ...vector, 0xfd, 0x80, 2, 0x1a]
 			: simd
@@ -316,11 +317,12 @@ function wasiCommand(simd = false, relaxedSimd = false) {
 	]);
 }
 
-function wasiObject(relaxedSimd = false) {
+function wasiObject(relaxedSimd = false, atomics = false) {
 	// Relocatable identity function: exercises host receipts, not GCC semantics.
 	const vector = [0xfd, 0x0c, ...Array<number>(16).fill(0)];
 	const body = [
 		0,
+		...(atomics ? [0xfe, 3, 0] : []),
 		...(relaxedSimd ? [...vector, ...vector, 0xfd, 0x80, 2, 0x1a] : []),
 		0x20,
 		0,
@@ -372,12 +374,31 @@ function wasiObject(relaxedSimd = false) {
 		3,
 		97,
 		100,
-		100
+		100,
+		...(atomics
+			? [
+					0,
+					26,
+					15,
+					...encoder.encode('target_features'),
+					1,
+					43,
+					7,
+					...encoder.encode('atomics')
+				]
+			: [])
 	]);
 }
 
-function wasiBundle(linker = wasiCommand(), rtti = false, coverage = false, relaxedSimd = false) {
-	const fixture = bundle();
+function wasiBundle(
+	linker = wasiCommand(),
+	rtti = false,
+	coverage = false,
+	relaxedSimd = false,
+	atomics = false,
+	atomicProvider = true
+) {
+	const fixture = bundle(atomics && atomicProvider ? 'lib/wasm32-wasi/libatomic.a' : undefined);
 	fixture.files.delete('gcc-toolchain.v1.json');
 	fixture.files.delete('ld.mjs');
 	fixture.files.set('ld.wasm', linker);
@@ -401,7 +422,10 @@ function wasiBundle(linker = wasiCommand(), rtti = false, coverage = false, rela
 		sysrootPath: '/sysroot',
 		gccInstallation: '/sysroot/lib/gcc/wasm32-wasi/17.0.0',
 		resourceDir: '/sysroot/lib/gcc/wasm32-wasi/17.0.0/include',
-		runtimeLibraries: ['/sysroot/lib/wasm32-wasi/libclang_rt.builtins-wasm32.a'],
+		runtimeLibraries: [
+			'/sysroot/lib/wasm32-wasi/libclang_rt.builtins-wasm32.a',
+			...(atomics ? ['/sysroot/lib/wasm32-wasi/libatomic.a'] : [])
+		],
 		capabilities: {
 			c: true,
 			cpp: true,
@@ -415,9 +439,10 @@ function wasiBundle(linker = wasiCommand(), rtti = false, coverage = false, rela
 			dynamicLinking: false,
 			simd: true,
 			...(relaxedSimd ? { relaxedSimd: true } : {}),
+			...(atomics ? { atomics: true, sharedMemory: true } : {}),
 			...(coverage ? { coverage: true } : {})
 		},
-		qualification: { status: relaxedSimd ? 'verified' : 'unverified' },
+		qualification: { status: relaxedSimd || atomics ? 'verified' : 'unverified' },
 		assets: Object.fromEntries(
 			[...fixture.files].map(([path, bytes]) => [
 				path === 'sysroot.tar'
@@ -826,10 +851,92 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 				emit: 'object',
 				simd: true
 			});
-			expect(result.artifact?.wasm?.features).toEqual({ simd128: true, relaxedSimd: false });
+			expect(result.artifact?.wasm?.features).toEqual({
+				simd128: true,
+				relaxedSimd: false,
+				atomics: false,
+				bulkMemory: false
+			});
 			expect(result.stages[0].argv).toContain('-msimd128');
 		} finally {
 			compiler.dispose();
+		}
+	});
+
+	it('binds atomic compilation receipts and private execution to the selected qualified provider', async () => {
+		await expect(
+			createGccCompiler(wasiBundle(undefined, false, false, false, true, false))
+		).rejects.toThrow('missing its qualified libatomic archive');
+		host.output = wasiObject(false, true);
+		const options = wasiBundle(undefined, false, false, false, true);
+		const compiler = await createGccCompiler(options);
+		const legacy = await createGccCompiler(wasiBundle());
+		try {
+			await expect(compiler.compile({ code: '', emit: 'object' })).rejects.toThrow(
+				'require explicit opt-in'
+			);
+			const count = host.calls.length;
+			await expect(
+				legacy.compile({ code: '', emit: 'object', atomics: true })
+			).rejects.toThrow('qualified capable bundle');
+			expect(host.calls).toHaveLength(count);
+			const { artifact } = await compiler.compile({
+				code: '',
+				emit: 'object',
+				atomics: true
+			});
+			expect(artifact).toMatchObject({
+				atomics: true,
+				wasm: { features: { atomics: true } },
+				linkInput: { profile: { atomics: true } }
+			});
+			const input = { ...artifact!.linkInput!, bytes: artifact!.bytes, path: 'atomic.o' };
+			const fetchCount = vi.mocked(options.fetchImpl).mock.calls.length,
+				toolCount = host.calls.length;
+			await expect(
+				compiler.compile({
+					code: '',
+					atomics: true,
+					sharedMemory: { entry: 'entry', initialPages: 4, maximumPages: 4 },
+					linkInputs: [input]
+				})
+			).rejects.toThrow(
+				'external link receipts do not attest shared-safe static initialization'
+			);
+			expect(vi.mocked(options.fetchImpl).mock.calls).toHaveLength(fetchCount);
+			expect(host.calls).toHaveLength(toolCount);
+			await expect(compiler.compile({ code: '', linkInputs: [input] })).rejects.toThrow(
+				'atomic profile differs'
+			);
+			const failed = await compiler.compile({
+				code: '!source error',
+				atomics: true,
+				linkInputs: [input]
+			});
+			expect(failed).toMatchObject({
+				exitCode: 9,
+				linkInputs: [{ profile: { atomics: true } }]
+			});
+			const executable = {
+				...artifact!,
+				format: 'wasm-executable' as const,
+				bytes: wasiCommand(false, false, true)
+			};
+			await expect(compiler.run(executable)).resolves.toMatchObject({
+				exitCode: 0,
+				stdout: ''
+			});
+			await expect(compiler.run({ ...executable, atomics: undefined })).rejects.toThrow(
+				'require explicit opt-in'
+			);
+			await expect(legacy.run(executable)).rejects.toThrow('qualified capable bundle');
+			host.output = wasiObject();
+			const normal = await compiler.compile({ code: '', emit: 'object' });
+			expect(normal.artifact).not.toHaveProperty('atomics');
+			expect(normal.artifact!.linkInput!.profile).not.toHaveProperty('atomics');
+		} finally {
+			compiler.dispose();
+			legacy.dispose();
 		}
 	});
 
@@ -857,7 +964,12 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 			const result = await compiler.compile(request);
 			const object = result.artifact!;
 			expect(object.relaxedSimd).toBe(true);
-			expect(object.wasm!.features).toEqual({ simd128: true, relaxedSimd: true });
+			expect(object.wasm!.features).toEqual({
+				simd128: true,
+				relaxedSimd: true,
+				atomics: false,
+				bulkMemory: false
+			});
 			expect(object.linkInput!.profile).toMatchObject({ simd: true, relaxedSimd: true });
 			const input = { ...object.linkInput!, bytes: object.bytes, path: 'provider.o' };
 			await expect(

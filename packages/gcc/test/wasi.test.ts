@@ -370,7 +370,12 @@ describe('GCC WASI API contract (synthetic fixtures, not GCC qualification)', ()
 					'requires explicit opt-in'
 				);
 			const inspection = await inspectGccWasm(bytes, 'executable', { relaxedSimd: true });
-			expect(inspection.features).toEqual({ simd128: true, relaxedSimd: true });
+			expect(inspection.features).toEqual({
+				simd128: true,
+				relaxedSimd: true,
+				atomics: false,
+				bulkMemory: false
+			});
 			expect(Object.isFrozen(inspection.features)).toBe(true);
 			await expect(runGccWasiArtifact(artifact(bytes), {}, manifest)).rejects.toThrow(
 				'requires explicit opt-in'
@@ -387,7 +392,7 @@ describe('GCC WASI API contract (synthetic fixtures, not GCC qualification)', ()
 			{ dataSegments: [[0xfd, 0x93, 2]] }
 		);
 		await expect(inspectGccWasm(dataOnly, 'executable')).resolves.toMatchObject({
-			features: { simd128: true, relaxedSimd: false }
+			features: { simd128: true, relaxedSimd: false, atomics: false, bulkMemory: false }
 		});
 		await expect(
 			inspectGccWasm(instructionFixture([0xfd, ...uleb(0x114)]), 'executable', {
@@ -1241,7 +1246,12 @@ describe('WASI runner and binary validation with hand-encoded Wasm fixtures', ()
 		});
 		const vector = instructionFixture([0xfd, 0x0c, ...Array<number>(16).fill(0), 0x1a]);
 		const inspected = await inspectGccWasm(vector, 'executable');
-		expect(inspected.features).toEqual({ simd128: true, relaxedSimd: false });
+		expect(inspected.features).toEqual({
+			simd128: true,
+			relaxedSimd: false,
+			atomics: false,
+			bulkMemory: false
+		});
 		expect(Object.isFrozen(inspected.features)).toBe(true);
 	});
 
@@ -1330,7 +1340,7 @@ describe('WASI runner and binary validation with hand-encoded Wasm fixtures', ()
 		{ code: [0xfd, ...uleb(0x9a)], error: 'Unsupported GCC WebAssembly opcode: 0xfd 9a' },
 		{ code: [0xfc, 18], error: 'Unsupported GCC WebAssembly opcode: 0xfc 12' },
 		{ code: [0xfd, ...uleb(0x100)], error: 'GCC WASI relaxed SIMD requires explicit opt-in' },
-		{ code: [0xfe, 0], error: 'GCC WASI does not support atomic instructions or threads' }
+		{ code: [0xfe, 0], error: 'GCC atomic instructions require explicit opt-in' }
 	])('rejects malformed or unsupported instructions: $error ($code)', async ({ code, error }) => {
 		await expect(
 			inspectGccWasm(instructionFixture(code, { closed: false }), 'executable')

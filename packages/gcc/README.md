@@ -73,8 +73,9 @@ metadata includes imports, exports, linking information, memory limits and
 The target is little-endian wasm32/WASI Preview 1: pointers and `long` are 32-bit,
 unlike x86-64. Objects require linking metadata. Executables export memory and
 `_start: () -> ()` and may import only Preview 1 functions. The loader rejects ELF,
-unexpected imports, imported/shared memory, memory64 and implicit start sections;
-object memory imports also reject shared memory/memory64. Execution uses the exact
+unexpected imports, imported/shared memory, memory64 and implicit start sections
+in this command profile; the explicit shared-entry profile below has a separate
+ABI. Object memory imports also reject shared memory/memory64. Execution uses the exact
 private byte snapshot inspected, protecting against later caller mutations.
 Digests establish asset identity; native and Chromium tests qualify the compiler.
 
@@ -150,9 +151,9 @@ actual Worker execution of the exact compiler/runtime must establish support;
 SDK parser/planner tests alone do not qualify a bundle.
 
 Requests for exceptions, threads and dynamic linking still fail.
-C++ retains `-fno-exceptions -fuse-cxa-atexit -fno-threadsafe-statics`, preserving
+The command profile retains `-fno-exceptions -fuse-cxa-atexit -fno-threadsafe-statics`, preserving
 static destruction in this single-threaded environment.
-`__GCC_WASI_SINGLE_THREAD__=1` selects the producer's `errno` header, which uses
+Its `__GCC_WASI_SINGLE_THREAD__=1` selects the producer's `errno` header, which uses
 single-thread WASI libc storage and rejects `_REENTRANT`; it provides no TLS.
 `cpu` must be `wasm32`; x86 `avx2`/`avx2-fma` do not select Wasm SIMD. GCC diagnoses
 unsupported target pragmas/attributes with `-Werror=pragmas -Werror=attributes`.
@@ -198,6 +199,81 @@ out-of-range conversions, fused arithmetic and selection masks. Qualification
 must record actual native and Worker outputs and check each against the allowed
 result set; the two engines need not choose identical permitted results.
 
+## Atomic instructions and shared entries
+
+`capabilities.atomics` and `capabilities.sharedMemory` are optional and default to
+false; shared memory requires atomics. `threads` remains false. An `atomics: true`
+compile request requires a verified capable bundle and an actual engine probe.
+It selects GCC `-matomics`, WABT `--enable-threads`, and exactly the qualified
+`/sysroot/lib/wasm32-wasi/libatomic.a` provider from the integrity-checked sysroot.
+Capable bundles use `-mno-atomics` and omit that provider for ordinary requests;
+older bundles preserve their compiler arguments. This compile profile can also
+produce ordinary WASI commands with private memory. Atomic waits require shared
+memory. Binary inspection reports `features.atomics` and `features.bulkMemory`,
+and rejects atomic instructions without explicit opt-in.
+
+`sharedMemory: { entry, initialPages, maximumPages }` selects a separate
+freestanding C or C++ executable contract. Both page counts must be equal, between
+1 and 8192; each page is 65536 bytes. There is no WASI command CRT or `_start`.
+The exported entry takes only `i32` arguments and returns one `i32`; use
+`extern "C"` for a C++ entry. The SDK does not link libstdc++, enable RTTI or
+coverage, or provide pthreads, TLS, dynamic constructors, stdio or allocation in
+this profile. Pure libc memory routines may resolve libatomic's dependencies.
+Use `sources` for additional translation units; every unit receives the same
+freestanding flags. External `linkInputs` are rejected in shared mode because
+their existing object/archive receipts do not attest shared-safe static
+initialization. The ordinary atomic command profile still accepts those inputs.
+The final executable may import only `env.memory`. C++ atomic builtins and
+separately qualified header operations do not establish general C++ runtime
+thread safety.
+
+```ts
+import { runGccSharedArtifact } from '@wasm-idle/gcc';
+
+// `compiler` is a wasm32-wasi Worker with a qualified atomics/shared-memory bundle.
+const compiled = await compiler.compile({
+	language: 'c',
+	atomics: true,
+	sharedMemory: { entry: 'count', initialPages: 4, maximumPages: 4 },
+	code: `static unsigned counter;
+unsigned count(unsigned iterations) {
+  for (unsigned i = 0; i < iterations; ++i)
+    __atomic_fetch_add(&counter, 1, __ATOMIC_SEQ_CST);
+  return (unsigned)&counter;
+}`
+});
+if (compiled.exitCode !== 0) throw new Error(compiled.stderr);
+const result = await runGccSharedArtifact(
+	compiled.artifact!,
+	{ workerArguments: [[10000], [10000]], stackBytes: 32768, timeoutMs: 30000 },
+	compiler.manifest
+);
+const counter = new DataView(result.memory.buffer).getUint32(result.values[0] >>> 0, true);
+console.log(counter); // 20000 after both Workers finish
+```
+
+The browser must support cross-origin isolation, shared WebAssembly memory and
+module Workers. Serve the application with appropriate COOP/COEP headers.
+`runGccSharedArtifact` creates a fresh shared memory and 1–16 Workers; it does not
+fetch compiler assets. Each argument row belongs to one Worker. `stackBytes` is
+a multiple of 16 between 4096 and 16777216. Data and all disjoint stack regions,
+including guards, must fit the fixed memory. The SDK checks the actual entry
+signature, exported data/heap bounds, local mutable stack pointer, zero TLS size,
+empty constructors, passive data and stackless one-time linker initialization.
+Each Worker instantiates the same module, sets its own stack pointer, waits for
+the host start barrier, then runs the guest entry. Host Atomics coordinate the
+barrier; guest instructions perform the program's atomic operations.
+
+Success returns `values`, a copied `Uint8Array` in `memory`, and `stackRegions`;
+it exposes no live memory or Worker handles. Abort, timeout, trap, malformed reply
+or a failed stack guard invalidates the entire run and requests termination of
+every Worker. Stale replies are ignored and that memory is permanently discarded.
+Browser termination can be delayed, so rejection does not promise immediate CPU
+quiescence or safe reuse. `timeoutMs` defaults to 30000 and is limited to 300000.
+Use this standalone runner for shared artifacts; ordinary `compiler.run()` and
+`runGccWasiArtifact()` reject them. Atomic WASI artifacts also require their
+qualified manifest when passed directly to `runGccWasiArtifact()`.
+
 ## Explicit static link inputs
 
 WASI executable requests accept ordered `linkInputs`, separately from `files` and
@@ -208,6 +284,10 @@ libraries follow them. Entries retain their listed order, including archives.
 The optional `profile.relaxedSimd` defaults to false and must exactly match the
 compilation request. True requires `profile.simd: true` and the same qualified
 GCC bundle; the existing `clang-c-scalar-v1` contract does not qualify relaxed SIMD.
+Likewise, optional `profile.atomics` defaults to false and must exactly match the
+request. Atomic object instructions require a `+atomics` target feature and the
+same qualified GCC bundle; `clang-c-scalar-v1` does not qualify atomics. Object
+receipts and compile Worker transport preserve both selections.
 Every archive member's actual instructions and declared `target_features` are
 checked before compilation, including members the linker would leave unused.
 Archives use ordinary lazy member extraction; this API adds no `--whole-archive`,

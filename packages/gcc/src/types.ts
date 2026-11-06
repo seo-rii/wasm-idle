@@ -139,7 +139,7 @@ export interface CrossGccWorker extends Omit<CrossGccCompiler, 'compile' | 'prec
 		request?: CrossGccPrecompileRequest,
 		options?: { signal?: AbortSignal }
 	): Promise<CrossGccPrecompileResult>;
-	/** Terminates the Worker immediately. Create a new Worker to compile again. */
+	/** Invalidates the Worker and requests termination. Engine CPU work may stop later. */
 	cancel(): void;
 }
 
@@ -197,6 +197,10 @@ export interface WasiGccManifest {
 		simd: boolean;
 		/** Qualified relaxed SIMD backend; absent is false and true requires simd. */
 		relaxedSimd?: boolean;
+		/** Qualified native atomic lowering and the matching GNU libatomic provider. */
+		atomics?: boolean;
+		/** Qualified freestanding shared-entry linking; does not imply pthread or TLS. */
+		sharedMemory?: boolean;
 	}>;
 	readonly qualification: Readonly<{ status: 'unverified' | 'verified' }>;
 }
@@ -218,6 +222,10 @@ export interface WasiGccCompileRequest extends Omit<CrossGccCompileRequest, 'cpu
 	readonly simd?: boolean;
 	/** Explicit relaxed SIMD profile. Requires simd: true, a capable bundle and engine. */
 	readonly relaxedSimd?: boolean;
+	/** Explicit native atomic instruction and libatomic profile; omitted means false. */
+	readonly atomics?: boolean;
+	/** Separate freestanding C/C++ executable contract. Requires atomics: true. */
+	readonly sharedMemory?: GccSharedMemoryProfile;
 	/** Source-only GCC gcov instrumentation. Requires a qualified bundle and no linkInputs. */
 	readonly coverage?: boolean;
 	/** Embed standard DWARF4 in WAT/object/executable output. Requires a qualified bundle;
@@ -234,6 +242,8 @@ export interface WasiGccLinkProfile {
 	readonly simd: boolean;
 	/** Relaxed SIMD compilation profile. Legacy omission means false. */
 	readonly relaxedSimd?: boolean;
+	/** Native atomic compilation profile. Legacy omission means false. */
+	readonly atomics?: boolean;
 	/** Known source language. Legacy omission cannot establish that an input is pure C. */
 	readonly language?: 'c' | 'cpp';
 	/** C++ RTTI profile; legacy omission means false. Pure C inputs are RTTI-neutral. */
@@ -281,8 +291,20 @@ export interface GccWasmInspection {
 	readonly exports: readonly WebAssembly.ModuleExportDescriptor[];
 	readonly hasLinkingMetadata: boolean;
 	/** Detected from validated instructions and types, independently of optional custom metadata. */
-	readonly features: Readonly<{ simd128: boolean; relaxedSimd: boolean }>;
-	readonly memory?: Readonly<{ initialPages: number; maximumPages?: number; shared: false }>;
+	readonly features: Readonly<{
+		simd128: boolean;
+		relaxedSimd: boolean;
+		atomics: boolean;
+		bulkMemory: boolean;
+	}>;
+	readonly memory?: Readonly<{ initialPages: number; maximumPages?: number; shared: boolean }>;
+	/** Present only after validating the separate freestanding shared-entry ABI. */
+	readonly sharedEntry?: Readonly<{
+		name: string;
+		parameterCount: number;
+		dataEnd: number;
+		heapBase: number;
+	}>;
 }
 
 export interface WasiGccArtifact extends Omit<CrossGccArtifact, 'target' | 'format' | 'cpu'> {
@@ -292,6 +314,9 @@ export interface WasiGccArtifact extends Omit<CrossGccArtifact, 'target' | 'form
 	readonly wasm?: GccWasmInspection;
 	/** Retains explicit compile-time relaxed SIMD selection for checked execution. */
 	readonly relaxedSimd?: boolean;
+	/** Retains explicit compile-time atomic selection for checked execution. */
+	readonly atomics?: boolean;
+	readonly sharedMemory?: GccSharedMemoryProfile;
 	/** Present for object output. Reuse with {path, bytes: artifact.bytes, ...artifact.linkInput!}. */
 	readonly linkInput?: WasiGccLinkInputReceipt;
 	/** Present on covered executables. run() requires an exact writable /profile preopen. */
@@ -378,6 +403,33 @@ export interface WasiGccRunResult {
 	readonly files: readonly WasiGccResultFile[];
 }
 
+/** Fresh fixed-size shared memory for one freestanding exported entry, never WASI _start. */
+export interface GccSharedMemoryProfile {
+	readonly entry: string;
+	readonly initialPages: number;
+	/** Must equal initialPages; shared execution does not grow memory. */
+	readonly maximumPages: number;
+}
+
+export interface GccSharedRunOptions {
+	/** One row per Worker; rows must match the exported i32-arguments -> i32 signature. */
+	readonly workerArguments: readonly (readonly number[])[];
+	/** Per-Worker stack reservation, aligned to sixteen bytes. */
+	readonly stackBytes: number;
+	readonly signal?: AbortSignal;
+	/** Bounds host acceptance of the entire cohort, including initialization. */
+	readonly timeoutMs?: number;
+}
+
+export interface GccSharedRunResult {
+	readonly values: readonly number[];
+	/** Copied only after all entries return successfully; never a live shared buffer. */
+	readonly memory: Uint8Array;
+	readonly stackRegions: readonly Readonly<{ low: number; high: number }>[];
+	readonly milliseconds: number;
+	readonly peakMemoryBytes: number;
+}
+
 export interface WasiGccCompiler {
 	readonly manifest: WasiGccManifest;
 	readonly identity: WasiGccIdentity;
@@ -396,6 +448,6 @@ export interface WasiGccWorker extends Omit<WasiGccCompiler, 'compile' | 'run'> 
 		artifact: WasiGccArtifact,
 		options?: WasiGccRunOptions & { signal?: AbortSignal }
 	): Promise<WasiGccRunResult>;
-	/** Terminates compilation or guest execution immediately; the Worker cannot be reused. */
+	/** Invalidates the Worker and requests termination; physical execution may stop later. */
 	cancel(): void;
 }

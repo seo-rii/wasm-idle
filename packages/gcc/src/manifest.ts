@@ -200,13 +200,24 @@ export function parseWasiGccManifest(value: unknown): WasiGccManifest {
 	if (typeof capabilityInput.simd !== 'boolean')
 		throw new Error('Invalid GCC WASI capability: simd');
 	capabilities.simd = capabilityInput.simd;
-	for (const name of ['longDouble', 'int128', 'coverage', 'debug', 'debugger', 'relaxedSimd']) {
+	for (const name of [
+		'longDouble',
+		'int128',
+		'coverage',
+		'debug',
+		'debugger',
+		'relaxedSimd',
+		'atomics',
+		'sharedMemory'
+	]) {
 		if (capabilityInput[name] !== undefined && typeof capabilityInput[name] !== 'boolean')
 			throw new Error(`Invalid GCC WASI capability: ${name}`);
 		capabilities[name] = (capabilityInput[name] ?? false) as boolean;
 	}
 	if (capabilities.relaxedSimd && !capabilities.simd)
 		throw new Error('GCC WASI relaxed SIMD requires the SIMD capability');
+	if (capabilities.sharedMemory && !capabilities.atomics)
+		throw new Error('GCC shared memory requires the atomics capability');
 	if (capabilities.longDouble && (!capabilities.libc || !capabilities.libm))
 		throw new Error('GCC WASI longDouble requires libc and libm');
 	if (capabilities.coverage && (!capabilities.libc || !capabilities.staticInitialization))
@@ -226,6 +237,16 @@ export function parseWasiGccManifest(value: unknown): WasiGccManifest {
 			throw new Error('Invalid GCC WASI runtime library path');
 		return path;
 	});
+	const atomicLibraries = runtimeLibraries.filter((path) => path.endsWith('/libatomic.a'));
+	if (
+		capabilities.atomics
+			? atomicLibraries.length !== 1 ||
+				atomicLibraries[0] !== '/sysroot/lib/wasm32-wasi/libatomic.a'
+			: atomicLibraries.length !== 0
+	)
+		throw new Error(
+			'GCC atomics requires exactly its qualified /sysroot/lib/wasm32-wasi/libatomic.a provider'
+		);
 	if (capabilities.debugger)
 		for (const library of [
 			'/sysroot/lib/wasm32-wasi/libstdc++debugger.a',

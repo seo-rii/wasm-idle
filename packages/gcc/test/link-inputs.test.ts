@@ -57,6 +57,7 @@ function object(
 		noSymbols?: boolean;
 		simd?: boolean;
 		relaxedSimd?: boolean;
+		atomics?: boolean;
 		feature?: string;
 		prohibitFeature?: boolean;
 		init?: boolean;
@@ -64,18 +65,20 @@ function object(
 	} = {}
 ) {
 	const symbol = options.symbol ?? 'helper';
-	const body = options.simd
-		? [
-				0,
-				0xfd,
-				0x0c,
-				...Array<number>(16).fill(0),
-				...(options.relaxedSimd
-					? [0xfd, 0x0c, ...Array<number>(16).fill(0), 0xfd, 0x80, 2]
-					: []),
-				0x0b
-			]
-		: [0, 0x20, 0, ...(options.relocation ? [0x10, 0x80, 0x80, 0x80, 0x80, 0] : []), 0x0b];
+	const body = options.atomics
+		? [0, 0x41, 0, 0x41, 1, 0xfe, 0x1e, 2, 0, 0x0b]
+		: options.simd
+			? [
+					0,
+					0xfd,
+					0x0c,
+					...Array<number>(16).fill(0),
+					...(options.relaxedSimd
+						? [0xfd, 0x0c, ...Array<number>(16).fill(0), 0xfd, 0x80, 2]
+						: []),
+					0x0b
+				]
+			: [0, 0x20, 0, ...(options.relocation ? [0x10, 0x80, 0x80, 0x80, 0x80, 0] : []), 0x0b];
 	const symbols = options.relocation
 		? [2, 0, 0, 1, ...name(symbol), 0, 16, 0]
 		: [1, 0, 0, 0, ...name(symbol)];
@@ -93,6 +96,7 @@ function object(
 			? section(2, [1, ...name('env'), ...name(options.importName ?? 'callee'), 0, 0])
 			: []),
 		...section(3, [1, 0]),
+		...(options.atomics ? section(5, [1, 0, 1]) : []),
 		...section(10, [1, ...uint(body.length), ...body]),
 		...custom('linking', [
 			options.version ?? 2,
@@ -166,6 +170,97 @@ const validate = (inputs: readonly WasiGccLinkInput[], simd = false, language: '
 	validateWasiGccLinkInputs(snapshotWasiGccLinkInputs(inputs), manifest, hash, simd, language);
 
 describe('explicit WASI link inputs', () => {
+	it('binds atomic objects and every archive member to the qualified opt-in profile', async () => {
+		const capable = {
+			...manifest,
+			capabilities: { ...manifest.capabilities, atomics: true },
+			qualification: { status: 'verified' as const }
+		};
+		const atomicProfile = { ...profile, atomics: true };
+		const validateAtomic = (entries: readonly WasiGccLinkInput[], selected = true) =>
+			validateWasiGccLinkInputs(
+				snapshotWasiGccLinkInputs(entries),
+				capable,
+				hash,
+				false,
+				'c',
+				false,
+				false,
+				selected
+			);
+		const bytes = object({ atomics: true, feature: 'atomics' });
+		for (const entry of [
+			await input(bytes, 'atomic.o', atomicProfile),
+			await input(
+				archive([{ path: 'atomic.o', bytes, symbol: 'helper' }]),
+				'atomic.a',
+				atomicProfile
+			)
+		]) {
+			await expect(validateAtomic([entry])).resolves.toMatchObject([
+				{ profile: atomicProfile }
+			]);
+			await expect(validateAtomic([entry], false)).rejects.toThrow('atomic profile differs');
+			await expect(validateAtomic([{ ...entry, profile }])).rejects.toThrow(
+				'atomic profile differs'
+			);
+			await expect(validateAtomic([{ ...entry, profile }], false)).rejects.toThrow(
+				'require explicit opt-in'
+			);
+			await expect(
+				validateWasiGccLinkInputs([entry], manifest, hash, false, 'c', false, false, true)
+			).rejects.toThrow('qualified capable bundle');
+			await expect(
+				validateWasiGccLinkInputs(
+					[entry],
+					{ ...capable, qualification: { status: 'unverified' } },
+					hash,
+					false,
+					'c',
+					false,
+					false,
+					true
+				)
+			).rejects.toThrow('qualified capable bundle');
+		}
+		await expect(
+			validateAtomic([await input(object({ atomics: true }), 'missing.o', atomicProfile)])
+		).rejects.toThrow('missing its atomics target feature');
+		await expect(
+			validateAtomic([
+				await input(
+					object({ feature: 'atomics', prohibitFeature: true }),
+					'prohibit.o',
+					atomicProfile
+				)
+			])
+		).rejects.toThrow('prohibits requested atomic profile');
+		const raw = await input(bytes, 'atomic.o', atomicProfile);
+		for (const atomics of ['true', 1, null, {}])
+			expect(() =>
+				snapshotWasiGccLinkInputs([
+					{ ...raw, profile: { ...atomicProfile, atomics } } as never
+				])
+			).toThrow('Invalid GCC link input atomic profile');
+		expect(() =>
+			snapshotWasiGccLinkInputs([
+				{
+					...raw,
+					profile: {
+						...atomicProfile,
+						compatibility: {
+							kind: 'clang-c-scalar-v1',
+							compilerVersion: '22.1.0',
+							compilerCommit: '4434dabb69916856b824f68a64b029c67175e532',
+							sysrootSha256: sysrootHash
+						}
+					}
+				}
+			])
+		).toThrow('does not qualify atomics');
+		expect(snapshotWasiGccLinkInputs([await input()])[0].profile).not.toHaveProperty('atomics');
+	});
+
 	it('binds relaxed object and archive inputs to explicit matching request and bundle profiles', async () => {
 		const capable = {
 			...manifest,
