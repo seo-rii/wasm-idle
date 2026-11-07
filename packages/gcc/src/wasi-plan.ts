@@ -1,5 +1,10 @@
 import { gccCompileInputs } from './plan.js';
-import { supportsGccWasmRelaxedSimd, supportsGccWasmSimd } from './wasm-output.js';
+import {
+	snapshotGccSharedMemory,
+	supportsGccWasmAtomics,
+	supportsGccWasmRelaxedSimd,
+	supportsGccWasmSimd
+} from './wasm-output.js';
 import { snapshotWasiGccLinkInputs } from './wasm-link-inputs.js';
 import type { CrossGccTool, WasiGccCompileRequest, WasiGccManifest } from './types.js';
 
@@ -14,6 +19,8 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 				'cpu',
 				'simd',
 				'relaxedSimd',
+				'atomics',
+				'sharedMemory',
 				'rtti',
 				'coverage',
 				'debug',
@@ -30,6 +37,32 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 			],
 			manifest.capabilities.debugger === true
 		);
+	if (request.atomics !== undefined && typeof request.atomics !== 'boolean')
+		throw new Error('Invalid GCC atomic option');
+	const atomics = request.atomics === true;
+	if (atomics) {
+		if (!manifest.capabilities.atomics || manifest.qualification.status !== 'verified')
+			throw new Error('GCC atomics requires a qualified capable bundle');
+		if (!supportsGccWasmAtomics())
+			throw new Error('This WebAssembly engine does not support atomic instructions');
+	}
+	const sharedMemory =
+		request.sharedMemory === undefined
+			? undefined
+			: snapshotGccSharedMemory(request.sharedMemory);
+	if (sharedMemory) {
+		if (
+			!atomics ||
+			!manifest.capabilities.sharedMemory ||
+			manifest.qualification.status !== 'verified'
+		)
+			throw new Error(
+				'GCC shared memory requires atomics: true and a qualified shared-memory bundle'
+			);
+		if (emit !== 'executable') throw new Error('GCC shared memory requires executable output');
+		if (request.coverage || request.rtti)
+			throw new Error('GCC shared entry does not support coverage or RTTI runtimes');
+	}
 	if (
 		(standard === 'c++26' || standard === 'gnu++26') &&
 		manifest.qualification.status !== 'verified'
@@ -47,6 +80,10 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 			throw new Error('GCC WASI debug currently requires optimization=0');
 	}
 	const linkInputs = snapshotWasiGccLinkInputs(request.linkInputs);
+	if (sharedMemory && linkInputs.length)
+		throw new Error(
+			'GCC shared entry requires source-only compilation: external link receipts do not attest shared-safe static initialization'
+		);
 	if (linkInputs.length && emit !== 'executable')
 		throw new Error('Explicit GCC link inputs require executable output');
 	if (request.coverage !== undefined && typeof request.coverage !== 'boolean')
@@ -93,7 +130,11 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 	}
 	if (language === 'cpp' && !manifest.capabilities.cpp)
 		throw new Error('This GCC wasm32-wasi bundle does not support C++');
-	if (emit === 'executable' && (!manifest.capabilities.libc || !manifest.capabilities.libm))
+	if (
+		emit === 'executable' &&
+		!sharedMemory &&
+		(!manifest.capabilities.libc || !manifest.capabilities.libm)
+	)
 		throw new Error('This GCC wasm32-wasi bundle cannot link WASI libc and libm executables');
 	const cc = [
 		'-quiet',
@@ -102,7 +143,7 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 		'-fdiagnostics-color=never',
 		'-Werror=attributes',
 		'-Werror=pragmas',
-		'-D__GCC_WASI_SINGLE_THREAD__=1',
+		...(sharedMemory ? ['-ffreestanding', '-fno-builtin'] : ['-D__GCC_WASI_SINGLE_THREAD__=1']),
 		...definitions
 	];
 	if (debug) cc.push('-g', '-gdwarf-4', '-gno-variable-location-views');
@@ -110,6 +151,7 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 	if (manifest.capabilities.simd) cc.push(request.simd ? '-msimd128' : '-mno-simd128');
 	if (manifest.capabilities.relaxedSimd)
 		cc.push(request.relaxedSimd ? '-mrelaxed-simd' : '-mno-relaxed-simd');
+	if (manifest.capabilities.atomics) cc.push(atomics ? '-matomics' : '-mno-atomics');
 	if (coverage)
 		cc.push(
 			'-fprofile-arcs',
@@ -122,8 +164,7 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 		cc.push(
 			'-fno-exceptions',
 			request.rtti === true ? '-frtti' : '-fno-rtti',
-			'-fuse-cxa-atexit',
-			'-fno-threadsafe-statics'
+			...(sharedMemory ? [] : ['-fuse-cxa-atexit', '-fno-threadsafe-statics'])
 		);
 	if (request.preprocessed) cc.push('-fpreprocessed');
 	else {
@@ -171,6 +212,7 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 					'-r',
 					'--enable-annotations',
 					...(request.relaxedSimd ? ['--enable-relaxed-simd'] : []),
+					...(atomics ? ['--enable-threads'] : []),
 					assembly,
 					'-o',
 					object
@@ -182,31 +224,70 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 	}
 	if (emit === 'executable') {
 		const lib = '/sysroot/lib/wasm32-wasi';
+		const libraries = manifest.runtimeLibraries.filter(
+			(path) => atomics || !path.endsWith('/libatomic.a')
+		);
 		stages.push({
 			tool: 'ld',
-			argv: [
-				'--fatal-warnings',
-				...(manifest.capabilities.debugger
-					? ['--export-if-defined=_ZN9__gnu_cxx30debugger_signal_for_breakpointE']
-					: []),
-				'-m',
-				'wasm32',
-				'-e',
-				'_start',
-				'-o',
-				'/workspace/program.wasm',
-				`${lib}/crt1-command.o`,
-				`-L${lib}`,
-				`-L${manifest.gccInstallation}`,
-				...objects,
-				...linkInputs.map((input) => `/link-inputs/${input.path}`),
-				...(language === 'cpp' && manifest.capabilities.libstdcxx ? ['-lstdc++'] : []),
-				...(manifest.capabilities.longDouble ? ['-lc-printscan-long-double'] : []),
-				...(coverage ? ['-lgcov', '-lwasi-emulated-getpid'] : []),
-				'-lm',
-				'-lc',
-				...manifest.runtimeLibraries
-			],
+			argv: sharedMemory
+				? [
+						'--fatal-warnings',
+						'--no-entry',
+						'--import-memory',
+						'--shared-memory',
+						'--export-memory',
+						'--no-stack-first',
+						'--global-base=1024',
+						'-z',
+						'stack-size=0',
+						`--initial-memory=${sharedMemory.initialPages * 65536}`,
+						`--max-memory=${sharedMemory.maximumPages * 65536}`,
+						'--extra-features=atomics,bulk-memory,mutable-globals',
+						...[
+							'__stack_pointer',
+							'__heap_base',
+							'__data_end',
+							'__wasm_call_ctors',
+							'__tls_size',
+							sharedMemory.entry
+						].map((name) => `--export=${name}`),
+						'-m',
+						'wasm32',
+						'-o',
+						'/workspace/program.wasm',
+						`-L${lib}`,
+						`-L${manifest.gccInstallation}`,
+						...objects,
+						...linkInputs.map((input) => `/link-inputs/${input.path}`),
+						...libraries.filter((path) => path.endsWith('/libatomic.a')),
+						'-lc',
+						...libraries.filter((path) => !path.endsWith('/libatomic.a'))
+					]
+				: [
+						'--fatal-warnings',
+						...(manifest.capabilities.debugger
+							? ['--export-if-defined=_ZN9__gnu_cxx30debugger_signal_for_breakpointE']
+							: []),
+						'-m',
+						'wasm32',
+						'-e',
+						'_start',
+						'-o',
+						'/workspace/program.wasm',
+						`${lib}/crt1-command.o`,
+						`-L${lib}`,
+						`-L${manifest.gccInstallation}`,
+						...objects,
+						...linkInputs.map((input) => `/link-inputs/${input.path}`),
+						...(language === 'cpp' && manifest.capabilities.libstdcxx
+							? ['-lstdc++']
+							: []),
+						...(manifest.capabilities.longDouble ? ['-lc-printscan-long-double'] : []),
+						...(coverage ? ['-lgcov', '-lwasi-emulated-getpid'] : []),
+						'-lm',
+						'-lc',
+						...libraries
+					],
 			output: '/workspace/program.wasm'
 		});
 	}
@@ -222,6 +303,8 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 		language,
 		simd: request.simd === true,
 		relaxedSimd: request.relaxedSimd === true,
+		atomics,
+		...(sharedMemory ? { sharedMemory } : {}),
 		rtti: request.rtti === true,
 		...(coverage ? { coverage: true as const } : {}),
 		stages,

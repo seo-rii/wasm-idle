@@ -39,7 +39,7 @@ export function createGccWorker(
 	options: GccWorkerOptions & { target: 'wasm32-wasi' }
 ): Promise<WasiGccWorker>;
 export function createGccWorker(options: GccWorkerOptions): Promise<CrossGccWorker | WasiGccWorker>;
-/** Owns a dedicated Worker. Cancellation ends compiler and guest CPU work synchronously. */
+/** Owns a dedicated Worker. Cancellation invalidates it and requests asynchronous termination. */
 export async function createGccWorker(
 	options: GccWorkerOptions
 ): Promise<CrossGccWorker | WasiGccWorker> {

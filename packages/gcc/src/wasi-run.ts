@@ -29,6 +29,15 @@ export async function runGccWasiArtifact(
 		!(artifact.bytes instanceof Uint8Array)
 	)
 		throw new Error('GCC run requires a linked wasm32-wasi executable artifact');
+	if (artifact.sharedMemory !== undefined)
+		throw new Error('GCC shared artifacts require runGccSharedArtifact');
+	if (artifact.atomics !== undefined && typeof artifact.atomics !== 'boolean')
+		throw new Error('Invalid GCC WASI artifact atomic profile');
+	if (artifact.atomics === true) {
+		const trusted = manifest === undefined ? undefined : parseWasiGccManifest(manifest);
+		if (!trusted?.capabilities.atomics || trusted.qualification.status !== 'verified')
+			throw new Error('GCC atomic execution requires a qualified capable bundle');
+	}
 	if (artifact.relaxedSimd !== undefined && typeof artifact.relaxedSimd !== 'boolean')
 		throw new Error('Invalid GCC WASI artifact relaxed SIMD profile');
 	if (artifact.relaxedSimd === true) {
@@ -117,7 +126,8 @@ export async function runGccWasiArtifact(
 		debug: false
 	});
 	const { module, inspection } = await compileGccWasm(artifact.bytes, 'executable', {
-		relaxedSimd: artifact.relaxedSimd === true
+		relaxedSimd: artifact.relaxedSimd === true,
+		atomics: artifact.atomics === true
 	});
 	for (const entry of inspection.imports)
 		if (

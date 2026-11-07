@@ -119,7 +119,9 @@ export const scenarios = [
 		// Another 4 KiB covers the 2,143-byte overflow and retains 1,953 bytes of headroom.
 		// Relaxed SIMD contracts measure 2,743,076 bytes with the same files/dependencies.
 		// Another 8 KiB covers the 6,948-byte overflow and retains 1,244 bytes of headroom.
-		budget: { maxBytes: 2.5 * MiB + 120 * 1024, maxFiles: 190, maxPackages: 4 },
+		// Atomic/shared-entry contracts measure 2,783,253 bytes / 192 files / four packages.
+		// The minimum 39 KiB increase covers 38,933 bytes; the new Worker pair needs two more files.
+		budget: { maxBytes: 2.5 * MiB + 159 * 1024, maxFiles: 192, maxPackages: 4 },
 		absentPackageNames: [
 			'wasm-idle',
 			'@wasm-idle/llvm-core',
@@ -424,7 +426,9 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Another 115 KiB covers the 116,415-byte overflow and retains 1,345 bytes of headroom.
 		// GCC relaxed-simd CI job 127948998376 measures 42,803,390 bytes / 3,402 files / 66 packages.
 		// Add 9 KiB for this feature while preserving the preceding aggregate headroom.
-		budget: { maxBytes: 40 * MiB + 842 * 1024, maxFiles: 3_402, maxPackages: 70 },
+		// GCC atomics CI job 127950008400 measures 42,843,769 bytes / 3,406 files / 66 packages.
+		// Add 40 KiB for this feature while preserving the preceding aggregate headroom.
+		budget: { maxBytes: 40 * MiB + 882 * 1024, maxFiles: 3_406, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

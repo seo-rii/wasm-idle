@@ -1,4 +1,75 @@
-import type { GccWasmInspection } from './types.js';
+import type { GccSharedMemoryProfile, GccWasmInspection } from './types.js';
+
+export function supportsGccWasmAtomics(): boolean {
+	const body = [0, 0x41, 0, 0x41, 1, 0xfe, 0x1e, 2, 0, 0x1a, 0xfe, 3, 0, 0x0b];
+	return WebAssembly.validate(
+		Uint8Array.from([
+			0,
+			97,
+			115,
+			109,
+			1,
+			0,
+			0,
+			0,
+			1,
+			4,
+			1,
+			0x60,
+			0,
+			0,
+			3,
+			2,
+			1,
+			0,
+			5,
+			3,
+			1,
+			0,
+			1,
+			10,
+			body.length + 2,
+			1,
+			body.length,
+			...body
+		])
+	);
+}
+
+export function snapshotGccSharedMemory(value: unknown): GccSharedMemoryProfile {
+	if (!value || typeof value !== 'object' || Array.isArray(value))
+		throw new Error('Invalid GCC shared memory profile');
+	const input = value as Record<string, unknown>;
+	if (
+		Object.keys(input).some(
+			(key) => !['entry', 'initialPages', 'maximumPages'].includes(key)
+		) ||
+		typeof input.entry !== 'string' ||
+		!/^[A-Za-z_][A-Za-z0-9_]{0,127}$/u.test(input.entry) ||
+		input.entry.startsWith('__wasm_') ||
+		['_start', 'memory', '__stack_pointer', '__heap_base', '__data_end', '__tls_size'].includes(
+			input.entry
+		) ||
+		!Number.isSafeInteger(input.initialPages) ||
+		(input.initialPages as number) < 1 ||
+		(input.initialPages as number) > 8192 ||
+		input.maximumPages !== input.initialPages
+	)
+		throw new Error(
+			'GCC shared memory requires an explicit entry and equal bounded initial/maximum pages'
+		);
+	return Object.freeze({
+		entry: input.entry,
+		initialPages: input.initialPages as number,
+		maximumPages: input.maximumPages as number
+	});
+}
+
+type InspectionOptions = Readonly<{
+	relaxedSimd?: boolean;
+	atomics?: boolean;
+	sharedMemory?: GccSharedMemoryProfile;
+}>;
 
 /** Probe actual v128 instructions in the current Wasm engine, independently of host CPU names. */
 export function supportsGccWasmSimd(): boolean {
@@ -94,22 +165,32 @@ export function supportsGccWasmRelaxedSimd(): boolean {
 export async function compileGccWasm(
 	input: Uint8Array,
 	emit: 'object' | 'executable',
-	options: Readonly<{ relaxedSimd?: boolean }> = {}
+	options: InspectionOptions = {}
 ) {
 	if (!(input instanceof Uint8Array) || (emit !== 'object' && emit !== 'executable'))
 		throw new Error('Invalid GCC WebAssembly inspection request');
 	if (
 		!options ||
 		typeof options !== 'object' ||
-		Object.keys(options).some((key) => key !== 'relaxedSimd') ||
-		(options.relaxedSimd !== undefined && typeof options.relaxedSimd !== 'boolean')
+		Object.keys(options).some(
+			(key) => !['relaxedSimd', 'atomics', 'sharedMemory'].includes(key)
+		) ||
+		(options.relaxedSimd !== undefined && typeof options.relaxedSimd !== 'boolean') ||
+		(options.atomics !== undefined && typeof options.atomics !== 'boolean')
 	)
 		throw new Error('Invalid GCC WebAssembly inspection options');
+	const sharedMemory =
+		options.sharedMemory === undefined
+			? undefined
+			: snapshotGccSharedMemory(options.sharedMemory);
+	if (sharedMemory && (options.atomics !== true || emit !== 'executable'))
+		throw new Error('GCC shared memory requires an opted-in atomic executable');
 	const bytes = Uint8Array.from(input);
 	if (bytes.length < 8 || ![0, 97, 115, 109, 1, 0, 0, 0].every((byte, i) => bytes[i] === byte))
 		throw new Error('GCC did not produce a WebAssembly 1 binary');
 	let position = 8;
-	const features = { simd128: false, relaxedSimd: false };
+	const features = { simd128: false, relaxedSimd: false, atomics: false, bulkMemory: false };
+	let atomicWait = false;
 	function byte(end: number) {
 		if (position >= end) throw new Error('Truncated GCC WebAssembly section');
 		return bytes[position++];
@@ -198,6 +279,8 @@ export async function compileGccWasm(
 				);
 			if (extended >= 8) unsigned(end);
 			if ([8, 10, 12, 14].includes(extended)) unsigned(end);
+			if (extended >= 8 && extended <= 11) features.bulkMemory = true;
+			return 0xfc00 + extended;
 		} else if (opcode === 0xfd) {
 			const extended = unsigned(end);
 			if (extended >= 0x100 && extended <= 0x113) {
@@ -222,31 +305,70 @@ export async function compileGccWasm(
 			if ((extended >= 0x15 && extended <= 0x22) || (extended >= 0x54 && extended <= 0x5b))
 				skip(1, end);
 		} else if (opcode === 0xfe) {
-			throw new Error('GCC WASI does not support atomic instructions or threads');
+			if (options.atomics !== true)
+				throw new Error('GCC atomic instructions require explicit opt-in');
+			const extended = unsigned(end);
+			if (extended > 0x4e || (extended > 3 && extended < 0x10))
+				throw new Error('Unsupported GCC WebAssembly atomic opcode');
+			features.atomics = true;
+			if (extended === 3) {
+				if (byte(end) !== 0) throw new Error('Invalid GCC atomic fence reserved byte');
+			} else {
+				const natural =
+					extended < 3
+						? extended === 2
+							? 3
+							: 2
+						: [2, 3, 0, 1, 0, 1, 2][(extended - 0x10) % 7];
+				if (unsigned(end) !== natural)
+					throw new Error('GCC atomic instructions require exact natural alignment');
+				unsigned(end);
+				if (extended === 1 || extended === 2) atomicWait = true;
+			}
+			return 0xfe00 + extended;
 		} else throw new Error(`Unsupported GCC WebAssembly opcode: 0x${opcode.toString(16)}`);
 		return opcode;
 	}
 	function limits(end: number, memory: boolean) {
 		const flags = unsigned(end);
-		if (flags !== 0 && flags !== 1)
+		if (flags !== 0 && flags !== 1 && !(memory && flags === 3 && sharedMemory))
 			throw new Error(
 				memory
 					? 'GCC WASI does not support shared memory, threads or memory64'
 					: 'Unsupported GCC WebAssembly table limits'
 			);
 		const initialPages = unsigned(end);
-		const maximumPages = flags === 1 ? unsigned(end) : undefined;
-		return { initialPages, ...(maximumPages === undefined ? {} : { maximumPages }) };
+		const maximumPages = flags & 1 ? unsigned(end) : undefined;
+		return {
+			initialPages,
+			...(maximumPages === undefined ? {} : { maximumPages }),
+			shared: flags === 3
+		};
 	}
 	let memory: GccWasmInspection['memory'];
 	function readMemory(end: number) {
 		if (memory) throw new Error('GCC WASI requires exactly one memory');
-		memory = Object.freeze({ ...limits(end, true), shared: false });
+		memory = Object.freeze(limits(end, true));
 	}
 	const types: { parameters: number[]; results: number[] }[] = [];
 	const functions: number[] = [];
+	const globals: { type: number; mutable: number; constant?: number }[] = [];
+	const exportedIndices = new Map<string, { kind: number; index: number }>();
+	const bodies = new Map<
+		number,
+		{
+			empty: boolean;
+			instructions: number[];
+			start: number;
+			end: number;
+			localDeclarations: number;
+		}
+	>();
+	let importedFunctions = 0,
+		moduleStartFunction: number | undefined;
 	let startFunction: number | undefined;
 	let linkingSections = 0;
+	const passiveDataSegments: number[] = [];
 	while (position < bytes.length) {
 		const id = byte(bytes.length);
 		const length = unsigned(bytes.length),
@@ -272,6 +394,7 @@ export async function compileGccWasm(
 				switch (byte(end)) {
 					case 0:
 						functions.push(unsigned(end));
+						importedFunctions++;
 						break;
 					case 1:
 						valueType(end);
@@ -280,11 +403,13 @@ export async function compileGccWasm(
 					case 2:
 						readMemory(end);
 						break;
-					case 3:
-						valueType(end);
-						if (byte(end) > 1)
-							throw new Error('Unsupported GCC WebAssembly global type');
+					case 3: {
+						const type = valueType(end),
+							mutable = byte(end);
+						if (mutable > 1) throw new Error('Unsupported GCC WebAssembly global type');
+						globals.push({ type, mutable });
 						break;
+					}
 					default:
 						throw new Error('Unsupported GCC WebAssembly import kind');
 				}
@@ -296,11 +421,30 @@ export async function compileGccWasm(
 			for (let remaining = count(end); remaining > 0; remaining--) readMemory(end);
 		} else if (id === 6) {
 			for (let remaining = count(end); remaining > 0; remaining--) {
-				valueType(end);
-				if (byte(end) > 1) throw new Error('Unsupported GCC WebAssembly global type');
+				const type = valueType(end),
+					mutable = byte(end),
+					expressionStart = position;
+				if (mutable > 1) throw new Error('Unsupported GCC WebAssembly global type');
 				while (instruction(end) !== 0x0b) {
 					/* Constant expression, checked by the engine. */
 				}
+				let constant: number | undefined;
+				if (type === 0x7f && bytes[expressionStart] === 0x41) {
+					let value = 0,
+						shift = 0,
+						cursor = expressionStart + 1,
+						next: number;
+					do {
+						next = bytes[cursor++];
+						value |= (next & 127) << shift;
+						shift += 7;
+					} while (next & 128 && shift < 35);
+					if (cursor === position - 1) {
+						if (shift < 32 && next & 64) value |= -1 << shift;
+						constant = value >>> 0;
+					}
+				}
+				globals.push({ type, mutable, ...(constant === undefined ? {} : { constant }) });
 			}
 		} else if (id === 7) {
 			for (let remaining = count(end); remaining > 0; remaining--) {
@@ -308,22 +452,47 @@ export async function compileGccWasm(
 					kind = byte(end),
 					index = unsigned(end);
 				if (exported === '_start' && kind === 0) startFunction = index;
+				exportedIndices.set(exported, { kind, index });
 			}
 		} else if (id === 8) {
 			// WASI imports need the instance's memory before the command is entered.
-			throw new Error(
-				'GCC WASI must enter through _start, without a WebAssembly start section'
-			);
+			if (!sharedMemory)
+				throw new Error(
+					'GCC WASI must enter through _start, without a WebAssembly start section'
+				);
+			moduleStartFunction = unsigned(end);
 		} else if (id === 10) {
+			let functionIndex = importedFunctions;
 			for (let remaining = count(end); remaining > 0; remaining--) {
 				const size = unsigned(end),
 					bodyEnd = position + size;
 				if (bodyEnd > end) throw new Error('Truncated GCC WebAssembly function body');
-				for (let locals = count(bodyEnd); locals > 0; locals--) {
+				const localDeclarations = count(bodyEnd);
+				for (let locals = localDeclarations; locals > 0; locals--) {
 					unsigned(bodyEnd);
 					valueType(bodyEnd);
 				}
-				while (position < bodyEnd) instruction(bodyEnd);
+				const instructions = [],
+					start = position;
+				while (position < bodyEnd) instructions.push(instruction(bodyEnd));
+				bodies.set(functionIndex++, {
+					start,
+					end: bodyEnd,
+					localDeclarations,
+					empty:
+						localDeclarations === 0 &&
+						instructions.length === 1 &&
+						instructions[0] === 0x0b,
+					instructions
+				});
+			}
+		} else if (id === 11 && sharedMemory) {
+			for (let remaining = count(end); remaining > 0; remaining--) {
+				if (unsigned(end) !== 1)
+					throw new Error('GCC shared memory requires passive data segments');
+				const size = unsigned(end);
+				passiveDataSegments.push(size);
+				skip(size, end);
 			}
 		} else if (id === 13 && unsigned(end) !== 0) {
 			throw new Error('GCC WASI does not support exception tags');
@@ -334,6 +503,10 @@ export async function compileGccWasm(
 		throw new Error('This WebAssembly engine does not support Wasm SIMD');
 	if (features.relaxedSimd && !supportsGccWasmRelaxedSimd())
 		throw new Error('This WebAssembly engine does not support relaxed SIMD');
+	if (features.atomics && !supportsGccWasmAtomics())
+		throw new Error('This WebAssembly engine does not support atomic instructions');
+	if (emit === 'executable' && atomicWait && !memory?.shared)
+		throw new Error('GCC atomic wait requires shared memory');
 	if (emit === 'executable' && startFunction !== undefined) {
 		const type = types[functions[startFunction]];
 		if (!type || type.parameters.length || type.results.length)
@@ -344,9 +517,171 @@ export async function compileGccWasm(
 	const imports = WebAssembly.Module.imports(module);
 	const exports = WebAssembly.Module.exports(module);
 	const hasLinkingMetadata = linkingSections === 1;
+	let sharedEntry: GccWasmInspection['sharedEntry'];
 	if (emit === 'object') {
 		if (!hasLinkingMetadata)
 			throw new Error('GCC Wasm object is missing relocatable linking metadata');
+	} else if (sharedMemory) {
+		if (
+			!memory?.shared ||
+			memory.initialPages !== sharedMemory.initialPages ||
+			memory.maximumPages !== sharedMemory.maximumPages
+		)
+			throw new Error('GCC shared memory limits differ from the explicit profile');
+		if (
+			imports.length !== 1 ||
+			imports[0].kind !== 'memory' ||
+			imports[0].module !== 'env' ||
+			imports[0].name !== 'memory'
+		)
+			throw new Error('GCC shared entry permits only the env.memory import');
+		if (exportedIndices.get('memory')?.kind !== 2 || startFunction !== undefined)
+			throw new Error('GCC shared entry must export memory without WASI _start');
+		const entry = exportedIndices.get(sharedMemory.entry);
+		const type = entry?.kind === 0 ? types[functions[entry.index]] : undefined;
+		if (
+			!type ||
+			type.parameters.some((item) => item !== 0x7f) ||
+			type.results.length !== 1 ||
+			type.results[0] !== 0x7f
+		)
+			throw new Error('GCC shared entry requires i32 arguments and one i32 result');
+		function exportedGlobal(name: string, mutable: number) {
+			const exported = exportedIndices.get(name);
+			const global = exported?.kind === 3 ? globals[exported.index] : undefined;
+			if (
+				!global ||
+				global.type !== 0x7f ||
+				global.mutable !== mutable ||
+				global.constant === undefined
+			)
+				throw new Error('Invalid GCC shared entry global: ' + name);
+			return global.constant;
+		}
+		const dataEnd = exportedGlobal('__data_end', 0),
+			heapBase = exportedGlobal('__heap_base', 0);
+		if (
+			exportedGlobal('__stack_pointer', 1) !== heapBase ||
+			heapBase % 16 ||
+			dataEnd > heapBase ||
+			heapBase > memory.initialPages * 65536
+		)
+			throw new Error('Invalid GCC shared entry data/stack bounds');
+		if (exportedGlobal('__tls_size', 0) !== 0)
+			throw new Error('GCC shared entry does not support TLS');
+		const constructors = exportedIndices.get('__wasm_call_ctors');
+		if (constructors?.kind !== 0 || !bodies.get(constructors.index)?.empty)
+			throw new Error('GCC shared entry does not support dynamic constructors');
+		if (passiveDataSegments.length && moduleStartFunction === undefined)
+			throw new Error('GCC shared passive data requires a one-time memory initializer');
+		if (moduleStartFunction !== undefined) {
+			const startup = bodies.get(moduleStartFunction);
+			const invalid = () =>
+				new Error('GCC shared startup must be the guarded one-time memory initializer');
+			if (!startup || startup.localDeclarations !== 0) throw invalid();
+			const savedPosition = position,
+				end = startup.end;
+			position = startup.start;
+			try {
+				const expectBytes = (...expected: number[]) => {
+					for (const value of expected) if (byte(end) !== value) throw invalid();
+				};
+				const constant = (bits: 32 | 64 = 32) => {
+					expectBytes(bits === 32 ? 0x41 : 0x42);
+					let value = 0n,
+						shift = 0n,
+						next: number;
+					do {
+						if (shift >= (bits === 32 ? 35n : 70n)) throw invalid();
+						next = byte(end);
+						value |= BigInt(next & 127) << shift;
+						shift += 7n;
+					} while (next & 128);
+					if (next & 64) value |= -1n << shift;
+					return BigInt.asUintN(bits, value);
+				};
+				const expectConstant = (value: number) => {
+					if (constant() !== BigInt(value >>> 0)) throw invalid();
+				};
+				const atomic = (opcode: number) => {
+					expectBytes(0xfe);
+					if (unsigned(end) !== opcode || unsigned(end) !== 2 || unsigned(end) !== 0)
+						throw invalid();
+				};
+				// Pinned LLD's three blocks route guard states 0/1/2 to the
+				// initializer, waiter and completed paths respectively. An opcode
+				// allowlist cannot establish this ownership/control-flow contract.
+				expectBytes(0x02, 0x40, 0x02, 0x40, 0x02, 0x40);
+				const guard = Number(constant());
+				if (guard < 1024 || guard % 4 || guard + 4 > dataEnd) throw invalid();
+				expectConstant(0);
+				expectConstant(1);
+				atomic(0x48);
+				expectBytes(0x0e);
+				for (const value of [2, 0, 1, 2]) if (unsigned(end) !== value) throw invalid();
+				expectBytes(0x0b);
+				const initialized = new Set<number>(),
+					ranges: [number, number][] = [[guard, guard + 4]];
+				for (;;) {
+					const destination = Number(constant()),
+						value = Number(constant());
+					if (bytes[position] === 0xfe) {
+						if (destination !== guard || value !== 2) throw invalid();
+						atomic(0x17);
+						break;
+					}
+					if (value !== 0) throw invalid();
+					const length = Number(constant()),
+						high = destination + length;
+					if (
+						destination < 1024 ||
+						high > dataEnd ||
+						ranges.some(([low, end]) => destination < end && high > low)
+					)
+						throw invalid();
+					ranges.push([destination, high]);
+					expectBytes(0xfc);
+					const opcode = unsigned(end);
+					if (opcode === 8) {
+						const segment = unsigned(end);
+						if (initialized.has(segment) || passiveDataSegments[segment] !== length)
+							throw invalid();
+						initialized.add(segment);
+					} else if (opcode !== 11) throw invalid();
+					if (unsigned(end) !== 0) throw invalid();
+				}
+				if (initialized.size !== passiveDataSegments.length) throw invalid();
+				expectConstant(guard);
+				expectConstant(0xffffffff);
+				atomic(0);
+				expectBytes(0x1a, 0x0c);
+				if (unsigned(end) !== 1) throw invalid();
+				expectBytes(0x0b);
+				expectConstant(guard);
+				expectConstant(1);
+				if (constant(64) !== 0xffffffffffffffffn) throw invalid();
+				atomic(1);
+				expectBytes(0x1a, 0x0b);
+				for (let segment = 0; segment < passiveDataSegments.length; segment++) {
+					expectBytes(0xfc);
+					if (unsigned(end) !== 9 || unsigned(end) !== segment) throw invalid();
+				}
+				expectBytes(0x0b);
+				if (position !== end) throw invalid();
+			} finally {
+				position = savedPosition;
+			}
+		}
+		if ([...bodies.values()].some((body) => body.instructions.includes(0x40)))
+			throw new Error(
+				'GCC shared entry does not support memory growth or allocator runtimes'
+			);
+		sharedEntry = Object.freeze({
+			name: sharedMemory.entry,
+			parameterCount: type.parameters.length,
+			dataEnd,
+			heapBase
+		});
 	} else {
 		if (
 			!memory ||
@@ -367,6 +702,7 @@ export async function compileGccWasm(
 			exports: Object.freeze(exports.map((entry) => Object.freeze(entry))),
 			hasLinkingMetadata,
 			features: Object.freeze(features),
+			...(sharedEntry ? { sharedEntry } : {}),
 			...(memory ? { memory } : {})
 		}) satisfies GccWasmInspection
 	};
@@ -376,7 +712,7 @@ export async function compileGccWasm(
 export async function inspectGccWasm(
 	bytes: Uint8Array,
 	emit: 'object' | 'executable',
-	options: Readonly<{ relaxedSimd?: boolean }> = {}
+	options: InspectionOptions = {}
 ): Promise<GccWasmInspection> {
 	return (await compileGccWasm(bytes, emit, options)).inspection;
 }

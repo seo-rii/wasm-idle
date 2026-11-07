@@ -28,7 +28,17 @@ function record(value: unknown, keys: readonly string[], label: string) {
 function profileSnapshot(value: unknown): WasiGccLinkProfile {
 	const profile = record(
 		value,
-		['target', 'abi', 'simd', 'relaxedSimd', 'language', 'rtti', 'coverage', 'compatibility'],
+		[
+			'target',
+			'abi',
+			'simd',
+			'relaxedSimd',
+			'atomics',
+			'language',
+			'rtti',
+			'coverage',
+			'compatibility'
+		],
 		'profile'
 	);
 	if (
@@ -41,6 +51,8 @@ function profileSnapshot(value: unknown): WasiGccLinkProfile {
 		throw new Error('Invalid GCC link input relaxed SIMD profile');
 	if (profile.relaxedSimd === true && !profile.simd)
 		throw new Error('Relaxed SIMD link inputs require a SIMD profile');
+	if (profile.atomics !== undefined && typeof profile.atomics !== 'boolean')
+		throw new Error('Invalid GCC link input atomic profile');
 	const language = profile.language,
 		rtti = profile.rtti;
 	if (language !== undefined && language !== 'c' && language !== 'cpp')
@@ -75,6 +87,7 @@ function profileSnapshot(value: unknown): WasiGccLinkProfile {
 		if (language === 'cpp') throw new Error('clang-c-scalar-v1 requires a C language profile');
 		if (profile.relaxedSimd === true)
 			throw new Error('clang-c-scalar-v1 does not qualify relaxed SIMD');
+		if (profile.atomics === true) throw new Error('clang-c-scalar-v1 does not qualify atomics');
 		contract = {
 			kind: 'clang-c-scalar-v1',
 			compilerVersion: '22.1.0',
@@ -87,6 +100,7 @@ function profileSnapshot(value: unknown): WasiGccLinkProfile {
 		abi: 'wasm32-wasi-preview1',
 		simd: profile.simd,
 		...(profile.relaxedSimd === undefined ? {} : { relaxedSimd: profile.relaxedSimd }),
+		...(profile.atomics === undefined ? {} : { atomics: profile.atomics }),
 		...(language === undefined ? {} : { language }),
 		...(rtti === undefined ? {} : { rtti }),
 		...(profile.coverage === undefined ? {} : { coverage: profile.coverage }),
@@ -207,7 +221,8 @@ async function inspectObject(
 	manifest: WasiGccManifest
 ) {
 	const inspection = await inspectGccWasm(bytes, 'object', {
-		relaxedSimd: profile.relaxedSimd === true
+		relaxedSimd: profile.relaxedSimd === true,
+		atomics: profile.atomics === true
 	});
 	if (inspection.features.simd128 && !profile.simd)
 		throw new Error('Object contains SIMD outside its declared profile');
@@ -468,6 +483,7 @@ async function inspectObject(
 		arch.done();
 	}
 	const featureSections = sections.filter((section) => section.name === 'target_features');
+	let atomicFeatureUsed = false;
 	if (featureSections.length > 1) throw new Error('Duplicate object target_features');
 	for (const featureSection of featureSections) {
 		const r = content(featureSection),
@@ -478,6 +494,7 @@ async function inspectObject(
 			if (![43, 45].includes(prefix) || names.has(name))
 				throw new Error('Malformed object target_features');
 			names.add(name);
+			if (prefix === 43 && name === 'atomics') atomicFeatureUsed = true;
 			const allowed = [
 				'bulk-memory',
 				'bulk-memory-opt',
@@ -488,7 +505,8 @@ async function inspectObject(
 				'reference-types',
 				'sign-ext',
 				'simd128',
-				...(profile.relaxedSimd === true ? ['relaxed-simd'] : [])
+				...(profile.relaxedSimd === true ? ['relaxed-simd'] : []),
+				...(profile.atomics === true ? ['atomics'] : [])
 			];
 			if (prefix === 43 && (!allowed.includes(name) || (name === 'simd128' && !profile.simd)))
 				throw new Error(`Unsupported object target feature: ${name}`);
@@ -496,9 +514,13 @@ async function inspectObject(
 				throw new Error('Object prohibits requested SIMD profile');
 			if (prefix === 45 && name === 'relaxed-simd' && profile.relaxedSimd === true)
 				throw new Error('Object prohibits requested relaxed SIMD profile');
+			if (prefix === 45 && name === 'atomics' && profile.atomics === true)
+				throw new Error('Object prohibits requested atomic profile');
 		}
 		r.done();
 	}
+	if (inspection.features.atomics && !atomicFeatureUsed)
+		throw new Error('Atomic object is missing its atomics target feature');
 	const relocatedSections = new Set<number>();
 	for (const relocation of sections.filter((section) => section.name?.startsWith('reloc.'))) {
 		if (sections.indexOf(relocation) < sections.indexOf(linking))
@@ -661,12 +683,15 @@ export async function validateWasiGccLinkInputs(
 	simd: boolean,
 	language: 'c' | 'cpp',
 	rtti = false,
-	relaxedSimd = false
+	relaxedSimd = false,
+	atomics = false
 ): Promise<readonly WasiGccLinkedInput[]> {
 	if (rtti && (language !== 'cpp' || !manifest.capabilities.rtti))
 		throw new Error('RTTI link validation requires a capable bundle and C++ source request');
 	if (relaxedSimd && (!simd || !manifest.capabilities.relaxedSimd))
 		throw new Error('Relaxed SIMD link validation requires a capable bundle and SIMD request');
+	if (atomics && (!manifest.capabilities.atomics || manifest.qualification.status !== 'verified'))
+		throw new Error('Atomic link validation requires a qualified capable bundle');
 	const identities: WasiGccLinkedInput[] = [];
 	for (const input of inputs) {
 		try {
@@ -680,6 +705,8 @@ export async function validateWasiGccLinkInputs(
 				throw new Error(
 					'Link input relaxed SIMD profile differs from the compilation request'
 				);
+			if ((profile.atomics === true) !== atomics)
+				throw new Error('Link input atomic profile differs from the compilation request');
 			if (compatibility.sysrootSha256 !== manifest.assets.sysroot.sha256)
 				throw new Error('Link input sysroot identity mismatch');
 			if (
