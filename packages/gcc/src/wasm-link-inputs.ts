@@ -1,6 +1,6 @@
 import { gccDigest } from './manifest.js';
 import { gccRelativePath } from './plan.js';
-import { inspectGccWasm } from './wasm-output.js';
+import { compileGccWasm } from './wasm-output.js';
 import type {
 	WasiGccCompileRequest,
 	WasiGccLinkInput,
@@ -35,6 +35,7 @@ function profileSnapshot(value: unknown): WasiGccLinkProfile {
 			'relaxedSimd',
 			'atomics',
 			'tls',
+			'exceptions',
 			'language',
 			'rtti',
 			'coverage',
@@ -56,6 +57,18 @@ function profileSnapshot(value: unknown): WasiGccLinkProfile {
 		throw new Error('Invalid GCC link input atomic profile');
 	if (profile.tls !== undefined && typeof profile.tls !== 'boolean')
 		throw new Error('Invalid GCC link input TLS profile');
+	if (profile.exceptions !== undefined && typeof profile.exceptions !== 'boolean')
+		throw new Error('Invalid GCC link input exception profile');
+	if (
+		profile.exceptions === true &&
+		(profile.language !== 'cpp' ||
+			profile.simd ||
+			profile.relaxedSimd ||
+			profile.atomics ||
+			profile.tls ||
+			profile.coverage)
+	)
+		throw new Error('GCC exception link profile requires qualified ordinary C++');
 	const language = profile.language,
 		rtti = profile.rtti;
 	if (language !== undefined && language !== 'c' && language !== 'cpp')
@@ -92,6 +105,8 @@ function profileSnapshot(value: unknown): WasiGccLinkProfile {
 			throw new Error('clang-c-scalar-v1 does not qualify relaxed SIMD');
 		if (profile.atomics === true) throw new Error('clang-c-scalar-v1 does not qualify atomics');
 		if (profile.tls === true) throw new Error('clang-c-scalar-v1 does not qualify TLS');
+		if (profile.exceptions === true)
+			throw new Error('clang-c-scalar-v1 does not qualify exceptions');
 		contract = {
 			kind: 'clang-c-scalar-v1',
 			compilerVersion: '22.1.0',
@@ -106,6 +121,7 @@ function profileSnapshot(value: unknown): WasiGccLinkProfile {
 		...(profile.relaxedSimd === undefined ? {} : { relaxedSimd: profile.relaxedSimd }),
 		...(profile.atomics === undefined ? {} : { atomics: profile.atomics }),
 		...(profile.tls === undefined ? {} : { tls: profile.tls }),
+		...(profile.exceptions === undefined ? {} : { exceptions: profile.exceptions }),
 		...(language === undefined ? {} : { language }),
 		...(rtti === undefined ? {} : { rtti }),
 		...(profile.coverage === undefined ? {} : { coverage: profile.coverage }),
@@ -220,16 +236,21 @@ type Symbol = { kind: number; flags: number; index?: number; name?: string };
  * Format: tool-conventions/25aceba5adba8f3f7cdbadd8e8705784aebcad6a/Linking.md.
  * LLD remains responsible for cross-object symbol resolution and final relocation application.
  */
-async function inspectObject(
+export async function inspectWasiGccObject(
 	bytes: Uint8Array,
 	profile: WasiGccLinkProfile,
 	manifest: WasiGccManifest
 ) {
-	const inspection = await inspectGccWasm(bytes, 'object', {
-		relaxedSimd: profile.relaxedSimd === true,
-		atomics: profile.atomics === true,
-		tls: profile.tls === true
-	});
+	const { inspection, exceptionTagOffsets, requiresMultivalue } = await compileGccWasm(
+		bytes,
+		'object',
+		{
+			exceptions: profile.exceptions === true,
+			relaxedSimd: profile.relaxedSimd === true,
+			atomics: profile.atomics === true,
+			tls: profile.tls === true
+		}
+	);
 	if (inspection.features.simd128 && !profile.simd)
 		throw new Error('Object contains SIMD outside its declared profile');
 	const scalar = profile.compatibility.kind === 'clang-c-scalar-v1';
@@ -273,6 +294,7 @@ async function inspectObject(
 	const imported = new Map<number, string[]>([
 		[0, []],
 		[2, []],
+		[4, []],
 		[5, []]
 	]);
 	const functionTypes: number[] = [];
@@ -304,6 +326,10 @@ async function inspectObject(
 				imported.get(2)!.push(name);
 				r.byte();
 				r.byte();
+			} else if (kind === 4 && profile.exceptions === true) {
+				imported.get(4)!.push(name);
+				r.byte(); // Tag attribute and payload type were checked by compileGccWasm.
+				r.uint();
 			} else throw new Error('Unsupported object import kind');
 		}
 		r.done();
@@ -317,6 +343,7 @@ async function inspectObject(
 	const totals = new Map([
 		[0, functionTypes.length],
 		[2, imported.get(2)!.length + count(6)],
+		[4, imported.get(4)!.length + count(13)],
 		[5, imported.get(5)!.length + count(4)]
 	]);
 	const chunks = new Map<Section, { start: number; end: number }[]>();
@@ -390,7 +417,7 @@ async function inspectObject(
 				'Unsupported object symbol flags (TLS requires opt-in; common/absolute are not supported)'
 			);
 		const symbol: Symbol = { kind, flags };
-		if (kind === 0 || kind === 2 || kind === 5) {
+		if (kind === 0 || kind === 2 || kind === 5 || (kind === 4 && profile.exceptions === true)) {
 			symbol.index = sr.uint();
 			const names = imported.get(kind)!;
 			if (
@@ -423,6 +450,8 @@ async function inspectObject(
 		if (symbol.name !== undefined && (flags & 3) !== 2) {
 			if (!symbol.name || externalNames.has(symbol.name))
 				throw new Error('Duplicate or empty external object symbol');
+			if (kind === 4 && symbol.name !== '__cpp_exception')
+				throw new Error('Unsupported object exception tag identity');
 			externalNames.add(symbol.name);
 			if (scalar && (symbol.name.startsWith('_Z') || symbol.name.startsWith('__cxa_')))
 				throw new Error('clang-c-scalar-v1 excludes C++ object interfaces');
@@ -473,7 +502,16 @@ async function inspectObject(
 			for (let entries = comdats.count(); entries > 0; entries--) {
 				const kind = comdats.byte(),
 					index = comdats.uint();
-				const symbolKind = kind === 1 ? 0 : kind === 2 ? 2 : kind === 4 ? 5 : undefined;
+				const symbolKind =
+					kind === 1
+						? 0
+						: kind === 2
+							? 2
+							: kind === 3 && profile.exceptions === true
+								? 4
+								: kind === 4
+									? 5
+									: undefined;
 				if (
 					kind === 0
 						? index >= segments.length
@@ -495,6 +533,8 @@ async function inspectObject(
 	}
 	const featureSections = sections.filter((section) => section.name === 'target_features');
 	let atomicFeatureUsed = false;
+	let exceptionFeatureUsed = false;
+	let multivalueFeatureUsed = false;
 	if (featureSections.length > 1) throw new Error('Duplicate object target_features');
 	for (const featureSection of featureSections) {
 		const r = content(featureSection),
@@ -506,6 +546,8 @@ async function inspectObject(
 				throw new Error('Malformed object target_features');
 			names.add(name);
 			if (prefix === 43 && name === 'atomics') atomicFeatureUsed = true;
+			if (prefix === 43 && name === 'exception-handling') exceptionFeatureUsed = true;
+			if (prefix === 43 && name === 'multivalue') multivalueFeatureUsed = true;
 			const allowed = [
 				'bulk-memory',
 				'bulk-memory-opt',
@@ -516,6 +558,7 @@ async function inspectObject(
 				'reference-types',
 				'sign-ext',
 				'simd128',
+				...(profile.exceptions === true ? ['exception-handling'] : []),
 				...(profile.relaxedSimd === true ? ['relaxed-simd'] : []),
 				...(profile.atomics === true || profile.tls === true ? ['atomics'] : [])
 			];
@@ -525,6 +568,15 @@ async function inspectObject(
 				throw new Error('Object prohibits requested SIMD profile');
 			if (prefix === 45 && name === 'relaxed-simd' && profile.relaxedSimd === true)
 				throw new Error('Object prohibits requested relaxed SIMD profile');
+			if (prefix === 45 && name === 'exception-handling' && profile.exceptions === true)
+				throw new Error('Object prohibits requested exception profile');
+			if (
+				prefix === 45 &&
+				name === 'multivalue' &&
+				profile.exceptions === true &&
+				requiresMultivalue
+			)
+				throw new Error('Exception object prohibits its required multivalue feature');
 			if (
 				prefix === 45 &&
 				name === 'atomics' &&
@@ -536,6 +588,10 @@ async function inspectObject(
 	}
 	if (inspection.features.atomics && !atomicFeatureUsed)
 		throw new Error('Atomic object is missing its atomics target feature');
+	if (inspection.features.exceptions && !exceptionFeatureUsed)
+		throw new Error('Exception object is missing its exception-handling target feature');
+	if (profile.exceptions === true && requiresMultivalue && !multivalueFeatureUsed)
+		throw new Error('Exception object is missing its multivalue target feature');
 	const relocatedSections = new Set<number>();
 	for (const relocation of sections.filter((section) => section.name?.startsWith('reloc.'))) {
 		if (sections.indexOf(relocation) < sections.indexOf(linking))
@@ -566,6 +622,7 @@ async function inspectObject(
 				[7, 2],
 				[8, 0],
 				[9, 3],
+				...(profile.exceptions === true ? [[10, 4] as const] : []),
 				[13, 2],
 				[20, 5],
 				...(profile.tls === true ? [[21, 1] as const] : []),
@@ -583,7 +640,7 @@ async function inspectObject(
 			if (type === 21 && !(symbols[index].flags & 0x100))
 				throw new Error('TLS relocation requires a TLS data symbol');
 			if ([3, 4, 5, 8, 9, 21, 23].includes(type)) r.signed();
-			const leb = [0, 1, 3, 4, 6, 7, 20, 21].includes(type),
+			const leb = [0, 1, 3, 4, 6, 7, 10, 20, 21].includes(type),
 				width = leb ? 5 : 4;
 			// Custom relocation offsets exclude the encoded section name. Standard
 			// code/data offsets retain their section-payload base and chunk bounds.
@@ -596,6 +653,10 @@ async function inspectObject(
 			)
 				throw new Error('Object relocation is overlapping or outside a code/data chunk');
 			previousEnd = offset + width;
+			if (type === 10 && (target.id !== 10 || !exceptionTagOffsets.delete(start)))
+				throw new Error(
+					'Exception relocation must address an actual tag instruction operand'
+				);
 			if (leb) {
 				const last = bytes[end - 1],
 					signed = type === 1 || type === 4 || type === 21;
@@ -609,6 +670,8 @@ async function inspectObject(
 		}
 		r.done();
 	}
+	if (exceptionTagOffsets.size)
+		throw new Error('Exception tag instruction is missing its tag relocation');
 	return symbols
 		.filter((symbol) => !(symbol.flags & 0x10) && (symbol.flags & 3) !== 2 && symbol.name)
 		.map((symbol) => symbol.name!);
@@ -703,7 +766,8 @@ export async function validateWasiGccLinkInputs(
 	rtti = false,
 	relaxedSimd = false,
 	atomics = false,
-	tls = false
+	tls = false,
+	exceptions = false
 ): Promise<readonly WasiGccLinkedInput[]> {
 	if (rtti && (language !== 'cpp' || !manifest.capabilities.rtti))
 		throw new Error('RTTI link validation requires a capable bundle and C++ source request');
@@ -713,6 +777,17 @@ export async function validateWasiGccLinkInputs(
 		throw new Error('Atomic link validation requires a qualified capable bundle');
 	if (tls && (!manifest.capabilities.tls || manifest.qualification.status !== 'verified'))
 		throw new Error('TLS link validation requires a qualified capable bundle');
+	if (
+		exceptions &&
+		(!manifest.capabilities.exceptions ||
+			manifest.qualification.status !== 'verified' ||
+			language !== 'cpp' ||
+			simd ||
+			relaxedSimd ||
+			atomics ||
+			tls)
+	)
+		throw new Error('Exception link validation requires qualified ordinary C++');
 	const identities: WasiGccLinkedInput[] = [];
 	for (const input of inputs) {
 		try {
@@ -730,6 +805,10 @@ export async function validateWasiGccLinkInputs(
 				throw new Error('Link input atomic profile differs from the compilation request');
 			if ((profile.tls === true) !== tls)
 				throw new Error('Link input TLS profile differs from the compilation request');
+			if ((profile.exceptions === true) !== exceptions)
+				throw new Error(
+					'Link input exception profile differs from the compilation request'
+				);
 			if (compatibility.sysrootSha256 !== manifest.assets.sysroot.sha256)
 				throw new Error('Link input sysroot identity mismatch');
 			if (
@@ -754,7 +833,8 @@ export async function validateWasiGccLinkInputs(
 			if ((await gccLinkDigest(input.bytes)) !== input.sha256)
 				throw new Error('Link input SHA-256 mismatch');
 			let members: WasiGccLinkedInput['members'];
-			if (input.format === 'wasm-object') await inspectObject(input.bytes, profile, manifest);
+			if (input.format === 'wasm-object')
+				await inspectWasiGccObject(input.bytes, profile, manifest);
 			else {
 				const archive = archiveMembers(input.bytes),
 					receipts = [],
@@ -763,7 +843,7 @@ export async function validateWasiGccLinkInputs(
 					try {
 						definitions.set(
 							member.offset,
-							await inspectObject(member.bytes, profile, manifest)
+							await inspectWasiGccObject(member.bytes, profile, manifest)
 						);
 					} catch (error) {
 						throw new Error(

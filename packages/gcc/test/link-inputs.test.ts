@@ -1,3 +1,4 @@
+import { exceptionObject } from './eh-fixtures.js';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { gccCompilePlan } from '../src/plan.js';
@@ -170,6 +171,59 @@ const validate = (inputs: readonly WasiGccLinkInput[], simd = false, language: '
 	validateWasiGccLinkInputs(snapshotWasiGccLinkInputs(inputs), manifest, hash, simd, language);
 
 describe('explicit WASI link inputs', () => {
+	it('binds actual exception tag imports/definitions and every archive member to the profile', async () => {
+		const capable = {
+			...manifest,
+			capabilities: { ...manifest.capabilities, exceptions: true },
+			qualification: { status: 'verified' as const }
+		};
+		const declared = { ...profile, language: 'cpp' as const, exceptions: true };
+		const check = (entries: readonly WasiGccLinkInput[], enabled = true) =>
+			validateWasiGccLinkInputs(
+				snapshotWasiGccLinkInputs(entries),
+				capable,
+				hash,
+				false,
+				'cpp',
+				false,
+				false,
+				false,
+				false,
+				enabled
+			);
+		for (const defined of [false, true]) {
+			const bytes = exceptionObject({ defined });
+			expect(WebAssembly.validate(bytes)).toBe(true);
+			await expect(check([await input(bytes, 'helper.o', declared)])).resolves.toHaveLength(
+				1
+			);
+		}
+		await expect(
+			check([await input(exceptionObject({ modern: true }), 'modern.o', declared)])
+		).resolves.toHaveLength(1);
+		const bytes = archive([{ path: 'helper.o', bytes: exceptionObject(), symbol: 'helper' }]);
+		await expect(check([await input(bytes, 'helper.a', declared)])).resolves.toHaveLength(1);
+		await expect(check([await input(bytes, 'helper.a', declared)], false)).rejects.toThrow(
+			/exception profile differs/i
+		);
+		for (const options of [
+			{ noFeature: true },
+			{ prohibit: true },
+			{ wrongSymbol: true },
+			{ wrongOffset: true },
+			{ noRelocation: true },
+			{ duplicateRelocation: true },
+			{ modern: true, noMultivalue: true },
+			{ modern: true, prohibitMultivalue: true }
+		]) {
+			const bad = archive([
+				{ path: 'helper.o', bytes: exceptionObject(options), symbol: 'helper' }
+			]);
+			await expect(check([await input(bad, 'helper.a', declared)])).rejects.toThrow(
+				/exception|relocation|multivalue/i
+			);
+		}
+	});
 	it('binds atomic objects and every archive member to the qualified opt-in profile', async () => {
 		const capable = {
 			...manifest,

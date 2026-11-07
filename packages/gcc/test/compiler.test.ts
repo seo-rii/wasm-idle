@@ -3,10 +3,15 @@ import { setFlagsFromString } from 'node:v8';
 import { runInNewContext } from 'node:vm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createCrossGccCompiler, createGccCompiler } from '../src/compiler.js';
-import { gccTlsRuntimePaths, parseCrossGccManifest } from '../src/manifest.js';
+import {
+	gccExceptionRuntimePaths,
+	gccTlsRuntimePaths,
+	parseCrossGccManifest
+} from '../src/manifest.js';
 import { loadGccModuleFactory } from '../src/module-loader.js';
 import * as wasiLinker from '../src/wasi-linker.js';
 import { tlsObject } from './tls-fixtures.js';
+import { exceptionObject, exceptionProgram } from './eh-fixtures.js';
 
 interface FixtureNode {
 	mode: number;
@@ -401,13 +406,15 @@ function wasiBundle(
 	tls = false,
 	tlsProviders: readonly string[] = Object.values(gccTlsRuntimePaths),
 	tlsLongDouble = tls,
-	tlsHeader: 'present' | 'missing' | 'empty' = 'present'
+	tlsHeader: 'present' | 'missing' | 'empty' = 'present',
+	exceptions = false,
+	exceptionProviders: readonly string[] = Object.values(gccExceptionRuntimePaths)
 ) {
 	const fixture = bundle(atomics && atomicProvider ? 'lib/wasm32-wasi/libatomic.a' : undefined);
-	if (tls) {
+	if (tls || exceptions) {
 		const records = [
 			fixture.files.get('sysroot.tar')!.subarray(0, 1024),
-			...(tlsHeader === 'missing'
+			...(!tls || tlsHeader === 'missing'
 				? []
 				: [
 						tar(
@@ -415,7 +422,12 @@ function wasiBundle(
 							tlsHeader === 'empty' ? new Uint8Array() : undefined
 						).subarray(0, 1024)
 					]),
-			...tlsProviders.map((path) => tar(path.slice('/sysroot/'.length)).subarray(0, 1024))
+			...(tls ? tlsProviders : []).map((path) =>
+				tar(path.slice('/sysroot/'.length)).subarray(0, 1024)
+			),
+			...(exceptions ? exceptionProviders : []).map((path) =>
+				tar(path.slice('/sysroot/'.length)).subarray(0, 1024)
+			)
 		];
 		const archive = new Uint8Array(records.length * 1024 + 1024);
 		records.forEach((record, index) => archive.set(record, index * 1024));
@@ -453,9 +465,9 @@ function wasiBundle(
 			cpp: true,
 			libc: true,
 			libm: true,
-			libstdcxx: rtti,
-			staticInitialization: coverage,
-			exceptions: false,
+			libstdcxx: rtti || exceptions,
+			staticInitialization: coverage || exceptions,
+			exceptions,
 			rtti,
 			threads: false,
 			dynamicLinking: false,
@@ -465,7 +477,9 @@ function wasiBundle(
 			...(tls ? { tls: true, longDouble: tlsLongDouble } : {}),
 			...(coverage ? { coverage: true } : {})
 		},
-		qualification: { status: relaxedSimd || atomics || tls ? 'verified' : 'unverified' },
+		qualification: {
+			status: relaxedSimd || atomics || tls || exceptions ? 'verified' : 'unverified'
+		},
 		assets: Object.fromEntries(
 			[...fixture.files].map(([path, bytes]) => [
 				path === 'sysroot.tar'
@@ -498,6 +512,123 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe('synthetic GCC host contract (not real compiler qualification)', () => {
+	it('requires every separate exception provider before creating tool instances', async () => {
+		for (const missing of Object.values(gccExceptionRuntimePaths)) {
+			const factories = vi.mocked(loadGccModuleFactory).mock.calls.length;
+			await expect(
+				createGccCompiler(
+					wasiBundle(
+						undefined,
+						false,
+						false,
+						false,
+						false,
+						true,
+						false,
+						undefined,
+						false,
+						'present',
+						true,
+						Object.values(gccExceptionRuntimePaths).filter((value) => value !== missing)
+					)
+				)
+			).rejects.toThrow('missing its qualified runtime archive: ' + missing);
+			expect(vi.mocked(loadGccModuleFactory).mock.calls).toHaveLength(factories);
+		}
+	});
+
+	it('retains explicit exceptions on generated object receipts and actual Wasm execution', async () => {
+		const options = wasiBundle(
+			undefined,
+			false,
+			false,
+			false,
+			false,
+			true,
+			false,
+			undefined,
+			false,
+			'present',
+			true
+		);
+		const compiler = await createGccCompiler(options);
+		const legacy = await createGccCompiler(wasiBundle());
+		try {
+			host.output = exceptionObject();
+			await expect(
+				legacy.compile({ code: '', language: 'cpp', exceptions: true })
+			).rejects.toThrow(/exceptions.*qualified/);
+			expect(host.calls).toHaveLength(0);
+			const { artifact, stages } = await compiler.compile({
+				code: '',
+				language: 'cpp',
+				emit: 'object',
+				exceptions: true
+			});
+			expect(artifact).toMatchObject({
+				exceptions: true,
+				wasm: { features: { exceptions: true } },
+				linkInput: { profile: { exceptions: true, language: 'cpp' } }
+			});
+			expect(stages[0].argv).toContain('-fexceptions');
+			expect(stages[1].argv).toContain('--enable-exceptions');
+			const calls = host.calls.length,
+				fetches = vi.mocked(options.fetchImpl).mock.calls.length;
+			const input = { ...artifact!.linkInput!, path: 'exceptions.o', bytes: artifact!.bytes };
+			await expect(
+				compiler.compile({ code: '', language: 'cpp', linkInputs: [input] })
+			).rejects.toThrow('exception profile differs');
+			expect(host.calls).toHaveLength(calls);
+			expect(vi.mocked(options.fetchImpl).mock.calls).toHaveLength(fetches);
+			const executable = {
+				...artifact!,
+				bytes: exceptionProgram(),
+				format: 'wasm-executable' as const
+			};
+			await expect(compiler.run(executable)).resolves.toMatchObject({
+				exitCode: 0,
+				stdout: ''
+			});
+			await expect(legacy.run(executable)).rejects.toThrow(/exception.*qualified/);
+			await expect(compiler.run({ ...executable, exceptions: undefined })).rejects.toThrow(
+				/exceptions.*opt-in/
+			);
+			host.output = wasiObject();
+			const ordinary = await compiler.compile({ code: '', emit: 'object' });
+			expect(ordinary.artifact).not.toHaveProperty('exceptions');
+			expect(ordinary.artifact!.linkInput!.profile).not.toHaveProperty('exceptions');
+			expect(ordinary.artifact!.wasm!.features).not.toHaveProperty('exceptions');
+		} finally {
+			compiler.dispose();
+			legacy.dispose();
+		}
+	});
+
+	it('rejects a generated exception object missing tag relocation before issuing its receipt', async () => {
+		const compiler = await createGccCompiler(
+			wasiBundle(
+				undefined,
+				false,
+				false,
+				false,
+				false,
+				true,
+				false,
+				undefined,
+				false,
+				'present',
+				true
+			)
+		);
+		try {
+			host.output = exceptionObject({ noRelocation: true });
+			await expect(
+				compiler.compile({ code: '', language: 'cpp', emit: 'object', exceptions: true })
+			).rejects.toThrow(/missing.*tag relocation/);
+		} finally {
+			compiler.dispose();
+		}
+	});
 	it('captures private raw per-frontend notes and marks covered objects without changing plain receipts', async () => {
 		host.output = wasiObject();
 		const compiler = await createGccCompiler(wasiBundle(undefined, true, true));

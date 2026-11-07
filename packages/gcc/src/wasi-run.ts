@@ -31,6 +31,15 @@ export async function runGccWasiArtifact(
 		throw new Error('GCC run requires a linked wasm32-wasi executable artifact');
 	if (artifact.sharedMemory !== undefined)
 		throw new Error('GCC shared artifacts require runGccSharedArtifact');
+	if (artifact.exceptions !== undefined && typeof artifact.exceptions !== 'boolean')
+		throw new Error('Invalid GCC WASI artifact exception profile');
+	if (artifact.exceptions === true) {
+		const trusted = manifest === undefined ? undefined : parseWasiGccManifest(manifest);
+		if (!trusted?.capabilities.exceptions || trusted.qualification.status !== 'verified')
+			throw new Error('GCC exception execution requires a qualified capable bundle');
+		if (artifact.tls || artifact.atomics || artifact.relaxedSimd || artifact.coverage)
+			throw new Error('GCC exception combination is not qualified');
+	}
 	if (artifact.tls !== undefined && typeof artifact.tls !== 'boolean')
 		throw new Error('Invalid GCC WASI artifact TLS profile');
 	if (artifact.tls === true) {
@@ -133,6 +142,7 @@ export async function runGccWasiArtifact(
 		debug: false
 	});
 	const { module, inspection } = await compileGccWasm(artifact.bytes, 'executable', {
+		exceptions: artifact.exceptions === true,
 		relaxedSimd: artifact.relaxedSimd === true,
 		atomics: artifact.atomics === true,
 		tls: artifact.tls === true

@@ -21,6 +21,12 @@ export const gccAssetPaths = Object.freeze({
 
 export const gccTlsIncludePath = '/sysroot/include/wasm32-wasi-tls';
 
+export const gccExceptionRuntimePaths = Object.freeze({
+	libstdcxx: '/sysroot/lib/wasm32-wasi-eh/libstdc++.a',
+	libsupcxx: '/sysroot/lib/wasm32-wasi-eh/libsupc++.a',
+	libunwind: '/sysroot/lib/wasm32-wasi-eh/libunwind.a'
+});
+
 // These opt-in providers are inside the integrity-bound sysroot, never in the
 // global runtimeLibraries list used by legacy/default compilation.
 export const gccTlsRuntimePaths = Object.freeze({
@@ -203,7 +209,18 @@ export function parseWasiGccManifest(value: unknown): WasiGccManifest {
 	}
 	if (!capabilities.c || (capabilities.libstdcxx && !capabilities.cpp))
 		throw new Error('Invalid GCC WASI language capabilities');
-	for (const name of ['exceptions', 'threads', 'dynamicLinking']) {
+	if (typeof capabilityInput.exceptions !== 'boolean')
+		throw new Error('Invalid GCC WASI capability: exceptions');
+	capabilities.exceptions = capabilityInput.exceptions;
+	if (
+		capabilities.exceptions &&
+		(!capabilities.cpp ||
+			!capabilities.libstdcxx ||
+			!capabilities.libc ||
+			!capabilities.staticInitialization)
+	)
+		throw new Error('GCC exceptions require C++ and the qualified GNU runtime');
+	for (const name of ['threads', 'dynamicLinking']) {
 		if (capabilityInput[name] !== false)
 			throw new Error(`Unsupported GCC WASI capability: ${name}`);
 		capabilities[name] = false;
@@ -260,6 +277,10 @@ export function parseWasiGccManifest(value: unknown): WasiGccManifest {
 		return path;
 	});
 	const atomicLibraries = runtimeLibraries.filter((path) => path.endsWith('/libatomic.a'));
+	if (runtimeLibraries.some((path) => /\/wasm32-wasi-eh\//u.test(path)))
+		throw new Error(
+			'GCC exception runtime providers must remain separate from default runtimeLibraries'
+		);
 	if (
 		runtimeLibraries.some(
 			(path) =>

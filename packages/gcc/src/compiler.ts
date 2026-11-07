@@ -3,6 +3,7 @@ import untar from '@wasm-idle/core/runtime-tar';
 import { readBuffer } from '@wasm-idle/core/runtime-asset-loader';
 import {
 	gccDigest,
+	gccExceptionRuntimePaths,
 	gccTlsIncludePath,
 	gccTlsRuntimePaths,
 	parseCrossGccManifest,
@@ -15,7 +16,11 @@ import { wasiGccCompilePlan } from './wasi-plan.js';
 import { compileGccWasm, inspectGccWasm } from './wasm-output.js';
 import { runGccWasiArtifact } from './wasi-run.js';
 import { runWasiGccLinker } from './wasi-linker.js';
-import { gccLinkDigest, validateWasiGccLinkInputs } from './wasm-link-inputs.js';
+import {
+	gccLinkDigest,
+	inspectWasiGccObject,
+	validateWasiGccLinkInputs
+} from './wasm-link-inputs.js';
 import type {
 	CreateCrossGccCompilerOptions,
 	CreateGccCompilerOptions,
@@ -187,6 +192,12 @@ export async function createGccCompiler(
 		}
 	});
 	if (!sysroot.size) throw new Error('GCC sysroot is empty');
+	if (manifest.target === 'wasm32-wasi' && manifest.capabilities.exceptions)
+		for (const path of Object.values(gccExceptionRuntimePaths))
+			if (!sysroot.get(path)?.byteLength)
+				throw new Error(
+					'GCC exception bundle is missing its qualified runtime archive: ' + path
+				);
 	if (
 		manifest.target === 'wasm32-wasi' &&
 		manifest.capabilities.atomics &&
@@ -259,7 +270,8 @@ export async function createGccCompiler(
 		relaxedSimdEnabled = false,
 		atomicsEnabled = false,
 		sharedMemory?: GccSharedMemoryProfile,
-		tlsEnabled = false
+		tlsEnabled = false,
+		exceptionsEnabled = false
 	): Promise<{
 		exitCode: number;
 		stdout: string;
@@ -281,6 +293,7 @@ export async function createGccCompiler(
 		let linkedInputs: readonly WasiGccLinkedInput[] | undefined;
 		async function inspectOutput(bytes: Uint8Array, emit: 'object' | 'executable') {
 			const inspection = await inspectGccWasm(bytes, emit, {
+				exceptions: exceptionsEnabled,
 				relaxedSimd: relaxedSimdEnabled,
 				atomics: atomicsEnabled,
 				tls: tlsEnabled,
@@ -289,6 +302,24 @@ export async function createGccCompiler(
 			if (inspection.features.simd128 && !simdEnabled)
 				throw new Error(
 					'GCC produced Wasm SIMD without an enabled SIMD compilation request'
+				);
+			if (exceptionsEnabled && emit === 'object' && manifest.target === 'wasm32-wasi')
+				await inspectWasiGccObject(
+					bytes,
+					{
+						target: 'wasm32-wasi',
+						abi: 'wasm32-wasi-preview1',
+						simd: false,
+						exceptions: true,
+						language: 'cpp',
+						rtti: rttiEnabled,
+						compatibility: {
+							kind: 'gcc-bundle',
+							manifestSha256,
+							sysrootSha256: manifest.assets.sysroot.sha256
+						}
+					},
+					manifest
 				);
 			return inspection;
 		}
@@ -314,7 +345,8 @@ export async function createGccCompiler(
 					rttiEnabled,
 					relaxedSimdEnabled,
 					atomicsEnabled,
-					tlsEnabled
+					tlsEnabled,
+					exceptionsEnabled
 				);
 			for (const stage of stages) {
 				if (disposed) throw new Error('GCC compiler is disposed');
@@ -617,7 +649,8 @@ export async function createGccCompiler(
 				'relaxedSimd' in plan && plan.relaxedSimd,
 				'atomics' in plan && plan.atomics,
 				'sharedMemory' in plan ? plan.sharedMemory : undefined,
-				'tls' in plan && plan.tls === true
+				'tls' in plan && plan.tls === true,
+				'exceptions' in plan && plan.exceptions === true
 			);
 			if (!result.workspace) return result;
 			const { workspace, wasmInspection, coverageNotes, ...completed } = result;
@@ -636,10 +669,15 @@ export async function createGccCompiler(
 									: {}),
 								...('atomics' in plan && plan.atomics ? { atomics: true } : {}),
 								...('tls' in plan && plan.tls ? { tls: true } : {}),
+								...('exceptions' in plan && plan.exceptions
+									? { exceptions: true }
+									: {}),
 								...('coverage' in plan && plan.coverage ? { coverage: true } : {}),
 								// Preserve legacy false-bundle receipt shapes. New bundles
 								// distinguish pure C from both C++ RTTI profiles.
-								...(manifest.capabilities.rtti && 'language' in plan
+								...((manifest.capabilities.rtti ||
+									('exceptions' in plan && plan.exceptions)) &&
+								'language' in plan
 									? {
 											language: plan.language,
 											...(plan.language === 'cpp' ? { rtti: plan.rtti } : {})
@@ -687,6 +725,7 @@ export async function createGccCompiler(
 					...('relaxedSimd' in plan && plan.relaxedSimd ? { relaxedSimd: true } : {}),
 					...('atomics' in plan && plan.atomics ? { atomics: true } : {}),
 					...('tls' in plan && plan.tls ? { tls: true } : {}),
+					...('exceptions' in plan && plan.exceptions ? { exceptions: true } : {}),
 					...('sharedMemory' in plan && plan.sharedMemory
 						? { sharedMemory: plan.sharedMemory }
 						: {}),

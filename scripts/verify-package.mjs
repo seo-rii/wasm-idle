@@ -123,7 +123,9 @@ export const scenarios = [
 		// The minimum 39 KiB increase covers 38,933 bytes; the new Worker pair needs two more files.
 		// TLS metadata/lifecycle/formatter/errno contracts measure 2,814,616 bytes / 194 files / four packages.
 		// Another 30 KiB covers the 30,360-byte overflow; one metadata helper adds two files.
-		budget: { maxBytes: 2.5 * MiB + 189 * 1024, maxFiles: 194, maxPackages: 4 },
+		// Modern EH admission/receipts/entry wrappers measure 2,832,075 bytes with the same files/dependencies.
+		// Another 17 KiB covers the 17,099-byte overflow and retains 309 bytes of headroom.
+		budget: { maxBytes: 2.5 * MiB + 206 * 1024, maxFiles: 194, maxPackages: 4 },
 		absentPackageNames: [
 			'wasm-idle',
 			'@wasm-idle/llvm-core',
@@ -432,7 +434,9 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Add 40 KiB for this feature while preserving the preceding aggregate headroom.
 		// GCC tls CI job 127951159791 measures 42,875,309 bytes / 3,408 files / 66 packages.
 		// Add 31 KiB for this feature while preserving the preceding aggregate headroom.
-		budget: { maxBytes: 40 * MiB + 913 * 1024, maxFiles: 3_408, maxPackages: 70 },
+		// GCC eh CI job 127952182494 measures 42,892,682 bytes / 3,408 files / 66 packages.
+		// Add 17 KiB for this feature while preserving the preceding aggregate headroom.
+		budget: { maxBytes: 40 * MiB + 930 * 1024, maxFiles: 3_408, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

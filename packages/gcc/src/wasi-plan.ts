@@ -1,15 +1,16 @@
 import { gccCompileInputs } from './plan.js';
-import { gccTlsIncludePath, gccTlsRuntimePaths } from './manifest.js';
+import { gccExceptionRuntimePaths, gccTlsIncludePath, gccTlsRuntimePaths } from './manifest.js';
 import {
 	snapshotGccSharedMemory,
 	supportsGccWasmAtomics,
+	supportsGccWasmExceptions,
 	supportsGccWasmRelaxedSimd,
 	supportsGccWasmSimd
 } from './wasm-output.js';
 import { snapshotWasiGccLinkInputs } from './wasm-link-inputs.js';
 import type { CrossGccTool, WasiGccCompileRequest, WasiGccManifest } from './types.js';
 
-const unavailableFeatures = ['exceptions', 'threads', 'dynamicLinking'] as const;
+const unavailableFeatures = ['threads', 'dynamicLinking'] as const;
 
 /** GCC emits WAT; patched WABT emits relocatable Wasm; LLVM is used only as the linker. */
 export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: WasiGccManifest) {
@@ -22,6 +23,7 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 				'relaxedSimd',
 				'atomics',
 				'tls',
+				'exceptions',
 				'sharedMemory',
 				'rtti',
 				'coverage',
@@ -39,6 +41,28 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 			],
 			manifest.capabilities.debugger === true
 		);
+	if (request.exceptions !== undefined && typeof request.exceptions !== 'boolean')
+		throw new Error('Invalid GCC exception option');
+	const exceptions = request.exceptions === true;
+	if (exceptions) {
+		if (language !== 'cpp') throw new Error('GCC exceptions require ordinary C++');
+		if (
+			request.sharedMemory !== undefined ||
+			request.tls ||
+			request.debug ||
+			request.coverage ||
+			request.simd ||
+			request.relaxedSimd ||
+			request.atomics ||
+			request.threads ||
+			request.dynamicLinking
+		)
+			throw new Error('GCC exception combination is not qualified');
+		if (!manifest.capabilities.exceptions || manifest.qualification.status !== 'verified')
+			throw new Error('GCC exceptions require a qualified capable bundle');
+		if (!supportsGccWasmExceptions())
+			throw new Error('This WebAssembly engine does not support modern exception handling');
+	}
 	if (request.atomics !== undefined && typeof request.atomics !== 'boolean')
 		throw new Error('Invalid GCC atomic option');
 	const atomics = request.atomics === true;
@@ -167,6 +191,7 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 		cc.push(request.relaxedSimd ? '-mrelaxed-simd' : '-mno-relaxed-simd');
 	if (manifest.capabilities.atomics) cc.push(atomics ? '-matomics' : '-mno-atomics');
 	if (manifest.capabilities.tls) cc.push(tls ? '-mtls' : '-mno-tls');
+	if (exceptions) cc.push('-mexception-handling');
 	if (coverage)
 		cc.push(
 			'-fprofile-arcs',
@@ -177,7 +202,7 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 		);
 	if (language === 'cpp')
 		cc.push(
-			'-fno-exceptions',
+			exceptions ? '-fexceptions' : '-fno-exceptions',
 			request.rtti === true ? '-frtti' : '-fno-rtti',
 			...(sharedMemory
 				? tls
@@ -230,6 +255,7 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 				argv: [
 					'-r',
 					'--enable-annotations',
+					...(exceptions ? ['--enable-exceptions'] : []),
 					...(request.relaxedSimd ? ['--enable-relaxed-simd'] : []),
 					...(atomics || tls ? ['--enable-threads'] : []),
 					assembly,
@@ -303,6 +329,14 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 					]
 				: [
 						'--fatal-warnings',
+						...(exceptions
+							? [
+									'--wrap=__main_void',
+									'--wrap=__wasm_call_ctors',
+									'--wrap=__wasm_call_dtors',
+									'--wrap=exit'
+								]
+							: []),
 						...(tls
 							? [
 									'--wrap=exit',
@@ -326,7 +360,9 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 						...linkInputs.map((input) => `/link-inputs/${input.path}`),
 						...(tls ? [gccTlsRuntimePaths.ordinary] : []),
 						...(language === 'cpp' && manifest.capabilities.libstdcxx
-							? ['-lstdc++']
+							? exceptions
+								? Object.values(gccExceptionRuntimePaths)
+								: ['-lstdc++']
 							: []),
 						...(manifest.capabilities.longDouble
 							? [
@@ -363,6 +399,7 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 		simd: request.simd === true,
 		relaxedSimd: request.relaxedSimd === true,
 		atomics,
+		...(exceptions ? { exceptions: true as const } : {}),
 		...(tls ? { tls: true as const } : {}),
 		...(sharedMemory ? { sharedMemory } : {}),
 		rtti: request.rtti === true,

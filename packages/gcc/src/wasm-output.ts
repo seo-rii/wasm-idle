@@ -1,6 +1,19 @@
 import type { GccSharedMemoryProfile, GccWasmInspection } from './types.js';
 import { inspectGccTlsMetadata } from './wasm-tls-metadata.js';
 
+/** Exercise modern typed catches and exception references; Tag existence is insufficient. */
+export function supportsGccWasmExceptions(): boolean {
+	// WABT --enable-exceptions: nested try_table/catch_ref, (i32, exnref) block,
+	// throw and throw_ref, caught by the outer typed handler. No assets are fetched.
+	return WebAssembly.validate(
+		Uint8Array.from([
+			0, 97, 115, 109, 1, 0, 0, 0, 1, 13, 3, 96, 1, 127, 0, 96, 0, 0, 96, 0, 2, 127, 105, 3,
+			2, 1, 1, 13, 3, 1, 0, 0, 10, 32, 1, 30, 0, 2, 127, 31, 64, 1, 0, 0, 0, 2, 2, 31, 64, 1,
+			1, 0, 0, 65, 42, 8, 0, 11, 0, 11, 10, 11, 0, 11, 26, 11
+		])
+	);
+}
+
 export function supportsGccWasmAtomics(): boolean {
 	const body = [0, 0x41, 0, 0x41, 1, 0xfe, 0x1e, 2, 0, 0x1a, 0xfe, 3, 0, 0x0b];
 	return WebAssembly.validate(
@@ -84,6 +97,7 @@ export function snapshotGccSharedMemory(value: unknown): GccSharedMemoryProfile 
 }
 
 type InspectionOptions = Readonly<{
+	exceptions?: boolean;
 	relaxedSimd?: boolean;
 	atomics?: boolean;
 	tls?: boolean;
@@ -192,13 +206,19 @@ export async function compileGccWasm(
 		!options ||
 		typeof options !== 'object' ||
 		Object.keys(options).some(
-			(key) => !['relaxedSimd', 'atomics', 'tls', 'sharedMemory'].includes(key)
+			(key) => !['exceptions', 'relaxedSimd', 'atomics', 'tls', 'sharedMemory'].includes(key)
 		) ||
+		(options.exceptions !== undefined && typeof options.exceptions !== 'boolean') ||
 		(options.relaxedSimd !== undefined && typeof options.relaxedSimd !== 'boolean') ||
 		(options.atomics !== undefined && typeof options.atomics !== 'boolean') ||
 		(options.tls !== undefined && typeof options.tls !== 'boolean')
 	)
 		throw new Error('Invalid GCC WebAssembly inspection options');
+	if (
+		options.exceptions === true &&
+		(options.sharedMemory || options.tls || options.atomics || options.relaxedSimd)
+	)
+		throw new Error('GCC exception combination is not qualified');
 	const sharedMemory =
 		options.sharedMemory === undefined
 			? undefined
@@ -216,10 +236,18 @@ export async function compileGccWasm(
 		relaxedSimd: boolean;
 		atomics: boolean;
 		bulkMemory: boolean;
+		exceptions?: boolean;
 		tls?: boolean;
 	} = { simd128: false, relaxedSimd: false, atomics: false, bulkMemory: false };
 	let atomicWait = false;
 	const i32ConstantOffsets = new Set<number>();
+	const exceptionTagOffsets = new Set<number>();
+	const exceptionTagIndices = new Set<number>();
+	const blockTypes = new Set<number>();
+	function exceptionFeature() {
+		if (options.exceptions !== true) throw new Error('GCC exceptions require explicit opt-in');
+		features.exceptions = true;
+	}
 	function byte(end: number) {
 		if (position >= end) throw new Error('Truncated GCC WebAssembly section');
 		return bytes[position++];
@@ -249,9 +277,10 @@ export async function compileGccWasm(
 	}
 	function valueType(end: number) {
 		const type = byte(end);
-		if (![0x7f, 0x7e, 0x7d, 0x7c, 0x7b, 0x70, 0x6f].includes(type))
+		if (![0x7f, 0x7e, 0x7d, 0x7c, 0x7b, 0x70, 0x6f, 0x69].includes(type))
 			throw new Error('Unsupported GCC WebAssembly value type');
 		if (type === 0x7b) features.simd128 = true;
+		if (type === 0x69) exceptionFeature();
 		return type;
 	}
 	function skip(length: number, end: number) {
@@ -268,19 +297,54 @@ export async function compileGccWasm(
 		if (alignment & 0x40) unsigned(end); // Explicit memory index in the multi-memory encoding.
 		unsigned(end); // The profile rejects memory64 before accepting the module.
 	}
+	function signedType(end: number) {
+		const start = position;
+		signed(end, 5);
+		let value = 0,
+			shift = 0;
+		for (let index = start; index < position; index++, shift += 7)
+			value += (bytes[index] & 127) * 2 ** shift;
+		if (bytes[position - 1] & 64) value -= 2 ** shift;
+		return value;
+	}
+	function blockType(end: number) {
+		const value = signedType(end);
+		if (value === -5) features.simd128 = true;
+		if (value === -23) exceptionFeature();
+		if (value >= 0) blockTypes.add(value);
+	}
+	function exceptionTag(end: number) {
+		exceptionTagOffsets.add(position);
+		exceptionTagIndices.add(unsigned(end));
+	}
 	// Decode immediates to find actual instructions, never arbitrary 0xfd data bytes.
 	// The engine remains the authority for full Wasm syntax and type validation.
 	// https://webassembly.github.io/spec/core/binary/instructions.html
 	function instruction(end: number) {
 		const opcode = byte(end);
+		if ([0x06, 0x07, 0x09, 0x18, 0x19].includes(opcode))
+			throw new Error('Legacy WebAssembly exception instructions are unsupported');
+		if (opcode === 0x08 || opcode === 0x0a || opcode === 0x1f) {
+			exceptionFeature();
+			if (opcode === 0x08) exceptionTag(end);
+			if (opcode === 0x1f) {
+				blockType(end);
+				for (let remaining = count(end); remaining > 0; remaining--) {
+					const kind = byte(end);
+					if (kind > 3) throw new Error('Invalid modern exception catch kind');
+					if (kind < 2) exceptionTag(end);
+					unsigned(end); // Label depth and catch payload types are engine-checked.
+				}
+			}
+			return opcode;
+		}
 		if (
 			[0x00, 0x01, 0x05, 0x0b, 0x0f, 0x1a, 0x1b, 0xd1, 0xd3, 0xd4].includes(opcode) ||
 			(opcode >= 0x45 && opcode <= 0xc4)
 		)
 			return opcode;
 		if (opcode >= 0x02 && opcode <= 0x04) {
-			if (bytes[position] === 0x7b) features.simd128 = true;
-			signed(end, 5); // s33: a value type, empty block, or function type index.
+			blockType(end); // s33: a value type, empty block, or function type index.
 		} else if (
 			[0x0c, 0x0d, 0x10, 0x12, 0x14, 0x15, 0x3f, 0x40, 0xd2, 0xd5, 0xd6].includes(opcode) ||
 			(opcode >= 0x20 && opcode <= 0x26)
@@ -299,8 +363,9 @@ export async function compileGccWasm(
 		} else if (opcode === 0x41) {
 			i32ConstantOffsets.add(position);
 			signed(end, 5);
-		} else if (opcode === 0xd0) signed(end, 5);
-		else if (opcode === 0x42) signed(end, 10);
+		} else if (opcode === 0xd0) {
+			if (signedType(end) === -23) exceptionFeature();
+		} else if (opcode === 0x42) signed(end, 10);
 		else if (opcode === 0x43) skip(4, end);
 		else if (opcode === 0x44) skip(8, end);
 		else if (opcode === 0xfc) {
@@ -386,6 +451,12 @@ export async function compileGccWasm(
 	}
 	const types: { parameters: number[]; results: number[] }[] = [];
 	const functions: number[] = [];
+	const tags: number[] = [];
+	function tagType(end: number) {
+		exceptionFeature();
+		if (byte(end) !== 0) throw new Error('Invalid GCC exception tag attribute');
+		tags.push(unsigned(end));
+	}
 	const globals: { type: number; mutable: number; constant?: number }[] = [];
 	const exportedIndices = new Map<string, { kind: number; index: number }>();
 	const bodies = new Map<
@@ -423,8 +494,8 @@ export async function compileGccWasm(
 			}
 		} else if (id === 2) {
 			for (let remaining = count(end); remaining > 0; remaining--) {
-				name(end);
-				name(end);
+				const namespace = name(end),
+					importedName = name(end);
 				switch (byte(end)) {
 					case 0:
 						functions.push(unsigned(end));
@@ -444,6 +515,15 @@ export async function compileGccWasm(
 						globals.push({ type, mutable });
 						break;
 					}
+					case 4:
+						if (
+							emit !== 'object' ||
+							namespace !== 'env' ||
+							importedName !== '__cpp_exception'
+						)
+							throw new Error('Unsupported GCC exception tag import');
+						tagType(end);
+						break;
 					default:
 						throw new Error('Unsupported GCC WebAssembly import kind');
 				}
@@ -451,6 +531,11 @@ export async function compileGccWasm(
 		} else if (id === 3) {
 			for (let remaining = count(end); remaining > 0; remaining--)
 				functions.push(unsigned(end));
+		} else if (id === 4) {
+			for (let remaining = count(end); remaining > 0; remaining--) {
+				valueType(end);
+				limits(end, false);
+			}
 		} else if (id === 5) {
 			for (let remaining = count(end); remaining > 0; remaining--) readMemory(end);
 		} else if (id === 6) {
@@ -495,6 +580,27 @@ export async function compileGccWasm(
 					'GCC WASI must enter through _start, without a WebAssembly start section'
 				);
 			moduleStartFunction = unsigned(end);
+		} else if (id === 9) {
+			for (let remaining = count(end); remaining > 0; remaining--) {
+				const flags = unsigned(end);
+				if (flags > 7) throw new Error('Unsupported GCC WebAssembly element segment');
+				if (flags === 2 || flags === 6) unsigned(end);
+				if (!(flags & 1))
+					while (instruction(end) !== 0x0b) {
+						/* Active offset. */
+					}
+				if (flags & 4) {
+					if (flags !== 4) valueType(end);
+					for (let entries = count(end); entries > 0; entries--)
+						while (instruction(end) !== 0x0b) {
+							/* Reference constant. */
+						}
+				} else {
+					if (flags !== 0 && byte(end) !== 0)
+						throw new Error('Unsupported GCC WebAssembly element kind');
+					for (let entries = count(end); entries > 0; entries--) unsigned(end);
+				}
+			}
 		} else if (id === 10) {
 			let functionIndex = importedFunctions;
 			for (let remaining = count(end); remaining > 0; remaining--) {
@@ -528,11 +634,28 @@ export async function compileGccWasm(
 				passiveDataSegments.push(size);
 				skip(size, end);
 			}
-		} else if (id === 13 && unsigned(end) !== 0) {
-			throw new Error('GCC WASI does not support exception tags');
+		} else if (id === 13) {
+			for (let remaining = count(end); remaining > 0; remaining--) tagType(end);
+			if (position !== end) throw new Error('Trailing GCC exception tag bytes');
 		}
 		position = end;
 	}
+	for (const index of tags) {
+		const type = types[index];
+		if (
+			!type ||
+			type.parameters.length !== 1 ||
+			type.parameters[0] !== 0x7f ||
+			type.results.length
+		)
+			throw new Error('GCC exception tag must have one i32 payload and no results');
+	}
+	if (tags.length > 1 || [...exceptionTagIndices].some((index) => index >= tags.length))
+		throw new Error('GCC exceptions require a single local C++ tag identity');
+	if (features.exceptions && features.simd128)
+		throw new Error('GCC exception/SIMD combination is not qualified');
+	if (options.exceptions === true && !supportsGccWasmExceptions())
+		throw new Error('This WebAssembly engine does not support modern exception handling');
 	if (
 		emit === 'object' &&
 		linkingSections === 1 &&
@@ -845,6 +968,11 @@ export async function compileGccWasm(
 	}
 	return {
 		module,
+		// Internal operand positions for object relocation validation; never caller metadata.
+		exceptionTagOffsets,
+		requiresMultivalue:
+			types.some((type) => type.results.length > 1) ||
+			[...blockTypes].some((index) => (types[index]?.parameters.length ?? 0) > 0),
 		inspection: Object.freeze({
 			imports: Object.freeze(imports.map((entry) => Object.freeze(entry))),
 			exports: Object.freeze(exports.map((entry) => Object.freeze(entry))),

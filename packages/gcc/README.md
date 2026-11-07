@@ -144,20 +144,41 @@ All translation units use the same request profile.
 
 The RTTI contract covers the producer's qualified nonthrowing operations, including
 pointer `dynamic_cast` and `typeid` on valid operands. Failed reference casts and
-`typeid` through null polymorphic pointers require exception paths and remain
-outside this profile. The option does not promise recovery from those failures
+`typeid` through null polymorphic pointers require the separate exception profile.
+RTTI alone does not promise recovery from those failures
 or source-level rejection of every expression that might reach them. Native and
 actual Worker execution of the exact compiler/runtime must establish support;
 SDK parser/planner tests alone do not qualify a bundle.
 
-Requests for exceptions, threads and dynamic linking still fail.
-The command profile retains `-fno-exceptions -fuse-cxa-atexit -fno-threadsafe-statics`, preserving
+Threads and dynamic linking remain unsupported.
+The default command profile retains `-fno-exceptions -fuse-cxa-atexit -fno-threadsafe-statics`, preserving
 static destruction in this single-threaded environment.
 Its `__GCC_WASI_SINGLE_THREAD__=1` selects the producer's `errno` header, which uses
 single-thread WASI libc storage and rejects `_REENTRANT`; it provides no TLS.
 `cpu` must be `wasm32`; x86 `avx2`/`avx2-fma` do not select Wasm SIMD. GCC diagnoses
 unsupported target pragmas/attributes with `-Werror=pragmas -Werror=attributes`.
 The separate x86 bundle retains its pragmas, intrinsics, libm and libstdc++.
+
+`exceptions: true` requires ordinary C++, a verified bundle advertising
+`capabilities.exceptions`, and an engine supporting modern `try_table`,
+`catch_ref` and `throw_ref`. `WebAssembly.Tag` alone is insufficient. Legacy and
+mixed EH binaries are rejected. All source units receive `-mexception-handling
+-fexceptions`; omitted/false preserves existing arguments and receipt shapes.
+The request selects the sysroot-bound `libstdc++.a`, `libsupc++.a` and
+`libunwind.a` under `/sysroot/lib/wasm32-wasi-eh`, followed by the ordinary libc
+providers. Default compilation retains its existing GNU archives.
+EH-only GNU wrappers cover uncaught exceptions at main, static construction,
+destruction and exit, calling `std::terminate` inside Wasm.
+
+The initial exception profile excludes C, shared memory, TLS, debug, coverage,
+SIMD and atomic options. RTTI remains independently selected; typed catches do
+not require enabling user RTTI. Object/archive receipts must match the exception
+profile and exact GCC bundle; tag symbols, instruction relocations and feature
+metadata are checked for every member. Standalone `runGccWasiArtifact` requires
+the qualified manifest. Exceptions execute in Wasm with a local C++ tag; no tag
+export or JavaScript exception bridge is required. SDK tests and Clang references
+do not qualify GCC: native and browser execution of the actual GCC/GNU runtime
+must establish the advertised support.
 
 SIMD requires `capabilities.simd: true`, a `simd: true` request and a successful
 engine `v128` probe before GCC receives `-msimd128`. Capable bundles default to
