@@ -8,6 +8,11 @@ import {
 	supportsGccWasmSimd
 } from './wasm-output.js';
 import { snapshotWasiGccLinkInputs } from './wasm-link-inputs.js';
+import {
+	gccStdModulesDirectory,
+	gccStdModulesMapperPath,
+	validateGccStdModulesProfile
+} from './std-modules.js';
 import type { CrossGccTool, WasiGccCompileRequest, WasiGccManifest } from './types.js';
 
 const unavailableFeatures = ['threads', 'dynamicLinking'] as const;
@@ -19,6 +24,7 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 			request,
 			[
 				'cpu',
+				'stdModules',
 				'simd',
 				'relaxedSimd',
 				'atomics',
@@ -40,6 +46,22 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 				...Array.from({ length: 63 }, (_, i) => `program.${i + 1}.wat`)
 			],
 			manifest.capabilities.debugger === true
+		);
+	const stdModules = validateGccStdModulesProfile(request, {
+		language,
+		emit,
+		optimization,
+		standard,
+		definitions
+	});
+	if (
+		stdModules &&
+		(!manifest.capabilities.stdModules ||
+			manifest.qualification.status !== 'verified' ||
+			manifest.stdModules?.qualification.status !== 'verified')
+	)
+		throw new Error(
+			'GCC std modules require a separately qualified module manifest and bundle'
 		);
 	if (request.exceptions !== undefined && typeof request.exceptions !== 'boolean')
 		throw new Error('Invalid GCC exception option');
@@ -182,6 +204,7 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 		...(sharedMemory
 			? [...(tls ? [] : ['-ffreestanding']), '-fno-builtin']
 			: ['-D__GCC_WASI_SINGLE_THREAD__=1']),
+		...(stdModules ? ['-D_WASI_EMULATED_SIGNAL=1'] : []),
 		...definitions
 	];
 	if (debug) cc.push('-g', '-gdwarf-4', '-gno-variable-location-views');
@@ -191,7 +214,7 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 		cc.push(request.relaxedSimd ? '-mrelaxed-simd' : '-mno-relaxed-simd');
 	if (manifest.capabilities.atomics) cc.push(atomics ? '-matomics' : '-mno-atomics');
 	if (manifest.capabilities.tls) cc.push(tls ? '-mtls' : '-mno-tls');
-	if (exceptions) cc.push('-mexception-handling');
+	if (exceptions || stdModules) cc.push('-mexception-handling');
 	if (coverage)
 		cc.push(
 			'-fprofile-arcs',
@@ -210,6 +233,7 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 					: []
 				: ['-fuse-cxa-atexit', '-fno-threadsafe-statics'])
 		);
+	if (stdModules) cc.push('-fmodules', `-fmodule-mapper=${gccStdModulesMapperPath}`);
 	if (request.preprocessed) cc.push('-fpreprocessed');
 	else {
 		cc.push('-nostdinc', '-isysroot', manifest.sysrootPath);
@@ -359,6 +383,12 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 						...objects,
 						...linkInputs.map((input) => `/link-inputs/${input.path}`),
 						...(tls ? [gccTlsRuntimePaths.ordinary] : []),
+						...(stdModules
+							? [
+									`${gccStdModulesDirectory}/libstdc++modules.a`,
+									`${gccStdModulesDirectory}/libwasi-emulated-signal.a`
+								]
+							: []),
 						...(language === 'cpp' && manifest.capabilities.libstdcxx
 							? exceptions
 								? Object.values(gccExceptionRuntimePaths)
@@ -399,6 +429,7 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 		simd: request.simd === true,
 		relaxedSimd: request.relaxedSimd === true,
 		atomics,
+		...(stdModules ? { stdModules: true as const } : {}),
 		...(exceptions ? { exceptions: true as const } : {}),
 		...(tls ? { tls: true as const } : {}),
 		...(sharedMemory ? { sharedMemory } : {}),

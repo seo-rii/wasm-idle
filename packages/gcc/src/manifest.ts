@@ -3,9 +3,11 @@ import type {
 	CrossGccAssetName,
 	CrossGccManifest,
 	GccSourceRevision,
+	GccStdModulesManifest,
 	WasiGccAssetName,
 	WasiGccManifest
 } from './types.js';
+import { gccStdModulesAssetPaths, gccStdModulesProfile } from './std-modules.js';
 
 export const gccAssetPaths = Object.freeze({
 	cc1Js: 'cc1.mjs',
@@ -177,6 +179,187 @@ function revision<Family extends string>(
 	});
 }
 
+function moduleRecord(value: unknown, keys: readonly string[], label: string) {
+	const parsed = record(value, `std modules ${label}`);
+	if (Object.keys(parsed).some((key) => !keys.includes(key)))
+		throw new Error(`Unsupported GCC std modules ${label} field`);
+	return parsed;
+}
+
+function moduleIdentity(value: unknown, label: string) {
+	const identity = moduleRecord(value, ['bytes', 'sha256'], label);
+	if (!Number.isSafeInteger(identity.bytes) || (identity.bytes as number) < 8)
+		throw new Error(`Invalid GCC std modules ${label} size`);
+	return Object.freeze({ bytes: identity.bytes as number, sha256: gccDigest(identity.sha256) });
+}
+
+function moduleAsset(value: unknown, path: string) {
+	const asset = moduleRecord(value, ['path', 'bytes', 'sha256'], 'asset');
+	if (asset.path !== path) throw new Error('Unsupported GCC std modules asset path');
+	return Object.freeze({
+		path,
+		...moduleIdentity({ bytes: asset.bytes, sha256: asset.sha256 }, path)
+	});
+}
+
+function moduleSource(value: unknown) {
+	const source = moduleRecord(value, ['gccCommit', 'sourceDiffSha256', 'patches'], 'GCC source');
+	if (typeof source.gccCommit !== 'string' || !/^[a-f0-9]{40}$/u.test(source.gccCommit))
+		throw new Error('Invalid GCC std modules compiler revision');
+	if (!Array.isArray(source.patches) || !source.patches.length || source.patches.length > 256)
+		throw new Error('Invalid GCC std modules compiler patches');
+	const patches = source.patches.map((value: unknown) => {
+		const patch = moduleRecord(value, ['path', 'purpose', 'sha256'], 'compiler patch');
+		const path = text(patch.path);
+		if (
+			path.startsWith('/') ||
+			path.split('/').some((part) => !part || part === '..' || part === '.')
+		)
+			throw new Error('Invalid GCC std modules compiler patch path');
+		return Object.freeze({
+			path,
+			purpose: text(patch.purpose),
+			sha256: gccDigest(patch.sha256)
+		});
+	});
+	if (new Set(patches.map((patch) => patch.path)).size !== patches.length)
+		throw new Error('Duplicate GCC std modules compiler patch');
+	return Object.freeze({
+		gccCommit: source.gccCommit,
+		sourceDiffSha256: gccDigest(source.sourceDiffSha256),
+		patches: Object.freeze(patches)
+	});
+}
+
+function parseStdModules(
+	value: unknown,
+	parent: Record<string, unknown>,
+	compiler: GccSourceRevision,
+	assets: Readonly<Record<WasiGccAssetName, CrossGccAsset>>
+): GccStdModulesManifest {
+	const input = moduleRecord(
+		value,
+		[
+			'schemaVersion',
+			'kind',
+			'compilerHost',
+			'target',
+			'abi',
+			'bindings',
+			'profile',
+			'interfaces',
+			'modules',
+			'initializerArchive',
+			'signalArchive',
+			'qualification'
+		],
+		'descriptor'
+	);
+	const fixed = {
+		schemaVersion: 1,
+		kind: 'gnu-libstdcxx-std-modules',
+		compilerHost: 'wasm32-unknown-emscripten',
+		target: 'wasm32-wasi',
+		abi: 'wasm32-wasi-preview1'
+	} as const;
+	for (const [key, expected] of Object.entries(fixed))
+		if (input[key] !== expected) throw new Error(`Unsupported GCC std modules ${key}`);
+	const bindings = moduleRecord(
+		input.bindings,
+		['gccSource', 'cc1plusJs', 'cc1plusWasm', 'sysroot'],
+		'bindings'
+	);
+	const gccSource = moduleSource(bindings.gccSource);
+	const parentSource = moduleSource(record(parent.provenance, 'provenance').gccSource);
+	if (
+		gccSource.gccCommit !== compiler.commit ||
+		JSON.stringify(gccSource) !== JSON.stringify(parentSource)
+	)
+		throw new Error('GCC std modules compiler source identity mismatch');
+	const identities = Object.fromEntries(
+		['cc1plusJs', 'cc1plusWasm', 'sysroot'].map((key) => {
+			const identity = moduleIdentity(bindings[key], key),
+				asset = assets[key as WasiGccAssetName];
+			if (identity.sha256 !== asset.sha256 || identity.bytes !== asset.bytes)
+				throw new Error(`GCC std modules ${key} identity mismatch`);
+			return [key, identity];
+		})
+	) as Pick<GccStdModulesManifest['bindings'], 'cc1plusJs' | 'cc1plusWasm' | 'sysroot'>;
+	const profile = moduleRecord(input.profile, Object.keys(gccStdModulesProfile), 'profile');
+	for (const [key, expected] of Object.entries(gccStdModulesProfile))
+		if (
+			Array.isArray(expected)
+				? !Array.isArray(profile[key]) ||
+					JSON.stringify(profile[key]) !== JSON.stringify(expected)
+				: profile[key] !== expected
+		)
+			throw new Error(`Unsupported GCC std modules profile: ${key}`);
+	const interfaces = moduleRecord(
+		input.interfaces,
+		['sources', 'std', 'stdCompat'],
+		'interfaces'
+	);
+	const sourceNames = ['std.cc.in', 'std.compat.cc.in', 'std-clib.cc.in'] as const;
+	const sources = moduleRecord(interfaces.sources, sourceNames, 'interface sources');
+	const parsedSources = Object.fromEntries(
+		sourceNames.map((name) => [name, moduleIdentity(sources[name], name)])
+	) as GccStdModulesManifest['interfaces']['sources'];
+	if (!Array.isArray(input.modules) || input.modules.length !== 2)
+		throw new Error('GCC std modules require both std and std.compat');
+	const modules = input.modules.map((value: unknown, index: number) => {
+		const module = moduleRecord(value, ['name', 'requires', 'bmi'], 'module');
+		const name = index ? 'std.compat' : 'std',
+			requires = index ? ['std'] : [];
+		if (
+			module.name !== name ||
+			!Array.isArray(module.requires) ||
+			JSON.stringify(module.requires) !== JSON.stringify(requires)
+		)
+			throw new Error('Unsupported GCC std modules dependency graph');
+		return Object.freeze({
+			name,
+			requires: Object.freeze(requires),
+			bmi: moduleAsset(
+				module.bmi,
+				index ? gccStdModulesAssetPaths.stdCompat : gccStdModulesAssetPaths.std
+			)
+		});
+	});
+	const initializer = moduleRecord(
+		input.initializerArchive,
+		['asset', 'members'],
+		'initializer archive'
+	);
+	if (!Array.isArray(initializer.members) || initializer.members.length !== 2)
+		throw new Error('GCC std modules require both initializer objects');
+	const members = initializer.members.map((value: unknown, index: number) => {
+		const member = moduleRecord(value, ['name', 'bytes', 'sha256'], 'initializer member');
+		const name = index ? 'std.compat.o' : 'std.o';
+		if (member.name !== name) throw new Error('Unsupported GCC std modules initializer member');
+		return Object.freeze({
+			name,
+			...moduleIdentity({ bytes: member.bytes, sha256: member.sha256 }, name)
+		});
+	});
+	return Object.freeze({
+		...fixed,
+		bindings: Object.freeze({ gccSource, ...identities }),
+		profile: gccStdModulesProfile,
+		interfaces: Object.freeze({
+			sources: Object.freeze(parsedSources),
+			std: moduleIdentity(interfaces.std, 'std interface'),
+			stdCompat: moduleIdentity(interfaces.stdCompat, 'std.compat interface')
+		}),
+		modules: Object.freeze(modules) as unknown as GccStdModulesManifest['modules'],
+		initializerArchive: Object.freeze({
+			asset: moduleAsset(initializer.asset, gccStdModulesAssetPaths.initializers),
+			members: Object.freeze(members)
+		}),
+		signalArchive: moduleAsset(input.signalArchive, gccStdModulesAssetPaths.signal),
+		qualification: parseQualification(input.qualification)
+	});
+}
+
 /** The Wasm output backend has its own schema and retains the x86 contract. */
 export function parseWasiGccManifest(value: unknown): WasiGccManifest {
 	const input = record(value, 'WASI manifest');
@@ -242,13 +425,13 @@ export function parseWasiGccManifest(value: unknown): WasiGccManifest {
 	if (capabilities.relaxedSimd && !capabilities.simd)
 		throw new Error('GCC WASI relaxed SIMD requires the SIMD capability');
 	// Preserve legacy parsed shapes as well as the absence=false behavior.
-	for (const name of ['tls', 'timezoneDatabase'])
+	for (const name of ['tls', 'timezoneDatabase', 'stdModules'])
 		if (capabilityInput[name] !== undefined) {
 			if (typeof capabilityInput[name] !== 'boolean')
 				throw new Error(`Invalid GCC WASI capability: ${name}`);
 			capabilities[name] = capabilityInput[name] as boolean;
 		}
-	for (const name of ['exceptions', 'timezoneDatabase'])
+	for (const name of ['exceptions', 'timezoneDatabase', 'stdModules'])
 		if (
 			capabilities[name] &&
 			(!capabilities.cpp ||
@@ -311,6 +494,15 @@ export function parseWasiGccManifest(value: unknown): WasiGccManifest {
 				throw new Error(`GCC WASI debugger requires runtime library: ${library}`);
 	if (record(input.linker, 'WASI linker').host !== 'wasm32-wasi')
 		throw new Error('Unsupported GCC WASI linker host');
+	const assets = parseAssets(input.assets, true) as Readonly<
+		Record<WasiGccAssetName, CrossGccAsset>
+	>;
+	if ((input.stdModules !== undefined) !== (capabilities.stdModules === true))
+		throw new Error('GCC std modules capability requires its separate descriptor');
+	const stdModules =
+		input.stdModules === undefined
+			? undefined
+			: parseStdModules(input.stdModules, input, compiler, assets);
 	return Object.freeze({
 		...wasmFixed,
 		compiler,
@@ -319,9 +511,8 @@ export function parseWasiGccManifest(value: unknown): WasiGccManifest {
 		sysroot: revision(input.sysroot, 'wasi-libc'),
 		gccInstallation,
 		resourceDir: `${gccInstallation}/include`,
-		assets: parseAssets(input.assets, true) as Readonly<
-			Record<WasiGccAssetName, CrossGccAsset>
-		>,
+		assets,
+		...(stdModules ? { stdModules } : {}),
 		runtimeLibraries: Object.freeze(runtimeLibraries),
 		capabilities: Object.freeze(capabilities) as unknown as WasiGccManifest['capabilities'],
 		qualification: parseQualification(input.qualification)

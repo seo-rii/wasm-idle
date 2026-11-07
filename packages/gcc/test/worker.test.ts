@@ -48,6 +48,23 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('GCC Worker ownership and cancellation', () => {
+	it('snapshots the explicit module profile and cancels pending module compilation', async () => {
+		const compiler = await createGccWorker({ ...options, target: 'wasm32-wasi' });
+		const transport = FixtureWorker.instances[0];
+		const request = { code: 'import std;', standard: 'gnu++23', stdModules: true };
+		const compiling = compiler.compile(request);
+		request.stdModules = false;
+		request.standard = 'gnu++20';
+		expect(transport.messages.at(-1)!.request).toEqual({
+			code: 'import std;',
+			standard: 'gnu++23',
+			stdModules: true
+		});
+		compiler.cancel();
+		await expect(compiling).rejects.toThrow(/cancel/iu);
+		expect(transport.terminate).toHaveBeenCalledTimes(1);
+	});
+
 	it('snapshots exception request/receipt/result/run profiles without detaching caller bytes', async () => {
 		const compiler = await createGccWorker({ ...options, target: 'wasm32-wasi' });
 		const transport = FixtureWorker.instances[0];

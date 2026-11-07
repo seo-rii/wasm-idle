@@ -152,6 +152,64 @@ export interface GccSourceRevision {
 	readonly version: string;
 }
 
+export type GccStdModulesIdentity = Pick<CrossGccAsset, 'bytes' | 'sha256'>;
+
+/** GCC serializes host-specific BMIs: a native producer cannot serve the Wasm compiler. */
+export interface GccStdModulesManifest {
+	readonly schemaVersion: 1;
+	readonly kind: 'gnu-libstdcxx-std-modules';
+	readonly compilerHost: 'wasm32-unknown-emscripten';
+	readonly target: 'wasm32-wasi';
+	readonly abi: 'wasm32-wasi-preview1';
+	readonly bindings: Readonly<{
+		gccSource: Readonly<{
+			gccCommit: string;
+			sourceDiffSha256: string;
+			patches: readonly Readonly<{ path: string; purpose: string; sha256: string }>[];
+		}>;
+		cc1plusJs: GccStdModulesIdentity;
+		cc1plusWasm: GccStdModulesIdentity;
+		sysroot: GccStdModulesIdentity;
+	}>;
+	readonly profile: Readonly<{
+		standard: 'gnu++23';
+		optimization: '2';
+		exceptions: false;
+		rtti: false;
+		/** Required by the original interfaces; does not enable C++ throw/catch or setjmp. */
+		targetExceptionHandling: true;
+		signalEmulation: true;
+		cxx11Abi: 1;
+		dualAbi: true;
+		glibcxxDebug: false;
+		simd: false;
+		relaxedSimd: false;
+		atomics: false;
+		tls: false;
+		sharedMemory: false;
+		debug: false;
+		coverage: false;
+		defines: readonly ['__GCC_WASI_SINGLE_THREAD__=1', '_WASI_EMULATED_SIGNAL=1'];
+	}>;
+	readonly interfaces: Readonly<{
+		sources: Readonly<
+			Record<'std.cc.in' | 'std.compat.cc.in' | 'std-clib.cc.in', GccStdModulesIdentity>
+		>;
+		std: GccStdModulesIdentity;
+		stdCompat: GccStdModulesIdentity;
+	}>;
+	readonly modules: readonly [
+		Readonly<{ name: 'std'; requires: readonly []; bmi: CrossGccAsset }>,
+		Readonly<{ name: 'std.compat'; requires: readonly ['std']; bmi: CrossGccAsset }>
+	];
+	readonly initializerArchive: Readonly<{
+		asset: CrossGccAsset;
+		members: readonly (GccStdModulesIdentity & Readonly<{ name: 'std.o' | 'std.compat.o' }>)[];
+	}>;
+	readonly signalArchive: CrossGccAsset;
+	readonly qualification: Readonly<{ status: 'unverified' | 'verified' }>;
+}
+
 /** Separate contract: the Emscripten compiler host does not describe its output ABI. */
 export interface WasiGccManifest {
 	readonly schemaVersion: 2;
@@ -168,6 +226,8 @@ export interface WasiGccManifest {
 	readonly gccInstallation: string;
 	readonly resourceDir: string;
 	readonly assets: Readonly<Record<WasiGccAssetName, CrossGccAsset>>;
+	/** Optional lazy assets, separate from the eagerly loaded compiler and sysroot. */
+	readonly stdModules?: GccStdModulesManifest;
 	/** Exact archive paths inside the sysroot, appended after libc/libm at link time. */
 	readonly runtimeLibraries: readonly string[];
 	readonly capabilities: Readonly<{
@@ -177,6 +237,8 @@ export interface WasiGccManifest {
 		libm: boolean;
 		libstdcxx: boolean;
 		staticInitialization: boolean;
+		/** Separately qualified host-specific GNU std/std.compat modules. Legacy absence is false. */
+		stdModules?: boolean;
 		/** Embedded GNU C++20 time zones for ordinary private-memory execution. */
 		timezoneDatabase?: boolean;
 		/** Qualified IEEE binary128 ABI, arithmetic and WASI long-double library interfaces. */
@@ -218,6 +280,9 @@ export interface CreateGccCompilerOptions extends CreateCrossGccCompilerOptions 
 export interface WasiGccCompileRequest extends Omit<CrossGccCompileRequest, 'cpu'> {
 	/** Baseline Wasm only. An x86 AVX2/FMA profile is not Wasm SIMD. */
 	readonly cpu?: 'wasm32';
+	/** Opt in to the separately qualified std/std.compat BMI profile. Requires explicit
+	 * gnu++23, O2, ordinary C++ source and executable output; no additional feature opt-ins. */
+	readonly stdModules?: boolean;
 	/** Explicit modern Wasm EH for ordinary C++; omitted/false preserves -fno-exceptions. */
 	readonly exceptions?: boolean;
 	/** Opt in to qualified C++ RTTI. Omitted/false retains -fno-rtti. */
