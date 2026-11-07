@@ -177,6 +177,8 @@ export interface WasiGccManifest {
 		libm: boolean;
 		libstdcxx: boolean;
 		staticInitialization: boolean;
+		/** Embedded GNU C++20 time zones for ordinary private-memory execution. */
+		timezoneDatabase?: boolean;
 		/** Qualified IEEE binary128 ABI, arithmetic and WASI long-double library interfaces. */
 		longDouble?: boolean;
 		/** Qualified signed/unsigned __int128 operations and ABI. */

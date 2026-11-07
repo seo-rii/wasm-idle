@@ -192,6 +192,12 @@ export async function createGccCompiler(
 		}
 	});
 	if (!sysroot.size) throw new Error('GCC sysroot is empty');
+	if (
+		manifest.target === 'wasm32-wasi' &&
+		manifest.capabilities.timezoneDatabase &&
+		!sysroot.get('/sysroot/lib/wasm32-wasi/libstdc++.a')?.byteLength
+	)
+		throw new Error('GCC timezone bundle is missing its GNU libstdc++ archive');
 	if (manifest.target === 'wasm32-wasi' && manifest.capabilities.exceptions)
 		for (const path of Object.values(gccExceptionRuntimePaths))
 			if (!sysroot.get(path)?.byteLength)
