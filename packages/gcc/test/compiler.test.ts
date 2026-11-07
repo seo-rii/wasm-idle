@@ -12,6 +12,8 @@ import { loadGccModuleFactory } from '../src/module-loader.js';
 import * as wasiLinker from '../src/wasi-linker.js';
 import { tlsObject } from './tls-fixtures.js';
 import { exceptionObject, exceptionProgram } from './eh-fixtures.js';
+import { stdModulesFixture } from './std-modules-fixtures.js';
+import type { WasiGccCompileRequest } from '../src/types.js';
 
 interface FixtureNode {
 	mode: number;
@@ -33,6 +35,7 @@ const host = vi.hoisted(() => ({
 	coverageSizes: [] as number[],
 	coverageReads: [] as string[],
 	coverageContentsBytes: undefined as number | undefined,
+	bmiReads: [] as Uint8Array[],
 	failure: undefined as WebAssembly.RuntimeError | undefined
 }));
 
@@ -74,8 +77,8 @@ vi.mock('../src/module-loader.js', () => ({
 				FS: {
 					mkdirTree() {},
 					chdir() {},
-					writeFile(path: string, bytes: Uint8Array) {
-						files.set(path, Uint8Array.from(bytes));
+					writeFile(path: string, bytes: Uint8Array, options?: { canOwn?: boolean }) {
+						files.set(path, options?.canOwn ? bytes : Uint8Array.from(bytes));
 					},
 					readFile(path: string) {
 						if (path.endsWith('.gcno')) host.coverageReads.push(path);
@@ -116,6 +119,11 @@ vi.mock('../src/module-loader.js', () => ({
 				},
 				callMain(argv: string[]) {
 					host.calls.push({ tool, argv, files });
+					const bmi = files.get('/gcc-std-modules/std.gcm');
+					if (bmi) {
+						host.bmiReads.push(Uint8Array.from(bmi));
+						if (host.mode === 'mutate-std-module') bmi.fill(0);
+					}
 					(options.print as Function)(`${tool} fixture stdout`);
 					if (host.mode === 'diagnostics') {
 						(options.printErr as Function)('retained diagnostic before limit');
@@ -493,10 +501,40 @@ function wasiBundle(
 	fixture.files.set('gcc-toolchain.v2.json', manifestBytes);
 	return {
 		...fixture.options,
+		manifest,
+		files: fixture.files,
 		target: 'wasm32-wasi' as const,
 		manifestUrl: 'https://example.test/gcc/gcc-toolchain.v2.json',
 		manifestSha256: hash(manifestBytes)
 	};
+}
+
+function moduleBundle(
+	update?: (manifest: ReturnType<typeof stdModulesFixture>['manifest']) => void
+) {
+	const base = wasiBundle();
+	const fixture = stdModulesFixture(base.manifest, wasiObject());
+	update?.(fixture.manifest);
+	const bytes = encoder.encode(JSON.stringify(fixture.manifest));
+	base.files.set('gcc-toolchain.v2.json', bytes);
+	const fetchImpl = vi.fn(async (url: Parameters<typeof fetch>[0], init?: RequestInit) => {
+		const path = new URL(String(url)).pathname.slice('/gcc/'.length);
+		if (!path.startsWith('std-modules/')) return base.fetchImpl(url, init);
+		const bytes = fixture.files.get(path);
+		return bytes ? new Response(Uint8Array.from(bytes)) : new Response(null, { status: 404 });
+	});
+	return { ...base, ...fixture, fetchImpl, manifestSha256: hash(bytes) };
+}
+
+const optionalFetches = (fetchImpl: ReturnType<typeof moduleBundle>['fetchImpl']) =>
+	fetchImpl.mock.calls.filter(([url]) => String(url).includes('/std-modules/'));
+const moduleRequest = { code: 'import std;', standard: 'gnu++23', stdModules: true } as const;
+function mockModuleLinker() {
+	return vi.spyOn(wasiLinker, 'runWasiGccLinker').mockResolvedValue({
+		exitCode: 0,
+		output: wasiCommand(),
+		peakMemoryBytes: 65536
+	});
 }
 
 beforeEach(() => {
@@ -507,9 +545,239 @@ beforeEach(() => {
 	host.coverageSizes = [];
 	host.coverageReads = [];
 	host.coverageContentsBytes = undefined;
+	host.bmiReads = [];
 	host.failure = undefined;
 });
 afterEach(() => vi.restoreAllMocks());
+
+describe('synthetic std module loading (not real compiler qualification)', () => {
+	it('snapshots source and profile and reserves the compiler during lazy loading', async () => {
+		const options = moduleBundle(),
+			originalFetch = options.fetchImpl.getMockImplementation()!;
+		let release!: () => void, entered!: () => void;
+		const gate = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const started = new Promise<void>((resolve) => {
+			entered = resolve;
+		});
+		options.fetchImpl.mockImplementation(async (url, init) => {
+			if (String(url).endsWith('/std-modules/std.gcm')) {
+				entered();
+				await gate;
+			}
+			return originalFetch(url, init);
+		});
+		const compiler = await createGccCompiler(options);
+		host.output = wasiObject();
+		mockModuleLinker();
+		const source = encoder.encode('import std.compat;');
+		const request: WasiGccCompileRequest = {
+			...moduleRequest,
+			files: [{ path: 'part.cpp', contents: source }],
+			sources: ['part.cpp']
+		};
+		const compiling = compiler.compile(request);
+		await started;
+		await expect(compiler.compile({ code: '', emit: 'object' })).rejects.toThrow('busy');
+		Object.assign(request, {
+			code: 'changed',
+			standard: 'gnu++20',
+			stdModules: false,
+			simd: true
+		});
+		source.fill(0);
+		release();
+		expect((await compiling).exitCode).toBe(0);
+		const frontends = host.calls.filter((call) => call.tool === 'cc1plus');
+		expect(frontends).toHaveLength(2);
+		for (const call of frontends) {
+			expect(call.argv).toContain('-std=gnu++23');
+			expect(call.argv).toContain('-mno-simd128');
+			expect(new TextDecoder().decode(call.files.get('/workspace/main.cpp'))).toBe(
+				'import std;'
+			);
+			expect(new TextDecoder().decode(call.files.get('/workspace/part.cpp'))).toBe(
+				'import std.compat;'
+			);
+		}
+		compiler.dispose();
+	});
+
+	it('prevents cache installation and tool creation when disposed during lazy loading', async () => {
+		const options = moduleBundle(),
+			originalFetch = options.fetchImpl.getMockImplementation()!;
+		let release!: () => void, entered!: () => void;
+		const gate = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const started = new Promise<void>((resolve) => {
+			entered = resolve;
+		});
+		options.fetchImpl.mockImplementation(async (url, init) => {
+			if (String(url).endsWith('/std-modules/std.gcm')) {
+				entered();
+				await gate;
+			}
+			return originalFetch(url, init);
+		});
+		const compiler = await createGccCompiler(options),
+			compiling = compiler.compile(moduleRequest);
+		await started;
+		compiler.dispose();
+		release();
+		await expect(compiling).rejects.toThrow('disposed');
+		await expect(compiler.compile(moduleRequest)).rejects.toThrow('disposed');
+		expect(host.calls).toHaveLength(0);
+		expect(optionalFetches(options.fetchImpl)).toHaveLength(1);
+	});
+
+	it('checks optional byte limits and initializer member identities before tool execution', async () => {
+		const oversized = moduleBundle((value) => {
+			value.stdModules.modules[0].bmi.bytes = 4096;
+		});
+		const compiler = await createGccCompiler({ ...oversized, maxAssetBytes: 2048 });
+		await expect(compiler.compile(moduleRequest)).rejects.toThrow('configured byte limit');
+		expect(optionalFetches(oversized.fetchImpl)).toHaveLength(0);
+		compiler.dispose();
+		const mismatched = moduleBundle((value) => {
+			value.stdModules.initializerArchive.members[0].sha256 = 'f'.repeat(64);
+		});
+		const other = await createGccCompiler(mismatched);
+		await expect(other.compile(moduleRequest)).rejects.toThrow(
+			'initializer member identity mismatch'
+		);
+		expect(host.calls).toHaveLength(0);
+		other.dispose();
+	});
+
+	it.each([
+		{ standard: undefined },
+		{ standard: 'c++23' },
+		{ standard: 'gnu++20' },
+		{ cpu: 'avx2' },
+		{ language: 'c', standard: 'gnu17' },
+		{ optimization: '3' },
+		{ emit: 'object' },
+		{ emit: 'assembly' },
+		{ preprocessed: true },
+		{ defines: ['_GLIBCXX_USE_CXX11_ABI=0'] },
+		{ linkInputs: [{}] },
+		{ simd: true },
+		{ relaxedSimd: true },
+		{ exceptions: true },
+		{ rtti: true },
+		{ atomics: true },
+		{ tls: true },
+		{ sharedMemory: {} },
+		{ debug: true },
+		{ coverage: true },
+		{ threads: true },
+		{ dynamicLinking: true },
+		{ flags: ['-fmodule-mapper=evil'] },
+		{ stdModules: 'true' }
+	])(
+		'rejects %j through the public API before optional fetch or tool instantiation',
+		async (update) => {
+			const options = moduleBundle(),
+				compiler = await createGccCompiler(options);
+			await expect(
+				compiler.compile({ ...moduleRequest, ...update } as never)
+			).rejects.toThrow();
+			expect(optionalFetches(options.fetchImpl)).toHaveLength(0);
+			expect(host.calls).toHaveLength(0);
+			compiler.dispose();
+		}
+	);
+
+	it('requires both independent qualification statuses before loading modules', async () => {
+		for (const outer of [true, false]) {
+			const options = moduleBundle((value) => {
+				(outer ? value.qualification : value.stdModules.qualification).status =
+					'unverified';
+			});
+			const compiler = await createGccCompiler(options);
+			await expect(compiler.compile(moduleRequest)).rejects.toThrow('separately qualified');
+			expect(optionalFetches(options.fetchImpl)).toHaveLength(0);
+			compiler.dispose();
+		}
+	});
+
+	it('does not retain corrupted fetch bytes and still supports headers and later retries', async () => {
+		const options = moduleBundle(),
+			originalFetch = options.fetchImpl.getMockImplementation()!;
+		let corrupt = true;
+		options.fetchImpl.mockImplementation(async (url, init) => {
+			if (String(url).endsWith('/std-modules/std.gcm') && corrupt) {
+				corrupt = false;
+				const bytes = Uint8Array.from(options.files.get('std-modules/std.gcm')!);
+				bytes[0] ^= 1;
+				return new Response(bytes);
+			}
+			return originalFetch(url, init);
+		});
+		const compiler = await createGccCompiler(options);
+		host.output = wasiObject();
+		await expect(compiler.compile(moduleRequest)).rejects.toThrow(/integrity|SHA-256/u);
+		expect(host.calls).toHaveLength(0);
+		expect(
+			(await compiler.compile({ code: '#include <vector>', emit: 'object' })).exitCode
+		).toBe(0);
+		mockModuleLinker();
+		expect((await compiler.compile(moduleRequest)).exitCode).toBe(0);
+		compiler.dispose();
+		const retry = await createGccCompiler(options);
+		expect((await retry.compile(moduleRequest)).exitCode).toBe(0);
+		expect(
+			optionalFetches(options.fetchImpl).filter(([url]) => String(url).endsWith('/std.gcm'))
+		).toHaveLength(3);
+		retry.dispose();
+	});
+
+	it('fetches no optional bytes for headers, then reuses verified cache with fresh BMI copies', async () => {
+		const options = moduleBundle(),
+			linker = mockModuleLinker();
+		const compiler = await createGccCompiler(options);
+		host.output = wasiObject();
+		for (const stdModules of [undefined, false])
+			await compiler.compile({ code: '#include <vector>', emit: 'object', stdModules });
+		expect(optionalFetches(options.fetchImpl)).toHaveLength(0);
+		expect(host.calls.every((call) => !call.files.has('/gcc-std-modules/std.gcm'))).toBe(true);
+		host.mode = 'mutate-std-module';
+		for (let run = 0; run < 2; run++) {
+			const result = await compiler.compile({
+				...moduleRequest,
+				files: [
+					{ path: 'part.cpp', contents: 'import std.compat;' },
+					{ path: 'gcm.cache/std.gcm', contents: 'untrusted caller bytes' },
+					{ path: 'mapper.txt', contents: 'std /workspace/gcm.cache/std.gcm' }
+				],
+				sources: ['part.cpp']
+			});
+			expect(result.exitCode).toBe(0);
+		}
+		expect(optionalFetches(options.fetchImpl)).toHaveLength(4);
+		expect(host.bmiReads).toHaveLength(4);
+		for (const bytes of host.bmiReads)
+			expect(bytes).toEqual(options.files.get('std-modules/std.gcm'));
+		for (const call of host.calls.filter((call) =>
+			call.files.has('/gcc-std-modules/std.gcm')
+		)) {
+			expect(call.tool).toBe('cc1plus');
+			expect(new TextDecoder().decode(call.files.get('/gcc-std-modules/mapper.txt'))).toBe(
+				'std /gcc-std-modules/std.gcm\nstd.compat /gcc-std-modules/std.compat.gcm\n'
+			);
+			expect(call.argv).toContain('-fmodule-mapper=/gcc-std-modules/mapper.txt');
+		}
+		for (const call of linker.mock.calls) {
+			const files = new Map(call[2]);
+			expect(files.has('/gcc-std-modules/libstdc++modules.a')).toBe(true);
+			expect(files.has('/gcc-std-modules/libwasi-emulated-signal.a')).toBe(true);
+			expect(files.has('/gcc-std-modules/std.gcm')).toBe(false);
+		}
+		compiler.dispose();
+	});
+});
 
 describe('synthetic GCC host contract (not real compiler qualification)', () => {
 	it('requires every separate exception provider before creating tool instances', async () => {

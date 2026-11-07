@@ -125,7 +125,9 @@ export const scenarios = [
 		// Another 30 KiB covers the 30,360-byte overflow; one metadata helper adds two files.
 		// Modern EH admission/receipts/entry wrappers measure 2,832,075 bytes with the same files/dependencies.
 		// Another 17 KiB covers the 17,099-byte overflow and retains 309 bytes of headroom.
-		budget: { maxBytes: 2.5 * MiB + 206 * 1024, maxFiles: 194, maxPackages: 4 },
+		// Standard modules CI job 128326182518 measures 2,855,516 bytes / 196 files / four packages.
+		// Another 23 KiB covers the 23,132-byte overflow with 420 bytes of headroom; BMIs stay external.
+		budget: { maxBytes: 2.5 * MiB + 229 * 1024, maxFiles: 196, maxPackages: 4 },
 		absentPackageNames: [
 			'wasm-idle',
 			'@wasm-idle/llvm-core',
@@ -436,7 +438,9 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Add 31 KiB for this feature while preserving the preceding aggregate headroom.
 		// GCC eh CI job 127952182494 measures 42,892,682 bytes / 3,408 files / 66 packages.
 		// Add 17 KiB for this feature while preserving the preceding aggregate headroom.
-		budget: { maxBytes: 40 * MiB + 930 * 1024, maxFiles: 3_408, maxPackages: 70 },
+		// Allow the same 23 KiB and two JS/declaration files for the standard module SDK.
+		// The optional compiler/runtime/BMI assets do not enter npm packages.
+		budget: { maxBytes: 40 * MiB + 953 * 1024, maxFiles: 3_410, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

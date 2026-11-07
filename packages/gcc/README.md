@@ -95,8 +95,66 @@ The SDK preserves `qualification.status`.
 Optional `timezoneDatabase` advertises embedded GNU C++20 time zones; provenance
 pins the data version. No compile option, timezone files or network is needed;
 `current_zone()` falls back to UTC. Throwing lookups need `exceptions: true`.
-TLS/shared combinations and prebuilt `std` modules are unqualified. C++26
-debugger functions use the separate profile below.
+TLS/shared combinations remain unqualified. Prebuilt `std` modules and C++26
+debugger functions use the separate profiles below.
+
+### GNU standard library modules
+
+`stdModules: true` opts in to a bundle's separately qualified `std` and `std.compat`
+BMIs. The default header workflow fetches no module assets, including when the
+bundle advertises this capability. Both the outer manifest and its optional
+`stdModules` descriptor must have `qualification.status: 'verified'`; a raw or
+unverified producer package is insufficient.
+
+```ts
+const compiled = await compiler.compile({
+	stdModules: true,
+	standard: 'gnu++23',
+	code: 'import std;\nint main() { std::vector<int> values{40, 2}; std::cout << values[0] + values[1] << "\\n"; }'
+});
+```
+
+This initial profile requires ordinary C++ source, explicit `gnu++23`, O2
+(`optimization` may be omitted), private scalar memory, and executable output.
+Additional source units may mix imports and headers using the same profile.
+Caller macro definitions, preprocessed input, external `linkInputs`, C++ exceptions,
+RTTI, SIMD, atomics, TLS, shared memory, coverage, debug, threads and dynamic linking
+are rejected before optional asset fetches. Omitting the standard retains the
+ordinary `gnu++20` default and therefore rejects this opt-in.
+
+The descriptor binds the exact Wasm-hosted compiler, GCC source revision and ordered
+patches, sysroot, GNU ABI, interface sources, BMI bytes and real initializer archive.
+Its full GCC BMI host is `wasm32-unknown-emscripten`, distinct from the outer SDK
+manifest's `wasm32-emscripten` label. Native-host BMIs cannot substitute for it.
+The SDK verifies all four lazy assets and the initializer archive's object members
+before starting a frontend. Successful bytes are retained per compiler instance;
+each fresh frontend receives private BMI copies and a fixed mapper outside the
+caller's workspace. Initializer and signal archives follow all user objects and
+precede the GNU runtime libraries. A failed fetch does not prevent header compilation
+or a later retry. `dispose()` releases retained assets.
+
+The original interfaces require the target flag `-mexception-handling` and the
+internal `_WASI_EMULATED_SIGNAL=1` definition with its real signal provider. C++
+compilation still uses `-fno-exceptions -fno-rtti`; this does not qualify throw/catch
+or `setjmp`/`longjmp`. Module support requires native and Chromium Worker execution
+of the exact packaged assets; synthetic SDK metadata and transport tests alone do
+not qualify a producer bundle.
+
+From the repository root, after building `packages/core` and `packages/gcc`, run the
+real Chromium check with the root development dependencies installed:
+
+```sh
+node packages/gcc/test/std-modules/browser.mjs \
+	--manifest /path/to/qualified/gcc-toolchain.qualification.v2.json \
+	--sha256 "$GCC_MODULES_MANIFEST_SHA256" \
+	--native-bmi /path/to/native-bmis --out /path/to/browser-receipt
+```
+
+The native BMI directory supplies the wrong-host negative case. `--candidate`
+labels an explicitly prepared private qualification candidate in the receipt;
+the harness never modifies or promotes a manifest. It records exact inputs,
+stdin/stdout, optional requests, cache reuse, rejected profiles/assets, compression
+sizes and Wasm linear memory separately from page heap measurements.
 
 The optional `capabilities.debugger` defaults to `false`. A capable bundle must
 advertise `cpp` and `libstdcxx` and include both

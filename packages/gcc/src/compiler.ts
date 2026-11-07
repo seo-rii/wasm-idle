@@ -13,6 +13,11 @@ import { loadGccModuleFactory, type GccModuleFactory } from './module-loader.js'
 import { gccCompilePlan, gccRelativePath } from './plan.js';
 import { gccSysrootTree, mountGccSysroot, type GccSysrootDirectory } from './sysroot-fs.js';
 import { wasiGccCompilePlan } from './wasi-plan.js';
+import {
+	gccStdModulesDirectory,
+	gccStdModulesMapper,
+	gccStdModulesMapperPath
+} from './std-modules.js';
 import { compileGccWasm, inspectGccWasm } from './wasm-output.js';
 import { runGccWasiArtifact } from './wasi-run.js';
 import { runWasiGccLinker } from './wasi-linker.js';
@@ -227,6 +232,7 @@ export async function createGccCompiler(
 		{ factory?: GccModuleFactory; revoke(): void; wasm: WebAssembly.Module }
 	>();
 	let precompiled: { flags: readonly string[]; bytes: Uint8Array } | undefined;
+	let stdModulesFiles: ReadonlyMap<string, Uint8Array> | undefined;
 	let disposed = false,
 		active = false;
 	function dispose() {
@@ -238,6 +244,79 @@ export async function createGccCompiler(
 		directories.clear();
 		sysrootTree.clear();
 		precompiled = undefined;
+		stdModulesFiles = undefined;
+	}
+	async function loadStdModules() {
+		if (stdModulesFiles) return stdModulesFiles;
+		if (manifest.target !== 'wasm32-wasi' || !manifest.stdModules)
+			throw new Error('GCC std modules descriptor is missing');
+		const descriptor = manifest.stdModules;
+		const receipts = [
+			...descriptor.modules.map((module) => module.bmi),
+			descriptor.initializerArchive.asset,
+			descriptor.signalArchive
+		];
+		for (const receipt of receipts)
+			if (receipt.bytes > maxAssetBytes)
+				throw new Error('GCC std modules asset exceeds the configured byte limit');
+		// A failed integrity check must not poison readBuffer's raw-byte cache on retry.
+		// Only this function's fully verified result is retained between compilations.
+		const attemptFetch = fetchImpl?.bind(undefined);
+		const files = new Map<string, Uint8Array>();
+		for (const receipt of receipts) {
+			const url = new URL(receipt.path, manifestUrl).href;
+			const bytes = new Uint8Array(
+				await readBuffer(url, undefined, receipt.bytes, signal, attemptFetch)
+			);
+			await verifyRuntimeAssetIntegrity({ asset: url, bytes, expected: receipt });
+			if (disposed) throw new Error('GCC compiler is disposed');
+			files.set(`${gccStdModulesDirectory}/${receipt.path.split('/').at(-1)!}`, bytes);
+		}
+		const initializer = descriptor.initializerArchive;
+		const [validated] = await validateWasiGccLinkInputs(
+			[
+				{
+					path: 'libstdc++modules.a',
+					format: 'wasm-archive',
+					bytes: files.get(`${gccStdModulesDirectory}/libstdc++modules.a`)!,
+					sha256: initializer.asset.sha256,
+					profile: {
+						target: 'wasm32-wasi',
+						abi: 'wasm32-wasi-preview1',
+						simd: false,
+						language: 'cpp',
+						rtti: false,
+						compatibility: {
+							kind: 'gcc-bundle',
+							manifestSha256,
+							sysrootSha256: manifest.assets.sysroot.sha256
+						}
+					}
+				}
+			],
+			manifest,
+			manifestSha256,
+			false,
+			'cpp'
+		);
+		if (
+			validated.members?.length !== initializer.members.length ||
+			initializer.members.some((expected, index) => {
+				const member = validated.members![index];
+				return (
+					member.path !== expected.name ||
+					member.bytes !== expected.bytes ||
+					member.sha256 !== expected.sha256
+				);
+			})
+		)
+			throw new Error('GCC std modules initializer member identity mismatch');
+		const signalArchive = files.get(`${gccStdModulesDirectory}/libwasi-emulated-signal.a`)!;
+		if (!encoder.encode('!<arch>\n').every((byte, index) => signalArchive[index] === byte))
+			throw new Error('GCC std modules signal provider is not a GNU archive');
+		if (disposed) throw new Error('GCC compiler is disposed');
+		stdModulesFiles = files;
+		return files;
 	}
 	try {
 		for (const tool of tools) {
@@ -277,7 +356,8 @@ export async function createGccCompiler(
 		atomicsEnabled = false,
 		sharedMemory?: GccSharedMemoryProfile,
 		tlsEnabled = false,
-		exceptionsEnabled = false
+		exceptionsEnabled = false,
+		stdModulesEnabled = false
 	): Promise<{
 		exitCode: number;
 		stdout: string;
@@ -341,6 +421,7 @@ export async function createGccCompiler(
 			else stderr += value;
 		};
 		try {
+			const moduleFiles = stdModulesEnabled ? await loadStdModules() : undefined;
 			if (linkInputs.length && manifest.target === 'wasm32-wasi')
 				linkedInputs = await validateWasiGccLinkInputs(
 					linkInputs,
@@ -363,7 +444,11 @@ export async function createGccCompiler(
 					const linked = await runWasiGccLinker(
 						loaded.wasm,
 						stage.argv,
-						[...sysroot, ...workspace],
+						[
+							...sysroot,
+							...workspace,
+							...[...(moduleFiles ?? [])].filter(([path]) => path.endsWith('.a'))
+						],
 						stage.output,
 						(stream, text) => print(stream)(text)
 					);
@@ -440,6 +525,17 @@ export async function createGccCompiler(
 				for (const [path, bytes] of workspace) {
 					module.FS.mkdirTree(path.slice(0, path.lastIndexOf('/')));
 					module.FS.writeFile(path, bytes);
+				}
+				if (moduleFiles && stage.tool === 'cc1plus') {
+					module.FS.mkdirTree(gccStdModulesDirectory);
+					module.FS.writeFile(
+						gccStdModulesMapperPath,
+						encoder.encode(gccStdModulesMapper)
+					);
+					for (const [path, bytes] of moduleFiles)
+						if (path.endsWith('.gcm'))
+							// GCC mmap writes into MEMFS: each frontend owns a fresh BMI copy.
+							module.FS.writeFile(path, Uint8Array.from(bytes), { canOwn: true });
 				}
 				// GCC maps a PCH privately, so the shared bytes are copied, never modified.
 				if (stage.precompiledHeader)
@@ -646,9 +742,7 @@ export async function createGccCompiler(
 					};
 				}),
 				plan.files,
-				manifest.target === 'wasm32-wasi' &&
-					manifest.capabilities.simd &&
-					(request as WasiGccCompileRequest).simd === true,
+				'simd' in plan && plan.simd,
 				'linkInputs' in plan ? plan.linkInputs : [],
 				'language' in plan ? plan.language : 'cpp',
 				'rtti' in plan && plan.rtti,
@@ -656,7 +750,8 @@ export async function createGccCompiler(
 				'atomics' in plan && plan.atomics,
 				'sharedMemory' in plan ? plan.sharedMemory : undefined,
 				'tls' in plan && plan.tls === true,
-				'exceptions' in plan && plan.exceptions === true
+				'exceptions' in plan && plan.exceptions === true,
+				'stdModules' in plan && plan.stdModules === true
 			);
 			if (!result.workspace) return result;
 			const { workspace, wasmInspection, coverageNotes, ...completed } = result;
