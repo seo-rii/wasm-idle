@@ -199,8 +199,10 @@ export interface WasiGccManifest {
 		relaxedSimd?: boolean;
 		/** Qualified native atomic lowering and the matching GNU libatomic provider. */
 		atomics?: boolean;
-		/** Qualified freestanding shared-entry linking; does not imply pthread or TLS. */
+		/** Qualified freestanding shared-entry linking; does not imply pthread. */
 		sharedMemory?: boolean;
+		/** Qualified local-exec TLS ABI and runtime. Legacy absence means false. */
+		tls?: boolean;
 	}>;
 	readonly qualification: Readonly<{ status: 'unverified' | 'verified' }>;
 }
@@ -224,6 +226,8 @@ export interface WasiGccCompileRequest extends Omit<CrossGccCompileRequest, 'cpu
 	readonly relaxedSimd?: boolean;
 	/** Explicit native atomic instruction and libatomic profile; omitted means false. */
 	readonly atomics?: boolean;
+	/** Explicit local-exec TLS profile, independent of native atomic lowering. */
+	readonly tls?: boolean;
 	/** Separate freestanding C/C++ executable contract. Requires atomics: true. */
 	readonly sharedMemory?: GccSharedMemoryProfile;
 	/** Source-only GCC gcov instrumentation. Requires a qualified bundle and no linkInputs. */
@@ -244,6 +248,8 @@ export interface WasiGccLinkProfile {
 	readonly relaxedSimd?: boolean;
 	/** Native atomic compilation profile. Legacy omission means false. */
 	readonly atomics?: boolean;
+	/** Local-exec TLS compilation profile. Legacy omission means false. */
+	readonly tls?: boolean;
 	/** Known source language. Legacy omission cannot establish that an input is pure C. */
 	readonly language?: 'c' | 'cpp';
 	/** C++ RTTI profile; legacy omission means false. Pure C inputs are RTTI-neutral. */
@@ -290,12 +296,14 @@ export interface GccWasmInspection {
 	readonly imports: readonly WebAssembly.ModuleImportDescriptor[];
 	readonly exports: readonly WebAssembly.ModuleExportDescriptor[];
 	readonly hasLinkingMetadata: boolean;
-	/** Detected from validated instructions and types, independently of optional custom metadata. */
+	/** Instruction/type features and, when present, independently validated TLS ABI metadata. */
 	readonly features: Readonly<{
 		simd128: boolean;
 		relaxedSimd: boolean;
 		atomics: boolean;
 		bulkMemory: boolean;
+		/** Actual TLS object metadata or validated executable TLS ABI; absence means false. */
+		tls?: boolean;
 	}>;
 	readonly memory?: Readonly<{ initialPages: number; maximumPages?: number; shared: boolean }>;
 	/** Present only after validating the separate freestanding shared-entry ABI. */
@@ -304,6 +312,13 @@ export interface GccWasmInspection {
 		parameterCount: number;
 		dataEnd: number;
 		heapBase: number;
+		/** Present only for the validated TLS shared-entry contract. */
+		tls?: Readonly<{
+			size: number;
+			alignment: number;
+			reservedLow: number;
+			reservedHigh: number;
+		}>;
 	}>;
 }
 
@@ -316,6 +331,8 @@ export interface WasiGccArtifact extends Omit<CrossGccArtifact, 'target' | 'form
 	readonly relaxedSimd?: boolean;
 	/** Retains explicit compile-time atomic selection for checked execution. */
 	readonly atomics?: boolean;
+	/** Retains explicit compile-time TLS selection for checked execution. */
+	readonly tls?: boolean;
 	readonly sharedMemory?: GccSharedMemoryProfile;
 	/** Present for object output. Reuse with {path, bytes: artifact.bytes, ...artifact.linkInput!}. */
 	readonly linkInput?: WasiGccLinkInputReceipt;
@@ -406,6 +423,8 @@ export interface WasiGccRunResult {
 /** Fresh fixed-size shared memory for one freestanding exported entry, never WASI _start. */
 export interface GccSharedMemoryProfile {
 	readonly entry: string;
+	/** TLS-only LLD reservation for all Worker stacks, TLS blocks and guards. */
+	readonly reservedBytes?: number;
 	readonly initialPages: number;
 	/** Must equal initialPages; shared execution does not grow memory. */
 	readonly maximumPages: number;
@@ -426,6 +445,8 @@ export interface GccSharedRunResult {
 	/** Copied only after all entries return successfully; never a live shared buffer. */
 	readonly memory: Uint8Array;
 	readonly stackRegions: readonly Readonly<{ low: number; high: number }>[];
+	/** Present only for TLS execution; each region lies below the allocator's heap. */
+	readonly tlsRegions?: readonly Readonly<{ low: number; high: number; alignment: number }>[];
 	readonly milliseconds: number;
 	readonly peakMemoryBytes: number;
 }

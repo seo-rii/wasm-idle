@@ -31,6 +31,13 @@ export async function runGccWasiArtifact(
 		throw new Error('GCC run requires a linked wasm32-wasi executable artifact');
 	if (artifact.sharedMemory !== undefined)
 		throw new Error('GCC shared artifacts require runGccSharedArtifact');
+	if (artifact.tls !== undefined && typeof artifact.tls !== 'boolean')
+		throw new Error('Invalid GCC WASI artifact TLS profile');
+	if (artifact.tls === true) {
+		const trusted = manifest === undefined ? undefined : parseWasiGccManifest(manifest);
+		if (!trusted?.capabilities.tls || trusted.qualification.status !== 'verified')
+			throw new Error('GCC TLS execution requires a qualified capable bundle');
+	}
 	if (artifact.atomics !== undefined && typeof artifact.atomics !== 'boolean')
 		throw new Error('Invalid GCC WASI artifact atomic profile');
 	if (artifact.atomics === true) {
@@ -127,7 +134,8 @@ export async function runGccWasiArtifact(
 	});
 	const { module, inspection } = await compileGccWasm(artifact.bytes, 'executable', {
 		relaxedSimd: artifact.relaxedSimd === true,
-		atomics: artifact.atomics === true
+		atomics: artifact.atomics === true,
+		tls: artifact.tls === true
 	});
 	for (const entry of inspection.imports)
 		if (

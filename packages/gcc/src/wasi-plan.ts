@@ -1,4 +1,5 @@
 import { gccCompileInputs } from './plan.js';
+import { gccTlsIncludePath, gccTlsRuntimePaths } from './manifest.js';
 import {
 	snapshotGccSharedMemory,
 	supportsGccWasmAtomics,
@@ -20,6 +21,7 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 				'simd',
 				'relaxedSimd',
 				'atomics',
+				'tls',
 				'sharedMemory',
 				'rtti',
 				'coverage',
@@ -50,6 +52,16 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 		request.sharedMemory === undefined
 			? undefined
 			: snapshotGccSharedMemory(request.sharedMemory);
+	if (request.tls !== undefined && typeof request.tls !== 'boolean')
+		throw new Error('Invalid GCC TLS option');
+	const tls = request.tls === true;
+	if (tls) {
+		if (!manifest.capabilities.tls || manifest.qualification.status !== 'verified')
+			throw new Error('GCC TLS requires a qualified capable bundle');
+		if (request.debug) throw new Error('GCC TLS with DWARF debug information is not qualified');
+	}
+	if (sharedMemory && tls !== (sharedMemory.reservedBytes !== undefined))
+		throw new Error('GCC shared TLS requires an explicit reservedBytes reservation');
 	if (sharedMemory) {
 		if (
 			!atomics ||
@@ -143,7 +155,9 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 		'-fdiagnostics-color=never',
 		'-Werror=attributes',
 		'-Werror=pragmas',
-		...(sharedMemory ? ['-ffreestanding', '-fno-builtin'] : ['-D__GCC_WASI_SINGLE_THREAD__=1']),
+		...(sharedMemory
+			? [...(tls ? [] : ['-ffreestanding']), '-fno-builtin']
+			: ['-D__GCC_WASI_SINGLE_THREAD__=1']),
 		...definitions
 	];
 	if (debug) cc.push('-g', '-gdwarf-4', '-gno-variable-location-views');
@@ -152,6 +166,7 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 	if (manifest.capabilities.relaxedSimd)
 		cc.push(request.relaxedSimd ? '-mrelaxed-simd' : '-mno-relaxed-simd');
 	if (manifest.capabilities.atomics) cc.push(atomics ? '-matomics' : '-mno-atomics');
+	if (manifest.capabilities.tls) cc.push(tls ? '-mtls' : '-mno-tls');
 	if (coverage)
 		cc.push(
 			'-fprofile-arcs',
@@ -164,12 +179,16 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 		cc.push(
 			'-fno-exceptions',
 			request.rtti === true ? '-frtti' : '-fno-rtti',
-			...(sharedMemory ? [] : ['-fuse-cxa-atexit', '-fno-threadsafe-statics'])
+			...(sharedMemory
+				? tls
+					? ['-fuse-cxa-atexit']
+					: []
+				: ['-fuse-cxa-atexit', '-fno-threadsafe-statics'])
 		);
 	if (request.preprocessed) cc.push('-fpreprocessed');
 	else {
 		cc.push('-nostdinc', '-isysroot', manifest.sysrootPath);
-		const includes: string[] = [];
+		const includes: string[] = tls ? [gccTlsIncludePath] : [];
 		if (language === 'cpp' && manifest.capabilities.libstdcxx) {
 			const cxx = `/sysroot/include/c++/${manifest.compiler.version}`;
 			includes.push(cxx, `${cxx}/wasm32-wasi`, `${cxx}/backward`);
@@ -212,7 +231,7 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 					'-r',
 					'--enable-annotations',
 					...(request.relaxedSimd ? ['--enable-relaxed-simd'] : []),
-					...(atomics ? ['--enable-threads'] : []),
+					...(atomics || tls ? ['--enable-threads'] : []),
 					assembly,
 					'-o',
 					object
@@ -239,7 +258,7 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 						'--no-stack-first',
 						'--global-base=1024',
 						'-z',
-						'stack-size=0',
+						`stack-size=${tls ? sharedMemory.reservedBytes : 0}`,
 						`--initial-memory=${sharedMemory.initialPages * 65536}`,
 						`--max-memory=${sharedMemory.maximumPages * 65536}`,
 						'--extra-features=atomics,bulk-memory,mutable-globals',
@@ -249,6 +268,16 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 							'__data_end',
 							'__wasm_call_ctors',
 							'__tls_size',
+							...(tls
+								? [
+										'__tls_base',
+										'__tls_align',
+										'__wasm_init_tls',
+										'__wasm_call_thread_dtors',
+										'__stack_low',
+										'__stack_high'
+									]
+								: []),
 							sharedMemory.entry
 						].map((name) => `--export=${name}`),
 						'-m',
@@ -259,12 +288,28 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 						`-L${manifest.gccInstallation}`,
 						...objects,
 						...linkInputs.map((input) => `/link-inputs/${input.path}`),
+						...(tls ? [gccTlsRuntimePaths.shared] : []),
 						...libraries.filter((path) => path.endsWith('/libatomic.a')),
-						'-lc',
-						...libraries.filter((path) => !path.endsWith('/libatomic.a'))
+						...(tls
+							? [
+									gccTlsRuntimePaths.libm,
+									gccTlsRuntimePaths.libc,
+									gccTlsRuntimePaths.builtins
+								]
+							: [
+									'-lc',
+									...libraries.filter((path) => !path.endsWith('/libatomic.a'))
+								])
 					]
 				: [
 						'--fatal-warnings',
+						...(tls
+							? [
+									'--wrap=exit',
+									'--wrap=__wasm_call_dtors',
+									'--extra-features=atomics,bulk-memory,mutable-globals'
+								]
+							: []),
 						...(manifest.capabilities.debugger
 							? ['--export-if-defined=_ZN9__gnu_cxx30debugger_signal_for_breakpointE']
 							: []),
@@ -279,14 +324,28 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 						`-L${manifest.gccInstallation}`,
 						...objects,
 						...linkInputs.map((input) => `/link-inputs/${input.path}`),
+						...(tls ? [gccTlsRuntimePaths.ordinary] : []),
 						...(language === 'cpp' && manifest.capabilities.libstdcxx
 							? ['-lstdc++']
 							: []),
-						...(manifest.capabilities.longDouble ? ['-lc-printscan-long-double'] : []),
+						...(manifest.capabilities.longDouble
+							? [
+									tls
+										? gccTlsRuntimePaths.ordinaryLongDouble
+										: '-lc-printscan-long-double'
+								]
+							: []),
 						...(coverage ? ['-lgcov', '-lwasi-emulated-getpid'] : []),
-						'-lm',
-						'-lc',
-						...libraries
+						...(tls
+							? [
+									gccTlsRuntimePaths.ordinaryLibm,
+									gccTlsRuntimePaths.ordinaryLibc,
+									...libraries.filter(
+										(path) => !path.endsWith('/libclang_rt.builtins-wasm32.a')
+									),
+									gccTlsRuntimePaths.ordinaryBuiltins
+								]
+							: ['-lm', '-lc', ...libraries])
 					],
 			output: '/workspace/program.wasm'
 		});
@@ -304,6 +363,7 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 		simd: request.simd === true,
 		relaxedSimd: request.relaxedSimd === true,
 		atomics,
+		...(tls ? { tls: true as const } : {}),
 		...(sharedMemory ? { sharedMemory } : {}),
 		rtti: request.rtti === true,
 		...(coverage ? { coverage: true as const } : {}),

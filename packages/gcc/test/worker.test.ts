@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createCrossGccWorker, createGccWorker } from '../src/worker.js';
 import type { WasiGccArtifact, WasiGccCompileRequest, WasiGccLinkProfile } from '../src/types.js';
 import { sharedArtifact, sharedProfile } from './atomic-fixtures.js';
+import { tlsObject, tlsSharedArtifact, tlsSharedProfile } from './tls-fixtures.js';
 
 /** Synthetic transport fixture only: CPU/compiler correctness belongs to the real bundle probe. */
 class FixtureWorker {
@@ -47,6 +48,85 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('GCC Worker ownership and cancellation', () => {
+	it('snapshots TLS selection and reserved arena through shared artifact transport', async () => {
+		const compiler = await createGccWorker({ ...options, target: 'wasm32-wasi' });
+		const transport = FixtureWorker.instances[0];
+		const request = {
+			code: 'source',
+			tls: true,
+			atomics: true,
+			sharedMemory: {
+				...tlsSharedProfile,
+				reservedBytes: Number(tlsSharedProfile.reservedBytes)
+			}
+		};
+		const pending = compiler.compile(request);
+		request.tls = false;
+		request.sharedMemory.reservedBytes = 16;
+		const message = transport.messages.at(-1)!;
+		expect(message.request).toMatchObject({
+			tls: true,
+			atomics: true,
+			sharedMemory: tlsSharedProfile
+		});
+		const artifact = tlsSharedArtifact();
+		transport.onmessage?.({
+			data: structuredClone({
+				id: message.id,
+				type: 'result',
+				result: { exitCode: 0, stdout: '', stderr: '', stages: [], artifact }
+			})
+		});
+		const result = await pending;
+		expect(result.artifact).toEqual(artifact);
+		expect(result.artifact!.sharedMemory).not.toBe(artifact.sharedMemory);
+		compiler.dispose();
+	});
+
+	it('retains the TLS profile on snapshotted link receipts across Worker transport', async () => {
+		const compiler = await createGccWorker({ ...options, target: 'wasm32-wasi' });
+		const transport = FixtureWorker.instances[0];
+		const profile: WasiGccLinkProfile = {
+			target: 'wasm32-wasi',
+			abi: 'wasm32-wasi-preview1',
+			simd: false,
+			tls: true,
+			compatibility: {
+				kind: 'gcc-bundle',
+				manifestSha256: 'a'.repeat(64),
+				sysrootSha256: 'b'.repeat(64)
+			}
+		};
+		const input = {
+			path: 'tls.o',
+			format: 'wasm-object' as const,
+			bytes: tlsObject(),
+			sha256: 'c'.repeat(64),
+			profile
+		};
+		const request = { code: '', tls: true, linkInputs: [input] };
+		const pending = compiler.compile(request);
+		request.tls = false;
+		(profile as { tls: boolean }).tls = false;
+		const message = transport.messages.at(-1)!;
+		expect(message.request).toMatchObject({
+			tls: true,
+			linkInputs: [{ profile: { tls: true } }]
+		});
+		const receipt = (message.request as WasiGccCompileRequest).linkInputs![0];
+		transport.onmessage?.({
+			data: structuredClone({
+				id: message.id,
+				type: 'result',
+				result: { exitCode: 9, stdout: '', stderr: '', stages: [], linkInputs: [receipt] }
+			})
+		});
+		const result = await pending;
+		expect(result.linkInputs?.[0].profile.tls).toBe(true);
+		expect(result.linkInputs?.[0].profile).not.toBe(receipt.profile);
+		compiler.dispose();
+	});
+
 	it('snapshots atomic and shared-entry selection through compile Worker transport', async () => {
 		const compiler = await createGccWorker({ ...options, target: 'wasm32-wasi' });
 		const transport = FixtureWorker.instances[0];

@@ -3,9 +3,10 @@ import { setFlagsFromString } from 'node:v8';
 import { runInNewContext } from 'node:vm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createCrossGccCompiler, createGccCompiler } from '../src/compiler.js';
-import { parseCrossGccManifest } from '../src/manifest.js';
+import { gccTlsRuntimePaths, parseCrossGccManifest } from '../src/manifest.js';
 import { loadGccModuleFactory } from '../src/module-loader.js';
 import * as wasiLinker from '../src/wasi-linker.js';
+import { tlsObject } from './tls-fixtures.js';
 
 interface FixtureNode {
 	mode: number;
@@ -194,15 +195,15 @@ function elf(type: number, machine = 62, dynamic = false) {
 	return bytes;
 }
 
-function tar(path = 'usr/include/stdio.h') {
+function tar(path = 'usr/include/stdio.h', contents = Uint8Array.of(10)) {
 	const bytes = new Uint8Array(2048);
 	bytes.set(encoder.encode(path));
 	for (const offset of [100, 108, 116]) bytes.set(encoder.encode('0000000\0'), offset);
 	bytes.set(encoder.encode('00000000000\0'), 136);
-	bytes.set(encoder.encode('00000000001\0'), 124);
+	bytes.set(encoder.encode(`${contents.length.toString(8).padStart(11, '0')}\0`), 124);
 	bytes[156] = 48;
 	bytes.set(encoder.encode('ustar\0'), 257);
-	bytes[512] = 10;
+	bytes.set(contents, 512);
 	bytes.fill(32, 148, 156);
 	const checksum = bytes.subarray(0, 512).reduce((sum, value) => sum + value, 0);
 	bytes.set(encoder.encode(`${checksum.toString(8).padStart(6, '0')}\0 `), 148);
@@ -396,9 +397,30 @@ function wasiBundle(
 	coverage = false,
 	relaxedSimd = false,
 	atomics = false,
-	atomicProvider = true
+	atomicProvider = true,
+	tls = false,
+	tlsProviders: readonly string[] = Object.values(gccTlsRuntimePaths),
+	tlsLongDouble = tls,
+	tlsHeader: 'present' | 'missing' | 'empty' = 'present'
 ) {
 	const fixture = bundle(atomics && atomicProvider ? 'lib/wasm32-wasi/libatomic.a' : undefined);
+	if (tls) {
+		const records = [
+			fixture.files.get('sysroot.tar')!.subarray(0, 1024),
+			...(tlsHeader === 'missing'
+				? []
+				: [
+						tar(
+							'include/wasm32-wasi-tls/__errno.h',
+							tlsHeader === 'empty' ? new Uint8Array() : undefined
+						).subarray(0, 1024)
+					]),
+			...tlsProviders.map((path) => tar(path.slice('/sysroot/'.length)).subarray(0, 1024))
+		];
+		const archive = new Uint8Array(records.length * 1024 + 1024);
+		records.forEach((record, index) => archive.set(record, index * 1024));
+		fixture.files.set('sysroot.tar', archive);
+	}
 	fixture.files.delete('gcc-toolchain.v1.json');
 	fixture.files.delete('ld.mjs');
 	fixture.files.set('ld.wasm', linker);
@@ -440,9 +462,10 @@ function wasiBundle(
 			simd: true,
 			...(relaxedSimd ? { relaxedSimd: true } : {}),
 			...(atomics ? { atomics: true, sharedMemory: true } : {}),
+			...(tls ? { tls: true, longDouble: tlsLongDouble } : {}),
 			...(coverage ? { coverage: true } : {})
 		},
-		qualification: { status: relaxedSimd || atomics ? 'verified' : 'unverified' },
+		qualification: { status: relaxedSimd || atomics || tls ? 'verified' : 'unverified' },
 		assets: Object.fromEntries(
 			[...fixture.files].map(([path, bytes]) => [
 				path === 'sysroot.tar'
@@ -860,6 +883,118 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 			expect(result.stages[0].argv).toContain('-msimd128');
 		} finally {
 			compiler.dispose();
+		}
+	});
+
+	it.each(['missing', 'empty'] as const)(
+		'rejects a %s TLS errno header before creating tool instances',
+		async (header) => {
+			await expect(
+				createGccCompiler(
+					wasiBundle(
+						undefined,
+						false,
+						false,
+						false,
+						false,
+						true,
+						true,
+						undefined,
+						true,
+						header
+					)
+				)
+			).rejects.toThrow('missing its qualified errno header');
+			expect(host.calls).toHaveLength(0);
+		}
+	);
+
+	it('requires every integrity-bound TLS provider before creating tool instances', async () => {
+		for (const missing of Object.values(gccTlsRuntimePaths)) {
+			const providers = Object.values(gccTlsRuntimePaths).filter((path) => path !== missing);
+			await expect(
+				createGccCompiler(
+					wasiBundle(undefined, false, false, false, false, true, true, providers)
+				)
+			).rejects.toThrow('missing its qualified runtime archive: ' + missing);
+			expect(host.calls).toHaveLength(0);
+		}
+		const ordinaryProviders = Object.values(gccTlsRuntimePaths).filter(
+			(path) => path !== gccTlsRuntimePaths.ordinaryLongDouble
+		);
+		const withoutLongDouble = await createGccCompiler(
+			wasiBundle(undefined, false, false, false, false, true, true, ordinaryProviders, false)
+		);
+		withoutLongDouble.dispose();
+	});
+
+	it('binds TLS object metadata, receipts and ordinary execution to the explicit profile', async () => {
+		host.output = tlsObject();
+		const options = wasiBundle(undefined, false, false, false, false, true, true);
+		const compiler = await createGccCompiler(options);
+		const legacy = await createGccCompiler(wasiBundle());
+		try {
+			await expect(compiler.compile({ code: '', emit: 'object' })).rejects.toThrow(
+				/TLS.*explicit opt-in/
+			);
+			const count = host.calls.length;
+			await expect(legacy.compile({ code: '', emit: 'object', tls: true })).rejects.toThrow(
+				/TLS.*qualified/
+			);
+			expect(host.calls).toHaveLength(count);
+			const { artifact, stages } = await compiler.compile({
+				code: '',
+				language: 'cpp',
+				emit: 'object',
+				tls: true
+			});
+			expect(artifact).toMatchObject({
+				tls: true,
+				wasm: { features: { tls: true, atomics: false } },
+				linkInput: { profile: { tls: true } }
+			});
+			expect(artifact).not.toHaveProperty('atomics');
+			expect(stages[0].argv).toContain('-mtls');
+			expect(stages[1].argv).toContain('--enable-threads');
+			host.output = wasiObject(false, true);
+			await expect(compiler.compile({ code: '', emit: 'object', tls: true })).rejects.toThrow(
+				'atomic instructions require explicit opt-in'
+			);
+			host.output = tlsObject();
+			const input = { ...artifact!.linkInput!, bytes: artifact!.bytes, path: 'tls.o' };
+			const fetchCount = vi.mocked(options.fetchImpl).mock.calls.length,
+				toolCount = host.calls.length;
+			await expect(
+				compiler.compile({ code: '', language: 'cpp', linkInputs: [input] })
+			).rejects.toThrow('TLS profile differs');
+			expect(vi.mocked(options.fetchImpl).mock.calls).toHaveLength(fetchCount);
+			expect(host.calls).toHaveLength(toolCount);
+			const executable = {
+				...artifact!,
+				format: 'wasm-executable' as const,
+				bytes: wasiCommand()
+			};
+			await expect(compiler.run(executable)).resolves.toMatchObject({
+				exitCode: 0,
+				stdout: ''
+			});
+			await expect(legacy.run(executable)).rejects.toThrow(/TLS.*qualified/);
+			const runtimeAtomics = { ...executable, bytes: wasiCommand(false, false, true) };
+			await expect(compiler.run(runtimeAtomics)).resolves.toMatchObject({
+				exitCode: 0,
+				stdout: ''
+			});
+			await expect(compiler.run({ ...runtimeAtomics, tls: undefined })).rejects.toThrow(
+				'atomic instructions require explicit opt-in'
+			);
+			host.output = wasiObject();
+			const ordinary = await compiler.compile({ code: '', emit: 'object' });
+			expect(ordinary.artifact).not.toHaveProperty('tls');
+			expect(ordinary.artifact!.linkInput!.profile).not.toHaveProperty('tls');
+			expect(ordinary.artifact!.wasm!.features).not.toHaveProperty('tls');
+		} finally {
+			compiler.dispose();
+			legacy.dispose();
 		}
 	});
 
