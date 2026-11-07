@@ -56,14 +56,25 @@ function object(
 		version?: number;
 		noSymbols?: boolean;
 		simd?: boolean;
+		relaxedSimd?: boolean;
 		feature?: string;
+		prohibitFeature?: boolean;
 		init?: boolean;
 		importName?: string;
 	} = {}
 ) {
 	const symbol = options.symbol ?? 'helper';
 	const body = options.simd
-		? [0, 0xfd, 0x0c, ...Array<number>(16).fill(0), 0x0b]
+		? [
+				0,
+				0xfd,
+				0x0c,
+				...Array<number>(16).fill(0),
+				...(options.relaxedSimd
+					? [0xfd, 0x0c, ...Array<number>(16).fill(0), 0xfd, 0x80, 2]
+					: []),
+				0x0b
+			]
 		: [0, 0x20, 0, ...(options.relocation ? [0x10, 0x80, 0x80, 0x80, 0x80, 0] : []), 0x0b];
 	const symbols = options.relocation
 		? [2, 0, 0, 1, ...name(symbol), 0, 16, 0]
@@ -97,7 +108,13 @@ function object(
 					...uint(options.index ?? 1)
 				])
 			: []),
-		...(options.feature ? custom('target_features', [1, 43, ...name(options.feature)]) : [])
+		...(options.feature
+			? custom('target_features', [
+					1,
+					options.prohibitFeature ? 45 : 43,
+					...name(options.feature)
+				])
+			: [])
 	]);
 }
 
@@ -149,6 +166,81 @@ const validate = (inputs: readonly WasiGccLinkInput[], simd = false, language: '
 	validateWasiGccLinkInputs(snapshotWasiGccLinkInputs(inputs), manifest, hash, simd, language);
 
 describe('explicit WASI link inputs', () => {
+	it('binds relaxed object and archive inputs to explicit matching request and bundle profiles', async () => {
+		const capable = {
+			...manifest,
+			capabilities: { ...manifest.capabilities, relaxedSimd: true }
+		};
+		const relaxedProfile = { ...profile, simd: true, relaxedSimd: true };
+		const validateRelaxed = (entries: readonly WasiGccLinkInput[], selected = true) =>
+			validateWasiGccLinkInputs(
+				snapshotWasiGccLinkInputs(entries),
+				capable,
+				hash,
+				true,
+				'c',
+				false,
+				selected
+			);
+		const bytes = object({ simd: true, relaxedSimd: true, feature: 'relaxed-simd' });
+		const raw = await input(bytes, 'relaxed.o', relaxedProfile);
+		const packed = await input(
+			archive([{ path: 'relaxed.o', bytes, symbol: 'helper' }]),
+			'relaxed.a',
+			relaxedProfile
+		);
+		for (const entry of [raw, packed]) {
+			await expect(validateRelaxed([entry])).resolves.toMatchObject([
+				{ profile: relaxedProfile }
+			]);
+			await expect(validateRelaxed([entry], false)).rejects.toThrow(
+				'relaxed SIMD profile differs'
+			);
+			await expect(
+				validateWasiGccLinkInputs([entry], manifest, hash, true, 'c', false, true)
+			).rejects.toThrow('requires a capable bundle');
+			await expect(
+				validateRelaxed([{ ...entry, profile: { ...profile, simd: true } }])
+			).rejects.toThrow('relaxed SIMD profile differs');
+			await expect(
+				validateRelaxed([{ ...entry, profile: { ...profile, simd: true } }], false)
+			).rejects.toThrow('requires explicit opt-in');
+		}
+		for (const value of ['true', null, 0, {}])
+			expect(() =>
+				snapshotWasiGccLinkInputs([
+					{ ...raw, profile: { ...relaxedProfile, relaxedSimd: value } } as never
+				])
+			).toThrow('Invalid GCC link input relaxed SIMD profile');
+		expect(() =>
+			snapshotWasiGccLinkInputs([{ ...raw, profile: { ...relaxedProfile, simd: false } }])
+		).toThrow('require a SIMD profile');
+		await expect(
+			validateRelaxed([
+				await input(
+					object({ simd: true, feature: 'relaxed-simd', prohibitFeature: true }),
+					'prohibit.o',
+					relaxedProfile
+				)
+			])
+		).rejects.toThrow('Object prohibits requested relaxed SIMD profile');
+		const unsupported = {
+			...relaxedProfile,
+			compatibility: {
+				kind: 'clang-c-scalar-v1' as const,
+				compilerVersion: '22.1.0' as const,
+				compilerCommit: '4434dabb69916856b824f68a64b029c67175e532' as const,
+				sysrootSha256: sysrootHash
+			}
+		};
+		expect(() => snapshotWasiGccLinkInputs([{ ...raw, profile: unsupported }])).toThrow(
+			'does not qualify relaxed SIMD'
+		);
+		const legacy = await input();
+		expect(snapshotWasiGccLinkInputs([legacy])[0].profile).not.toHaveProperty('relaxedSimd');
+		await expect(validate([legacy])).resolves.toHaveLength(1);
+	});
+
 	it('accepts native DWARF custom relocations relative to payload and checks every slot boundary', async () => {
 		const bytes = Uint8Array.from(
 			readFileSync(new URL('./fixtures/dwarf-native.o', import.meta.url))

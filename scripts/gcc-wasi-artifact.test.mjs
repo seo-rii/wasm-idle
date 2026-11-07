@@ -4,7 +4,30 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { inspectWasm, runNodeWasi } from './gcc-wasi-artifact.mjs';
+import { inspectWasm, runNodeWasi, assertQualificationStdout } from './gcc-wasi-artifact.mjs';
+
+test('relaxed output admits only complete declared results and preserves exact legacy assertions', () => {
+	const fixture = {
+		request: { relaxedSimd: true },
+		stdout: '0000 ffff\n',
+		stdoutAlternatives: ['0000 ffff\n', 'ffff 0000\n']
+	};
+	for (const result of fixture.stdoutAlternatives) assertQualificationStdout(result, fixture);
+	assert.throws(() => assertQualificationStdout('0000 0000\n', fixture), /permitted relaxed/);
+	assert.throws(() => assertQualificationStdout('anything', { stdout: 'expected' }));
+	assert.throws(
+		() => assertQualificationStdout(fixture.stdout, { ...fixture, request: {} }),
+		/require relaxed/
+	);
+	assert.throws(
+		() => assertQualificationStdout(fixture.stdout, { ...fixture, stdoutAlternatives: [] }),
+		/Invalid stdout/
+	);
+	assert.throws(
+		() => assertQualificationStdout(fixture.stdout, { ...fixture, stdout: 'undeclared' }),
+		/Canonical stdout/
+	);
+});
 
 const header = [0, 97, 115, 109, 1, 0, 0, 0];
 const section = (id, payload) => [id, payload.length, ...payload];

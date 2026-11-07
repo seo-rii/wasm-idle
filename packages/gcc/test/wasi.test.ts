@@ -5,7 +5,7 @@ import { gccAssetPaths, parseCrossGccManifest, parseWasiGccManifest } from '../s
 import { gccCompilePlan } from '../src/plan.js';
 import { wasiGccCompilePlan } from '../src/wasi-plan.js';
 import { runGccWasiArtifact } from '../src/wasi-run.js';
-import { inspectGccWasm } from '../src/wasm-output.js';
+import { inspectGccWasm, supportsGccWasmRelaxedSimd } from '../src/wasm-output.js';
 import type { WasiGccArtifact } from '../src/types.js';
 
 const encoder = new TextEncoder();
@@ -232,6 +232,170 @@ function instructionFixture(
 }
 
 describe('GCC WASI API contract (synthetic fixtures, not GCC qualification)', () => {
+	it('gates relaxed SIMD by manifest, explicit SIMD selection, qualification and the actual engine', () => {
+		const source = manifestFixture();
+		const legacy = parseWasiGccManifest(source);
+		const capable = parseWasiGccManifest({
+			...source,
+			capabilities: { ...source.capabilities, simd: true, relaxedSimd: true },
+			qualification: { status: 'verified' }
+		});
+		expect(legacy.capabilities.relaxedSimd).toBe(false);
+		for (const value of [null, 'true', 1, [], {}]) {
+			expect(() =>
+				parseWasiGccManifest({
+					...source,
+					capabilities: { ...source.capabilities, relaxedSimd: value }
+				})
+			).toThrow('Invalid GCC WASI capability: relaxedSimd');
+			expect(() =>
+				wasiGccCompilePlan({ code: '', relaxedSimd: value } as never, capable)
+			).toThrow('Invalid GCC WASI relaxed SIMD option');
+		}
+		expect(() =>
+			parseWasiGccManifest({
+				...source,
+				capabilities: { ...source.capabilities, relaxedSimd: true }
+			})
+		).toThrow('requires the SIMD capability');
+		expect(wasiGccCompilePlan({ code: '', relaxedSimd: false }, legacy)).toEqual(
+			wasiGccCompilePlan({ code: '' }, legacy)
+		);
+		expect(() => wasiGccCompilePlan({ code: '', relaxedSimd: true }, capable)).toThrow(
+			'requires simd: true'
+		);
+		const simdOnly = parseWasiGccManifest({
+			...source,
+			capabilities: { ...source.capabilities, simd: true }
+		});
+		expect(() =>
+			wasiGccCompilePlan({ code: '', simd: true, relaxedSimd: true }, simdOnly)
+		).toThrow('bundle does not support relaxed SIMD');
+		expect(() =>
+			wasiGccCompilePlan(
+				{ code: '', simd: true, relaxedSimd: true },
+				{
+					...capable,
+					qualification: { status: 'unverified' }
+				}
+			)
+		).toThrow('requires a qualified bundle');
+		for (const language of ['c', 'cpp'] as const) {
+			const request = {
+				code: 'original source',
+				language,
+				files: [{ path: 'second.c', contents: 'source 2' }],
+				sources: ['second.c']
+			};
+			for (const relaxedSimd of [false, true]) {
+				const plan = wasiGccCompilePlan({ ...request, simd: true, relaxedSimd }, capable);
+				for (const stage of plan.stages.filter((stage) => stage.tool.startsWith('cc1'))) {
+					expect(stage.argv).toContain('-msimd128');
+					expect(stage.argv).toContain(
+						relaxedSimd ? '-mrelaxed-simd' : '-mno-relaxed-simd'
+					);
+				}
+				for (const stage of plan.stages.filter((stage) => stage.tool === 'as'))
+					expect(stage.argv.includes('--enable-relaxed-simd')).toBe(relaxedSimd);
+				expect(new TextDecoder().decode(plan.files[0].contents)).toBe(request.code);
+			}
+			for (const stage of wasiGccCompilePlan(request, legacy).stages)
+				expect(stage.argv.some((argument) => argument.includes('relaxed-simd'))).toBe(
+					false
+				);
+		}
+		const realValidate = WebAssembly.validate;
+		// An engine may accept baseline SIMD while lacking just the last relaxed operation.
+		const probe = vi.spyOn(WebAssembly, 'validate').mockImplementation((input) => {
+			const bytes = new Uint8Array(input as ArrayBuffer);
+			return (
+				!bytes.some(
+					(value, i) => value === 0xfd && bytes[i + 1] === 0x93 && bytes[i + 2] === 2
+				) && realValidate(input)
+			);
+		});
+		try {
+			expect(supportsGccWasmRelaxedSimd()).toBe(false);
+			expect(() =>
+				wasiGccCompilePlan({ code: '', simd: true, relaxedSimd: true }, capable)
+			).toThrow('engine does not support relaxed SIMD');
+			expect(() => wasiGccCompilePlan({ code: '', simd: true }, capable)).not.toThrow();
+		} finally {
+			probe.mockRestore();
+		}
+	});
+
+	it('inspects and executes all 20 actual relaxed instructions only with explicit opt-in', async () => {
+		const source = manifestFixture();
+		const manifest = parseWasiGccManifest({
+			...source,
+			capabilities: { ...source.capabilities, simd: true, relaxedSimd: true },
+			qualification: { status: 'verified' }
+		});
+		const operations = [
+			[0x100, 2],
+			[0x101, 1],
+			[0x102, 1],
+			[0x103, 1],
+			[0x104, 1],
+			[0x105, 3],
+			[0x106, 3],
+			[0x107, 3],
+			[0x108, 3],
+			[0x109, 3],
+			[0x10a, 3],
+			[0x10b, 3],
+			[0x10c, 3],
+			[0x10d, 2],
+			[0x10e, 2],
+			[0x10f, 2],
+			[0x110, 2],
+			[0x111, 2],
+			[0x112, 2],
+			[0x113, 3]
+		];
+		for (const [opcode, arity] of operations) {
+			const bytes = instructionFixture([
+				...Array.from({ length: arity }, () => [
+					0xfd,
+					0x0c,
+					...Array<number>(16).fill(0)
+				]).flat(),
+				0xfd,
+				...uleb(opcode),
+				0x1a
+			]);
+			for (const options of [{}, { relaxedSimd: false }])
+				await expect(inspectGccWasm(bytes, 'executable', options)).rejects.toThrow(
+					'requires explicit opt-in'
+				);
+			const inspection = await inspectGccWasm(bytes, 'executable', { relaxedSimd: true });
+			expect(inspection.features).toEqual({ simd128: true, relaxedSimd: true });
+			expect(Object.isFrozen(inspection.features)).toBe(true);
+			await expect(runGccWasiArtifact(artifact(bytes), {}, manifest)).rejects.toThrow(
+				'requires explicit opt-in'
+			);
+			await expect(
+				runGccWasiArtifact({ ...artifact(bytes), relaxedSimd: true })
+			).rejects.toThrow('requires a qualified capable bundle');
+			await expect(
+				runGccWasiArtifact({ ...artifact(bytes), relaxedSimd: true }, {}, manifest)
+			).resolves.toMatchObject({ exitCode: 0, stdout: '', stderr: '' });
+		}
+		const dataOnly = instructionFixture(
+			[0xfd, 0x0c, 0xfd, 0x80, 2, ...Array<number>(13).fill(0), 0x1a],
+			{ dataSegments: [[0xfd, 0x93, 2]] }
+		);
+		await expect(inspectGccWasm(dataOnly, 'executable')).resolves.toMatchObject({
+			features: { simd128: true, relaxedSimd: false }
+		});
+		await expect(
+			inspectGccWasm(instructionFixture([0xfd, ...uleb(0x114)]), 'executable', {
+				relaxedSimd: true
+			})
+		).rejects.toThrow('Unsupported GCC WebAssembly opcode');
+	});
+
 	it('requires the optional debugger capability to have C++ and both real runtime archives', () => {
 		const source = debuggerManifestFixture();
 		const manifest = parseWasiGccManifest(source);
@@ -1077,7 +1241,7 @@ describe('WASI runner and binary validation with hand-encoded Wasm fixtures', ()
 		});
 		const vector = instructionFixture([0xfd, 0x0c, ...Array<number>(16).fill(0), 0x1a]);
 		const inspected = await inspectGccWasm(vector, 'executable');
-		expect(inspected.features).toEqual({ simd128: true });
+		expect(inspected.features).toEqual({ simd128: true, relaxedSimd: false });
 		expect(Object.isFrozen(inspected.features)).toBe(true);
 	});
 
@@ -1165,7 +1329,7 @@ describe('WASI runner and binary validation with hand-encoded Wasm fixtures', ()
 		{ code: [0xfc], error: 'Truncated GCC WebAssembly section' },
 		{ code: [0xfd, ...uleb(0x9a)], error: 'Unsupported GCC WebAssembly opcode: 0xfd 9a' },
 		{ code: [0xfc, 18], error: 'Unsupported GCC WebAssembly opcode: 0xfc 12' },
-		{ code: [0xfd, ...uleb(0x100)], error: 'GCC WASI does not support relaxed SIMD' },
+		{ code: [0xfd, ...uleb(0x100)], error: 'GCC WASI relaxed SIMD requires explicit opt-in' },
 		{ code: [0xfe, 0], error: 'GCC WASI does not support atomic instructions or threads' }
 	])('rejects malformed or unsupported instructions: $error ($code)', async ({ code, error }) => {
 		await expect(

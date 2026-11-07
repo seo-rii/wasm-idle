@@ -10,6 +10,7 @@ import { createGzip } from 'node:zlib';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
 	assertFileSnapshot,
+	assertQualificationStdout,
 	digest,
 	inspectWasm,
 	measureBundle,
@@ -86,6 +87,7 @@ for (const fixture of cases) {
 		typeof fixture.stdin === 'string' && typeof fixture.stdout === 'string',
 		'Missing fixture IO'
 	);
+	assertQualificationStdout(fixture.stdout, fixture, `${fixture.id}: invalid output contract`);
 	if (fixture.runOptions || fixture.expectedFiles)
 		assert(
 			options.manifest,
@@ -729,6 +731,21 @@ try {
 				);
 			}
 			entry.sdkInspection = actual.artifact.wasm;
+			if (manifest.capabilities.relaxedSimd) {
+				const flag = fixture.request.relaxedSimd ? '-mrelaxed-simd' : '-mno-relaxed-simd';
+				assert(
+					actual.compilation.stages
+						.filter((stage) => /^cc1/.test(stage.tool))
+						.every((stage) => stage.argv.includes(flag)),
+					`${fixture.id}: ${flag} was not passed to every GCC frontend invocation`
+				);
+			}
+			if (fixture.request.relaxedSimd !== undefined)
+				assert.equal(
+					actual.artifact.wasm?.features?.relaxedSimd,
+					fixture.request.relaxedSimd,
+					`${fixture.id}: relaxed SIMD instructions do not match the requested fixture profile`
+				);
 			if (fixture.request.simd !== undefined)
 				assert.equal(
 					actual.artifact.wasm?.features?.simd128,
@@ -798,7 +815,7 @@ try {
 			const label = `${fixture.id}: Chromium Worker run ${index + 1}`;
 			assert(!result.error, `${label}: ${result.error}`);
 			assert.equal(result.exitCode, 0, `${label}: exit status`);
-			assert.equal(result.stdout, fixture.stdout, `${label}: stdout`);
+			assertQualificationStdout(result.stdout, fixture, `${label}: stdout`);
 			assert.equal(result.stderr, '', `${label}: stderr`);
 			if (fixture.expectedFiles)
 				assertFileSnapshot(result.files, fixture.expectedFiles, `${label}: files`);
@@ -813,7 +830,7 @@ try {
 	}
 	if (manifest) {
 		report.unsupportedFeatures = await page.evaluate(
-			async ({ request, simdSupported, rttiSupported }) => {
+			async ({ request, simdSupported, relaxedSimdSupported, rttiSupported }) => {
 				const compiler = globalThis.gccWasiQualification;
 				const results = [];
 				for (const feature of [
@@ -822,12 +839,14 @@ try {
 					'threads',
 					'dynamicLinking',
 					...(simdSupported ? [] : ['simd']),
+					...(relaxedSimdSupported ? [] : ['relaxedSimd']),
 					'cpu'
 				]) {
 					let diagnostic = '';
 					try {
 						await compiler.compile({
 							...request,
+							...(feature === 'relaxedSimd' ? { simd: true } : {}),
 							[feature]: feature === 'cpu' ? 'avx2-fma' : true
 						});
 					} catch (error) {
@@ -850,6 +869,7 @@ try {
 			{
 				request: defaultCases[0].request,
 				simdSupported: manifest.capabilities.simd,
+				relaxedSimdSupported: manifest.capabilities.relaxedSimd,
 				rttiSupported: manifest.capabilities.rtti
 			}
 		);

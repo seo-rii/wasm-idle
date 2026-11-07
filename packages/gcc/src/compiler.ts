@@ -231,7 +231,8 @@ export async function createGccCompiler(
 		simdEnabled = false,
 		linkInputs: readonly WasiGccLinkInput[] = [],
 		language: 'c' | 'cpp' = 'cpp',
-		rttiEnabled = false
+		rttiEnabled = false,
+		relaxedSimdEnabled = false
 	): Promise<{
 		exitCode: number;
 		stdout: string;
@@ -252,7 +253,9 @@ export async function createGccCompiler(
 		let wasmInspection: GccWasmInspection | undefined;
 		let linkedInputs: readonly WasiGccLinkedInput[] | undefined;
 		async function inspectOutput(bytes: Uint8Array, emit: 'object' | 'executable') {
-			const inspection = await inspectGccWasm(bytes, emit);
+			const inspection = await inspectGccWasm(bytes, emit, {
+				relaxedSimd: relaxedSimdEnabled
+			});
 			if (inspection.features.simd128 && !simdEnabled)
 				throw new Error(
 					'GCC produced Wasm SIMD without an enabled SIMD compilation request'
@@ -278,7 +281,8 @@ export async function createGccCompiler(
 					manifestSha256,
 					simdEnabled,
 					language,
-					rttiEnabled
+					rttiEnabled,
+					relaxedSimdEnabled
 				);
 			for (const stage of stages) {
 				if (disposed) throw new Error('GCC compiler is disposed');
@@ -577,7 +581,8 @@ export async function createGccCompiler(
 					(request as WasiGccCompileRequest).simd === true,
 				'linkInputs' in plan ? plan.linkInputs : [],
 				'language' in plan ? plan.language : 'cpp',
-				'rtti' in plan && plan.rtti
+				'rtti' in plan && plan.rtti,
+				'relaxedSimd' in plan && plan.relaxedSimd
 			);
 			if (!result.workspace) return result;
 			const { workspace, wasmInspection, coverageNotes, ...completed } = result;
@@ -591,6 +596,9 @@ export async function createGccCompiler(
 								target: 'wasm32-wasi',
 								abi: 'wasm32-wasi-preview1',
 								simd: 'simd' in plan && plan.simd,
+								...('relaxedSimd' in plan && plan.relaxedSimd
+									? { relaxedSimd: true }
+									: {}),
 								...('coverage' in plan && plan.coverage ? { coverage: true } : {}),
 								// Preserve legacy false-bundle receipt shapes. New bundles
 								// distinguish pure C from both C++ RTTI profiles.
@@ -639,6 +647,7 @@ export async function createGccCompiler(
 					cpu: plan.cpu,
 					...(linkInput ? { linkInput } : {}),
 					...(wasmInspection ? { wasm: wasmInspection } : {}),
+					...('relaxedSimd' in plan && plan.relaxedSimd ? { relaxedSimd: true } : {}),
 					...(plan.emit === 'executable' && coverageNotes
 						? {
 								coverage: {
@@ -660,7 +669,7 @@ export async function createGccCompiler(
 						if (active) throw new Error('GCC compiler is busy');
 						active = true;
 						try {
-							return await runGccWasiArtifact(artifact, runOptions);
+							return await runGccWasiArtifact(artifact, runOptions, manifest);
 						} finally {
 							active = false;
 						}

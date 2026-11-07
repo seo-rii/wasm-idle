@@ -37,15 +37,79 @@ export function supportsGccWasmSimd(): boolean {
 	);
 }
 
+/** Probe every relaxed instruction separately from baseline SIMD support. */
+export function supportsGccWasmRelaxedSimd(): boolean {
+	return Array.from({ length: 20 }, (_, index) => {
+		const opcode = 0x100 + index;
+		const arity =
+			opcode >= 0x101 && opcode <= 0x104
+				? 1
+				: (opcode >= 0x105 && opcode <= 0x10c) || opcode === 0x113
+					? 3
+					: 2;
+		// (v128, v128, v128) -> (); actual relaxed operation followed by drop.
+		const body = [
+			0,
+			...Array.from({ length: arity }, (_, argument) => [0x20, argument]).flat(),
+			0xfd,
+			(opcode & 0x7f) | 0x80,
+			opcode >>> 7,
+			0x1a,
+			0x0b
+		];
+		return WebAssembly.validate(
+			Uint8Array.from([
+				0,
+				97,
+				115,
+				109,
+				1,
+				0,
+				0,
+				0,
+				1,
+				7,
+				1,
+				0x60,
+				3,
+				0x7b,
+				0x7b,
+				0x7b,
+				0,
+				3,
+				2,
+				1,
+				0,
+				10,
+				body.length + 2,
+				1,
+				body.length,
+				...body
+			])
+		);
+	}).every(Boolean);
+}
+
 /** Compile and inspect one private snapshot. Execution must use this same module. */
-export async function compileGccWasm(input: Uint8Array, emit: 'object' | 'executable') {
+export async function compileGccWasm(
+	input: Uint8Array,
+	emit: 'object' | 'executable',
+	options: Readonly<{ relaxedSimd?: boolean }> = {}
+) {
 	if (!(input instanceof Uint8Array) || (emit !== 'object' && emit !== 'executable'))
 		throw new Error('Invalid GCC WebAssembly inspection request');
+	if (
+		!options ||
+		typeof options !== 'object' ||
+		Object.keys(options).some((key) => key !== 'relaxedSimd') ||
+		(options.relaxedSimd !== undefined && typeof options.relaxedSimd !== 'boolean')
+	)
+		throw new Error('Invalid GCC WebAssembly inspection options');
 	const bytes = Uint8Array.from(input);
 	if (bytes.length < 8 || ![0, 97, 115, 109, 1, 0, 0, 0].every((byte, i) => bytes[i] === byte))
 		throw new Error('GCC did not produce a WebAssembly 1 binary');
 	let position = 8;
-	const features = { simd128: false };
+	const features = { simd128: false, relaxedSimd: false };
 	function byte(end: number) {
 		if (position >= end) throw new Error('Truncated GCC WebAssembly section');
 		return bytes[position++];
@@ -136,8 +200,12 @@ export async function compileGccWasm(input: Uint8Array, emit: 'object' | 'execut
 			if ([8, 10, 12, 14].includes(extended)) unsigned(end);
 		} else if (opcode === 0xfd) {
 			const extended = unsigned(end);
-			if (extended >= 0x100 && extended <= 0x113)
-				throw new Error('GCC WASI does not support relaxed SIMD');
+			if (extended >= 0x100 && extended <= 0x113) {
+				if (options.relaxedSimd !== true)
+					throw new Error('GCC WASI relaxed SIMD requires explicit opt-in');
+				features.simd128 = features.relaxedSimd = true;
+				return opcode;
+			}
 			if (
 				extended > 0xff ||
 				[
@@ -264,6 +332,8 @@ export async function compileGccWasm(input: Uint8Array, emit: 'object' | 'execut
 	}
 	if (features.simd128 && !supportsGccWasmSimd())
 		throw new Error('This WebAssembly engine does not support Wasm SIMD');
+	if (features.relaxedSimd && !supportsGccWasmRelaxedSimd())
+		throw new Error('This WebAssembly engine does not support relaxed SIMD');
 	if (emit === 'executable' && startFunction !== undefined) {
 		const type = types[functions[startFunction]];
 		if (!type || type.parameters.length || type.results.length)
@@ -305,7 +375,8 @@ export async function compileGccWasm(input: Uint8Array, emit: 'object' | 'execut
 /** Checks the binary container and executable ABI; this is not a source compiler. */
 export async function inspectGccWasm(
 	bytes: Uint8Array,
-	emit: 'object' | 'executable'
+	emit: 'object' | 'executable',
+	options: Readonly<{ relaxedSimd?: boolean }> = {}
 ): Promise<GccWasmInspection> {
-	return (await compileGccWasm(bytes, emit)).inspection;
+	return (await compileGccWasm(bytes, emit, options)).inspection;
 }

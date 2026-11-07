@@ -195,6 +195,8 @@ export interface WasiGccManifest {
 		dynamicLinking: false;
 		/** True only for a producer bundle qualified with the GCC simd128 backend patch. */
 		simd: boolean;
+		/** Qualified relaxed SIMD backend; absent is false and true requires simd. */
+		relaxedSimd?: boolean;
 	}>;
 	readonly qualification: Readonly<{ status: 'unverified' | 'verified' }>;
 }
@@ -214,6 +216,8 @@ export interface WasiGccCompileRequest extends Omit<CrossGccCompileRequest, 'cpu
 	readonly dynamicLinking?: false;
 	/** Opt in to the bundle's qualified baseline Wasm SIMD operations; never selects x86 AVX. */
 	readonly simd?: boolean;
+	/** Explicit relaxed SIMD profile. Requires simd: true, a capable bundle and engine. */
+	readonly relaxedSimd?: boolean;
 	/** Source-only GCC gcov instrumentation. Requires a qualified bundle and no linkInputs. */
 	readonly coverage?: boolean;
 	/** Embed standard DWARF4 in WAT/object/executable output. Requires a qualified bundle;
@@ -228,6 +232,8 @@ export interface WasiGccLinkProfile {
 	readonly target: 'wasm32-wasi';
 	readonly abi: 'wasm32-wasi-preview1';
 	readonly simd: boolean;
+	/** Relaxed SIMD compilation profile. Legacy omission means false. */
+	readonly relaxedSimd?: boolean;
 	/** Known source language. Legacy omission cannot establish that an input is pure C. */
 	readonly language?: 'c' | 'cpp';
 	/** C++ RTTI profile; legacy omission means false. Pure C inputs are RTTI-neutral. */
@@ -275,7 +281,7 @@ export interface GccWasmInspection {
 	readonly exports: readonly WebAssembly.ModuleExportDescriptor[];
 	readonly hasLinkingMetadata: boolean;
 	/** Detected from validated instructions and types, independently of optional custom metadata. */
-	readonly features: Readonly<{ simd128: boolean }>;
+	readonly features: Readonly<{ simd128: boolean; relaxedSimd: boolean }>;
 	readonly memory?: Readonly<{ initialPages: number; maximumPages?: number; shared: false }>;
 }
 
@@ -284,6 +290,8 @@ export interface WasiGccArtifact extends Omit<CrossGccArtifact, 'target' | 'form
 	readonly format: 'assembly' | 'wasm-object' | 'wasm-executable';
 	readonly cpu: 'wasm32';
 	readonly wasm?: GccWasmInspection;
+	/** Retains explicit compile-time relaxed SIMD selection for checked execution. */
+	readonly relaxedSimd?: boolean;
 	/** Present for object output. Reuse with {path, bytes: artifact.bytes, ...artifact.linkInput!}. */
 	readonly linkInput?: WasiGccLinkInputReceipt;
 	/** Present on covered executables. run() requires an exact writable /profile preopen. */

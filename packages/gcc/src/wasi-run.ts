@@ -6,15 +6,22 @@ import {
 	wasi as wasiConstants
 } from '@bjorn3/browser_wasi_shim';
 import { compileGccWasm } from './wasm-output.js';
+import { parseWasiGccManifest } from './manifest.js';
 import { createGccWasiFilesystem } from './wasi-filesystem.js';
-import type { WasiGccArtifact, WasiGccRunOptions, WasiGccRunResult } from './types.js';
+import type {
+	WasiGccArtifact,
+	WasiGccManifest,
+	WasiGccRunOptions,
+	WasiGccRunResult
+} from './types.js';
 
 const encoder = new TextEncoder();
 
 /** Buffered Preview 1 stdin/stdout host; program instructions are executed by WebAssembly. */
 export async function runGccWasiArtifact(
 	artifact: WasiGccArtifact,
-	options: WasiGccRunOptions = {}
+	options: WasiGccRunOptions = {},
+	manifest?: WasiGccManifest
 ): Promise<WasiGccRunResult> {
 	if (
 		artifact?.target !== 'wasm32-wasi' ||
@@ -22,6 +29,13 @@ export async function runGccWasiArtifact(
 		!(artifact.bytes instanceof Uint8Array)
 	)
 		throw new Error('GCC run requires a linked wasm32-wasi executable artifact');
+	if (artifact.relaxedSimd !== undefined && typeof artifact.relaxedSimd !== 'boolean')
+		throw new Error('Invalid GCC WASI artifact relaxed SIMD profile');
+	if (artifact.relaxedSimd === true) {
+		const trusted = manifest === undefined ? undefined : parseWasiGccManifest(manifest);
+		if (!trusted?.capabilities.relaxedSimd || trusted.qualification.status !== 'verified')
+			throw new Error('GCC WASI relaxed SIMD execution requires a qualified capable bundle');
+	}
 	if (
 		Object.keys(options).some(
 			(key) =>
@@ -102,7 +116,9 @@ export async function runGccWasiArtifact(
 	const wasi = new WASI(args, env, [input, output(0), output(1), ...filesystem.fds], {
 		debug: false
 	});
-	const { module, inspection } = await compileGccWasm(artifact.bytes, 'executable');
+	const { module, inspection } = await compileGccWasm(artifact.bytes, 'executable', {
+		relaxedSimd: artifact.relaxedSimd === true
+	});
 	for (const entry of inspection.imports)
 		if (
 			!Object.hasOwn(wasi.wasiImport, entry.name) ||

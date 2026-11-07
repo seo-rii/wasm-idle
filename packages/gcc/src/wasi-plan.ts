@@ -1,5 +1,5 @@
 import { gccCompileInputs } from './plan.js';
-import { supportsGccWasmSimd } from './wasm-output.js';
+import { supportsGccWasmRelaxedSimd, supportsGccWasmSimd } from './wasm-output.js';
 import { snapshotWasiGccLinkInputs } from './wasm-link-inputs.js';
 import type { CrossGccTool, WasiGccCompileRequest, WasiGccManifest } from './types.js';
 
@@ -10,7 +10,16 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 	const { language, emit, optimization, standard, main, files, sources, definitions } =
 		gccCompileInputs(
 			request,
-			['cpu', 'simd', 'rtti', 'coverage', 'debug', 'linkInputs', ...unavailableFeatures],
+			[
+				'cpu',
+				'simd',
+				'relaxedSimd',
+				'rtti',
+				'coverage',
+				'debug',
+				'linkInputs',
+				...unavailableFeatures
+			],
 			[
 				'program.wat',
 				'program.wasm',
@@ -71,6 +80,17 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 		if (!supportsGccWasmSimd())
 			throw new Error('This WebAssembly engine does not support Wasm SIMD');
 	}
+	if (request.relaxedSimd !== undefined && typeof request.relaxedSimd !== 'boolean')
+		throw new Error('Invalid GCC WASI relaxed SIMD option');
+	if (request.relaxedSimd === true) {
+		if (request.simd !== true) throw new Error('GCC WASI relaxed SIMD requires simd: true');
+		if (!manifest.capabilities.relaxedSimd)
+			throw new Error('This GCC wasm32-wasi bundle does not support relaxed SIMD');
+		if (manifest.qualification.status !== 'verified')
+			throw new Error('GCC WASI relaxed SIMD requires a qualified bundle');
+		if (!supportsGccWasmRelaxedSimd())
+			throw new Error('This WebAssembly engine does not support relaxed SIMD');
+	}
 	if (language === 'cpp' && !manifest.capabilities.cpp)
 		throw new Error('This GCC wasm32-wasi bundle does not support C++');
 	if (emit === 'executable' && (!manifest.capabilities.libc || !manifest.capabilities.libm))
@@ -88,6 +108,8 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 	if (debug) cc.push('-g', '-gdwarf-4', '-gno-variable-location-views');
 	// Legacy scalar bundles do not recognize either flag; leave their argv unchanged.
 	if (manifest.capabilities.simd) cc.push(request.simd ? '-msimd128' : '-mno-simd128');
+	if (manifest.capabilities.relaxedSimd)
+		cc.push(request.relaxedSimd ? '-mrelaxed-simd' : '-mno-relaxed-simd');
 	if (coverage)
 		cc.push(
 			'-fprofile-arcs',
@@ -145,7 +167,14 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 			const object = `/workspace/${stem}.o`;
 			stages.push({
 				tool: 'as',
-				argv: ['-r', '--enable-annotations', assembly, '-o', object],
+				argv: [
+					'-r',
+					'--enable-annotations',
+					...(request.relaxedSimd ? ['--enable-relaxed-simd'] : []),
+					assembly,
+					'-o',
+					object
+				],
 				output: object
 			});
 			objects.push(object);
@@ -192,6 +221,7 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 		linkInputs,
 		language,
 		simd: request.simd === true,
+		relaxedSimd: request.relaxedSimd === true,
 		rtti: request.rtti === true,
 		...(coverage ? { coverage: true as const } : {}),
 		stages,

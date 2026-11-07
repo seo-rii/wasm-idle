@@ -117,7 +117,9 @@ export const scenarios = [
 		// at least 1 KiB of headroom (1,568 bytes); dependencies remain unchanged.
 		// C++26 debugger contracts measure 2,734,175 bytes / 188 files / four packages.
 		// Another 4 KiB covers the 2,143-byte overflow and retains 1,953 bytes of headroom.
-		budget: { maxBytes: 2.5 * MiB + 112 * 1024, maxFiles: 190, maxPackages: 4 },
+		// Relaxed SIMD contracts measure 2,743,076 bytes with the same files/dependencies.
+		// Another 8 KiB covers the 6,948-byte overflow and retains 1,244 bytes of headroom.
+		budget: { maxBytes: 2.5 * MiB + 120 * 1024, maxFiles: 190, maxPackages: 4 },
 		absentPackageNames: [
 			'wasm-idle',
 			'@wasm-idle/llvm-core',
@@ -420,7 +422,9 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Fresh CI job 127268208234 measures 42,794,687 bytes / 3,402 files / 66 packages
 		// with currently allowed Svelte 5.57.3, @babel/types 7.29.11 and Vue compiler 3.5.45.
 		// Another 115 KiB covers the 116,415-byte overflow and retains 1,345 bytes of headroom.
-		budget: { maxBytes: 40 * MiB + 833 * 1024, maxFiles: 3_402, maxPackages: 70 },
+		// GCC relaxed-simd CI job 127948998376 measures 42,803,390 bytes / 3,402 files / 66 packages.
+		// Add 9 KiB for this feature while preserving the preceding aggregate headroom.
+		budget: { maxBytes: 40 * MiB + 842 * 1024, maxFiles: 3_402, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

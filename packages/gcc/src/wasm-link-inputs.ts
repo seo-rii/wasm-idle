@@ -28,7 +28,7 @@ function record(value: unknown, keys: readonly string[], label: string) {
 function profileSnapshot(value: unknown): WasiGccLinkProfile {
 	const profile = record(
 		value,
-		['target', 'abi', 'simd', 'language', 'rtti', 'coverage', 'compatibility'],
+		['target', 'abi', 'simd', 'relaxedSimd', 'language', 'rtti', 'coverage', 'compatibility'],
 		'profile'
 	);
 	if (
@@ -37,6 +37,10 @@ function profileSnapshot(value: unknown): WasiGccLinkProfile {
 		typeof profile.simd !== 'boolean'
 	)
 		throw new Error('Unsupported GCC link input target/ABI/SIMD profile');
+	if (profile.relaxedSimd !== undefined && typeof profile.relaxedSimd !== 'boolean')
+		throw new Error('Invalid GCC link input relaxed SIMD profile');
+	if (profile.relaxedSimd === true && !profile.simd)
+		throw new Error('Relaxed SIMD link inputs require a SIMD profile');
 	const language = profile.language,
 		rtti = profile.rtti;
 	if (language !== undefined && language !== 'c' && language !== 'cpp')
@@ -69,6 +73,8 @@ function profileSnapshot(value: unknown): WasiGccLinkProfile {
 		!('manifestSha256' in compatibility)
 	) {
 		if (language === 'cpp') throw new Error('clang-c-scalar-v1 requires a C language profile');
+		if (profile.relaxedSimd === true)
+			throw new Error('clang-c-scalar-v1 does not qualify relaxed SIMD');
 		contract = {
 			kind: 'clang-c-scalar-v1',
 			compilerVersion: '22.1.0',
@@ -80,6 +86,7 @@ function profileSnapshot(value: unknown): WasiGccLinkProfile {
 		target: 'wasm32-wasi',
 		abi: 'wasm32-wasi-preview1',
 		simd: profile.simd,
+		...(profile.relaxedSimd === undefined ? {} : { relaxedSimd: profile.relaxedSimd }),
 		...(language === undefined ? {} : { language }),
 		...(rtti === undefined ? {} : { rtti }),
 		...(profile.coverage === undefined ? {} : { coverage: profile.coverage }),
@@ -199,7 +206,9 @@ async function inspectObject(
 	profile: WasiGccLinkProfile,
 	manifest: WasiGccManifest
 ) {
-	const inspection = await inspectGccWasm(bytes, 'object');
+	const inspection = await inspectGccWasm(bytes, 'object', {
+		relaxedSimd: profile.relaxedSimd === true
+	});
 	if (inspection.features.simd128 && !profile.simd)
 		throw new Error('Object contains SIMD outside its declared profile');
 	const scalar = profile.compatibility.kind === 'clang-c-scalar-v1';
@@ -478,12 +487,15 @@ async function inspectObject(
 				'nontrapping-fptoint',
 				'reference-types',
 				'sign-ext',
-				'simd128'
+				'simd128',
+				...(profile.relaxedSimd === true ? ['relaxed-simd'] : [])
 			];
 			if (prefix === 43 && (!allowed.includes(name) || (name === 'simd128' && !profile.simd)))
 				throw new Error(`Unsupported object target feature: ${name}`);
 			if (prefix === 45 && name === 'simd128' && profile.simd)
 				throw new Error('Object prohibits requested SIMD profile');
+			if (prefix === 45 && name === 'relaxed-simd' && profile.relaxedSimd === true)
+				throw new Error('Object prohibits requested relaxed SIMD profile');
 		}
 		r.done();
 	}
@@ -648,10 +660,13 @@ export async function validateWasiGccLinkInputs(
 	manifestSha256: string,
 	simd: boolean,
 	language: 'c' | 'cpp',
-	rtti = false
+	rtti = false,
+	relaxedSimd = false
 ): Promise<readonly WasiGccLinkedInput[]> {
 	if (rtti && (language !== 'cpp' || !manifest.capabilities.rtti))
 		throw new Error('RTTI link validation requires a capable bundle and C++ source request');
+	if (relaxedSimd && (!simd || !manifest.capabilities.relaxedSimd))
+		throw new Error('Relaxed SIMD link validation requires a capable bundle and SIMD request');
 	const identities: WasiGccLinkedInput[] = [];
 	for (const input of inputs) {
 		try {
@@ -661,6 +676,10 @@ export async function validateWasiGccLinkInputs(
 				throw new Error('Instrumented GCC coverage link inputs are currently unsupported');
 			if (profile.simd !== simd)
 				throw new Error('Link input SIMD profile differs from the compilation request');
+			if ((profile.relaxedSimd === true) !== relaxedSimd)
+				throw new Error(
+					'Link input relaxed SIMD profile differs from the compilation request'
+				);
 			if (compatibility.sysrootSha256 !== manifest.assets.sysroot.sha256)
 				throw new Error('Link input sysroot identity mismatch');
 			if (

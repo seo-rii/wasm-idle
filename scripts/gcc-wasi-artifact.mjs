@@ -8,6 +8,31 @@ import { fileURLToPath } from 'node:url';
 
 export const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
 
+/** Whole-output alternatives preserve a relaxed host's fixed lane projection. */
+export function assertQualificationStdout(actual, fixture, message) {
+	if (fixture.stdoutAlternatives === undefined)
+		return assert.equal(actual, fixture.stdout, message);
+	const alternatives = fixture.stdoutAlternatives;
+	assert.equal(fixture.request?.relaxedSimd, true, 'Output alternatives require relaxed SIMD');
+	assert(
+		Array.isArray(alternatives) && alternatives.length > 0 && alternatives.length <= 16,
+		'Invalid stdout alternatives'
+	);
+	assert(
+		alternatives.every((value) => typeof value === 'string' && value.length <= 1024 * 1024),
+		'Invalid stdout alternative'
+	);
+	assert.equal(new Set(alternatives).size, alternatives.length, 'Duplicate stdout alternative');
+	assert(
+		alternatives.includes(fixture.stdout),
+		'Canonical stdout must be an allowed alternative'
+	);
+	assert(
+		alternatives.includes(actual),
+		message || 'Output is outside the permitted relaxed results'
+	);
+}
+
 /** Read format-level ABI data without relying on producer assertions. */
 export function inspectWasm(bytes, { object = false } = {}) {
 	assert.deepEqual(
@@ -162,7 +187,7 @@ export function runNodeWasi(file, fixture) {
 	);
 	assert.ifError(result.error);
 	assert.equal(result.status, 0, `${fixture.id}: Node WASI exit status; ${result.stderr}`);
-	assert.equal(result.stdout, fixture.stdout, `${fixture.id}: Node WASI stdout`);
+	assertQualificationStdout(result.stdout, fixture, `${fixture.id}: Node WASI stdout`);
 	assert.equal(result.stderr, '', `${fixture.id}: Node WASI stderr`);
 	const { files } = JSON.parse(result.output[3]);
 	if (fixture.expectedFiles)
