@@ -238,6 +238,28 @@ describe('runtime failure and Stop recovery', () => {
 				}
 				await page.locator('#lsp-toggle').uncheck();
 				await selectLanguage(page, 'CSHARP');
+				for (const failure of [
+					{
+						source: 'Console.WriteLine(missingCsharpRecoveryValue);',
+						diagnostic: 'CS0103',
+						recovered: 'recovered-csharp-after-compile-error'
+					},
+					{
+						source: 'throw new Exception("csharp-recovery-runtime-error");',
+						diagnostic: 'csharp-recovery-runtime-error',
+						recovered: 'recovered-csharp-after-runtime-error'
+					}
+				]) {
+					await beginRun(page, failure.source);
+					const failed = await settle(page, 'failed');
+					const transcript =
+						(await page
+							.locator('[data-testid="terminal-debug-output"]')
+							.textContent()) || '';
+					expect(`${failed.error || ''}\n${transcript}`).toContain(failure.diagnostic);
+					await beginRun(page, `Console.Write("${failure.recovered}");`);
+					await settle(page, 'completed', failure.recovered);
+				}
 				await beginRun(
 					page,
 					'using System; class Program { static void Main() { for (int i=0; i<2000000; i++) Console.Write("x"); } }'
