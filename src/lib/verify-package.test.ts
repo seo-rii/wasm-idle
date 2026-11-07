@@ -191,8 +191,8 @@ describe('package install budgets', () => {
 				maxPackages: 6
 			},
 			'@wasm-idle/gcc install': {
-				maxBytes: 2.5 * MiB + 206 * 1024,
-				maxFiles: 194,
+				maxBytes: 2.5 * MiB + 229 * 1024,
+				maxFiles: 196,
 				maxPackages: 4
 			},
 			'wasm-idle/container install': {
@@ -216,8 +216,8 @@ describe('package install budgets', () => {
 				maxPackages: 10
 			},
 			'all public packages/adapters aggregate': {
-				maxBytes: 40 * MiB + 930 * 1024,
-				maxFiles: 3_408,
+				maxBytes: 40 * MiB + 953 * 1024,
+				maxFiles: 3_410,
 				maxPackages: 70
 			}
 		});
@@ -254,8 +254,12 @@ describe('package install budgets', () => {
 		}
 	});
 
-	it('rejects each GCC byte/file/package limit plus one after the EH allowance', () => {
+	it('admits the measured standard module SDK and rejects each GCC limit plus one', () => {
 		const scenario = scenarios.find((entry) => entry.name === '@wasm-idle/gcc install')!;
+		// Actual GitHub packages job 128326182518; no compiler or BMI assets are included.
+		expect(() =>
+			assertInstallBudget(scenario, { bytes: 2_855_516, files: 196, packages: 4 })
+		).not.toThrow();
 		const atLimit = {
 			bytes: scenario.budget.maxBytes,
 			files: scenario.budget.maxFiles,
