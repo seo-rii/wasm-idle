@@ -174,6 +174,8 @@ function worker(
 			if (id === '../debugMailbox') return debugMailbox;
 			if (id === './javaDebugRuntime') return javaDebugRuntime;
 			if (id === '$lib/playground/javaRuntimeErrors') return { prepareJavaExceptionBridge };
+			if (id === '$lib/playground/javaMain')
+				return { selectJavaMainInvocation: () => 'static-args' };
 			if (id === './javaOutput')
 				return {
 					createJavaOutput: (emit: (text: string) => void) =>

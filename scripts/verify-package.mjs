@@ -57,8 +57,11 @@ export const scenarios = [
 		// Python debug setup and Zig value formatting add two more such pairs.
 		// Scala adds 20 adapter/Worker/declaration/license files; assets remain external.
 		// Lazy receipt lookup adds three core JavaScript/declaration pairs (789 files measured).
-		budget: { maxBytes: 7 * MiB + 64 * 1024, maxFiles: 789, maxPackages: 6 },
+		// Java 25 adds one bytecode reader JavaScript/declaration pair; ASM is bundled rather than installed.
+		// The measured 7,405,837-byte / 791-file install needs 1 KiB above the previous byte cap.
+		budget: { maxBytes: 7 * MiB + 65 * 1024, maxFiles: 791, maxPackages: 6 },
 		absentPackageNames: [
+			'@katana-project/asm',
 			'java-parser',
 			'chevrotain',
 			'chevrotain-allstar',
@@ -82,6 +85,8 @@ export const scenarios = [
 			"if (typeof crossClang.createCrossClangCompiler !== 'function' || typeof crossClang.parseCrossClangManifest !== 'function') throw new Error('Missing packaged x86 cross compiler API');",
 			"await (await import('node:assert/strict')).default.rejects(import('@wasm-idle/llvm-core/gcc'), { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' });",
 			"if (!import.meta.resolve('wasm-idle').endsWith('/wasm-idle/dist/index.js')) throw new Error('wasm-idle import export did not resolve');",
+			"const { selectJavaMainInvocation } = await import(new URL('./playground/javaMain.js', import.meta.resolve('wasm-idle')));",
+			"if (typeof selectJavaMainInvocation !== 'function') throw new Error('Packaged Java entry point reader is missing');",
 			"const { instrumentJavaDebugSource } = await import(new URL('./playground/javaDebugSource.js', import.meta.resolve('wasm-idle')));",
 			"const captured = instrumentJavaDebugSource('class Main { void run() { int value = 7; value++; } }', 'Main.java', 'debug.Bridge');",
 			"if (!captured.locations.length || !captured.code.includes('debug.Bridge.capture(value)')) throw new Error('Packaged Java source hooks failed');",
@@ -91,7 +96,7 @@ export const scenarios = [
 			"let rejectedMutation = false; try { buildJavaDebugEvaluationProgram({ expression: 'value++', bindings: [{ name: 'value', type: 'int', value: '7' }] }); } catch { rejectedMutation = true; }",
 			"if (!rejectedMutation) throw new Error('Packaged Java mutation guard failed');",
 			"const javaNotices = await (await import('node:fs/promises')).readFile(new URL('./playground/java-debug-notices.txt', import.meta.resolve('wasm-idle')), 'utf8');",
-			"if (!javaNotices.includes('java-parser@3.0.1') || !javaNotices.includes('Apache License')) throw new Error('Packaged Java parser notices are missing');"
+			"if (!javaNotices.includes('java-parser@3.0.1') || !javaNotices.includes('Apache License') || !javaNotices.includes('@katana-project/asm@0.25.4')) throw new Error('Packaged Java parser notices are missing');"
 		]
 	},
 	{
@@ -442,7 +447,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// The optional compiler/runtime/BMI assets do not enter npm packages.
 		// Baseline CI job 131822775029 measures 42,959,390 bytes / 3,410 files / 66 packages.
 		// Add 64 KiB for the 40,478-byte overflow; file and package limits stay unchanged.
-		budget: { maxBytes: 40 * MiB + 1_017 * 1024, maxFiles: 3_410, maxPackages: 70 },
+		// Java 25 CI adds 31,813 bytes and two files to that baseline; allow another 32 KiB / two files.
+		budget: { maxBytes: 40 * MiB + 1_049 * 1024, maxFiles: 3_412, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

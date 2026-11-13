@@ -3,7 +3,7 @@ export interface JavaSourceIdentity {
 	sourcePath: string;
 }
 
-export function resolveJavaSourceIdentity(code: string): JavaSourceIdentity {
+export function resolveJavaSourceIdentity(code: string, activePath?: string): JavaSourceIdentity {
 	const packageMatch = code.match(/^\s*package\s+([A-Za-z_][\w.]*)\s*;/m);
 	const typeMatch =
 		code.match(
@@ -14,7 +14,12 @@ export function resolveJavaSourceIdentity(code: string): JavaSourceIdentity {
 		);
 	const className = typeMatch?.[1];
 	if (!className) {
-		throw new Error('Java source must define a top-level class, record, enum, or interface');
+		// javac, rather than this filename helper, validates compact source syntax.
+		const sourcePath = activePath || 'Main.java';
+		return {
+			sourcePath,
+			mainClass: (sourcePath.split('/').pop() || sourcePath).replace(/\.java$/, '')
+		};
 	}
 	const packageName = packageMatch?.[1] || '';
 	return {

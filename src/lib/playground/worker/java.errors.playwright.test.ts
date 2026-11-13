@@ -233,9 +233,17 @@ self.postMessage = (message, ...args) => auditPost({ ...message, auditCompileCal
 								probe.compileCalls = event.data.auditCompileCalls;
 						});
 					});
-					const run = (code: string, args: string[], stdin = '') =>
+					const run = (
+						code: string,
+						args: string[],
+						stdin = '',
+						options: {
+							activePath?: string;
+							workspaceFiles?: Array<{ path: string; content: string }>;
+						} = {}
+					) =>
 						page.evaluate(
-							async ({ code, args, stdin }) => {
+							async ({ code, args, stdin, options }) => {
 								const { sandbox, output, diagnostics } = (
 									globalThis as unknown as { javaErrorProbe: BrowserProbe }
 								).javaErrorProbe;
@@ -250,6 +258,7 @@ self.postMessage = (message, ...args) => auditPost({ ...message, auditCompileCal
 										undefined,
 										args,
 										{
+											...options,
 											stdin,
 											limits: {
 												compileTimeoutMs: 60_000,
@@ -288,7 +297,7 @@ self.postMessage = (message, ...args) => auditPost({ ...message, auditCompileCal
 									};
 								}
 							},
-							{ code, args, stdin }
+							{ code, args, stdin, options }
 						);
 					const illegal = await run(source, ['illegal']);
 					expect(illegal.error).toContain(
@@ -382,6 +391,121 @@ self.postMessage = (message, ...args) => auditPost({ ...message, auditCompileCal
 					expect(compileFailure.error).toMatch(/Main\.java:4(?::\d+)?: error:/u);
 					expect(compileFailure.error.split('\n').length).toBeGreaterThan(1);
 					expect(compileFailure.diagnostics).toHaveLength(2);
+					const entryCases = [
+						{
+							code: `class Main {
+    int value = 40;
+    Main() { value += 2; System.out.println("constructor"); }
+    int answer() { return value; }
+    void main(String[] args) { System.out.println(answer() + ":" + args[0]); }
+}`,
+							output: 'constructor\n42:first\n'
+						},
+						{
+							code: `class Main implements Answer {
+    public int answer() { return 42; }
+    void main() { Answer receiver = this; System.out.println(receiver.answer()); }
+}
+interface Answer { int answer(); }`,
+							output: '42\n'
+						},
+						{
+							code: `class Main {
+    Main() { throw new AssertionError("constructor called"); }
+    static void main() { System.out.println("static"); }
+}`,
+							output: 'static\n'
+						},
+						{
+							code: `class Main {
+    Main(int ignored) { throw new AssertionError("constructor called"); }
+    static void main() { System.out.println("no default constructor"); }
+}`,
+							output: 'no default constructor\n'
+						},
+						{
+							code: `class Main {
+    Main() { throw new AssertionError("constructor called"); }
+    static void main(String[] args) { System.out.println(args[0]); }
+    void main() { throw new AssertionError("wrong overload"); }
+}`,
+							output: 'first\n'
+						},
+						{
+							code: `class Main {
+    void main(String[] args) { System.out.println(args[0]); }
+    static void main() { throw new AssertionError("wrong overload"); }
+}`,
+							output: 'first\n'
+						},
+						{
+							code: 'int value = 42;\nvoid main() { IO.println(value); }',
+							output: '42\n'
+						},
+						{
+							code: `class Main {
+    static void main(Object ignored) { throw new AssertionError("wrong overload"); }
+    static void main() { System.out.println("exact signature"); }
+}`,
+							output: 'exact signature\n'
+						},
+						{
+							code: `class Main {
+    void main(Object[] ignored) { throw new AssertionError("wrong overload"); }
+    void main() { System.out.println("exact instance signature"); }
+}`,
+							output: 'exact instance signature\n'
+						}
+					];
+					for (const entry of entryCases) {
+						const result = await run(entry.code, ['first']);
+						expect(result, entry.code).toMatchObject({
+							result: true,
+							error: '',
+							output: entry.output,
+							diagnostics: []
+						});
+					}
+					const compactInput = `import java.io.BufferedReader;
+import java.io.InputStreamReader;
+void main() throws Exception {
+    System.out.println(new BufferedReader(new InputStreamReader(System.in)).readLine());
+}`;
+					const compactFirst = await run(compactInput, [], '안녕🙂\n', {
+						activePath: 'lessons/Hello.java'
+					});
+					const compactWarm = await run(compactInput, [], 'second\n', {
+						activePath: 'lessons/Hello.java'
+					});
+					expect(compactFirst).toMatchObject({
+						result: true,
+						error: '',
+						output: '안녕🙂\n'
+					});
+					expect(compactWarm).toMatchObject({
+						result: true,
+						error: '',
+						output: 'second\n'
+					});
+					expect(compactWarm.compileCalls).toBe(compactFirst.compileCalls);
+					const compactFailure = await run(
+						'void main() { throw new IllegalArgumentException("compact failure"); }',
+						[],
+						'',
+						{ activePath: 'lessons/Hello.java' }
+					);
+					expect(compactFailure.error).toContain(
+						'java.lang.IllegalArgumentException: compact failure'
+					);
+					expect(compactFailure.error).toContain('at Hello.main(Hello.java:1)');
+					const instanceFailure = await run(
+						'class Main { void main() { throw new IllegalStateException("instance failure"); } }',
+						[]
+					);
+					expect(instanceFailure.error).toContain(
+						'java.lang.IllegalStateException: instance failure'
+					);
+					expect(instanceFailure.error).toContain('at Main.main(Main.java:1)');
 					expect(pageErrors).toEqual([]);
 					await page.evaluate(async () => {
 						await (

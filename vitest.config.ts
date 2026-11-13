@@ -23,6 +23,7 @@ export default defineConfig({
 		}
 	},
 	test: {
+		server: { deps: { inline: ['@katana-project/asm'] } },
 		reporters:
 			process.env.WASM_IDLE_REQUIRE_BROWSER_TESTS === '1'
 				? ['default', new RequiredBrowserReporter()]

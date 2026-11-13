@@ -117,6 +117,7 @@ function worker(
 					'$lib/playground/javaRuntimeStdin',
 					'$lib/playground/javaSource',
 					'$lib/playground/javaRuntimeErrors',
+					'$lib/playground/javaMain',
 					'$lib/playground/stdinBuffer',
 					'../javaDebugBridge',
 					'../debugMailbox',

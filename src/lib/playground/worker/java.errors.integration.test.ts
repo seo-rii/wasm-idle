@@ -12,6 +12,7 @@ import * as javaDebugSource from '../javaDebugSource';
 import * as javaDebugRuntime from './javaDebugRuntime';
 import * as debugMailbox from '../debugMailbox';
 import * as javaRuntimeErrors from '../javaRuntimeErrors';
+import * as javaMain from '../javaMain';
 import * as javaRuntimeStdin from '../javaRuntimeStdin';
 import * as javaSource from '../javaSource';
 import * as stdinBuffer from '../stdinBuffer';
@@ -129,6 +130,7 @@ async function createRealWorker() {
 			if (id === './javaOutput') return javaOutput;
 			if (id === './javaStreaming') return javaStreaming;
 			if (id === '$lib/playground/javaRuntimeErrors') return javaRuntimeErrors;
+			if (id === '$lib/playground/javaMain') return javaMain;
 			if (id === '$lib/playground/javaRuntimeStdin') return javaRuntimeStdin;
 			if (id === '$lib/playground/javaSource') return javaSource;
 			if (id === '$lib/playground/stdinBuffer') return stdinBuffer;
@@ -458,4 +460,190 @@ class ${name} {
 		expect(worker.counts.generate - before.generate).toBe(1);
 		expect(worker.counts.execute - before.execute).toBe(2);
 	}, 60_000);
+
+	it.each([
+		{
+			name: 'instance main with arguments',
+			code: `class Main {
+    int value = 40;
+    Main() { value += 2; System.out.println("constructor"); }
+    int answer() { return value; }
+    void main(String[] args) { System.out.println(answer() + ":" + args[0]); }
+}`,
+			output: 'constructor\n42:first\n'
+		},
+		{
+			name: 'instance main without arguments',
+			code: `class Main {
+    int value = 42;
+    int answer() { return value; }
+    void main() { System.out.println(answer()); }
+}`,
+			output: '42\n'
+		},
+		{
+			name: 'static main without a default constructor',
+			code: `class Main {
+    Main(int ignored) { throw new AssertionError("constructor"); }
+    static void main() { System.out.println("static"); }
+}`,
+			output: 'static\n'
+		},
+		{
+			name: 'compact source',
+			code: 'int value = 42;\nvoid main() { IO.println(value); }',
+			output: '42\n'
+		},
+		{
+			name: 'instance main with a checked constructor exception',
+			code: `class Main {
+    Main() throws java.io.IOException { System.out.println("constructor"); }
+    void main() { System.out.println("checked"); }
+}`,
+			output: 'constructor\nchecked\n'
+		}
+	])(
+		'runs Java 25 $name through the real worker',
+		async ({ code, output }) => {
+			const messages = await worker.run(code, { args: ['first'] });
+			expect(messages.filter((message) => message.error || message.diagnostic)).toEqual([]);
+			expect(messages.at(-1)).toEqual({ results: true, mainClass: 'Main' });
+			expect(outputFrom(messages)).toBe(output);
+		},
+		60_000
+	);
+
+	it('does not shadow an entry class named args in a no-argument adapter', async () => {
+		const messages = await worker.run(
+			'class args { static void main() { System.out.println("selected"); } }'
+		);
+		expect(messages.filter((message) => message.error || message.diagnostic)).toEqual([]);
+		expect(messages.at(-1)).toEqual({ results: true, mainClass: 'args' });
+		expect(outputFrom(messages)).toBe('selected\n');
+	}, 60_000);
+
+	it('uses the compiler-selected class and preserves compact filename exception frames', async () => {
+		const messages = await worker.run(
+			'void main() { throw new IllegalStateException("compact"); }',
+			{
+				activePath: 'lessons/Hello.java'
+			}
+		);
+		const error = errorFrom(messages);
+		expect(error).toContain('java.lang.IllegalStateException: compact');
+		expect(error).toContain('\tat Hello.main(Hello.java:1)');
+	}, 60_000);
+
+	it('selects an argument main before a no-argument overload without constructing its class', async () => {
+		const messages = await worker.run(
+			`class Main {
+    Main() { throw new AssertionError("constructor"); }
+    static void main(String[] args) { System.out.println(args[0]); }
+    void main() { throw new AssertionError("wrong overload"); }
+}`,
+			{ args: ['selected'] }
+		);
+		expect(messages.some((message) => message.error)).toBe(false);
+		expect(outputFrom(messages)).toBe('selected\n');
+	}, 60_000);
+
+	it.each(
+		['Object', 'Object[]', 'T[]'].flatMap((parameter) => [
+			{ parameter, modifier: 'static ' },
+			{ parameter, modifier: '' }
+		])
+	)(
+		'does not treat compatible $modifier main($parameter) as main(String[])',
+		async ({ parameter, modifier }) => {
+			const generic = parameter === 'T[]' ? '<T> ' : '';
+			const messages = await worker.run(`class Main {
+    ${modifier}${generic}void main(${parameter} ignored) { throw new AssertionError("wrong overload"); }
+    ${modifier}void main() { System.out.println("selected"); }
+}`);
+			expect(messages.some((message) => message.error)).toBe(false);
+			expect(outputFrom(messages)).toBe('selected\n');
+		},
+		60_000
+	);
+
+	it('ignores a private argument overload when selecting a visible main()', async () => {
+		const messages = await worker.run(`class Main {
+    private static void main(String[] ignored) { throw new AssertionError("private overload"); }
+    void main() { System.out.println("visible"); }
+}`);
+		expect(messages.some((message) => message.error)).toBe(false);
+		expect(outputFrom(messages)).toBe('visible\n');
+	}, 60_000);
+
+	it('uses an entry point in another workspace source rather than the active source type', async () => {
+		const messages = await worker.run('public class Helper {}', {
+			activePath: 'Helper.java',
+			workspaceFiles: [
+				{
+					path: 'Entry.java',
+					content:
+						'class Entry { static void main() { System.out.println("secondary"); } }'
+				}
+			]
+		});
+		expect(messages.at(-1)).toEqual({ results: true, mainClass: 'Entry' });
+		expect(outputFrom(messages)).toBe('secondary\n');
+	}, 60_000);
+
+	it('rejects a private-only main and recovers for the next valid source', async () => {
+		const messages = await worker.run(
+			'class Main { private static void main(String[] ignored) {} }'
+		);
+		expect(errorFrom(messages)).toBe('Main method not found');
+		const next = await worker.run('void main() { IO.println("recovered"); }');
+		expect(next.some((message) => message.error || message.diagnostic)).toBe(false);
+		expect(outputFrom(next)).toBe('recovered\n');
+	}, 60_000);
+
+	it.each(['', 'public '])(
+		'runs compact source containing a %shelper and reuses its inferred filename',
+		async (modifier) => {
+			const code = `${modifier}class Helper { static int answer() { return 42; } }
+void main() { IO.println(Helper.answer()); }`;
+			const before = { ...worker.counts };
+			const first = await worker.run(code);
+			expect(first.filter((message) => message.error || message.diagnostic)).toEqual([]);
+			expect(first.at(-1)).toEqual({ results: true, mainClass: 'Helper' });
+			expect(outputFrom(first)).toBe('42\n');
+			expect(worker.counts.compile - before.compile).toBe(2);
+			const second = await worker.run(code);
+			expect(second.filter((message) => message.error || message.diagnostic)).toEqual([]);
+			expect(outputFrom(second)).toBe('42\n');
+			expect(worker.counts.compile - before.compile).toBe(2);
+		},
+		60_000
+	);
+
+	it('keeps ordinary public type filenames without a compact-source retry', async () => {
+		const before = { ...worker.counts };
+		const messages = await worker.run(`public class Foo {
+    public static void main(String[] args) { System.out.println("ordinary Foo"); }
+}`);
+		expect(messages.filter((message) => message.error || message.diagnostic)).toEqual([]);
+		expect(messages.at(-1)).toEqual({ results: true, mainClass: 'Foo' });
+		expect(outputFrom(messages)).toBe('ordinary Foo\n');
+		expect(worker.counts.compile - before.compile).toBe(2);
+	}, 60_000);
+
+	it.each(['', 'public '])(
+		'keeps an explicit compact filename when source contains a %shelper',
+		async (modifier) => {
+			const before = { ...worker.counts };
+			const messages = await worker.run(
+				`${modifier}class Helper { static int answer() { return 42; } }
+void main() { IO.println(Helper.answer()); }`,
+				{ activePath: 'lessons/Hello.java' }
+			);
+			expect(messages.filter((message) => message.error || message.diagnostic)).toEqual([]);
+			expect(messages.at(-1)).toEqual({ results: true, mainClass: 'Hello' });
+			expect(outputFrom(messages)).toBe('42\n');
+			expect(worker.counts.compile - before.compile).toBe(2);
+		},
+		60_000
+	);
 });
