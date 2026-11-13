@@ -186,8 +186,8 @@ describe('package install budgets', () => {
 			Object.fromEntries(scenarios.map((scenario) => [scenario.name, scenario.budget]))
 		).toEqual({
 			'wasm-idle root install': {
-				maxBytes: 7 * MiB + 64 * 1024,
-				maxFiles: 789,
+				maxBytes: 7 * MiB + 65 * 1024,
+				maxFiles: 791,
 				maxPackages: 6
 			},
 			'@wasm-idle/gcc install': {
@@ -322,6 +322,7 @@ describe('package install budgets', () => {
 
 		expect(byName.get('wasm-idle root install')?.absentPackageNames).toEqual(
 			expect.arrayContaining([
+				'@katana-project/asm',
 				'@wasm-idle/debug',
 				'@wasm-idle/lsp',
 				'@xterm/xterm',

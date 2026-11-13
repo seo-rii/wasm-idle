@@ -173,9 +173,6 @@ importers:
       '@bjorn3/browser_wasi_shim':
         specifier: ^0.4.2
         version: 0.4.2
-      '@katana-project/asm':
-        specifier: 0.25.4
-        version: 0.25.4
       '@wasm-idle/core':
         specifier: workspace:*
         version: link:packages/core
@@ -198,6 +195,9 @@ importers:
       '@eslint/js':
         specifier: ^10.0.1
         version: 10.0.1(eslint@10.13.0(supports-color@7.2.0))
+      '@katana-project/asm':
+        specifier: 0.25.4
+        version: 0.25.4
       '@live-codes/gleam-precompiled':
         specifier: 0.5.0
         version: 0.5.0

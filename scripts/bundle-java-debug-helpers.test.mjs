@@ -78,6 +78,19 @@ test('the standalone bundle preserves evaluation generation and rejects unsuppor
 	}
 });
 
+test('the standalone bytecode reader selects the exact visible main signature', async () => {
+	const { selectJavaMainInvocation } = await import(
+		pathToFileURL(path.join(directory, 'javaMain.js')).href
+	);
+	// javac -g:none output for:
+	// class Entry { private static void main(String[] ignored) {} void main() {} }
+	const classFile = Buffer.from(
+		'yv66vgAAAD0ADAoAAgADBwAEDAAFAAYBABBqYXZhL2xhbmcvT2JqZWN0AQAGPGluaXQ+AQADKClWBwAIAQAFRW50cnkBAARDb2RlAQAEbWFpbgEAFihbTGphdmEvbGFuZy9TdHJpbmc7KVYAIAAHAAIAAAAAAAMAAAAFAAYAAQAJAAAAEQABAAEAAAAFKrcAAbEAAAAAAAoACgALAAEACQAAAA0AAAABAAAAAbEAAAAAAAAACgAGAAEACQAAAA0AAAABAAAAAbEAAAAAAAA=',
+		'base64'
+	);
+	assert.equal(selectJavaMainInvocation(classFile), 'instance-noargs');
+});
+
 test('the distributable is self-contained and retains complete upstream license texts', async () => {
 	assert.equal(
 		Object.values(metafile.outputs).flatMap((output) =>
@@ -90,7 +103,16 @@ test('the distributable is self-contained and retains complete upstream license 
 		new URL('../node_modules/java-parser/LICENSE', import.meta.url),
 		'utf8'
 	);
+	const bytecodeLicense = await readFile(
+		new URL('../node_modules/@katana-project/asm/LICENSE', import.meta.url),
+		'utf8'
+	);
 	assert.ok(notices.includes(parserLicense), 'retains the complete upstream Java parser LICENSE');
+	assert.ok(
+		notices.includes(bytecodeLicense),
+		'retains the complete upstream bytecode reader LICENSE'
+	);
+	assert.match(notices, /@katana-project\/asm@0\.25\.4/);
 	assert.match(notices, /java-parser@3\.0\.1/);
 	assert.match(notices, /chevrotain@11\.0\.3/);
 	assert.match(notices, /lodash@4\.17\.21/);

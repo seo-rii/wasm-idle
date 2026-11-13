@@ -250,6 +250,7 @@
 		"@assemblyscript/loader": "0.28.20",
 		"@duckdb/duckdb-wasm": "1.33.1-dev57.0",
 		"@electric-sql/pglite": "0.5.11",
+		"@katana-project/asm": "0.25.4",
 		"@live-codes/gleam-precompiled": "0.5.0",
 		"@ruby/3.4-wasm-wasi": "2.10.1",
 		"@ruby/wasm-wasi": "2.10.1",
@@ -295,7 +296,6 @@
 	},
 	"dependencies": {
 		"@bjorn3/browser_wasi_shim": "^0.4.2",
-		"@katana-project/asm": "0.25.4",
 		"@wasm-idle/core": "workspace:*",
 		"@wasm-idle/llvm-core": "workspace:*",
 		"fflate": "0.8.3"
