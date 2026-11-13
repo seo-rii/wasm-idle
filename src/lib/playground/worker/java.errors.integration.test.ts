@@ -458,4 +458,126 @@ class ${name} {
 		expect(worker.counts.generate - before.generate).toBe(1);
 		expect(worker.counts.execute - before.execute).toBe(2);
 	}, 60_000);
+
+	it.each([
+		{
+			name: 'instance main with arguments',
+			code: `class Main {
+    int value = 40;
+    Main() { value += 2; System.out.println("constructor"); }
+    int answer() { return value; }
+    void main(String[] args) { System.out.println(answer() + ":" + args[0]); }
+}`,
+			output: 'constructor\n42:first\n'
+		},
+		{
+			name: 'instance main without arguments',
+			code: `class Main {
+    int value = 42;
+    int answer() { return value; }
+    void main() { System.out.println(answer()); }
+}`,
+			output: '42\n'
+		},
+		{
+			name: 'static main without a default constructor',
+			code: `class Main {
+    Main(int ignored) { throw new AssertionError("constructor"); }
+    static void main() { System.out.println("static"); }
+}`,
+			output: 'static\n'
+		},
+		{
+			name: 'compact source',
+			code: 'int value = 42;\nvoid main() { IO.println(value); }',
+			output: '42\n'
+		}
+	])(
+		'runs Java 25 $name through the real worker',
+		async ({ code, output }) => {
+			const messages = await worker.run(code, { args: ['first'] });
+			expect(messages.filter((message) => message.error || message.diagnostic)).toEqual([]);
+			expect(messages.at(-1)).toEqual({ results: true, mainClass: 'Main' });
+			expect(outputFrom(messages)).toBe(output);
+		},
+		60_000
+	);
+
+	it('uses the compiler-selected class and preserves compact filename exception frames', async () => {
+		const messages = await worker.run(
+			'void main() { throw new IllegalStateException("compact"); }',
+			{
+				activePath: 'lessons/Hello.java'
+			}
+		);
+		const error = errorFrom(messages);
+		expect(error).toContain('java.lang.IllegalStateException: compact');
+		expect(error).toContain('\tat Hello.main(Hello.java:1)');
+	}, 60_000);
+
+	it('selects an argument main before a no-argument overload without constructing its class', async () => {
+		const messages = await worker.run(
+			`class Main {
+    Main() { throw new AssertionError("constructor"); }
+    static void main(String[] args) { System.out.println(args[0]); }
+    void main() { throw new AssertionError("wrong overload"); }
+}`,
+			{ args: ['selected'] }
+		);
+		expect(messages.some((message) => message.error)).toBe(false);
+		expect(outputFrom(messages)).toBe('selected\n');
+	}, 60_000);
+
+	it.each(
+		['Object', 'Object[]', 'T[]'].flatMap((parameter) => [
+			{ parameter, modifier: 'static ' },
+			{ parameter, modifier: '' }
+		])
+	)(
+		'does not treat compatible $modifier main($parameter) as main(String[])',
+		async ({ parameter, modifier }) => {
+			const generic = parameter === 'T[]' ? '<T> ' : '';
+			const messages = await worker.run(`class Main {
+    ${modifier}${generic}void main(${parameter} ignored) { throw new AssertionError("wrong overload"); }
+    ${modifier}void main() { System.out.println("selected"); }
+}`);
+			expect(messages.some((message) => message.error)).toBe(false);
+			expect(outputFrom(messages)).toBe('selected\n');
+		},
+		60_000
+	);
+
+	it('ignores a private argument overload when selecting a visible main()', async () => {
+		const messages = await worker.run(`class Main {
+    private static void main(String[] ignored) { throw new AssertionError("private overload"); }
+    void main() { System.out.println("visible"); }
+}`);
+		expect(messages.some((message) => message.error)).toBe(false);
+		expect(outputFrom(messages)).toBe('visible\n');
+	}, 60_000);
+
+	it('uses an entry point in another workspace source rather than the active source type', async () => {
+		const messages = await worker.run('public class Helper {}', {
+			activePath: 'Helper.java',
+			workspaceFiles: [
+				{
+					path: 'Entry.java',
+					content:
+						'class Entry { static void main() { System.out.println("secondary"); } }'
+				}
+			]
+		});
+		expect(messages.at(-1)).toEqual({ results: true, mainClass: 'Entry' });
+		expect(outputFrom(messages)).toBe('secondary\n');
+	}, 60_000);
+
+	it('rejects a private-only main and recovers for the next valid source', async () => {
+		const messages = await worker.run(
+			'class Main { private static void main(String[] ignored) {} }'
+		);
+		expect(errorFrom(messages)).toBe('Main method not found');
+		const next = await worker.run('void main() { IO.println("recovered"); }');
+		expect(next.some((message) => message.error || message.diagnostic)).toBe(false);
+		expect(outputFrom(next)).toBe('recovered\n');
+	}, 60_000);
 });

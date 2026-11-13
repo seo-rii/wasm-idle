@@ -609,10 +609,11 @@ class Java implements Sandbox {
 				);
 			}
 			programArgs = resolveSandboxExecutionArgs('JAVA', args, options).programArgs;
-			const { sourcePath } = resolveJavaSourceIdentity(code);
+			const requestedActivePath = options.activePath;
+			const { sourcePath } = resolveJavaSourceIdentity(code, requestedActivePath);
 			limits = resolveExecutionLimits(options.limits);
 			const workspaceFiles = options.workspaceFiles ?? [];
-			const activePath = options.activePath ?? sourcePath;
+			const activePath = requestedActivePath ?? sourcePath;
 			const workspaceLimitsSource = options.workspaceLimits;
 			const workspaceLimits = workspaceLimitsSource
 				? {

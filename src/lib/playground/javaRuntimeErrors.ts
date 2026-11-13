@@ -1,8 +1,35 @@
+import { FLAG_SKIP_ATTR, read as readJavaClass } from '@katana-project/asm';
+import { Modifier } from '@katana-project/asm/spec/modifier';
+
+type JavaMainInvocation = 'static-args' | 'instance-args' | 'static-noargs' | 'instance-noargs';
+
+/** Inspect actual javac output: a compatible method reference can also accept Object overloads. */
+export function selectJavaMainInvocation(classFile: Uint8Array): JavaMainInvocation {
+	const cls = readJavaClass(classFile, FLAG_SKIP_ATTR);
+	if (cls.magic !== 0xcafebabe) throw new Error('Invalid Java entry class');
+	for (const [descriptor, argumentsKind] of [
+		['([Ljava/lang/String;)V', 'args'],
+		['()V', 'noargs']
+	] as const) {
+		const method = cls.methods.find(
+			(candidate) =>
+				candidate.name.string === 'main' &&
+				candidate.type.string === descriptor &&
+				(candidate.access & Modifier.PRIVATE) === 0
+		);
+		if (method) {
+			return `${(method.access & Modifier.STATIC) !== 0 ? 'static' : 'instance'}-${argumentsKind}`;
+		}
+	}
+	throw new Error('Main method not found');
+}
+
 /** A real Java entry point keeps exception formatting inside the Java class library. */
 export function prepareJavaExceptionBridge(
 	mainClass: string,
 	sourceTexts: readonly string[],
-	classFiles: readonly string[]
+	classFiles: readonly string[],
+	invocation: JavaMainInvocation = 'static-args'
 ) {
 	const packageName = mainClass.slice(0, Math.max(0, mainClass.lastIndexOf('.')));
 	const packagePath = packageName ? `${packageName.replaceAll('.', '/')}/` : '';
@@ -34,6 +61,12 @@ export function prepareJavaExceptionBridge(
 	);
 	let formatExport = 'wasmIdleFormatJavaException';
 	while (decodedSources.some((source) => source.includes(formatExport))) formatExport += '_';
+	const entryCall = {
+		'static-args': `${entryClass}::main`,
+		'instance-args': `args -> new ${entryClass}().main(args)`,
+		'static-noargs': `args -> ${entryClass}.main()`,
+		'instance-noargs': `args -> new ${entryClass}().main()`
+	}[invocation];
 	return {
 		mainClass: packageName ? `${packageName}.${formatterClass}` : formatterClass,
 		sourceFileName: `${className}.java`,
@@ -42,7 +75,7 @@ export function prepareJavaExceptionBridge(
 		// No imported types can hide the user entry class, even when it is named String.
 		source: `${sourcePrefix}final class ${className} {
     static ${formatterClass}.Program program() {
-        return ${entryClass}::main;
+        return ${entryCall};
     }
 }
 `,

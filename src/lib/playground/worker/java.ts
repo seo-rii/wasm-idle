@@ -5,7 +5,10 @@ import {
 	prepareJavaRuntimeStdinInjection
 } from '$lib/playground/javaRuntimeStdin';
 import { resolveJavaSourceIdentity } from '$lib/playground/javaSource';
-import { prepareJavaExceptionBridge } from '$lib/playground/javaRuntimeErrors';
+import {
+	prepareJavaExceptionBridge,
+	selectJavaMainInvocation
+} from '$lib/playground/javaRuntimeErrors';
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 import { createJavaDebugBridge } from '../javaDebugBridge';
 import { readDebugCommand } from '../debugMailbox';
@@ -197,7 +200,7 @@ self.addEventListener('message', async (event) => {
 		output = createJavaOutput((text) => self.postMessage({ output: text }));
 		const explicitStdin = hasExplicitStdin === true;
 		const stdinInjection = prepareJavaRuntimeStdinInjection(code);
-		const sourceIdentity = resolveJavaSourceIdentity(code);
+		const sourceIdentity = resolveJavaSourceIdentity(code, activePath);
 		const sourcePath =
 			typeof activePath === 'string' && activePath ? activePath : sourceIdentity.sourcePath;
 		const sourceFileName = sourcePath.split('/').pop() || sourcePath;
@@ -280,7 +283,6 @@ self.addEventListener('message', async (event) => {
 			compiledModule = null;
 			compiledDiagnostics = [];
 			compiledDebugFiles = [];
-			const mainClass = sourceIdentity.mainClass;
 			currentSourcePaths = new Set(
 				[sourcePath, ...sourceFiles.map((file) => file.path)].flatMap((path) => [
 					path,
@@ -417,9 +419,21 @@ self.addEventListener('message', async (event) => {
 						: 'Multiple main methods found'
 				);
 			}
+			const mainClass = mainClasses[0].replaceAll('/', '.');
 			// Compile the launcher against the original class files so user diagnostics and
 			// main-method validation stay independent, and original source lines are unchanged.
 			const classFiles = Array.from(compiler.listOutputFiles() as string[]);
+			let invocation: ReturnType<typeof selectJavaMainInvocation>;
+			try {
+				invocation = selectJavaMainInvocation(
+					new Uint8Array(
+						compiler.getOutputFile(`${mainClass.replaceAll('.', '/')}.class`)
+					)
+				);
+			} catch (error) {
+				disposeDiagnosticRegistration();
+				throw error;
+			}
 			const exceptionBridge = prepareJavaExceptionBridge(
 				mainClass,
 				[
@@ -427,7 +441,8 @@ self.addEventListener('message', async (event) => {
 					...sourceFiles.map((file) => file.content),
 					stdinInjection.helperSource || ''
 				],
-				classFiles
+				classFiles,
+				invocation
 			);
 			for (const path of classFiles) {
 				if (path.endsWith('.class'))
