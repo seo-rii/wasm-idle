@@ -37,11 +37,12 @@ export function prepareJavaExceptionBridge(
 	);
 	let formatExport = 'wasmIdleFormatJavaException';
 	while (decodedSources.some((source) => source.includes(formatExport))) formatExport += '_';
+	const argumentsName = entryClass === 'args' ? 'args_' : 'args';
 	const entryCall = {
 		'static-args': `${entryClass}::main`,
-		'instance-args': `args -> new ${entryClass}().main(args)`,
-		'static-noargs': `args -> ${entryClass}.main()`,
-		'instance-noargs': `args -> new ${entryClass}().main()`
+		'instance-args': `${argumentsName} -> new ${entryClass}().main(${argumentsName})`,
+		'static-noargs': `${argumentsName} -> ${entryClass}.main()`,
+		'instance-noargs': `${argumentsName} -> new ${entryClass}().main()`
 	}[invocation];
 	return {
 		mainClass: packageName ? `${packageName}.${formatterClass}` : formatterClass,

@@ -493,6 +493,14 @@ class ${name} {
 			name: 'compact source',
 			code: 'int value = 42;\nvoid main() { IO.println(value); }',
 			output: '42\n'
+		},
+		{
+			name: 'instance main with a checked constructor exception',
+			code: `class Main {
+    Main() throws java.io.IOException { System.out.println("constructor"); }
+    void main() { System.out.println("checked"); }
+}`,
+			output: 'constructor\nchecked\n'
 		}
 	])(
 		'runs Java 25 $name through the real worker',
@@ -504,6 +512,15 @@ class ${name} {
 		},
 		60_000
 	);
+
+	it('does not shadow an entry class named args in a no-argument adapter', async () => {
+		const messages = await worker.run(
+			'class args { static void main() { System.out.println("selected"); } }'
+		);
+		expect(messages.filter((message) => message.error || message.diagnostic)).toEqual([]);
+		expect(messages.at(-1)).toEqual({ results: true, mainClass: 'args' });
+		expect(outputFrom(messages)).toBe('selected\n');
+	}, 60_000);
 
 	it('uses the compiler-selected class and preserves compact filename exception frames', async () => {
 		const messages = await worker.run(
@@ -582,4 +599,51 @@ class ${name} {
 		expect(next.some((message) => message.error || message.diagnostic)).toBe(false);
 		expect(outputFrom(next)).toBe('recovered\n');
 	}, 60_000);
+
+	it.each(['', 'public '])(
+		'runs compact source containing a %shelper and reuses its inferred filename',
+		async (modifier) => {
+			const code = `${modifier}class Helper { static int answer() { return 42; } }
+void main() { IO.println(Helper.answer()); }`;
+			const before = { ...worker.counts };
+			const first = await worker.run(code);
+			expect(first.filter((message) => message.error || message.diagnostic)).toEqual([]);
+			expect(first.at(-1)).toEqual({ results: true, mainClass: 'Helper' });
+			expect(outputFrom(first)).toBe('42\n');
+			expect(worker.counts.compile - before.compile).toBe(2);
+			const second = await worker.run(code);
+			expect(second.filter((message) => message.error || message.diagnostic)).toEqual([]);
+			expect(outputFrom(second)).toBe('42\n');
+			expect(worker.counts.compile - before.compile).toBe(2);
+		},
+		60_000
+	);
+
+	it('keeps ordinary public type filenames without a compact-source retry', async () => {
+		const before = { ...worker.counts };
+		const messages = await worker.run(`public class Foo {
+    public static void main(String[] args) { System.out.println("ordinary Foo"); }
+}`);
+		expect(messages.filter((message) => message.error || message.diagnostic)).toEqual([]);
+		expect(messages.at(-1)).toEqual({ results: true, mainClass: 'Foo' });
+		expect(outputFrom(messages)).toBe('ordinary Foo\n');
+		expect(worker.counts.compile - before.compile).toBe(2);
+	}, 60_000);
+
+	it.each(['', 'public '])(
+		'keeps an explicit compact filename when source contains a %shelper',
+		async (modifier) => {
+			const before = { ...worker.counts };
+			const messages = await worker.run(
+				`${modifier}class Helper { static int answer() { return 42; } }
+void main() { IO.println(Helper.answer()); }`,
+				{ activePath: 'lessons/Hello.java' }
+			);
+			expect(messages.filter((message) => message.error || message.diagnostic)).toEqual([]);
+			expect(messages.at(-1)).toEqual({ results: true, mainClass: 'Hello' });
+			expect(outputFrom(messages)).toBe('42\n');
+			expect(worker.counts.compile - before.compile).toBe(2);
+		},
+		60_000
+	);
 });
