@@ -445,7 +445,9 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Add 17 KiB for this feature while preserving the preceding aggregate headroom.
 		// Allow the same 23 KiB and two JS/declaration files for the standard module SDK.
 		// The optional compiler/runtime/BMI assets do not enter npm packages.
-		budget: { maxBytes: 40 * MiB + 953 * 1024, maxFiles: 3_410, maxPackages: 70 },
+		// Java 25 CI measures 42,991,203 bytes / 3,412 files against the 42,959,390-byte / 3,410-file baseline.
+		// Allocate 32 KiB and two files for the 31,813-byte reader delta; baseline overflow is corrected separately.
+		budget: { maxBytes: 40 * MiB + 985 * 1024, maxFiles: 3_412, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
