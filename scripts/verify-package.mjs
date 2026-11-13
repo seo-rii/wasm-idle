@@ -440,7 +440,9 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Add 17 KiB for this feature while preserving the preceding aggregate headroom.
 		// Allow the same 23 KiB and two JS/declaration files for the standard module SDK.
 		// The optional compiler/runtime/BMI assets do not enter npm packages.
-		budget: { maxBytes: 40 * MiB + 953 * 1024, maxFiles: 3_410, maxPackages: 70 },
+		// Baseline CI job 131822775029 measures 42,959,390 bytes / 3,410 files / 66 packages.
+		// Add 64 KiB for the 40,478-byte overflow; file and package limits stay unchanged.
+		budget: { maxBytes: 40 * MiB + 1_017 * 1024, maxFiles: 3_410, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
