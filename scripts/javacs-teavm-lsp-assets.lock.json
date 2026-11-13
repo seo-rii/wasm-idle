@@ -29,13 +29,13 @@
 				"packages": [
 					{
 						"path": "openjdk-17-jdk-headless_17.0.20.1+1-1~deb12u1_amd64.deb",
-						"url": "https://security.debian.org/debian-security/pool/updates/main/o/openjdk-17/openjdk-17-jdk-headless_17.0.20.1+1-1~deb12u1_amd64.deb",
+						"url": "https://snapshot.debian.org/file/9b8ece005ebc90a8761fc9bc4d9e01c3c9a12da1",
 						"bytes": 71714748,
 						"sha256": "d28519dfabf0b6234bd6f3bf25de5e372524c2c93d93983f8363117e539f7b15"
 					},
 					{
 						"path": "openjdk-17-jre-headless_17.0.20.1+1-1~deb12u1_amd64.deb",
-						"url": "https://security.debian.org/debian-security/pool/updates/main/o/openjdk-17/openjdk-17-jre-headless_17.0.20.1+1-1~deb12u1_amd64.deb",
+						"url": "https://snapshot.debian.org/file/c244ebdbf89e463a149852c55f3f8ae38b136130",
 						"bytes": 43925216,
 						"sha256": "c80b1542f0f0bd45c9362de990732d780bc7deff046ca4a16c3afd3a787978c7"
 					}
@@ -173,8 +173,8 @@
 			},
 			{
 				"path": "README.md",
-				"bytes": 7039,
-				"sha256": "ed109f7ba668eeb5f92d220a9c1ae22704971642a01c5887e9355d9011fa3c93"
+				"bytes": 7174,
+				"sha256": "857539177f821df773d37eca440ae26d8c989606b82a7b889bf25739e455000c"
 			},
 			{
 				"path": "THIRD_PARTY_NOTICES.md",
@@ -208,8 +208,8 @@
 			},
 			{
 				"path": "inputs.lock.json",
-				"bytes": 6005,
-				"sha256": "215fe44cb41e1445e5b8adc7e42d7f78367b06f9989d551ef904acea1ffaf47e"
+				"bytes": 5891,
+				"sha256": "0901147b41313acb177955e2a06342e7a32e43ea49209dd5d460a8e021e5ee71"
 			},
 			{
 				"path": "java/org/javacs/BrowserFileManager.java",
