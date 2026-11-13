@@ -14,7 +14,9 @@ pnpm sync:java-lsp
 ```
 
 The producer downloads its exact Debian OpenJDK and Gradle distribution into
-`.cache/javacs-teavm/`. It verifies byte sizes and SHA-256 before extraction,
+`.cache/javacs-teavm/`. JDK packages use content-addressed Debian Snapshot URLs
+instead of rolling security mirror paths, which can disappear after an update.
+It verifies byte sizes and SHA-256 before extraction,
 checks all seven input JDK module hashes and the actual Java version, and
 checks restored Gradle distribution files against the authenticated archive.
 It never installs packages or modifies the host JDK. Gradle uses the private

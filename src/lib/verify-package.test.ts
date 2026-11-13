@@ -216,21 +216,23 @@ describe('package install budgets', () => {
 				maxPackages: 10
 			},
 			'all public packages/adapters aggregate': {
-				maxBytes: 40 * MiB + 985 * 1024,
+				maxBytes: 40 * MiB + 1_049 * 1024,
 				maxFiles: 3_412,
 				maxPackages: 70
 			}
 		});
 	});
 
-	it('accepts the measured GCC aggregate and rejects every aggregate limit plus one', () => {
+	it('accepts measured baseline and Java 25 aggregates and rejects every limit plus one', () => {
 		const scenario = scenarios.find(
 			(entry) => entry.name === 'all public packages/adapters aggregate'
 		)!;
-		// Actual GitHub packages job 127952182494, including all public adapters.
-		expect(() =>
-			assertInstallBudget(scenario, { bytes: 42_892_682, files: 3_408, packages: 66 })
-		).not.toThrow();
+		// Actual baseline job 131822775029 and Java 25 job 131823558365, including all adapters.
+		for (const measurement of [
+			{ bytes: 42_959_390, files: 3_410, packages: 66 },
+			{ bytes: 42_991_203, files: 3_412, packages: 66 }
+		])
+			expect(() => assertInstallBudget(scenario, measurement)).not.toThrow();
 		const atLimit = {
 			bytes: scenario.budget.maxBytes,
 			files: scenario.budget.maxFiles,
