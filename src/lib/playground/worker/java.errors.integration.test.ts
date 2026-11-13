@@ -12,6 +12,7 @@ import * as javaDebugSource from '../javaDebugSource';
 import * as javaDebugRuntime from './javaDebugRuntime';
 import * as debugMailbox from '../debugMailbox';
 import * as javaRuntimeErrors from '../javaRuntimeErrors';
+import * as javaMain from '../javaMain';
 import * as javaRuntimeStdin from '../javaRuntimeStdin';
 import * as javaSource from '../javaSource';
 import * as stdinBuffer from '../stdinBuffer';
@@ -129,6 +130,7 @@ async function createRealWorker() {
 			if (id === './javaOutput') return javaOutput;
 			if (id === './javaStreaming') return javaStreaming;
 			if (id === '$lib/playground/javaRuntimeErrors') return javaRuntimeErrors;
+			if (id === '$lib/playground/javaMain') return javaMain;
 			if (id === '$lib/playground/javaRuntimeStdin') return javaRuntimeStdin;
 			if (id === '$lib/playground/javaSource') return javaSource;
 			if (id === '$lib/playground/stdinBuffer') return stdinBuffer;

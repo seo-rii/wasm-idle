@@ -173,6 +173,9 @@ function worker() {
 			if (id === './javaOutput') return outputHelpers;
 			if (id === '$lib/playground/javaRuntimeStdin') return helpers;
 			if (id === '$lib/playground/javaRuntimeErrors') return exceptionHelpers;
+			// This host fixture supplies fake class bytes; real-worker tests cover metadata selection.
+			if (id === '$lib/playground/javaMain')
+				return { selectJavaMainInvocation: () => 'static-args' };
 			if (id === '$lib/playground/javaSource')
 				return {
 					resolveJavaSourceIdentity: () => ({

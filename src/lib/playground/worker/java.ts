@@ -5,10 +5,8 @@ import {
 	prepareJavaRuntimeStdinInjection
 } from '$lib/playground/javaRuntimeStdin';
 import { resolveJavaSourceIdentity } from '$lib/playground/javaSource';
-import {
-	prepareJavaExceptionBridge,
-	selectJavaMainInvocation
-} from '$lib/playground/javaRuntimeErrors';
+import { prepareJavaExceptionBridge } from '$lib/playground/javaRuntimeErrors';
+import { selectJavaMainInvocation } from '$lib/playground/javaMain';
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 import { createJavaDebugBridge } from '../javaDebugBridge';
 import { readDebugCommand } from '../debugMailbox';
