@@ -6,9 +6,13 @@ import { gzipSync } from 'node:zlib';
 import { format } from 'prettier';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
+/** @param {Uint8Array} bytes */
 const hash = (bytes) => createHash('sha256').update(bytes).digest('hex');
 
-/** Pin upstream bytes before adding a module factory around the official non-modular build. */
+/**
+ * Pin upstream bytes before adding a module factory around the official non-modular build.
+ * @param {{ sourceDir?: string; targetDir?: string; versionModulePath?: string; fetchImpl?: typeof fetch }} [options]
+ */
 export async function syncWasmPariGpAssets({
 	sourceDir,
 	targetDir = path.join(root, 'static/wasm-parigp'),
@@ -18,6 +22,7 @@ export async function syncWasmPariGpAssets({
 	const lock = JSON.parse(
 		await readFile(new URL('./wasm-parigp-assets.lock.json', import.meta.url), 'utf8')
 	);
+	/** @type {Record<string, Uint8Array>} */
 	const verified = {};
 	for (const [name, receipt] of Object.entries(lock.assets)) {
 		let bytes;
@@ -40,7 +45,8 @@ export async function syncWasmPariGpAssets({
 	const javascript = Buffer.from(
 		`// Official PARI/GP ${lock.version}, factory wrapper only.\nexport default function createPari(options) { return new Promise((resolve, reject) => {\nvar Module = { ...options, noInitialRun: true, onAbort: reject, onRuntimeInitialized() { Module.FS = FS; Module.wasmMemory = wasmMemory; resolve(Module); } };\n${original}\n}); }\n`
 	);
-	const wasm = gzipSync(verified['gp.wasm'], { level: 9, mtime: 0 });
+	// Node writes a zero mtime in gzip headers by default.
+	const wasm = gzipSync(verified['gp.wasm'], { level: 9 });
 	const assets = {
 		'gp.mjs': { bytes: javascript.length, sha256: hash(javascript) },
 		'gp.wasm.gz.bin': { bytes: wasm.length, sha256: hash(wasm) }
