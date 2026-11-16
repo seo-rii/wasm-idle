@@ -20,6 +20,13 @@ interface SandboxRoute {
 
 const sandboxRoutes = [
 	{
+		languageId: 'SED',
+		load: async () => {
+			const { default: Sed } = await import('$lib/playground/sed');
+			return new Sed();
+		}
+	},
+	{
 		languageId: 'SCALA',
 		load: async () => {
 			const { default: Scala } = await import('$lib/playground/scala');

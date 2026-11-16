@@ -29,6 +29,7 @@ const canonicalLanguageIds = [
 	'JULIA',
 	'NIM',
 	'BASH',
+	'SED',
 	'CLOJURESCRIPT',
 	'RESCRIPT',
 	'HY',

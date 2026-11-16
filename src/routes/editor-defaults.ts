@@ -38,6 +38,7 @@ export type EditorDefaultLanguage =
 	| 'janet'
 	| 'julia'
 	| 'nim'
+	| 'sed'
 	| 'bash'
 	| 'clojurescript'
 	| 'rescript'
@@ -113,6 +114,7 @@ export const editorDefaults: Record<
 	| 'janet'
 	| 'julia'
 	| 'nim'
+	| 'sed'
 	| 'bash'
 	| 'clojurescript'
 	| 'rescript'
@@ -855,6 +857,9 @@ let n =
     4
 
 echo "fibonacci=", fibonacci(n) + bonus`,
+	sed: `# Replace world in each input line. Type input, then send EOF.
+s/world/sed/g
+`,
 	bash: `bonus=3
 declare -A memo=( [0]=1 [1]=1 )
 
@@ -1622,6 +1627,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.janet ||
 		source === editorDefaults.julia ||
 		source === editorDefaults.nim ||
+		source === editorDefaults.sed ||
 		source === editorDefaults.bash ||
 		source === editorDefaults.clojurescript ||
 		source === editorDefaults.rescript ||

@@ -78,6 +78,12 @@ export const playgroundLanguages: PlaygroundLanguage[] = [
 export const playgroundLanguageDescriptors: Readonly<
 	Record<PlaygroundLanguage, PlaygroundLanguageDescriptor>
 > = {
+	SED: {
+		label: 'sed — BusyBox',
+		editorLanguage: 'plaintext',
+		supportsArgs: true,
+		argsLabel: 'sed options / input files'
+	},
 	UHMLANG: { label: 'UHMLANG (엄준식)', editorLanguage: 'plaintext' },
 	LOLCODE: { label: 'LOLCODE 1.3', editorLanguage: 'plaintext' },
 	APECODE: { label: 'APECode', editorLanguage: 'plaintext' },

@@ -235,7 +235,9 @@
 		"test:zig:browser": "node scripts/zig017-browser-smoke.mjs",
 		"sync:wasm-scala": "node scripts/sync-wasm-scala.mjs",
 		"test:scala": "vitest run --config vitest.scala.config.ts",
-		"test:browser:scala": "WASM_IDLE_RUN_REAL_BROWSER_SCALA=1 vitest run --config vitest.scala.config.ts src/lib/playground/scala.playwright.test.ts"
+		"test:browser:scala": "WASM_IDLE_RUN_REAL_BROWSER_SCALA=1 vitest run --config vitest.scala.config.ts src/lib/playground/scala.playwright.test.ts",
+		"test:browser:sed": "WASM_IDLE_REQUIRE_BROWSER_TESTS=1 WASM_IDLE_RUN_REAL_BROWSER_SED=1 vitest run src/lib/playground/esolangs.playwright.test.ts",
+		"sync:wasm-sed": "node scripts/sync-wasm-sed.mjs"
 	},
 	"devDependencies": {
 		"acorn": "8.19.0",

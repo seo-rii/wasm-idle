@@ -2217,6 +2217,8 @@ export const RUNTIME_ASSET_LOCK: RuntimeAssetLockManifest = /* @__PURE__ */ free
 		"wasm-rust/vendor/preview2-shim/lib/browser/random.js.bin": {"sha256":"10ca591c575a43051f205ef953861e2bcba3a917e1ffbb40d74c0bc6985c4eb2","bytes":1531,"mediaType":"application/octet-stream"},
 		"wasm-rust/vendor/preview2-shim/lib/browser/sockets.js.bin": {"sha256":"a9a6ba4c7847c8109924447d36ec3087d410237e0728832f1de14625d03969e3","bytes":1370,"mediaType":"application/octet-stream"},
 		"wasm-rust/worker-status.js.bin": {"sha256":"8c345945f87eb1305fca69d4b99cca7a3df90a8f5b4ac334cd04e5d5b5be7041","bytes":3841,"mediaType":"application/octet-stream"},
+		"wasm-sed/busybox.wasm": {"sha256":"30ea0ce3a36013b343dddc0045c72f490c468268c1a1fd2050fdc8702f97bd40","bytes":634885,"mediaType":"application/wasm"},
+		"wasm-sed/runtime-build.json": {"sha256":"3064861b2bd7a68cce28ff1347eee037bddec0d2f790debdb08ed81bfb687a9a","bytes":5999,"mediaType":"application/json"},
 		"wasm-sqlite/assets/sql-wasm-C1D_RJuy.wasm": {"sha256":"f3aaaa47b7957d084f0a70037fb780b5465d7bfb6e58a5bd485d6f23a9576b74","bytes":684897,"mediaType":"application/wasm","deliveryPath":"wasm-sqlite/assets/sql-wasm-C1D_RJuy.wasm.gz"},
 		"wasm-sqlite/assets/sql-wasm-C1D_RJuy.wasm.gz": {"sha256":"7825c3e9f978e13ac74918d4bcc75a96b0bd8c191d7a524b6817c71002784eac","bytes":336263,"encoding":"gzip","mediaType":"application/wasm","uncompressedSha256":"f3aaaa47b7957d084f0a70037fb780b5465d7bfb6e58a5bd485d6f23a9576b74","uncompressedBytes":684897},
 		"wasm-sqlite/runtime-manifest.v1.json": {"sha256":"318d812f668cae22eb60a899c1a86d23ce825ba5cc923277fb4c79bb0d9cf047","bytes":580,"mediaType":"application/json"},

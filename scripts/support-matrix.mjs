@@ -160,6 +160,19 @@ function codeList(values) {
 /** @type {SupportMatrixRow[]} */
 export const supportMatrixRows = [
 	{
+		language: 'sed',
+		ids: ['SED'],
+		runtime: 'BusyBox 1.37.0 sed applet on WASI',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/esolangs.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_SED',
+			language: 'SED'
+		}
+	},
+	{
 		language: 'GolfScript',
 		ids: ['GOLFSCRIPT'],
 		runtime: 'Original GolfScript interpreter on Ruby/WASI',
@@ -1107,6 +1120,15 @@ function staticWorkerCustomizationFor(runtimeKey, envKey = runtimeKey.toUpperCas
 
 /** @type {Map<string, RuntimeDetail>} */
 const runtimeDetailsByLanguage = new Map([
+	[
+		'sed',
+		{
+			packageBase: 'BusyBox 1.37.0 (GPL-2.0-only), the pinned reviewed container WASI build',
+			execution:
+				'Runs the original sed applet with -f and the active source file; supports patterns, substitutions, hold space, branching, extended regular expressions and input files; stdin streams to EOF; the upstream WASI profile rejects -i',
+			customization: `${code('runtimeAssets.rootUrl')}, ${code('stdin')}, ${code('programArgs')}, ${code('activePath')}, ${code('workspaceFiles')}; readonly source snapshots, private per-run filesystem, execution limits and cancellation; prepare compiles the interpreter without executing user source`
+		}
+	],
 	[
 		'GolfScript',
 		{

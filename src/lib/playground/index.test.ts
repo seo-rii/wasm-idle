@@ -220,6 +220,11 @@ vi.mock('$lib/playground/nim', () => {
 	};
 });
 
+vi.mock('$lib/playground/sed', () => {
+	moduleLoads.add('SED');
+	return { default: createMockSandboxClass('SED') };
+});
+
 vi.mock('$lib/playground/bash', () => {
 	moduleLoads.add('BASH');
 	return {
