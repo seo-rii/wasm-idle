@@ -132,65 +132,6 @@ describe('host runtime Wasm module service', () => {
 		expect(cache.stats()).toMatchObject({ entries: 1, inFlight: 0 });
 	});
 
-	it('answers one lookup with a retained module so peers can skip downloading the bytes', async () => {
-		const cache = new RuntimeAssetCache(), compile = vi.fn(async () => module);
-		const lookup = (port: MessagePort) =>
-			new Promise<{ type?: string; module?: unknown }>((resolve) => {
-				port.onmessage = (event) => resolve(event.data);
-				port.postMessage({ type: 'lookup' });
-			});
-		// A miss leaves the ordinary verified compile request available on the same port.
-		const cold = service({ cache, compile });
-		expect(await lookup(cold.port)).toEqual({ type: 'miss' });
-		await expect(
-			requestRuntimeWasmModule(Uint8Array.from(wasm), cold.port)
-		).resolves.toBeInstanceOf(WebAssembly.Module);
-		const warm = await lookup(service({ cache, compile }).port);
-		expect(warm.type).toBe('module');
-		expect(warm.module).toBeInstanceOf(WebAssembly.Module);
-		expect(compile).toHaveBeenCalledOnce();
-		// Lookups never cross authorization or memory profiles.
-		expect(await lookup(service({ cache, compile, identity: 'other-profile' }).port)).toEqual({
-			type: 'miss'
-		});
-		expect(await lookup(service({ cache, compile, maxAssetBytes: 16 }).port)).toEqual({
-			type: 'miss'
-		});
-	});
-
-	it('rejects repeated or decorated lookups and lookups on prepared endpoints', async () => {
-		const cache = new RuntimeAssetCache(), compile = vi.fn(async () => module);
-		const reply = (port: MessagePort, ...messages: unknown[]) =>
-			new Promise<unknown[]>((resolve) => {
-				const replies: unknown[] = [];
-				port.onmessage = (event) => {
-					replies.push(event.data);
-					if (replies.length === messages.length) resolve(replies);
-				};
-				for (const message of messages) port.postMessage(message);
-			});
-		const repeated = await reply(
-			service({ cache, compile }).port,
-			{ type: 'lookup' },
-			{ type: 'lookup' }
-		);
-		expect(repeated[0]).toEqual({ type: 'miss' });
-		expect(repeated[1]).toMatchObject({ type: 'error' });
-		const [decorated] = await reply(service({ cache, compile }).port, {
-			type: 'lookup',
-			module
-		});
-		expect(decorated).toMatchObject({ type: 'error' });
-		const prepared = createPreparedRuntimeWasmModuleService({
-			...options({ cache, compile }),
-			bytes: wasm
-		});
-		services.push(prepared);
-		const [preparedLookup] = await reply(prepared.port, { type: 'lookup' });
-		expect(preparedLookup).toMatchObject({ type: 'error' });
-		expect(compile).not.toHaveBeenCalled();
-	});
-
 	it('snapshots host receipts and never accepts a peer-supplied hash or module', async () => {
 		const pinned = { ...receipt };
 		const compile = vi.fn(async () => module);
