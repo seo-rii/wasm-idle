@@ -26,6 +26,14 @@ const THIS_FILE = fileURLToPath(import.meta.url);
 /** @type {RuntimeDefinition[]} */
 export const RUNTIMES = [
 	{
+		name: 'wasm-uiua',
+		module: './sync-wasm-uiua.mjs',
+		exportName: 'syncWasmUiuaAssets',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir',
+		manual: true
+	},
+	{
 		name: 'wasm-clang',
 		module: './sync-wasm-clang.mjs',
 		exportName: 'syncWasmClangDist',

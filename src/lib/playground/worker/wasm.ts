@@ -316,7 +316,8 @@ self.onmessage = async (event: { data: any }) => {
 				? [
 						interpreter.command,
 						...interpreter.args,
-						`${interpreter.sourcePathPrefix ?? '/'}${workspace.activePath}`
+						`${interpreter.sourcePathPrefix ?? '/'}${workspace.activePath}`,
+						...(interpreter.forwardProgramArgs ? args : [])
 					]
 				: args,
 			['USER=wasm-idle'],

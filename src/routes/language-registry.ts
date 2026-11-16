@@ -78,6 +78,7 @@ export const playgroundLanguages: PlaygroundLanguage[] = [
 export const playgroundLanguageDescriptors: Readonly<
 	Record<PlaygroundLanguage, PlaygroundLanguageDescriptor>
 > = {
+	UIUA: { label: 'Uiua', editorLanguage: 'plaintext', supportsArgs: true },
 	UHMLANG: { label: 'UHMLANG (엄준식)', editorLanguage: 'plaintext' },
 	LOLCODE: { label: 'LOLCODE 1.3', editorLanguage: 'plaintext' },
 	APECODE: { label: 'APECode', editorLanguage: 'plaintext' },

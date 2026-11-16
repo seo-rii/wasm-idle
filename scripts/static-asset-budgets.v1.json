@@ -1,8 +1,8 @@
 {
 	"schemaVersion": 1,
 	"total": {
-		"maxBytes": 1151750000,
-		"maxFiles": 1977
+		"maxBytes": 1164750000,
+		"maxFiles": 1981
 	},
 	"directories": {
 		"clang": {
@@ -318,6 +318,10 @@
 			"maxBytes": 8000000,
 			"maxFiles": 11,
 			"optional": true
+		},
+		"wasm-uiua": {
+			"maxBytes": 13000000,
+			"maxFiles": 4
 		}
 	}
 }

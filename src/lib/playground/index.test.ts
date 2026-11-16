@@ -51,6 +51,11 @@ const { moduleLoads, sandboxInstances, createMockSandboxClass, MockSandbox } = v
 	return { moduleLoads, sandboxInstances, createMockSandboxClass, MockSandbox };
 });
 
+vi.mock('$lib/playground/uiua', () => {
+	moduleLoads.add('UIUA');
+	return { default: createMockSandboxClass('UIUA') };
+});
+
 vi.mock('$lib/playground/c3', () => {
 	moduleLoads.add('C3');
 	return { default: createMockSandboxClass('C3') };

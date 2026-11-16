@@ -160,6 +160,19 @@ function codeList(values) {
 /** @type {SupportMatrixRow[]} */
 export const supportMatrixRows = [
 	{
+		language: 'Uiua',
+		ids: ['UIUA'],
+		runtime: 'Uiua 0.19.1 / WASI',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/uiua.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_UIUA',
+			marker: 'runUiuaConsumer'
+		}
+	},
+	{
 		language: 'GolfScript',
 		ids: ['GOLFSCRIPT'],
 		runtime: 'Original GolfScript interpreter on Ruby/WASI',
@@ -1107,6 +1120,15 @@ function staticWorkerCustomizationFor(runtimeKey, envKey = runtimeKey.toUpperCas
 
 /** @type {Map<string, RuntimeDetail>} */
 const runtimeDetailsByLanguage = new Map([
+	[
+		'Uiua',
+		{
+			packageBase: 'Original Uiua 0.19.1 (MIT), Rust wasm32-wasip1 build',
+			execution:
+				'Runs the upstream compiler/interpreter with source-file input, UTF-8 stdin/stdout and original diagnostics; remaining stack values are printed as in the CLI; each execution starts fresh',
+			customization: `${code('runtimeAssets.rootUrl')}, ${code('stdin')}, ${code('programArgs')}, ${code('activePath')}, ${code('workspaceFiles')}; text execution without native FFI, networking, subprocesses or media`
+		}
+	],
 	[
 		'GolfScript',
 		{
