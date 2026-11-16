@@ -59,9 +59,11 @@ export const scenarios = [
 		// Lazy receipt lookup adds three core JavaScript/declaration pairs (789 files measured).
 		// Java 25 adds one bytecode reader JavaScript/declaration pair; ASM is bundled rather than installed.
 		// The measured 7,405,837-byte / 791-file install needs 1 KiB above the previous byte cap.
-		// Verilog measures 7,418,041 bytes / 795 files / five packages. The adapter
-		// and pinned profile add four files; cover the 11,449-byte overflow with 12 KiB.
-		budget: { maxBytes: 7 * MiB + 77 * 1024, maxFiles: 795, maxPackages: 6 },
+		// Picat packed root/core deltas are 16,284 + 1,109 bytes and six files.
+		// Add 17 KiB / six files for its adapter, assets and profile; runtime payloads stay external.
+		// Cumulative Squirrel, Wren, PARI/GP and WASI memory limits add another 27 KiB/12 files.
+		// Retain Verilog adapter/profile allowance above the integrated main languages.
+		budget: { maxBytes: 7 * MiB + 121 * 1024, maxFiles: 813, maxPackages: 6 },
 		absentPackageNames: [
 			'@katana-project/asm',
 			'java-parser',
@@ -134,9 +136,11 @@ export const scenarios = [
 		// Another 17 KiB covers the 17,099-byte overflow and retains 309 bytes of headroom.
 		// Standard modules CI job 128326182518 measures 2,855,516 bytes / 196 files / four packages.
 		// Another 23 KiB covers the 23,132-byte overflow with 420 bytes of headroom; BMIs stay external.
-		// Verilog's shared-core receipts measure 2,856,881 bytes / 196 files / four packages.
-		// Cover only the 945-byte overflow with another 1 KiB; files/dependencies stay unchanged.
-		budget: { maxBytes: 2.5 * MiB + 230 * 1024, maxFiles: 196, maxPackages: 4 },
+		// Picat CI job 133036878600 measures 2,856,625 bytes with unchanged files/dependencies.
+		// The four-language core measures 1,619,555 bytes, a 3,193-byte increase.
+		// GCC totals 2,858,709 bytes; a 3 KiB increase retains 299 bytes of headroom.
+		// Retain Verilog shared-core receipt allowance above main.
+		budget: { maxBytes: 2.5 * MiB + 233 * 1024, maxFiles: 196, maxPackages: 4 },
 		absentPackageNames: [
 			'wasm-idle',
 			'@wasm-idle/llvm-core',
@@ -452,9 +456,10 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Baseline CI job 131822775029 measures 42,959,390 bytes / 3,410 files / 66 packages.
 		// Add 64 KiB for the 40,478-byte overflow; file and package limits stay unchanged.
 		// Java 25 CI adds 31,813 bytes and two files to that baseline; allow another 32 KiB / two files.
-		// Verilog measures 43,004,280 bytes / 3,416 files / 66 packages. Its four
-		// new adapter/profile files fit within the existing byte/dependency limits.
-		budget: { maxBytes: 40 * MiB + 1_049 * 1024, maxFiles: 3_416, maxPackages: 70 },
+		// Propagate Picat's measured 17 KiB / six-file SDK increase; dependencies are unchanged.
+		// Keep all four language profile allowances when installing the combined SDK.
+		// Verilog adds four adapter/profile files within the existing aggregate byte cap.
+		budget: { maxBytes: 40 * MiB + 1_093 * 1024, maxFiles: 3_434, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

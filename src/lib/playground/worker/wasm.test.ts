@@ -112,3 +112,37 @@ describe('WASM worker', () => {
 		});
 	});
 });
+
+// wasi-libc may issue readv with an empty leading vector before its byte buffer.
+// Fixture reads 'A', then EOF with iovecs [{ptr:0,len:0},{ptr:c,len:1}].
+it('does not consume terminal data or EOF for zero-length readv vectors', async () => {
+	vi.resetModules();
+	(globalThis as any).self = globalThis;
+	(globalThis as any).postMessage = vi.fn();
+	const nextChunk = vi
+		.fn()
+		.mockReturnValueOnce('A')
+		.mockReturnValueOnce(null)
+		.mockImplementation(() => {
+			throw new Error('stdin was requested again after EOF');
+		});
+	vi.doMock('$lib/playground/stdinBuffer', () => ({ waitForBufferedStdin: nextChunk }));
+	try {
+		await import('./wasm');
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: 'AGFzbQEAAAABFgRgBH9/f38Bf2ABfwBgAABgAn9/AX8CRQIWd2FzaV9zbmFwc2hvdF9wcmV2aWV3MQdmZF9yZWFkAAAWd2FzaV9zbmFwc2hvdF9wcmV2aWV3MQlwcm9jX2V4aXQAAQMDAgIDBQMBAAIGCAF/AUGAgAQLBxMCBm1lbW9yeQIABl9zdGFydAACDAEBCoECAuwBAQJ/AkBBhIAEKAIARQRAQYSABEEBNgIAQYyABEGMgAQ2AgBBxIAEQQA2AgBBwIAEQYCABDYCAEG8gARBgIAENgIAQZSABEGMgAQ2AgBBkIAEQYyABDYCAEGYgARBiIAEKAIANgIAQYCABEGAgAQ2AgAjAEEgayIAJABBASEBIABBATYCDCAAQgA3AwAgACAAQR9qNgIIAkAgACAAQRhqEAMNACAAKAIYQQFHDQAgAC0AH0HBAEcNACAAIABBGGoQAyEBQQJBAkEAIAAoAhgbIAEbIQELIABBIGokACABIgANAQ8LAAsgABABAAsRAEEAIABBAiABEABB//8DcQsLCQEAQYKABAsBAgB7D3RhcmdldF9mZWF0dXJlcwcrD211dGFibGUtZ2xvYmFscysTbm9udHJhcHBpbmctZnB0b2ludCsLYnVsay1tZW1vcnkrCHNpZ24tZXh0Kw9yZWZlcmVuY2UtdHlwZXMrCm11bHRpdmFsdWUrDmV4dGVuZGVkLWNvbnN0',
+				activePath: 'main.wasm',
+				workspaceFiles: [],
+				buffer: new Int32Array(new SharedArrayBuffer(16))
+			}
+		});
+		expect(nextChunk).toHaveBeenCalledTimes(2);
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
+		expect(
+			(globalThis as any).postMessage.mock.calls.some(([message]: [any]) => message.error)
+		).toBe(false);
+	} finally {
+		vi.doUnmock('$lib/playground/stdinBuffer');
+	}
+});
