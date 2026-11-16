@@ -144,6 +144,7 @@ describe('application runtime asset root', () => {
 		expect(assets.lfortran).toEqual({ baseUrl: '/foo/bar/wasm-lfortran/' });
 		expect(assets.lean4).toEqual({ baseUrl: '/foo/bar/wasm-lean4/' });
 		expect(assets.commonlisp).toEqual({ baseUrl: '/foo/bar/wasm-commonlisp/' });
+		expect(assets.parigp).toEqual({ baseUrl: '/foo/bar/wasm-parigp/' });
 		expect(Object.keys(assets).sort()).toEqual([
 			'assemblyscript',
 			'awk',
@@ -175,9 +176,11 @@ describe('application runtime asset root', () => {
 			'objectivec',
 			'ocaml',
 			'octave',
+			'parigp',
 			'pascal',
 			'perl',
 			'php',
+			'picat',
 			'postgresql',
 			'prolog',
 			'r',
@@ -1241,4 +1244,10 @@ it('selects an independently pinned JavaScript entry and includes it in runtime 
 			}
 		})
 	);
+});
+
+describe('Picat application assets', () => {
+	it('keeps the Picat runtime under the configured application root', () => {
+		expect(createApplicationRuntimeAssets('/demo').picat?.baseUrl).toBe('/demo/wasm-picat/');
+	});
 });
