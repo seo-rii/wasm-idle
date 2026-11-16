@@ -12,7 +12,14 @@ class MockWorker {
 	postMessage = vi.fn((message: any) => {
 		if (message.load) {
 			if (suppressAutoLoadAck) return;
-			queueMicrotask(() => this.onmessage?.({ data: { load: true } } as MessageEvent<any>));
+			queueMicrotask(() =>
+				this.onmessage?.({
+					data: {
+						load: true,
+						...(message.interpreter ? { initialMemoryBytes: 65536 } : {})
+					}
+				} as MessageEvent<any>)
+			);
 			return;
 		}
 		if (message.prepare) {
@@ -155,6 +162,78 @@ describe('WASM sandbox', () => {
 		).resolves.toBeUndefined();
 		expect(workerInstances[0].postMessage).toHaveBeenCalledWith({ load: true, log: false });
 	});
+
+	it('forwards interpreter memory budgets for startup and each execution', async () => {
+		const sandbox = new Wasm(WASI_INTERPRETERS.BRAINFUCK);
+		await sandbox.load('', '', false, [], { limits: { maxWasmMemoryBytes: 8 * 65536 } });
+		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({ load: true, maxWasmMemoryBytes: 8 * 65536 })
+		);
+		for (const maxWasmMemoryBytes of [4 * 65536, 12 * 65536]) {
+			await sandbox.run(',.', false, false, undefined, [], {
+				stdin: 'Q',
+				limits: { maxWasmMemoryBytes }
+			});
+			expect(workerInstances[0].postMessage).toHaveBeenLastCalledWith(
+				expect.objectContaining({ prepare: false, maxWasmMemoryBytes })
+			);
+		}
+	});
+
+	it('rejects a tighter startup budget using the loaded interpreter minimum', async () => {
+		const sandbox = new Wasm(WASI_INTERPRETERS.BRAINFUCK);
+		await sandbox.load();
+		await expect(
+			sandbox.load('', '', false, [], {
+				limits: { maxWasmMemoryBytes: 65535 }
+			})
+		).rejects.toMatchObject({
+			name: 'ResourceLimitError',
+			code: 'resource-limit',
+			resource: 'wasm-memory',
+			actual: 65536,
+			limit: 65535,
+			phase: 'startup',
+			runtimeId: 'BRAINFUCK'
+		});
+		expect(workerInstances[0].postMessage).toHaveBeenCalledTimes(1);
+		await expect(sandbox.load()).resolves.toBeUndefined();
+	});
+
+	it.each(['startup', 'execute'] as const)(
+		'preserves typed worker memory errors during %s',
+		async (phase) => {
+			const sandbox = new Wasm(WASI_INTERPRETERS.BRAINFUCK);
+			const error = {
+				error: 'initial memory exceeds the configured memory limit',
+				memoryLimit: { actual: 65536, limit: 1 }
+			};
+			let pending: Promise<unknown>;
+			if (phase === 'startup') {
+				suppressAutoLoadAck = true;
+				pending = sandbox.load();
+				await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+				workerInstances[0].onmessage?.({ data: error } as MessageEvent<any>);
+			} else {
+				await sandbox.load();
+				workerInstances[0].postMessage.mockImplementationOnce(() => {
+					queueMicrotask(() =>
+						workerInstances[0].onmessage?.({ data: error } as MessageEvent<any>)
+					);
+				});
+				pending = sandbox.run(',.', false);
+			}
+			await expect(pending).rejects.toMatchObject({
+				name: 'ResourceLimitError',
+				code: 'resource-limit',
+				resource: 'wasm-memory',
+				actual: 65536,
+				limit: 1,
+				phase,
+				runtimeId: 'BRAINFUCK'
+			});
+		}
+	);
 
 	it('terminates WASM output before exceeding the cumulative UTF-8 byte limit', async () => {
 		const sandbox = new Wasm();
