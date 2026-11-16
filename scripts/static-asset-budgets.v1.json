@@ -1,8 +1,8 @@
 {
 	"schemaVersion": 1,
 	"total": {
-		"maxBytes": 1154750000,
-		"maxFiles": 1981
+		"maxBytes": 1166600000,
+		"maxFiles": 2001
 	},
 	"directories": {
 		"clang": {
@@ -318,6 +318,24 @@
 			"maxBytes": 8000000,
 			"maxFiles": 11,
 			"optional": true
+		},
+		"wasm-picat": {
+			"maxBytes": 3500000,
+			"maxFiles": 8,
+			"optional": true
+		},
+		"wasm-parigp": {
+			"maxBytes": 7000000,
+			"maxFiles": 5,
+			"optional": true
+		},
+		"wasm-wren": {
+			"maxBytes": 350000,
+			"maxFiles": 4
+		},
+		"wasm-squirrel": {
+			"maxBytes": 1000000,
+			"maxFiles": 3
 		},
 		"wasm-sml": {
 			"maxBytes": 3000000,

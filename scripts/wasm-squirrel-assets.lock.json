@@ -1,0 +1,49 @@
+{
+	"format": "wasm-squirrel-build-v1",
+	"version": "3.2",
+	"revision": "f92bc298784ceea459b12e2de33bdff672bfeb83",
+	"repository": "https://github.com/albertodemichelis/squirrel",
+	"source": {
+		"path": "runtimes/wasm-squirrel/vendor/squirrel-f92bc298.tar.gz",
+		"sha256": "722f1a5f271dfb7ac90a42d3789a861b381b4741499de29ce06d238384645f2d"
+	},
+	"patches": [
+		{
+			"path": "runtimes/wasm-squirrel/stdin-eof.patch",
+			"sha256": "ad14810780c8eec6b8164abea2936fb464334c111306d3a8517a7150fe6f3561"
+		}
+	],
+	"runnerSha256": "540929467eddc83318361e3c292cab1114bd0f2084c970696abc676ed3133261",
+	"toolchain": {
+		"name": "wasi-sdk",
+		"version": "33.0",
+		"compiler": "clang version 22.1.0-wasi-sdk (https://github.com/llvm/llvm-project 4434dabb69916856b824f68a64b029c67175e532)"
+	},
+	"flags": [
+		"--target=wasm32-wasip1",
+		"-std=c++11",
+		"-O2",
+		"-fno-rtti",
+		"-fno-exceptions",
+		"-mexception-handling",
+		"-mllvm",
+		"-wasm-enable-sjlj",
+		"-mllvm",
+		"-wasm-use-legacy-eh=true",
+		"-lsetjmp",
+		"-fno-ident",
+		"-D_WASI_EMULATED_PROCESS_CLOCKS",
+		"-lwasi-emulated-process-clocks",
+		"-DSQUSEDOUBLE",
+		"-Wl,--strip-all",
+		"-Wl,-z,stack-size=1048576",
+		"-Wl,--max-memory=67108864"
+	],
+	"license": "MIT",
+	"numericProfile": "int32/float64",
+	"wasm": {
+		"path": "squirrel.wasm",
+		"bytes": 305988,
+		"sha256": "ca43b31506cc294c31b7b4b0e2d714ca3ab4fed88c4a3a7dcd9d0ac482b04f14"
+	}
+}

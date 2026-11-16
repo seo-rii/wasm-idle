@@ -28,6 +28,7 @@ function runtime(
 
 /** @type {BrowserRuntime[]} */
 export const runtimeBrowserRegistry = [
+	runtime('sml', 'esolangs'),
 	runtime('clang', 'clang', { languages: ['C', 'CPP'] }),
 	runtime('objectivec', 'clang', {
 		languages: ['OBJC', 'OBJECTIVECXX'],
@@ -47,8 +48,11 @@ export const runtimeBrowserRegistry = [
 	runtime('aheui', 'esolangs', { dependencies: ['python'] }),
 	runtime('apecode', 'esolangs', { dependencies: ['python'] }),
 	runtime('golfscript', 'esolangs', { dependencies: ['ruby'] }),
-	runtime('sml', 'esolangs'),
+	runtime('picat', 'specialized'),
+	runtime('wren', 'esolangs'),
+	runtime('squirrel', 'esolangs'),
 	runtime('scala', 'specialized'),
+	runtime('parigp', 'specialized', { sourceNames: ['parigp', 'pari-gp'] }),
 	runtime('java', 'stdin', { sourceNames: ['java', 'teavm'] }),
 	runtime('elixir', 'stdin'),
 	runtime('javascript', 'stdin', { sourceNames: ['javascript', 'js-sandbox'] }),

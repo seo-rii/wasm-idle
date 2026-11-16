@@ -59,9 +59,12 @@ export const scenarios = [
 		// Lazy receipt lookup adds three core JavaScript/declaration pairs (789 files measured).
 		// Java 25 adds one bytecode reader JavaScript/declaration pair; ASM is bundled rather than installed.
 		// The measured 7,405,837-byte / 791-file install needs 1 KiB above the previous byte cap.
-		// Standard ML measures 7,410,761 bytes / 795 files / five packages. Its adapter
-		// and profile add four files; the 4,169-byte overflow needs only another 5 KiB.
-		budget: { maxBytes: 7 * MiB + 70 * 1024, maxFiles: 795, maxPackages: 6 },
+		// Picat packed root/core deltas are 16,284 + 1,109 bytes and six files.
+		// Add 17 KiB / six files for its adapter, assets and profile; runtime payloads stay external.
+		// Cumulative Squirrel, Wren, PARI/GP and WASI memory limits add another 27 KiB/12 files.
+		// With Standard ML, the merged install measures 7,454,292 bytes / 813 files / five packages.
+		// The 2,644-byte overflow needs 3 KiB; its adapter/profile add four files.
+		budget: { maxBytes: 7 * MiB + 112 * 1024, maxFiles: 813, maxPackages: 6 },
 		absentPackageNames: [
 			'@katana-project/asm',
 			'java-parser',
@@ -134,9 +137,12 @@ export const scenarios = [
 		// Another 17 KiB covers the 17,099-byte overflow and retains 309 bytes of headroom.
 		// Standard modules CI job 128326182518 measures 2,855,516 bytes / 196 files / four packages.
 		// Another 23 KiB covers the 23,132-byte overflow with 420 bytes of headroom; BMIs stay external.
-		// Standard ML's core receipts measure 2,856,056 bytes / 196 files / four packages.
-		// The 120-byte overflow needs 1 KiB; file and dependency limits stay unchanged.
-		budget: { maxBytes: 2.5 * MiB + 230 * 1024, maxFiles: 196, maxPackages: 4 },
+		// Picat CI job 133036878600 measures 2,856,625 bytes with unchanged files/dependencies.
+		// The four-language core measures 1,619,555 bytes, a 3,193-byte increase.
+		// GCC totals 2,858,709 bytes; a 3 KiB increase retains 299 bytes of headroom.
+		// Standard ML's shared-core receipts measure 2,859,249 bytes / 196 files / four packages.
+		// The 241-byte overflow needs 1 KiB; file and dependency caps stay unchanged.
+		budget: { maxBytes: 2.5 * MiB + 233 * 1024, maxFiles: 196, maxPackages: 4 },
 		absentPackageNames: [
 			'wasm-idle',
 			'@wasm-idle/llvm-core',
@@ -452,9 +458,11 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Baseline CI job 131822775029 measures 42,959,390 bytes / 3,410 files / 66 packages.
 		// Add 64 KiB for the 40,478-byte overflow; file and package limits stay unchanged.
 		// Java 25 CI adds 31,813 bytes and two files to that baseline; allow another 32 KiB / two files.
-		// Standard ML measures 42,997,000 bytes / 3,416 files / 66 packages. Its four
+		// Propagate Picat's measured 17 KiB / six-file SDK increase; dependencies are unchanged.
+		// Keep all four language profile allowances when installing the combined SDK.
+		// Standard ML measures 43,040,531 bytes / 3,434 files / 66 packages. Its four
 		// adapter/profile files fit the existing byte and dependency limits.
-		budget: { maxBytes: 40 * MiB + 1_049 * 1024, maxFiles: 3_416, maxPackages: 70 },
+		budget: { maxBytes: 40 * MiB + 1_093 * 1024, maxFiles: 3_434, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

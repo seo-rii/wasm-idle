@@ -3,6 +3,8 @@
 `SML` runs the original HaMLet 2.0.1 SML97 parser, type checker and evaluator
 compiled to WASI by MLton. The original Standard Basis library is embedded in
 its executable. Each run gets a fresh interpreter and private filesystem.
+HaMLet's shipped Basis library has upstream omissions, including
+`TextIO.scanStream`.
 
 The default `main.sml` reads and prints one input line:
 
