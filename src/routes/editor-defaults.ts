@@ -1,6 +1,7 @@
 import type { RustTargetTriple } from '$lib/playground/options';
 
 export type EditorDefaultLanguage =
+	| 'coq'
 	| 'picat'
 	| 'wren'
 	| 'squirrel'
@@ -81,6 +82,7 @@ export type EditorDefaultLanguage =
 
 export const editorDefaults: Record<
 	| 'befunge93'
+	| 'coq'
 	| 'picat'
 	| 'wren'
 	| 'squirrel'
@@ -161,6 +163,7 @@ export const editorDefaults: Record<
 	squirrel:
 		"// Echo UTF-8 input; send EOF to finish.\nwhile (true) {\n    try { stdout.writen(stdin.readn('b'), 'b'); }\n    catch (error) {\n        if (stdin.eos()) break;\n        throw error;\n    }\n}\n",
 	uhmlang: '어떻게\n엄식?\n식어!\n이 사람이름이냐ㅋㅋ\n',
+	coq: '(* Enter additional Coq commands in the terminal, then press Ctrl+D. *)\nDefinition twice (n : nat) := n + n.\nEval cbv in twice 21.\n\nTheorem two_plus_two : 2 + 2 = 4.\nProof. reflexivity. Qed.\nCheck two_plus_two.\n',
 	picat: 'main =>\n    print("Name? "),\n    flush(),\n    Name = read_line(),\n    println("Hello, " ++ Name).\n',
 	parigp: 'n = input();\nprint(sum(i = 1, n, i));\n',
 	wren: 'import "io" for Stdin\nSystem.print(Stdin.readLine())\n',
@@ -1603,6 +1606,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.malbolge ||
 		source === editorDefaults.aheui ||
 		source === editorDefaults.uhmlang ||
+		source === editorDefaults.coq ||
 		source === editorDefaults.picat ||
 		source === editorDefaults.parigp ||
 		source === editorDefaults.wren ||

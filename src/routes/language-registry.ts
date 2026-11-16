@@ -78,6 +78,12 @@ export const playgroundLanguages: PlaygroundLanguage[] = [
 export const playgroundLanguageDescriptors: Readonly<
 	Record<PlaygroundLanguage, PlaygroundLanguageDescriptor>
 > = {
+	COQ: {
+		label: 'Coq 8.17.1',
+		editorLanguage: 'plaintext',
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
 	PICAT: { label: 'Picat', editorLanguage: 'plaintext' },
 	PARIGP: { label: 'PARI/GP', editorLanguage: 'plaintext' },
 	WREN: { label: 'Wren', editorLanguage: 'plaintext' },

@@ -51,6 +51,11 @@ const { moduleLoads, sandboxInstances, createMockSandboxClass, MockSandbox } = v
 	return { moduleLoads, sandboxInstances, createMockSandboxClass, MockSandbox };
 });
 
+vi.mock('$lib/playground/coq', () => {
+	moduleLoads.add('COQ');
+	return { default: createMockSandboxClass('COQ') };
+});
+
 vi.mock('$lib/playground/picat', () => {
 	moduleLoads.add('PICAT');
 	return { default: createMockSandboxClass('PICAT') };

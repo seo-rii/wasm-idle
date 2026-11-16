@@ -160,6 +160,19 @@ function codeList(values) {
 /** @type {SupportMatrixRow[]} */
 export const supportMatrixRows = [
 	{
+		language: 'Coq',
+		ids: ['COQ'],
+		runtime: 'Original jsCoq 0.17.1 / Coq 8.17.1 kernel',
+		stdin: 'Coq commands at EOF',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/coq.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_COQ',
+			marker: 'real Coq browser kernel'
+		}
+	},
+	{
 		language: 'Picat',
 		ids: ['PICAT'],
 		runtime: 'Official Picat WebAssembly playground VM',
@@ -1159,6 +1172,17 @@ function staticWorkerCustomizationFor(runtimeKey, envKey = runtimeKey.toUpperCas
 
 /** @type {Map<string, RuntimeDetail>} */
 const runtimeDetailsByLanguage = new Map([
+	[
+		'Coq',
+		{
+			packageBase:
+				'Byte-pinned jsCoq 0.17.1 with matching Coq 8.17.1 init/coq-base libraries; complete original source and license records',
+			execution:
+				'Genuine Coq proofs, tactics, evaluation and diagnostics; whole source and EOF-delimited stdin files processed by original Put/Load in a fresh Worker',
+			customization:
+				'rootUrl, stdin, activePath and workspace Load files; .coq page alias preserves V .v association; input commands execute at EOF; JavaScript heap is outside the Wasm linear-memory cap; no unbundled plugins, remote libraries or program/compiler arguments'
+		}
+	],
 	[
 		'Picat',
 		{

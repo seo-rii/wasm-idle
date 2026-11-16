@@ -158,6 +158,14 @@ export const RUNTIMES = [
 		sourceRequired: true
 	},
 	{
+		name: 'wasm-coq',
+		module: './sync-wasm-coq.mjs',
+		exportName: 'syncWasmCoqAssets',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir',
+		manual: true
+	},
+	{
 		name: 'wasm-picat',
 		module: './sync-wasm-picat.mjs',
 		exportName: 'syncWasmPicatAssets',

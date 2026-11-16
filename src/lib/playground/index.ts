@@ -20,6 +20,13 @@ interface SandboxRoute {
 
 const sandboxRoutes = [
 	{
+		languageId: 'COQ',
+		load: async () => {
+			const { default: Coq } = await import('$lib/playground/coq');
+			return new Coq();
+		}
+	},
+	{
 		languageId: 'PICAT',
 		load: async () => {
 			const { default: Picat } = await import('$lib/playground/picat');
