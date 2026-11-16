@@ -854,6 +854,7 @@ describe('browser test asset preparation', () => {
 			'lean4',
 			'commonlisp',
 			'picat',
+			'parigp',
 			'scala'
 		]);
 		expect(normalizeBrowserTestAssetGroups(['--', 'container'])).toEqual(['container']);

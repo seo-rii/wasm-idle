@@ -61,7 +61,8 @@ export const scenarios = [
 		// The measured 7,405,837-byte / 791-file install needs 1 KiB above the previous byte cap.
 		// Picat packed root/core deltas are 16,284 + 1,109 bytes and six files.
 		// Add 17 KiB / six files for its adapter, assets and profile; runtime payloads stay external.
-		budget: { maxBytes: 7 * MiB + 82 * 1024, maxFiles: 797, maxPackages: 6 },
+		// Cumulative Squirrel, Wren and PARI/GP profiles add another 23 KiB/ten files.
+		budget: { maxBytes: 7 * MiB + 105 * 1024, maxFiles: 807, maxPackages: 6 },
 		absentPackageNames: [
 			'@katana-project/asm',
 			'java-parser',
@@ -136,7 +137,7 @@ export const scenarios = [
 		// Another 23 KiB covers the 23,132-byte overflow with 420 bytes of headroom; BMIs stay external.
 		// Picat CI job 133036878600 measures 2,856,625 bytes with unchanged files/dependencies.
 		// The shared core profile adds 1,109 bytes; 1 KiB covers its 689-byte overflow.
-		budget: { maxBytes: 2.5 * MiB + 230 * 1024, maxFiles: 196, maxPackages: 4 },
+		budget: { maxBytes: 2.5 * MiB + 233 * 1024, maxFiles: 196, maxPackages: 4 },
 		absentPackageNames: [
 			'wasm-idle',
 			'@wasm-idle/llvm-core',
@@ -453,7 +454,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Add 64 KiB for the 40,478-byte overflow; file and package limits stay unchanged.
 		// Java 25 CI adds 31,813 bytes and two files to that baseline; allow another 32 KiB / two files.
 		// Propagate Picat's measured 17 KiB / six-file SDK increase; dependencies are unchanged.
-		budget: { maxBytes: 40 * MiB + 1_066 * 1024, maxFiles: 3_418, maxPackages: 70 },
+		// Keep all four language profile allowances when installing the combined SDK.
+		budget: { maxBytes: 40 * MiB + 1_089 * 1024, maxFiles: 3_428, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

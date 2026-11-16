@@ -27,6 +27,33 @@ const sandboxRoutes = [
 		}
 	},
 	{
+		languageId: 'PARIGP',
+		load: async () => {
+			const { default: PariGp } = await import('$lib/playground/parigp');
+			return new PariGp();
+		}
+	},
+	{
+		languageId: 'WREN',
+		load: async () => {
+			const [{ default: Wasm }, { WREN_INTERPRETER }] = await Promise.all([
+				import('$lib/playground/wasm'),
+				import('$lib/playground/wasmWrenVersion')
+			]);
+			return new Wasm(WREN_INTERPRETER);
+		}
+	},
+	{
+		languageId: 'SQUIRREL',
+		load: async () => {
+			const [{ default: Wasm }, { SQUIRREL_PROFILE }] = await Promise.all([
+				import('$lib/playground/wasm'),
+				import('$lib/playground/squirrelProfile')
+			]);
+			return new Wasm(SQUIRREL_PROFILE);
+		}
+	},
+	{
 		languageId: 'SCALA',
 		load: async () => {
 			const { default: Scala } = await import('$lib/playground/scala');

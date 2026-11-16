@@ -258,6 +258,11 @@ vi.mock('$lib/playground/swift', () => {
 	};
 });
 
+vi.mock('$lib/playground/parigp', () => {
+	moduleLoads.add('PARIGP');
+	return { default: createMockSandboxClass('PARIGP') };
+});
+
 vi.mock('$lib/playground/commonlisp', () => {
 	moduleLoads.add('COMMONLISP');
 	return { default: createMockSandboxClass('COMMONLISP') };
@@ -536,6 +541,12 @@ describe('playground runtime binding', () => {
 		expect(shortAlias).not.toBe(alternateAlias);
 		expect(sandboxInstances.get('COBOL')).toHaveLength(3);
 		expect(moduleLoads).toContain('COBOL');
+	});
+
+	it('routes Wren requests through the real-WASM sandbox profile', async () => {
+		const sandbox = await playground('WREN');
+		expect(sandbox).toBeInstanceOf(MockSandbox);
+		expect(sandboxInstances.get('WASM')).toHaveLength(1);
 	});
 
 	it('loads every canonical language declared by Core', async () => {

@@ -29,6 +29,7 @@ const ASSET_GROUPS = [
 	'lean4',
 	'commonlisp',
 	'picat',
+	'parigp',
 	'scala'
 ];
 const SUPPORTED_GROUPS = new Set(['all', ...ASSET_GROUPS]);
@@ -283,6 +284,12 @@ export async function prepareBrowserTestAssets({
 			).syncWasmPicatAssets({ targetDir: path.join(staticDir, 'wasm-picat'), fetchImpl });
 			continue;
 		}
+		if (group === 'parigp') {
+			await (
+				await import('./sync-wasm-parigp.mjs')
+			).syncWasmPariGpAssets({ targetDir: path.join(staticDir, 'wasm-parigp'), fetchImpl });
+			continue;
+		}
 		if (group === 'lean4' || group === 'commonlisp') {
 			const prepareRuntime = group === 'lean4' ? prepareLean4 : prepareCommonLisp;
 			await prepareRuntime({ targetDir: path.join(staticDir, `wasm-${group}`), fetchImpl });
@@ -471,6 +478,21 @@ export async function verifyBrowserTestAssets({
 		})) {
 			receipts.push({
 				target: `wasm-picat/${name}`,
+				size: receipt.bytes,
+				sha256: receipt.sha256
+			});
+		}
+	}
+	if (selectedGroups.includes('parigp')) {
+		const { WASM_PARIGP_PROFILE: profile } = await loadBundledProfile(
+			new URL('../src/lib/playground/wasmPariGpVersion.ts', import.meta.url)
+		);
+		for (const [name, receipt] of Object.entries({
+			...profile.delivery,
+			'runner-worker.js': profile.workerReceipt
+		})) {
+			receipts.push({
+				target: `wasm-parigp/${name}`,
 				size: receipt.bytes,
 				sha256: receipt.sha256
 			});
