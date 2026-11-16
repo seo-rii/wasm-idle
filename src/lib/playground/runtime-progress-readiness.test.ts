@@ -37,6 +37,11 @@ type RuntimeReadinessAudit = EntryReadiness | StaticWorkerReadiness | TerminalRe
  * is the first safe user-visible readiness signal.
  */
 const runtimeReadinessAudit = {
+	APL: {
+		strategy: 'entry-signal',
+		hostModule: 'apl',
+		producerPath: 'src/lib/playground/worker/wasm.ts'
+	},
 	PICAT: { strategy: 'static-worker-fallback', hostModule: 'picat' },
 	PARIGP: { strategy: 'static-worker-fallback', hostModule: 'parigp' },
 	WREN: {
@@ -304,7 +309,9 @@ describe('runtime progress readiness audit', () => {
 				? readProjectSource('src/lib/playground/python.ts')
 				: ownHostSource.includes('extends Ruby')
 					? readProjectSource('src/lib/playground/ruby.ts')
-					: ownHostSource;
+					: ownHostSource.includes('extends Wasm')
+						? readProjectSource('src/lib/playground/wasm.ts')
+						: ownHostSource;
 
 			expect(producerSource, `${languageId} producer must emit ready`).toMatch(
 				/kind:\s*['"]ready['"]/u

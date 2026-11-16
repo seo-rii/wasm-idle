@@ -1,4 +1,5 @@
 const canonicalLanguageIds = [
+	'APL',
 	'PICAT',
 	'WREN',
 	'SQUIRREL',
@@ -99,6 +100,8 @@ export const DEFAULT_DEFERRED_PROGRESS_LANGUAGES: ReadonlySet<string> = new Set(
 );
 
 const languageAliasDefinitions = {
+	GNUAPL: { canonicalId: 'APL', kind: 'implementation' },
+	'GNU-APL': { canonicalId: 'APL', kind: 'implementation' },
 	'PARI/GP': { canonicalId: 'PARIGP', kind: 'spelling' },
 	GP: { canonicalId: 'PARIGP', kind: 'implementation' },
 	BEFUNGE: { canonicalId: 'BEFUNGE93', kind: 'dialect' },

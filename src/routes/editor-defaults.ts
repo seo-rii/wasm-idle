@@ -1,6 +1,7 @@
 import type { RustTargetTriple } from '$lib/playground/options';
 
 export type EditorDefaultLanguage =
+	| 'apl'
 	| 'picat'
 	| 'wren'
 	| 'squirrel'
@@ -81,6 +82,7 @@ export type EditorDefaultLanguage =
 
 export const editorDefaults: Record<
 	| 'befunge93'
+	| 'apl'
 	| 'picat'
 	| 'wren'
 	| 'squirrel'
@@ -158,6 +160,7 @@ export const editorDefaults: Record<
 	| 'markdown',
 	string
 > = {
+	apl: '⍝ Type a line in standard input.\n⎕←⍞\n',
 	squirrel:
 		"// Echo UTF-8 input; send EOF to finish.\nwhile (true) {\n    try { stdout.writen(stdin.readn('b'), 'b'); }\n    catch (error) {\n        if (stdin.eos()) break;\n        throw error;\n    }\n}\n",
 	uhmlang: '어떻게\n엄식?\n식어!\n이 사람이름이냐ㅋㅋ\n',
@@ -1603,6 +1606,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.malbolge ||
 		source === editorDefaults.aheui ||
 		source === editorDefaults.uhmlang ||
+		source === editorDefaults.apl ||
 		source === editorDefaults.picat ||
 		source === editorDefaults.parigp ||
 		source === editorDefaults.wren ||

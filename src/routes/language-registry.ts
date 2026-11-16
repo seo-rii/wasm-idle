@@ -78,6 +78,7 @@ export const playgroundLanguages: PlaygroundLanguage[] = [
 export const playgroundLanguageDescriptors: Readonly<
 	Record<PlaygroundLanguage, PlaygroundLanguageDescriptor>
 > = {
+	APL: { label: 'GNU APL', editorLanguage: 'plaintext', supportsArgs: true },
 	PICAT: { label: 'Picat', editorLanguage: 'plaintext' },
 	PARIGP: { label: 'PARI/GP', editorLanguage: 'plaintext' },
 	WREN: { label: 'Wren', editorLanguage: 'plaintext' },

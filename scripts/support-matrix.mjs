@@ -160,6 +160,19 @@ function codeList(values) {
 /** @type {SupportMatrixRow[]} */
 export const supportMatrixRows = [
 	{
+		language: 'GNU APL',
+		ids: ['APL'],
+		runtime: 'Original GNU APL 2.0 CLI on WASI',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/apl.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_APL',
+			marker: 'runAplConsumer'
+		}
+	},
+	{
 		language: 'Picat',
 		ids: ['PICAT'],
 		runtime: 'Official Picat WebAssembly playground VM',
@@ -1159,6 +1172,15 @@ function staticWorkerCustomizationFor(runtimeKey, envKey = runtimeKey.toUpperCas
 
 /** @type {Map<string, RuntimeDetail>} */
 const runtimeDetailsByLanguage = new Map([
+	[
+		'GNU APL',
+		{
+			packageBase: 'GNU APL 2.0 (GPL-3.0-or-later), wasi-sdk 33.0',
+			execution:
+				'Runs the original GNU APL parser, array evaluator, traditional functions and workspace engine; each execution has a fresh WASI filesystem',
+			customization: `${code('runtimeAssets.rootUrl')}, ${code('stdin')}, ${code('programArgs')}, ${code('activePath')}, ${code('workspaceFiles')}; no native processes, sockets, terminal attributes or optional GUI/database libraries`
+		}
+	],
 	[
 		'Picat',
 		{

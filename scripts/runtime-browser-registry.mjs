@@ -28,6 +28,7 @@ function runtime(
 
 /** @type {BrowserRuntime[]} */
 export const runtimeBrowserRegistry = [
+	runtime('apl', 'esolangs'),
 	runtime('clang', 'clang', { languages: ['C', 'CPP'] }),
 	runtime('objectivec', 'clang', {
 		languages: ['OBJC', 'OBJECTIVECXX'],

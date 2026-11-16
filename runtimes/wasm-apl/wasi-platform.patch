@@ -1,0 +1,212 @@
+--- a/src/main.cc
++++ b/src/main.cc
+@@ -422,11 +422,12 @@
+    sigaction(SIGHUP,   &new_HUP_action,       &old_HUP_action);
+    signal(SIGCHLD, SIG_IGN);   // do not create zombies
+ 
++const UserPreferences & uprefs = UserPreferences::uprefs;
++
+ #if HAVE_IOCTL_TIOCGWINSZ
+    // Enable the ability to change ⎕PW on window resize only if the
+    // platform supports ioctl TIOCGWINSZ
+    //
+-const UserPreferences & uprefs = UserPreferences::uprefs;    
+    if (uprefs.WINCH_sets_pw)
+       {
+         // IF WINCH_sets_pw preference is enabled, set up a handler for the
+--- a/src/Quad_WA.cc
++++ b/src/Quad_WA.cc
+@@ -171,6 +171,9 @@
+ uint64_t
+ Quad_WA::get_free_memory()
+ {
++#ifdef __wasi__
++   return WASM_IDLE_APL_MEMORY_LIMIT;
++#else
+ uint64_t result = 0xC0000000;   // assume ~3 GB on error
+ 
+    if (read_meminfo() == 3)
+@@ -183,6 +186,7 @@
+    if (sizeof(const void *) == 4 && result > 0xB0000000)  result = 0xB0000000;
+ 
+    return result;
++#endif
+ }
+ //----------------------------------------------------------------------------
+ void
+--- a/src/Quad_FIO.cc
++++ b/src/Quad_FIO.cc
+@@ -99,12 +99,14 @@
+    open_files.push_back(f1);
+    open_files.push_back(f2);
+ 
++#ifndef __wasi__ // WASI fd 3 is a preopened workspace, not an APserver pipe.
+    if (-1 != fcntl(3, F_GETFD))   // this process was forked from another APL
+       {
+         file_entry f3(0, 3);
+         f3.path << "pipe-to_client";
+         open_files.push_back(f3);
+       }
++#endif
+ }
+ //----------------------------------------------------------------------------
+ void
+@@ -1185,6 +1187,12 @@
+         case -10: // slow new
+              return Token(TOK_APL_VALUE1,
+                           IntScalar(Value::slow_new_count, LOC));
++#ifdef __wasi__
++        case -9: // screen height
++        case -8: // screen width
++             MORE_ERROR() << "Terminal dimensions are unavailable in browser WASI";
++             DOMAIN_ERROR;
++#else
+         case -9: // screen height
+              {
+                struct winsize ws;
+@@ -1197,6 +1205,7 @@
+                ioctl(STDIN_FILENO, TIOCGWINSZ, &ws);
+                return Token(TOK_APL_VALUE1, IntScalar(ws.ws_col, LOC));
+              }
++#endif
+         case -7: // throw a segfault
+              {
+                CERR << "NOTE: Triggering a segfault (keeping the current "
+--- a/src/sbrk.cc
++++ b/src/sbrk.cc
+@@ -28,7 +28,9 @@
+ #include <stdint.h>
+ 
+ /// the standard sbrk() function (known by everybody except Apple OS X)
++#ifndef __wasi__
+ extern "C" void * sbrk(int increment);
++#endif
+ extern uint64_t top_of_memory();
+ 
+ /// our sbrk() so that it compiles under Apple OS X
+--- a/src/IO_Files.cc
++++ b/src/IO_Files.cc
+@@ -347,7 +347,12 @@
+    InputFile::files_todo.erase(InputFile::files_todo.begin());
+ 
+    if (UserPreferences::uprefs.auto_OFF &&
+-       ! InputFile::files_todo.size())   Command::cmd_OFF(0);
++       ! InputFile::files_todo.size())
++#ifdef __wasi__
++          Command::cmd_OFF(error_count() ? 1 : 0);
++#else
++          Command::cmd_OFF(0);
++#endif
+ 
+    Output::reset_dout();
+    reset_errors();
+--- a/src/FileBuffers.hh
++++ b/src/FileBuffers.hh
+@@ -22,12 +22,26 @@
+ #define __FILEBUFFERS_HH_DEFINED__
+ 
+ #include <fstream>
++#include <iostream>
++
++#ifdef __wasi__
++// These buffers own no FILE. libc++ filebuf::xsputn requires an open file,
++// while streambuf forwards to the original per-character overflow handlers.
++class AplOutputBufferBase : public std::streambuf
++{
++protected:
++   int sync() override
++      { std::cout.flush(); std::cerr.flush(); return 0; }
++};
++#else
++using AplOutputBufferBase = std::filebuf;
++#endif
+ 
+ #include "UTF8_string.hh"
+ 
+ //============================================================================
+ /// a filebuf for stdin echo
+-class CinOut_filebuf : public filebuf
++class CinOut_filebuf : public AplOutputBufferBase
+ {
+    /// overloaded filebuf::overflow
+    virtual int overflow(int c);
+@@ -35,7 +49,7 @@
+ extern CinOut_filebuf CIN_filebuf;
+ //============================================================================
+ // a filebuf for stderr output
+-class ErrOut_filebuf : public filebuf
++class ErrOut_filebuf : public AplOutputBufferBase
+ {
+ protected:
+    /// overloaded filebuf::overflow()
+@@ -66,7 +80,7 @@
+        get_CERR() checks \b used and returns cerr instead of CERR if it is
+        false.
+     **/
+-   filebuf * use()   { used = true;   return this; }
++   AplOutputBufferBase * use()   { used = true;   return this; }
+ 
+    /// true iff the constructor for CERR was called
+    static bool used;   // set when CERR is constructed
+@@ -78,7 +92,7 @@
+ };
+ //============================================================================
+ /// a filebuf that compares its output with a file.
+-class DiffOut : public filebuf
++class DiffOut : public AplOutputBufferBase
+ {
+ public:
+    /// constructor
+--- a/src/Command.cc
++++ b/src/Command.cc
+@@ -386,6 +386,9 @@
+       }
+    catch (Error err)
+       {
++#ifdef __wasi__
++        IO_Files::apl_error(LOC); // report an uncaught batch diagnostic
++#endif
+         bool plus = Workspace::more_error().size();   // assume + needed
+         const char * error_name = Error::error_name(err.get_error_code());
+         if (strchr(error_name, UNI_PLUS))   plus = false;   // not needed
+@@ -416,6 +419,9 @@
+ 
+    if (statements == 0)   // StatementList::fix() failed
+       {
++#ifdef __wasi__
++        IO_Files::apl_error(LOC);
++#endif
+         COUT << "main: Parse error";
+         if (Workspace::more_error().size())   COUT << "+";
+         else                                  COUT << ".";
+@@ -645,6 +651,10 @@
+                     goto check_EOC;
+                   }
+ 
++#ifdef __wasi__
++              IO_Files::apl_error(LOC); // safe execution was handled above
++#endif
++
+               // if suspend is not allowed then pop all SI entries that
+               // don't allow suspend
+               //
+--- a/src/Nabla.cc
++++ b/src/Nabla.cc
+@@ -23,6 +23,7 @@
+ 
+ #include "Command.hh"
+ #include "InputFile.hh"
++#include "IO_Files.hh"
+ #include "LineInput.hh"
+ #include "Logging.hh"
+ #include "Nabla.hh"
+@@ -60,6 +61,9 @@
+ void
+ Nabla::throw_edit_error(const char * why)
+ {
++#ifdef __wasi__
++   IO_Files::apl_error(LOC); // preserve the native diagnostic and mark failure
++#endif
+ UCS_string command = first_command;
+    if (trailing_nabla)   command << UNI_NABLA;
+ 

@@ -239,10 +239,14 @@ describe('all-language browser test runner', () => {
 			(row) => row.browserTest?.file === 'src/lib/playground/esolangs.playwright.test.ts'
 		);
 		expect(interpreterRows.map((row) => row.ids)).toContainEqual(['BRAINFUCK']);
-		expect(plan.testFiles).toEqual(['src/lib/playground/esolangs.playwright.test.ts']);
-		expect(plan.env).toEqual(
-			Object.fromEntries(interpreterRows.map((row) => [row.browserTest!.env, '1']))
-		);
+		expect(plan.testFiles).toEqual([
+			'src/lib/playground/apl.playwright.test.ts',
+			'src/lib/playground/esolangs.playwright.test.ts'
+		]);
+		expect(plan.env).toEqual({
+			...Object.fromEntries(interpreterRows.map((row) => [row.browserTest!.env, '1'])),
+			WASM_IDLE_RUN_REAL_BROWSER_APL: '1'
+		});
 		expect(plan.env.WASM_IDLE_RUN_REAL_BROWSER_BRAINFUCK).toBe('1');
 		const invocation = createVitestChildInvocation(plan, 'http://127.0.0.1:4573/wasm-idle/');
 		expect(invocation.env.WASM_IDLE_REQUIRE_BROWSER_TESTS).toBe('1');
