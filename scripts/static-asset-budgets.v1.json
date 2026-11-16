@@ -1,8 +1,8 @@
 {
 	"schemaVersion": 1,
 	"total": {
-		"maxBytes": 1163600000,
-		"maxFiles": 1997
+		"maxBytes": 1164000000,
+		"maxFiles": 2003
 	},
 	"directories": {
 		"clang": {
@@ -336,6 +336,10 @@
 		"wasm-squirrel": {
 			"maxBytes": 1000000,
 			"maxFiles": 3
+		},
+		"wasm-smalltalk": {
+			"maxBytes": 400000,
+			"maxFiles": 6
 		}
 	}
 }

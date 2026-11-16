@@ -186,12 +186,12 @@ describe('package install budgets', () => {
 			Object.fromEntries(scenarios.map((scenario) => [scenario.name, scenario.budget]))
 		).toEqual({
 			'wasm-idle root install': {
-				maxBytes: 7 * MiB + 109 * 1024,
-				maxFiles: 809,
+				maxBytes: 7 * MiB + 120 * 1024,
+				maxFiles: 813,
 				maxPackages: 6
 			},
 			'@wasm-idle/gcc install': {
-				maxBytes: 2.5 * MiB + 232 * 1024,
+				maxBytes: 2.5 * MiB + 233 * 1024,
 				maxFiles: 196,
 				maxPackages: 4
 			},
@@ -217,16 +217,16 @@ describe('package install budgets', () => {
 			},
 			'all public packages/adapters aggregate': {
 				maxBytes: 40 * MiB + 1_093 * 1024,
-				maxFiles: 3_430,
+				maxFiles: 3_434,
 				maxPackages: 70
 			}
 		});
 	});
 
-	it('accepts the measured Picat GCC install while retaining every size/count limit', () => {
+	it('accepts the measured Amber core/GCC install while retaining every size/count limit', () => {
 		const scenario = scenarios.find((entry) => entry.name === '@wasm-idle/gcc install')!;
 		expect(() =>
-			assertInstallBudget(scenario, { bytes: 2_856_625, files: 196, packages: 4 })
+			assertInstallBudget(scenario, { bytes: 2_859_590, files: 196, packages: 4 })
 		).not.toThrow();
 		const atLimit = {
 			bytes: scenario.budget.maxBytes,
@@ -242,9 +242,9 @@ describe('package install budgets', () => {
 
 	it('accepts measured language installs and rejects every aggregate limit plus one', () => {
 		const root = scenarios.find((entry) => entry.name === 'wasm-idle root install')!;
-		// Picat adds 17,393 packed root/core bytes and six files to the measured Java 25 baseline.
+		// Original Amber compiler assets stay external; this is the measured root/core install.
 		expect(() =>
-			assertInstallBudget(root, { bytes: 7_423_230, files: 797, packages: 5 })
+			assertInstallBudget(root, { bytes: 7_462_911, files: 813, packages: 5 })
 		).not.toThrow();
 		const scenario = scenarios.find(
 			(entry) => entry.name === 'all public packages/adapters aggregate'
@@ -253,7 +253,8 @@ describe('package install budgets', () => {
 		for (const measurement of [
 			{ bytes: 42_959_390, files: 3_410, packages: 66 },
 			{ bytes: 42_991_203, files: 3_412, packages: 66 },
-			{ bytes: 43_008_596, files: 3_418, packages: 66 }
+			{ bytes: 43_008_596, files: 3_418, packages: 66 },
+			{ bytes: 43_049_150, files: 3_434, packages: 66 }
 		])
 			expect(() => assertInstallBudget(scenario, measurement)).not.toThrow();
 		const atLimit = {

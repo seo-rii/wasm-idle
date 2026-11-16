@@ -37,6 +37,7 @@ type RuntimeReadinessAudit = EntryReadiness | StaticWorkerReadiness | TerminalRe
  * is the first safe user-visible readiness signal.
  */
 const runtimeReadinessAudit = {
+	SMALLTALK: { strategy: 'static-worker-fallback', hostModule: 'smalltalk' },
 	PICAT: { strategy: 'static-worker-fallback', hostModule: 'picat' },
 	PARIGP: { strategy: 'static-worker-fallback', hostModule: 'parigp' },
 	WREN: {

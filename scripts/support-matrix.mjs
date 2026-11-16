@@ -160,6 +160,19 @@ function codeList(values) {
 /** @type {SupportMatrixRow[]} */
 export const supportMatrixRows = [
 	{
+		language: 'Smalltalk (Amber)',
+		ids: ['SMALLTALK'],
+		runtime: 'Amber 0.32.0 compiler and JavaScript VM',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/smalltalk.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_SMALLTALK',
+			marker: 'runSmalltalkConsumer'
+		}
+	},
+	{
 		language: 'Picat',
 		ids: ['PICAT'],
 		runtime: 'Official Picat WebAssembly playground VM',
@@ -1159,6 +1172,17 @@ function staticWorkerCustomizationFor(runtimeKey, envKey = runtimeKey.toUpperCas
 
 /** @type {Map<string, RuntimeDetail>} */
 const runtimeDetailsByLanguage = new Map([
+	[
+		'Smalltalk (Amber)',
+		{
+			packageBase:
+				'Original @ambers/lang 0.32.0 and RequireJS 2.3.8 (MIT), pinned offline source archives',
+			execution:
+				'Original Amber compiler, chunk importer and kernel in a fresh Worker; classes, methods and collections; explicit or streaming UTF-8 stdin and EOF via host objects',
+			customization:
+				'rootUrl, stdin, programArgs, activePath, text workspace read/file-in; output, workspace and time limits, cancellation; JavaScript heap has no Wasm linear-memory cap; Amber dialect, no native GNU Smalltalk image or OS APIs'
+		}
+	],
 	[
 		'Picat',
 		{
