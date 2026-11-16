@@ -26,6 +26,14 @@ const THIS_FILE = fileURLToPath(import.meta.url);
 /** @type {RuntimeDefinition[]} */
 export const RUNTIMES = [
 	{
+		name: 'wasm-bc',
+		module: './sync-wasm-bc.mjs',
+		exportName: 'syncWasmBcAssets',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir',
+		manual: true
+	},
+	{
 		name: 'wasm-clang',
 		module: './sync-wasm-clang.mjs',
 		exportName: 'syncWasmClangDist',

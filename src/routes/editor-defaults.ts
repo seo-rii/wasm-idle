@@ -35,6 +35,7 @@ export type EditorDefaultLanguage =
 	| 'forth'
 	| 'j'
 	| 'bqn'
+	| 'bc'
 	| 'janet'
 	| 'julia'
 	| 'nim'
@@ -110,6 +111,7 @@ export const editorDefaults: Record<
 	| 'forth'
 	| 'j'
 	| 'bqn'
+	| 'bc'
 	| 'janet'
 	| 'julia'
 	| 'nim'
@@ -791,6 +793,9 @@ fib =: 3 : 0
   end.
 )
 smoutput 'fibonacci=', ": 3 + fib n`,
+	bc: `value = read()
+print "value=", value + 1, "\\n"
+`,
 	bqn: `bonus ← 3
 fibonacci ← {𝕩 ≤ 1 ? 1 ; (fibonacci (𝕩 - 1)) + (fibonacci (𝕩 - 2))}
 n ← •ParseFloat •GetLine @
@@ -1619,6 +1624,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.forth ||
 		source === editorDefaults.j ||
 		source === editorDefaults.bqn ||
+		source === editorDefaults.bc ||
 		source === editorDefaults.janet ||
 		source === editorDefaults.julia ||
 		source === editorDefaults.nim ||

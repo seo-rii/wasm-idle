@@ -160,6 +160,19 @@ function codeList(values) {
 /** @type {SupportMatrixRow[]} */
 export const supportMatrixRows = [
 	{
+		language: 'bc',
+		ids: ['BC'],
+		runtime: 'Gavin Howard bc 7.0.3 / WASI',
+		stdin: 'Yes (read())',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/bc.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_BC',
+			marker: 'runBcConsumer'
+		}
+	},
+	{
 		language: 'GolfScript',
 		ids: ['GOLFSCRIPT'],
 		runtime: 'Original GolfScript interpreter on Ruby/WASI',
@@ -1107,6 +1120,15 @@ function staticWorkerCustomizationFor(runtimeKey, envKey = runtimeKey.toUpperCas
 
 /** @type {Map<string, RuntimeDetail>} */
 const runtimeDetailsByLanguage = new Map([
+	[
+		'bc',
+		{
+			packageBase: 'Original Gavin Howard bc 7.0.3 (BSD-2-Clause), wasi-sdk 33.0 build',
+			execution:
+				'Runs the original arbitrary-precision POSIX bc with GNU extensions; -q -f loads source separately from read() stdin and exits after the script; original math library via -l',
+			customization: `${code('runtimeAssets.rootUrl')}, ${code('stdin')}, ${code('programArgs')}, ${code('activePath')}, ${code('workspaceFiles')}; interpreter options/files, execution limits, cancellation and fresh private state`
+		}
+	],
 	[
 		'GolfScript',
 		{
