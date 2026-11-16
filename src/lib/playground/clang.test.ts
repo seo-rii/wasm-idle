@@ -489,6 +489,18 @@ int main() {
 	});
 
 	it.each(['C', 'CPP'] as const)(
+		'tells the %s worker which language to prefetch for',
+		async (language) => {
+			const sandbox = new Clang(language);
+			await sandbox.load();
+			expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
+				1,
+				expect.objectContaining({ load: true, language })
+			);
+		}
+	);
+
+	it.each(['C', 'CPP'] as const)(
 		'enables verified streaming for the default bundled %s runtime',
 		async (language) => {
 			const sandbox = new Clang(language);
