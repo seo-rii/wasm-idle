@@ -296,6 +296,103 @@ describe('compressed runtime service worker', () => {
 		expect(harness.cachesOpen).not.toHaveBeenCalled();
 	});
 
+	describe('content-addressed application code', () => {
+		const chunk = '_app/immutable/workers/chunks/Abc123.js';
+		const host = `container-app/host/${'b'.repeat(64)}/sdk/index.mjs`;
+		function memoryCache() {
+			const store = new Map<string, Response>();
+			return {
+				store,
+				cache: {
+					match: vi.fn(async (request: Request) => store.get(request.url)?.clone()),
+					put: vi.fn(async (request: Request, response: Response) => {
+						store.set(request.url, response);
+					})
+				}
+			};
+		}
+		const assetFetches = (
+			harness: Awaited<ReturnType<typeof createServiceWorkerHarness>>,
+			path: string
+		) =>
+			harness.fetchMock.mock.calls.filter(([input]) =>
+				String(input instanceof Request ? input.url : input).includes(path)
+			).length;
+		async function sameOriginHarness(payloads: Record<string, Uint8Array>) {
+			const harness = await createServiceWorkerHarness({}, undefined, payloads);
+			const fetch = harness.fetchMock.getMockImplementation()!;
+			// Browser same-origin responses are basic; Node's constructed responses are default.
+			harness.fetchMock.mockImplementation(async (input, init) => {
+				const response = await fetch(input, init);
+				Object.defineProperty(response, 'type', { value: 'basic' });
+				return response;
+			});
+			return harness;
+		}
+
+		it.each([chunk, host])(
+			'serves %s from the build cache after its first fetch',
+			async (path) => {
+				const harness = await sameOriginHarness({
+					[path]: new TextEncoder().encode('module')
+				});
+				const { cache, store } = memoryCache();
+				harness.cachesOpen.mockResolvedValue(cache);
+				expect(await (await harness.request(path)).text()).toBe('module');
+				await vi.waitFor(() => expect(store.size).toBe(1));
+				expect(harness.cachesOpen).toHaveBeenCalledWith('wasm-idle-immutable-default');
+				const cached = await harness.request(path);
+				expect(await cached.text()).toBe('module');
+				expect(cached.headers.get('cross-origin-embedder-policy')).toBe('require-corp');
+				expect(assetFetches(harness, path)).toBe(1);
+			}
+		);
+
+		it.each([
+			'_app/version.json',
+			'wasm-go/index.js',
+			`container-app/host/not-a-digest/sdk/index.mjs`,
+			`${chunk}?v=1`
+		])('keeps revalidating %s', async (path) => {
+			const relative = path.split('?')[0];
+			const harness = await sameOriginHarness({
+				[relative]: new TextEncoder().encode('fresh')
+			});
+			const { cache } = memoryCache();
+			harness.cachesOpen.mockResolvedValue(cache);
+			await harness.request(path);
+			await harness.request(path);
+			expect(cache.put).not.toHaveBeenCalled();
+			expect(
+				harness.fetchMock.mock.calls.filter(([input]) =>
+					String(input instanceof Request ? input.url : input).includes(relative)
+				)
+			).toHaveLength(2);
+		});
+
+		it('never stores locally decompressed responses or failed fetches', async () => {
+			const compressed = '_app/immutable/assets/runtime.1234.wasm';
+			const harness = await createServiceWorkerHarness({
+				[compressed]: new TextEncoder().encode('wasm payload')
+			});
+			const { cache } = memoryCache();
+			harness.cachesOpen.mockResolvedValue(cache);
+			expect((await harness.request(compressed)).status).toBe(200);
+			expect((await harness.request('_app/immutable/missing.js')).status).toBe(404);
+			expect(cache.put).not.toHaveBeenCalled();
+		});
+
+		it('falls back to the network when Cache Storage is unavailable', async () => {
+			const harness = await sameOriginHarness({
+				[chunk]: new TextEncoder().encode('module')
+			});
+			harness.cachesOpen.mockRejectedValue(new Error('Cache Storage unavailable'));
+			expect(await (await harness.request(chunk)).text()).toBe('module');
+			expect(await (await harness.request(chunk)).text()).toBe('module');
+			expect(assetFetches(harness, chunk)).toBe(2);
+		});
+	});
+
 	it.each([
 		'sdk.wasm',
 		'bash.webc',
