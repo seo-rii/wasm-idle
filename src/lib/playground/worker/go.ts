@@ -2,6 +2,8 @@ import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 import { isSharedBufferBackedView } from '$lib/playground/sharedBuffer';
 import { instrumentGoDebugSource } from '$lib/playground/goDebugInstrumentation';
 import type { DebugFrame, DebugPauseReason } from '$lib/playground/options';
+import type { RuntimeAssetCacheOptions } from '@wasm-idle/core';
+import { createGoAssetFetch } from './goAssetCache';
 
 declare var self: any;
 
@@ -49,6 +51,8 @@ let compilerPromise: Promise<{
 }> | null = null;
 let compiledArtifact: any = null;
 let compiledCacheKey = '';
+// wasm-go reads the global fetch at call time; each load installs the cached variant.
+const networkFetch = globalThis.fetch.bind(globalThis);
 
 interface GoDebugState {
 	breakpointVersion: number;
@@ -284,7 +288,8 @@ self.onmessage = async (event: { data: any }) => {
 		log,
 		debug = false,
 		breakpoints = [],
-		pauseOnEntry = false
+		pauseOnEntry = false,
+		persistentCache
 	} = event.data;
 	let abandonedJsWasmRun = false;
 	try {
@@ -292,6 +297,7 @@ self.onmessage = async (event: { data: any }) => {
 			compilerUrl = nextCompilerUrl;
 			manifestUrl = nextManifestUrl;
 			compilerLimits = runtimeLimits;
+			globalThis.fetch = createGoAssetFetch(compilerUrl, persistentCache, networkFetch);
 			if (log) {
 				console.log(`[wasm-idle:go-worker] load compilerUrl=${compilerUrl}`);
 			}
