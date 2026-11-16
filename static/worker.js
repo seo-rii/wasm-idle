@@ -79,6 +79,10 @@ const dynamicModulePathPrefix = '__wasm_idle_dynamic_modules__/';
 let compressedRuntimeAssetManifestPromise = null;
 let compressedRuntimeAssetManifestMissRefreshAt = 0;
 let layeredRuntimeAssetManifestPromise = null;
+// A failed refresh keeps the last manifest that loaded, instead of replacing it with an empty one
+// that would send compressed or layered assets to undeployed logical paths.
+let lastCompressedRuntimeAssetManifest = null;
+let lastLayeredRuntimeAssetManifest = null;
 let layeredRuntimeAssetManifestLoadedAt = 0;
 let layeredRuntimeAssetManifestMissRefreshAt = 0;
 // Only retained, completed layers count against the LRU byte budget.
@@ -140,12 +144,19 @@ async function compressedRuntimeAssetManifest(forceRefresh = false) {
 				cache: 'no-cache'
 			}
 		)
-			.then((response) => (response.ok ? response.json() : { assets: [] }))
-			.then((manifest) => ({
-				assets: new Set(Array.isArray(manifest.assets) ? manifest.assets : []),
-				sizes: manifest.sizes && typeof manifest.sizes === 'object' ? manifest.sizes : {}
-			}))
-			.catch(() => ({ assets: new Set(), sizes: {} }));
+			.then((response) => {
+				if (!response.ok) throw new Error(`Compressed asset manifest ${response.status}`);
+				return response.json();
+			})
+			.then(
+				(manifest) =>
+					(lastCompressedRuntimeAssetManifest = {
+						assets: new Set(Array.isArray(manifest.assets) ? manifest.assets : []),
+						sizes:
+							manifest.sizes && typeof manifest.sizes === 'object' ? manifest.sizes : {}
+					})
+			)
+			.catch(() => lastCompressedRuntimeAssetManifest ?? { assets: new Set(), sizes: {} });
 	}
 	return compressedRuntimeAssetManifestPromise;
 }
@@ -164,7 +175,10 @@ async function layeredRuntimeAssetManifest(forceRefresh = false) {
 				cache: 'no-cache'
 			}
 		)
-			.then((response) => (response.ok ? response.json() : null))
+			.then((response) => {
+				if (!response.ok) throw new Error(`Layered asset manifest ${response.status}`);
+				return response.json();
+			})
 			.then((manifest) => {
 				if (
 					manifest?.schemaVersion !== 1 ||
@@ -175,7 +189,7 @@ async function layeredRuntimeAssetManifest(forceRefresh = false) {
 					typeof manifest.layers !== 'object' ||
 					Array.isArray(manifest.layers)
 				) {
-					return { assets: new Map() };
+					throw new Error('Layered asset manifest is invalid');
 				}
 
 				const assets = new Map();
@@ -229,9 +243,9 @@ async function layeredRuntimeAssetManifest(forceRefresh = false) {
 				for (const [key, entry] of decompressedLayerPromises) {
 					if (!currentLayerKeys.has(key)) removeCachedLayer(key, entry);
 				}
-				return { assets };
+				return (lastLayeredRuntimeAssetManifest = { assets });
 			})
-			.catch(() => ({ assets: new Map() }));
+			.catch(() => lastLayeredRuntimeAssetManifest ?? { assets: new Map() });
 	}
 	return layeredRuntimeAssetManifestPromise;
 }
