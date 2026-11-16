@@ -191,7 +191,7 @@ describe('package install budgets', () => {
 				maxPackages: 6
 			},
 			'@wasm-idle/gcc install': {
-				maxBytes: 2.5 * MiB + 229 * 1024,
+				maxBytes: 2.5 * MiB + 230 * 1024,
 				maxFiles: 196,
 				maxPackages: 4
 			},
@@ -239,6 +239,16 @@ describe('package install budgets', () => {
 				assertInstallBudget(scenario, { ...limit, [key]: limit[key] + 1 })
 			).toThrow('Install budget exceeded for wasm-idle root install');
 		}
+	});
+
+	it('accepts the measured GCC consumer after PARI/GP core receipt growth', () => {
+		const scenario = scenarios.find((entry) => entry.name === '@wasm-idle/gcc install')!;
+		// PARI/GP CI job 133037276692; no new GCC files or dependencies are installed.
+		expect(() =>
+			assertInstallBudget(scenario, { bytes: 2_856_855, files: 196, packages: 4 })
+		).not.toThrow();
+		expect(scenario.budget.maxFiles).toBe(196);
+		expect(scenario.budget.maxPackages).toBe(4);
 	});
 
 	it('accepts measured baseline and Java 25 aggregates and rejects every limit plus one', () => {
