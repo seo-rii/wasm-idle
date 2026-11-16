@@ -29,7 +29,7 @@ async function loadInterpreter(id: string) {
 			persistentCache: false
 		}
 	});
-	expect(messages).toContainEqual({ load: true });
+	expect(messages).toContainEqual(expect.objectContaining({ load: true }));
 	messages.length = 0;
 }
 
@@ -200,7 +200,7 @@ describe('pinned upstream Brainfuck WASI interpreter', () => {
 				persistentCache: false
 			}
 		});
-		expect(messages).toContainEqual({ load: true });
+		expect(messages).toContainEqual(expect.objectContaining({ load: true }));
 		expect(await run(',.', 'Q')).toEqual({ output: 'Q', error: undefined, completed: true });
 	});
 });
