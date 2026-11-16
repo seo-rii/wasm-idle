@@ -191,7 +191,7 @@ describe('package install budgets', () => {
 				maxPackages: 6
 			},
 			'@wasm-idle/gcc install': {
-				maxBytes: 2.5 * MiB + 229 * 1024,
+				maxBytes: 2.5 * MiB + 230 * 1024,
 				maxFiles: 196,
 				maxPackages: 4
 			},
@@ -221,6 +221,23 @@ describe('package install budgets', () => {
 				maxPackages: 70
 			}
 		});
+	});
+
+	it('accepts the measured Picat GCC install while retaining every size/count limit', () => {
+		const scenario = scenarios.find((entry) => entry.name === '@wasm-idle/gcc install')!;
+		expect(() =>
+			assertInstallBudget(scenario, { bytes: 2_856_625, files: 196, packages: 4 })
+		).not.toThrow();
+		const atLimit = {
+			bytes: scenario.budget.maxBytes,
+			files: scenario.budget.maxFiles,
+			packages: scenario.budget.maxPackages
+		};
+		for (const field of ['bytes', 'files', 'packages'] as const) {
+			expect(() =>
+				assertInstallBudget(scenario, { ...atLimit, [field]: atLimit[field] + 1 })
+			).toThrow('Install budget exceeded for @wasm-idle/gcc install');
+		}
 	});
 
 	it('accepts measured language installs and rejects every aggregate limit plus one', () => {
