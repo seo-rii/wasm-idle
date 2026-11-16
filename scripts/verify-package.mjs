@@ -59,7 +59,9 @@ export const scenarios = [
 		// Lazy receipt lookup adds three core JavaScript/declaration pairs (789 files measured).
 		// Java 25 adds one bytecode reader JavaScript/declaration pair; ASM is bundled rather than installed.
 		// The measured 7,405,837-byte / 791-file install needs 1 KiB above the previous byte cap.
-		budget: { maxBytes: 7 * MiB + 65 * 1024, maxFiles: 791, maxPackages: 6 },
+		// Wren's packed root/core delta is 2,571 bytes and two profile files.
+		// Reserve 3 KiB / two files above the measured baseline; dependencies are unchanged.
+		budget: { maxBytes: 7 * MiB + 68 * 1024, maxFiles: 793, maxPackages: 6 },
 		absentPackageNames: [
 			'@katana-project/asm',
 			'java-parser',
@@ -448,7 +450,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Baseline CI job 131822775029 measures 42,959,390 bytes / 3,410 files / 66 packages.
 		// Add 64 KiB for the 40,478-byte overflow; file and package limits stay unchanged.
 		// Java 25 CI adds 31,813 bytes and two files to that baseline; allow another 32 KiB / two files.
-		budget: { maxBytes: 40 * MiB + 1_049 * 1024, maxFiles: 3_412, maxPackages: 70 },
+		// Propagate Wren's bounded 3 KiB / two-file delta without adding dependencies.
+		budget: { maxBytes: 40 * MiB + 1_052 * 1024, maxFiles: 3_414, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

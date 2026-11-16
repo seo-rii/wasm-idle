@@ -186,8 +186,8 @@ describe('package install budgets', () => {
 			Object.fromEntries(scenarios.map((scenario) => [scenario.name, scenario.budget]))
 		).toEqual({
 			'wasm-idle root install': {
-				maxBytes: 7 * MiB + 65 * 1024,
-				maxFiles: 791,
+				maxBytes: 7 * MiB + 68 * 1024,
+				maxFiles: 793,
 				maxPackages: 6
 			},
 			'@wasm-idle/gcc install': {
@@ -216,8 +216,8 @@ describe('package install budgets', () => {
 				maxPackages: 10
 			},
 			'all public packages/adapters aggregate': {
-				maxBytes: 40 * MiB + 1_049 * 1024,
-				maxFiles: 3_412,
+				maxBytes: 40 * MiB + 1_052 * 1024,
+				maxFiles: 3_414,
 				maxPackages: 70
 			}
 		});
@@ -242,6 +242,34 @@ describe('package install budgets', () => {
 			expect(() =>
 				assertInstallBudget(scenario, { ...atLimit, [key]: atLimit[key] + 1 })
 			).toThrow('Install budget exceeded for all public packages/adapters aggregate');
+	});
+
+	it('covers the measured Wren package delta without relaxing any dependency cap', () => {
+		const root = scenarios.find((entry) => entry.name === 'wasm-idle root install')!;
+		const aggregate = scenarios.find(
+			(entry) => entry.name === 'all public packages/adapters aggregate'
+		)!;
+		// npm pack dry runs: root +2,543 bytes / two files; core +28 bytes / zero files.
+		// Add that packed delta to the CI-measured baseline installations.
+		expect(() =>
+			assertInstallBudget(root, { bytes: 7_405_837 + 2_571, files: 793, packages: 5 })
+		).not.toThrow();
+		expect(() =>
+			assertInstallBudget(aggregate, {
+				bytes: 42_991_203 + 2_571,
+				files: 3_414,
+				packages: 66
+			})
+		).not.toThrow();
+		for (const scenario of [root, aggregate]) {
+			expect(() =>
+				assertInstallBudget(scenario, {
+					bytes: scenario.budget.maxBytes,
+					files: scenario.budget.maxFiles,
+					packages: scenario.budget.maxPackages + 1
+				})
+			).toThrow('package count');
+		}
 	});
 
 	it('allows measurements exactly at every configured limit', () => {
