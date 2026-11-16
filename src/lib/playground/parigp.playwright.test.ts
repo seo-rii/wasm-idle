@@ -115,6 +115,16 @@ describe.skipIf(!enabled)('real PARI/GP in Chromium', () => {
 							stdin: '',
 							workspaceFiles: [{ path: 'lib/value.gp', content: 'answer = 42;' }]
 						});
+						const quotedWorkspace = await run(
+							'read("lib/value\\\"quoted.gp"); print(answer);',
+							{
+								stdin: '',
+								activePath: 'examples/main"quoted.gp',
+								workspaceFiles: [
+									{ path: 'lib/value"quoted.gp', content: 'answer = 42;' }
+								]
+							}
+						);
 						const arithmetic = await run('print(factor(2^64+1)); print(2^100);', {
 							stdin: ''
 						});
@@ -143,6 +153,7 @@ describe.skipIf(!enabled)('real PARI/GP in Chromium', () => {
 							multiline,
 							mixed,
 							workspace,
+							quotedWorkspace,
 							arithmetic,
 							error,
 							syntax,
@@ -164,6 +175,7 @@ describe.skipIf(!enabled)('real PARI/GP in Chromium', () => {
 				expect(results.multiline).toMatchObject({ value: true, output: '169\n' });
 				expect(results.mixed).toMatchObject({ value: true, output: '169\n[]\n' });
 				expect(results.workspace).toMatchObject({ value: true, output: '42\n' });
+				expect(results.quotedWorkspace).toMatchObject({ value: true, output: '42\n' });
 				expect(results.arithmetic.output).toContain('1267650600228229401496703205376');
 				expect(results.error).toMatchObject({ error: 'runtime' });
 				expect(results.error.output).toContain('before');

@@ -100,7 +100,6 @@ function workspacePath(value) {
 		!value ||
 		value.startsWith('/') ||
 		value.includes('\\') ||
-		value.includes('"') ||
 		value.split('/').some((part) => part === '..' || part === '.' || !part) ||
 		value.includes('\0')
 	) {

@@ -33,7 +33,7 @@ export const WASM_PARIGP_PROFILE = {
 		}
 	},
 	workerReceipt: {
-		bytes: 10185,
-		sha256: 'b6b09a33cfda53d510ba2ead5badbb4c3841287042072225ab47878a896c11f4'
+		bytes: 10160,
+		sha256: 'eba38020853cda5f50da8e338eb2d43d553adbfd57a0a8c796e75d8edcac3cbe'
 	}
 } as const;
