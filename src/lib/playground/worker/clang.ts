@@ -67,7 +67,8 @@ async function loadClang(
 	maxAssetBytes: number | undefined,
 	verifiedStreaming = false,
 	languageSysrootProfiles = false,
-	persistentCache?: import('@wasm-idle/core').RuntimeAssetCacheOptions
+	persistentCache?: import('@wasm-idle/core').RuntimeAssetCacheOptions,
+	language?: unknown
 ) {
 	const { BrowserClangRuntime, loadRuntimeManifest, resolveRuntimeManifestUrl } =
 		await import('@wasm-idle/llvm-core/clang');
@@ -115,6 +116,9 @@ async function loadClang(
 		manifest: runtimeManifest,
 		persistentCache
 	});
+	// A prewarmed worker is otherwise idle until the first run, which would then download the
+	// C++ sysroot addon and the linker. Helper workers (no language) skip this.
+	if (language === 'C' || language === 'CPP') clang.prefetch(language);
 	await clang.ready;
 }
 
@@ -159,7 +163,8 @@ self.onmessage = async (event: { data: any }) => {
 				maxAssetBytes,
 				event.data.verifiedStreaming === true,
 				event.data.languageSysrootProfiles === true,
-				persistentCache
+				persistentCache,
+				language
 			);
 			postMessage({ load: true });
 		} catch (error: any) {
