@@ -447,7 +447,8 @@ export async function syncWasmOfJsOfOcamlDist({
 
 	await rm(targetBrowserDistDir, { recursive: true, force: true });
 	await rm(targetBundleDir, { recursive: true, force: true });
-	await rm(LEGACY_TARGET_BUNDLE_DIR, { recursive: true, force: true });
+	if (path.resolve(targetBundleDir) === DEFAULT_TARGET_BUNDLE_DIR)
+		await rm(LEGACY_TARGET_BUNDLE_DIR, { recursive: true, force: true });
 	await mkdir(targetBrowserDistDir, { recursive: true });
 	await mkdir(targetBundleDir, { recursive: true });
 	await copyDirectory(sourceBrowserDistDir, targetBrowserDistDir);
