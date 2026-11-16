@@ -726,6 +726,7 @@ describe('browser test asset preparation', () => {
 			manifestPath,
 			staticDir: path.join(root, 'static'),
 			cacheDir: path.join(root, 'cache'),
+			temporaryParentDir: root,
 			prepareOcamlWrapper,
 			fetchImpl
 		};
@@ -739,6 +740,9 @@ describe('browser test asset preparation', () => {
 		});
 		expect(fetchImpl).toHaveBeenCalledTimes(1);
 		expect(prepareOcamlWrapper).toHaveBeenCalledTimes(2);
+		expect(prepareOcamlWrapper).toHaveBeenCalledWith(
+			expect.objectContaining({ temporaryParentDir: root })
+		);
 		expect(await readFile(derived, 'utf8')).toBe('corrected browser adapter');
 	});
 

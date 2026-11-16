@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
@@ -240,6 +240,32 @@ test('prepares each missing group once, coalesces clangd into clang, and reuses 
 		3
 	);
 	assert.equal(renderRuntimeAssetLock(manifest), source);
+});
+
+test('keeps preparation caches on the asset filesystem when the root is a symlink', async (t) => {
+	const f = await fixture(t);
+	const rootDir = path.join(f.directory, 'linked-assets');
+	await symlink(f.rootDir, rootDir, 'dir');
+	const bytes = Buffer.from('verified language server');
+	const manifest = manifestFor({ 'clangd/clangd.js': receipt(bytes) });
+	const physicalRoot = await realpath(f.rootDir);
+	let prepared = false;
+	const audit = await prepareRuntimeAssetLockInputs({
+		rootDir,
+		manifest,
+		prepareGroup: async (group, { cacheDir }) => {
+			assert.equal(group, 'clang');
+			await mkdir(cacheDir, { recursive: true });
+			const cache = await realpath(cacheDir);
+			assert.equal(path.dirname(cache), physicalRoot);
+			await f.put('clangd/clangd.js', bytes);
+			prepared = true;
+		}
+	});
+	assert.equal(prepared, true);
+	assertClean(audit, 1);
+	assertClean(await auditRuntimeAssetLockInputs({ rootDir, manifest }), 1);
+	await assert.rejects(stat(path.join(f.directory, '.asset-inputs-cache')), { code: 'ENOENT' });
 });
 
 test('budgets the full selected group and decoded staging when only a tiny input is missing', async (t) => {

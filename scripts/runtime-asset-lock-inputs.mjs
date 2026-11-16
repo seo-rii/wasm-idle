@@ -224,7 +224,11 @@ async function defaultPrepareGroup(group, { rootDir, manifest, missing, cacheDir
 		const versionModulePath = path.join(temporary, 'version.ts');
 		if (group === 'debug') {
 			const { prepareWasmDebugRelease } = await import('./prepare-wasm-debug-release.mjs');
-			await prepareWasmDebugRelease({ staticDir: stage, versionModulePath });
+			await prepareWasmDebugRelease({
+				staticDir: stage,
+				versionModulePath,
+				temporaryParentDir: temporary
+			});
 		} else if (['lean4', 'commonlisp', 'picat', 'parigp'].includes(group)) {
 			const definitions = {
 				lean4: ['./sync-wasm-lean4.mjs', 'syncWasmLean4Assets'],
@@ -242,7 +246,8 @@ async function defaultPrepareGroup(group, { rootDir, manifest, missing, cacheDir
 				groups: [group],
 				staticDir: stage,
 				cacheDir: path.join(temporary, 'cache'),
-				versionModulePath
+				versionModulePath,
+				temporaryParentDir: temporary
 			});
 		}
 		await normalizeIndexedDeliveries({ rootDir: stage, manifest });
@@ -265,7 +270,7 @@ export async function prepareRuntimeAssetLockInputs({
 	rootDir,
 	manifest,
 	prepareGroup = defaultPrepareGroup,
-	cacheDir = path.join(path.dirname(rootDir), '.asset-inputs-cache')
+	cacheDir = path.join(rootDir, '.asset-inputs-cache')
 }) {
 	const before = await auditRuntimeAssetLockInputs({ rootDir, manifest });
 	if (before.invalid.length)
