@@ -160,6 +160,19 @@ function codeList(values) {
 /** @type {SupportMatrixRow[]} */
 export const supportMatrixRows = [
 	{
+		language: 'Squirrel',
+		ids: ['SQUIRREL'],
+		runtime: 'Squirrel 3.2 VM on WASI',
+		stdin: 'Yes',
+		editorSupport: 'C++ syntax',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/esolangs.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_SQUIRREL',
+			language: 'SQUIRREL'
+		}
+	},
+	{
 		language: 'GolfScript',
 		ids: ['GOLFSCRIPT'],
 		runtime: 'Original GolfScript interpreter on Ruby/WASI',
@@ -1107,6 +1120,16 @@ function staticWorkerCustomizationFor(runtimeKey, envKey = runtimeKey.toUpperCas
 
 /** @type {Map<string, RuntimeDetail>} */
 const runtimeDetailsByLanguage = new Map([
+	[
+		'Squirrel',
+		{
+			packageBase: 'albertodemichelis/squirrel 3.2 (f92bc298, MIT), wasi-sdk 33.0',
+			execution:
+				'Original Squirrel VM and standard libraries in a fresh WASI instance; 32-bit integers, 64-bit floats, byte stdin/stdout, workspace dofile and runtime/compiler diagnostics',
+			customization:
+				'runtimeAssets.rootUrl, stdin, activePath, workspaceFiles; fixed script argv; execution/output/memory limits and cancellation; OS subprocesses unavailable'
+		}
+	],
 	[
 		'GolfScript',
 		{

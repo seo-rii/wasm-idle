@@ -1,4 +1,5 @@
 const canonicalLanguageIds = [
+	'SQUIRREL',
 	'C',
 	'C3',
 	'CPP',

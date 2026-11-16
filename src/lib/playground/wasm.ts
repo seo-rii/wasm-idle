@@ -5,6 +5,7 @@ import {
 	DEFAULT_WORKSPACE_LIMITS,
 	DiagnosticLimitError,
 	OutputLimitError,
+	ResourceLimitError,
 	RuntimeConfigurationError,
 	TimeoutError,
 	resolveExecutionLimits,
@@ -59,6 +60,7 @@ class Wasm implements Sandbox {
 	pendingEof = false;
 	private activeOperation: WasmOperation | null = null;
 	private disposed = false;
+	private interpreterInitialMemoryBytes?: number;
 	private disposePromise: Promise<void> | null = null;
 	private readonly disposeCancellation = new CancelledError('WASM sandbox disposed', {
 		phase: 'dispose',
@@ -69,11 +71,23 @@ class Wasm implements Sandbox {
 		label: 'WASM',
 		onDispose: (worker) => {
 			if (this.worker === worker) delete this.worker;
+			this.interpreterInitialMemoryBytes = undefined;
 			this.exit = true;
 			this.waitingForInput = false;
 			this.pendingEof = false;
 		}
 	});
+
+	private workerError(data: any, phase: 'startup' | 'execute') {
+		return data.memoryLimit
+			? new ResourceLimitError(data.error, {
+					...data.memoryLimit,
+					resource: 'wasm-memory',
+					phase,
+					runtimeId: this.interpreter?.id ?? 'WASM'
+				})
+			: data.error;
+	}
 
 	private requireOperationIdle() {
 		if (!this.activeOperation) return;
@@ -274,6 +288,21 @@ class Wasm implements Sandbox {
 					}
 				);
 			}
+			if (
+				this.interpreterInitialMemoryBytes !== undefined &&
+				this.interpreterInitialMemoryBytes > limits.maxWasmMemoryBytes
+			) {
+				throw new ResourceLimitError(
+					`${this.interpreter?.id} Wasm initial memory exceeds the configured memory limit`,
+					{
+						resource: 'wasm-memory',
+						actual: this.interpreterInitialMemoryBytes,
+						limit: limits.maxWasmMemoryBytes,
+						phase: 'startup',
+						runtimeId: this.interpreter?.id
+					}
+				);
+			}
 			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
 				return Promise.reject(
 					this.releaseBeforeSession(activeOperation, 'WASM runtime startup cancelled')
@@ -330,12 +359,14 @@ class Wasm implements Sandbox {
 							reportWorkerProgress(progress, event.data?.progress);
 							if (!ownsLoad()) return;
 							if (event.data?.load) {
+								this.interpreterInitialMemoryBytes = event.data.initialMemoryBytes;
 								progress?.set?.(1);
 								if (!ownsLoad()) return;
 								resolveLoad();
 								return;
 							}
-							if (event.data?.error) rejectLoad(event.data.error);
+							if (event.data?.error)
+								rejectLoad(this.workerError(event.data, 'startup'));
 						} catch (error) {
 							failLoad(error);
 						}
@@ -348,6 +379,7 @@ class Wasm implements Sandbox {
 							? {
 									interpreter: this.interpreter,
 									maxAssetBytes: limits.maxAssetBytes,
+									maxWasmMemoryBytes: limits.maxWasmMemoryBytes,
 									interpreterUrl: new URL(
 										`${(typeof _runtimeAssets === 'string' ? _runtimeAssets : (_runtimeAssets.rootUrl ?? '')).replace(/\/$/u, '')}/${this.interpreter.folder}/${this.interpreter.fileName}`,
 										globalThis.location.href
@@ -619,7 +651,7 @@ class Wasm implements Sandbox {
 						resolve(results as string);
 						return;
 					}
-					if (error) failRun(error);
+					if (error) failRun(this.workerError(event.data, 'execute'));
 				} catch (error) {
 					failRun(error, true);
 				}
@@ -636,7 +668,12 @@ class Wasm implements Sandbox {
 					args: _args,
 					activePath: workspace.activePath,
 					workspaceFiles: workspace.workspaceFiles,
-					...(this.interpreter ? { workspaceLimits: options.workspaceLimits } : {}),
+					...(this.interpreter
+						? {
+								workspaceLimits: options.workspaceLimits,
+								maxWasmMemoryBytes: limits.maxWasmMemoryBytes
+							}
+						: {}),
 					log: _log
 				});
 			} catch (error) {
