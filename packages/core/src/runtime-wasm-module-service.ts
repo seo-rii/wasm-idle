@@ -147,12 +147,32 @@ function serveModule(
 		finish();
 	};
 	const abort = () => close();
+	let lookedUp = false;
 	port.onmessageerror = close;
 	port.onmessage = (event: MessageEvent<unknown>) => {
 		if (closed) return;
 		const message = event.data as { type?: unknown; bytes?: unknown } | null;
 		if (message?.type === 'cancel') {
 			close();
+			return;
+		}
+		if (
+			!prepared &&
+			!received &&
+			!lookedUp &&
+			message?.type === 'lookup' &&
+			Object.keys(message).length === 1
+		) {
+			// A peer may ask once before downloading the pinned bytes. A retained module was
+			// compiled from bytes that passed this exact receipt and key, so it needs no new
+			// copy of those (public) bytes; a miss keeps the ordinary verified compile request.
+			lookedUp = true;
+			const module = cache?.get<WebAssembly.Module>(key);
+			if (module) {
+				received = true;
+				port.postMessage({ type: 'module', module });
+				finish();
+			} else port.postMessage({ type: 'miss' });
 			return;
 		}
 		if (received) return;

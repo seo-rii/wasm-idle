@@ -1,8 +1,8 @@
 export const WASM_RUST_RUNTIME_PROFILE = Object.freeze({
-	profileId: 'wasm-rust-6990bddaebda5337b365913696303cc2c6c3251c6143721f4b0b58defd83411f',
+	profileId: 'wasm-rust-eb3c349088d622440a20f7f6ddcb5dc276555aeb1e9f202a704d61e3b620c881',
 	protocolVersion: 1,
 	manifestPath: 'runtime/runtime-manifest.v3.json',
-	manifestFingerprint: '6990bddaebda5337b365913696303cc2c6c3251c6143721f4b0b58defd83411f',
+	manifestFingerprint: 'eb3c349088d622440a20f7f6ddcb5dc276555aeb1e9f202a704d61e3b620c881',
 	manifestReceipt: {
 		bytes: 6185,
 		sha256: '30b210003632395a1effd19f7a46565d5f8c52a9d3a28a310fa24219f97a5a9a'
@@ -419,12 +419,12 @@ export const WASM_RUST_EXECUTABLE_GRAPH_PROFILE = Object.freeze({
 				encoding: 'identity'
 			},
 			storage: {
-				bytes: 24122,
-				sha256: 'fc799b595d8d4022cbf02328673b5bb08ad0f86be0da9ac0b3ac12e9f5d343fa'
+				bytes: 24993,
+				sha256: 'cabea85ff4812666f405306609370e49a8665537726be4110fdf607a8f643549'
 			},
 			logical: {
-				bytes: 24122,
-				sha256: 'fc799b595d8d4022cbf02328673b5bb08ad0f86be0da9ac0b3ac12e9f5d343fa'
+				bytes: 24993,
+				sha256: 'cabea85ff4812666f405306609370e49a8665537726be4110fdf607a8f643549'
 			},
 			imports: [
 				{
@@ -828,12 +828,12 @@ export const WASM_RUST_EXECUTABLE_GRAPH_PROFILE = Object.freeze({
 				encoding: 'identity'
 			},
 			storage: {
-				bytes: 4926,
-				sha256: '643e87810870eadb9489f4161f2132a158e37c1e343426c58e04e3482e1d7045'
+				bytes: 9313,
+				sha256: '61c6806aedef576cc38bbb2492122d036faf13996b21f69f60c7cd2960c06740'
 			},
 			logical: {
-				bytes: 4926,
-				sha256: '643e87810870eadb9489f4161f2132a158e37c1e343426c58e04e3482e1d7045'
+				bytes: 9313,
+				sha256: '61c6806aedef576cc38bbb2492122d036faf13996b21f69f60c7cd2960c06740'
 			},
 			imports: [
 				{
@@ -1575,7 +1575,7 @@ export const WASM_RUST_EXECUTABLE_GRAPH_PROFILE = Object.freeze({
 			externals: []
 		}
 	},
-	fingerprint: '5e2563e8a985fe3a30a209aa7cb7d53cdfd2b0b8af1c1a96b7e8f2d08046bfee'
+	fingerprint: 'abf83d8854fb91c9b6468b437d314ce822c9e7f6a03ed12eb7f3c884d009d1c3'
 } as const);
 
 export const WASM_RUST_ASSET_VERSION = WASM_RUST_RUNTIME_PROFILE.manifestFingerprint;
