@@ -186,12 +186,12 @@ describe('package install budgets', () => {
 			Object.fromEntries(scenarios.map((scenario) => [scenario.name, scenario.budget]))
 		).toEqual({
 			'wasm-idle root install': {
-				maxBytes: 7 * MiB + 75 * 1024,
-				maxFiles: 797,
+				maxBytes: 7 * MiB + 92 * 1024,
+				maxFiles: 803,
 				maxPackages: 6
 			},
 			'@wasm-idle/gcc install': {
-				maxBytes: 2.5 * MiB + 230 * 1024,
+				maxBytes: 2.5 * MiB + 231 * 1024,
 				maxFiles: 196,
 				maxPackages: 4
 			},
@@ -216,19 +216,42 @@ describe('package install budgets', () => {
 				maxPackages: 10
 			},
 			'all public packages/adapters aggregate': {
-				maxBytes: 40 * MiB + 1_059 * 1024,
-				maxFiles: 3_418,
+				maxBytes: 40 * MiB + 1_076 * 1024,
+				maxFiles: 3_424,
 				maxPackages: 70
 			}
 		});
 	});
 
-	it('accepts measured language installs and rejects every aggregate limit plus one', () => {
-		const root = scenarios.find((entry) => entry.name === 'wasm-idle root install')!;
-		// Squirrel CI job 133012736567, including the emitted profile JS/declaration pair.
+	it('accepts measured PARI/GP root footprint without weakening dependency limits', () => {
+		const scenario = scenarios.find((entry) => entry.name === 'wasm-idle root install')!;
+		// Baseline install plus the measured 16,964-byte / six-file root-and-core delta.
 		expect(() =>
-			assertInstallBudget(root, { bytes: 7_408_849, files: 793, packages: 5 })
+			assertInstallBudget(scenario, { bytes: 7_422_801, files: 797, packages: 5 })
 		).not.toThrow();
+		for (const key of ['bytes', 'files', 'packages'] as const) {
+			const limit = {
+				bytes: scenario.budget.maxBytes,
+				files: scenario.budget.maxFiles,
+				packages: scenario.budget.maxPackages
+			};
+			expect(() =>
+				assertInstallBudget(scenario, { ...limit, [key]: limit[key] + 1 })
+			).toThrow('Install budget exceeded for wasm-idle root install');
+		}
+	});
+
+	it('accepts the measured GCC consumer after PARI/GP core receipt growth', () => {
+		const scenario = scenarios.find((entry) => entry.name === '@wasm-idle/gcc install')!;
+		// PARI/GP CI job 133037276692; no new GCC files or dependencies are installed.
+		expect(() =>
+			assertInstallBudget(scenario, { bytes: 2_856_855, files: 196, packages: 4 })
+		).not.toThrow();
+		expect(scenario.budget.maxFiles).toBe(196);
+		expect(scenario.budget.maxPackages).toBe(4);
+	});
+
+	it('accepts measured baseline and Java 25 aggregates and rejects every limit plus one', () => {
 		const scenario = scenarios.find(
 			(entry) => entry.name === 'all public packages/adapters aggregate'
 		)!;
@@ -247,34 +270,6 @@ describe('package install budgets', () => {
 			expect(() =>
 				assertInstallBudget(scenario, { ...atLimit, [key]: atLimit[key] + 1 })
 			).toThrow('Install budget exceeded for all public packages/adapters aggregate');
-	});
-
-	it('covers the measured Wren package delta without relaxing any dependency cap', () => {
-		const root = scenarios.find((entry) => entry.name === 'wasm-idle root install')!;
-		const aggregate = scenarios.find(
-			(entry) => entry.name === 'all public packages/adapters aggregate'
-		)!;
-		// npm pack dry runs: root +2,543 bytes / two files; core +28 bytes / zero files.
-		// Add that packed delta to the CI-measured baseline installations.
-		expect(() =>
-			assertInstallBudget(root, { bytes: 7_405_837 + 2_571, files: 793, packages: 5 })
-		).not.toThrow();
-		expect(() =>
-			assertInstallBudget(aggregate, {
-				bytes: 42_991_203 + 2_571,
-				files: 3_414,
-				packages: 66
-			})
-		).not.toThrow();
-		for (const scenario of [root, aggregate]) {
-			expect(() =>
-				assertInstallBudget(scenario, {
-					bytes: scenario.budget.maxBytes,
-					files: scenario.budget.maxFiles,
-					packages: scenario.budget.maxPackages + 1
-				})
-			).toThrow('package count');
-		}
 	});
 
 	it('allows measurements exactly at every configured limit', () => {

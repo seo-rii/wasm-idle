@@ -55,6 +55,7 @@ export type EditorDefaultLanguage =
 	| 'zig'
 	| 'lisp'
 	| 'commonlisp'
+	| 'parigp'
 	| 'ruby'
 	| 'haskell'
 	| 'r'
@@ -132,6 +133,7 @@ export const editorDefaults: Record<
 	| 'zig'
 	| 'lisp'
 	| 'commonlisp'
+	| 'parigp'
 	| 'ruby'
 	| 'haskell'
 	| 'r'
@@ -157,6 +159,7 @@ export const editorDefaults: Record<
 	squirrel:
 		"// Echo UTF-8 input; send EOF to finish.\nwhile (true) {\n    try { stdout.writen(stdin.readn('b'), 'b'); }\n    catch (error) {\n        if (stdin.eos()) break;\n        throw error;\n    }\n}\n",
 	uhmlang: '어떻게\n엄식?\n식어!\n이 사람이름이냐ㅋㅋ\n',
+	parigp: 'n = input();\nprint(sum(i = 1, n, i));\n',
 	wren: 'import "io" for Stdin\nSystem.print(Stdin.readLine())\n',
 	lolcode: 'HAI 1.3\nI HAS A name\nGIMMEH name\nVISIBLE name\nKTHXBYE\n',
 	apecode:
@@ -1597,6 +1600,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.malbolge ||
 		source === editorDefaults.aheui ||
 		source === editorDefaults.uhmlang ||
+		source === editorDefaults.parigp ||
 		source === editorDefaults.wren ||
 		source === editorDefaults.squirrel ||
 		source === editorDefaults.lolcode ||

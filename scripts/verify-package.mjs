@@ -59,11 +59,10 @@ export const scenarios = [
 		// Lazy receipt lookup adds three core JavaScript/declaration pairs (789 files measured).
 		// Java 25 adds one bytecode reader JavaScript/declaration pair; ASM is bundled rather than installed.
 		// The measured 7,405,837-byte / 791-file install needs 1 KiB above the previous byte cap.
-		// Wren's packed root/core delta is 2,571 bytes and two profile files.
-		// The shared WASI memory guard adds another 3,501 bytes and two files.
-		// Reserve 3 KiB / two files above the measured baseline; dependencies are unchanged.
-		// Include Squirrel's additional 3 KiB/two files when both language profiles are installed.
-		budget: { maxBytes: 7 * MiB + 75 * 1024, maxFiles: 797, maxPackages: 6 },
+		// PARI/GP adds 15,625 packed root bytes / six files and 1,339 core bytes.
+		// Reserve the rounded 17 KiB delta for its adapter, asset resolver and version-profile pairs.
+		// Include preceding Squirrel and Wren profiles: another 6 KiB/four files.
+		budget: { maxBytes: 7 * MiB + 92 * 1024, maxFiles: 803, maxPackages: 6 },
 		absentPackageNames: [
 			'@katana-project/asm',
 			'java-parser',
@@ -136,9 +135,9 @@ export const scenarios = [
 		// Another 17 KiB covers the 17,099-byte overflow and retains 309 bytes of headroom.
 		// Standard modules CI job 128326182518 measures 2,855,516 bytes / 196 files / four packages.
 		// Another 23 KiB covers the 23,132-byte overflow with 420 bytes of headroom; BMIs stay external.
-		// Cumulative Squirrel/Wren core adds 745 bytes; GCC totals 2,856,261 bytes.
-		// Another 1 KiB retains 699 bytes of headroom with unchanged files/dependencies.
-		budget: { maxBytes: 2.5 * MiB + 230 * 1024, maxFiles: 196, maxPackages: 4 },
+		// PARI/GP shared-core receipts make CI job 133037276692 measure 2,856,855 bytes.
+		// One KiB covers its 919-byte overflow; file and package limits remain unchanged.
+		budget: { maxBytes: 2.5 * MiB + 231 * 1024, maxFiles: 196, maxPackages: 4 },
 		absentPackageNames: [
 			'wasm-idle',
 			'@wasm-idle/llvm-core',
@@ -454,9 +453,9 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Baseline CI job 131822775029 measures 42,959,390 bytes / 3,410 files / 66 packages.
 		// Add 64 KiB for the 40,478-byte overflow; file and package limits stay unchanged.
 		// Java 25 CI adds 31,813 bytes and two files to that baseline; allow another 32 KiB / two files.
-		// Propagate Wren's bounded 3 KiB / two-file delta without adding dependencies.
-		// Both Squirrel and Wren add 3 KiB/two files above the Java 25 baseline.
-		budget: { maxBytes: 40 * MiB + 1_059 * 1024, maxFiles: 3_418, maxPackages: 70 },
+		// Propagate PARI/GP's measured 16,964-byte / six-file delta as 17 KiB / six files.
+		// Preserve the cumulative Squirrel/Wren allowance of 6 KiB/four files.
+		budget: { maxBytes: 40 * MiB + 1_076 * 1024, maxFiles: 3_424, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

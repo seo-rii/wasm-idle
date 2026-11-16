@@ -28,6 +28,7 @@ const ASSET_GROUPS = [
 	'lfortran',
 	'lean4',
 	'commonlisp',
+	'parigp',
 	'scala'
 ];
 const SUPPORTED_GROUPS = new Set(['all', ...ASSET_GROUPS]);
@@ -276,6 +277,12 @@ export async function prepareBrowserTestAssets({
 			reused += result.reused;
 			continue;
 		}
+		if (group === 'parigp') {
+			await (
+				await import('./sync-wasm-parigp.mjs')
+			).syncWasmPariGpAssets({ targetDir: path.join(staticDir, 'wasm-parigp'), fetchImpl });
+			continue;
+		}
 		if (group === 'lean4' || group === 'commonlisp') {
 			const prepareRuntime = group === 'lean4' ? prepareLean4 : prepareCommonLisp;
 			await prepareRuntime({ targetDir: path.join(staticDir, `wasm-${group}`), fetchImpl });
@@ -452,6 +459,21 @@ export async function verifyBrowserTestAssets({
 		);
 		if (fingerprint !== profile.fingerprint)
 			throw new Error('Required OCaml browser bundle fingerprint mismatch');
+	}
+	if (selectedGroups.includes('parigp')) {
+		const { WASM_PARIGP_PROFILE: profile } = await loadBundledProfile(
+			new URL('../src/lib/playground/wasmPariGpVersion.ts', import.meta.url)
+		);
+		for (const [name, receipt] of Object.entries({
+			...profile.delivery,
+			'runner-worker.js': profile.workerReceipt
+		})) {
+			receipts.push({
+				target: `wasm-parigp/${name}`,
+				size: receipt.bytes,
+				sha256: receipt.sha256
+			});
+		}
 	}
 	for (const group of ['lean4', 'commonlisp']) {
 		if (!selectedGroups.includes(group)) continue;

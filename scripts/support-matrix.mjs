@@ -160,6 +160,19 @@ function codeList(values) {
 /** @type {SupportMatrixRow[]} */
 export const supportMatrixRows = [
 	{
+		language: 'PARI/GP',
+		ids: ['PARIGP'],
+		runtime: 'Official PARI/GP 2.19.0 Emscripten wasm32',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/parigp.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_PARIGP',
+			marker: 'real PARI/GP'
+		}
+	},
+	{
 		language: 'Wren',
 		ids: ['WREN'],
 		runtime: 'Upstream Wren 0.4.0 VM on WASI',
@@ -1133,6 +1146,17 @@ function staticWorkerCustomizationFor(runtimeKey, envKey = runtimeKey.toUpperCas
 
 /** @type {Map<string, RuntimeDetail>} */
 const runtimeDetailsByLanguage = new Map([
+	[
+		'PARI/GP',
+		{
+			packageBase:
+				'Official PARI/GP 2.19.0 Emscripten wasm32 (GPL-2.0-or-later), SHA-256 pinned upstream binaries',
+			execution:
+				'Fresh Worker per run executes unchanged GP source through the upstream gp_embedded multiline reader; streaming stdin, EOF, workspace files, errors and cancellation; bounded Wasm memory; plots, external processes and optional database downloads unavailable',
+			customization:
+				'runtimeAssets.parigp.baseUrl, runtimeAssets.rootUrl, stdin, activePath, workspaceFiles; no program arguments'
+		}
+	],
 	[
 		'Wren',
 		{

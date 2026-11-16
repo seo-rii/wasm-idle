@@ -158,6 +158,14 @@ export const RUNTIMES = [
 		sourceRequired: true
 	},
 	{
+		name: 'wasm-parigp',
+		module: './sync-wasm-parigp.mjs',
+		exportName: 'syncWasmPariGpAssets',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir',
+		manual: true
+	},
+	{
 		name: 'wasm-commonlisp',
 		module: './sync-wasm-commonlisp.mjs',
 		exportName: 'syncWasmCommonLispAssets',

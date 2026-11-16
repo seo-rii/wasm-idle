@@ -60,6 +60,7 @@ const canonicalLanguageIds = [
 	'ZIG',
 	'LISP',
 	'COMMONLISP',
+	'PARIGP',
 	'RUBY',
 	'HASKELL',
 	'R',
@@ -97,6 +98,8 @@ export const DEFAULT_DEFERRED_PROGRESS_LANGUAGES: ReadonlySet<string> = new Set(
 );
 
 const languageAliasDefinitions = {
+	'PARI/GP': { canonicalId: 'PARIGP', kind: 'spelling' },
+	GP: { canonicalId: 'PARIGP', kind: 'implementation' },
 	BEFUNGE: { canonicalId: 'BEFUNGE93', kind: 'dialect' },
 	'BEFUNGE-93': { canonicalId: 'BEFUNGE93', kind: 'spelling' },
 	BF: { canonicalId: 'BRAINFUCK', kind: 'spelling' },
