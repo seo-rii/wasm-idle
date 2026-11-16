@@ -277,24 +277,36 @@ export async function createBashProfile({
 		];
 		if (sysroots.has(profile)) return args;
 		// Each consumer owns its signal; the verified asset loader shares only fetches.
-		const prepared = await manager.prepare('llvm', { signal });
+		// The compiler and sysroot layers are independent pinned packages: download them together
+		// instead of waiting for the compiler before requesting each layer in turn.
+		// Settle every preparation before reporting a failure so none is left in flight.
+		const settled = await Promise.allSettled([
+			manager.prepare('llvm', { signal }),
+			layers ? manager.prepare(layers.basePackage, { signal }) : undefined,
+			layers && profile === 'full'
+				? manager.prepare(layers.cxxPackage, { signal })
+				: undefined
+		]);
+		const failure = settled.find((result) => result.status === 'rejected');
+		if (failure) throw failure.reason;
+		const [prepared, base, cxx] = settled.map((result) =>
+			result.status === 'fulfilled' ? result.value : undefined
+		);
 		let archive: Uint8Array | undefined;
 		if (layers) {
-			const base = await manager.prepare(layers.basePackage, { signal });
-			archive = base.packages
+			archive = base?.packages
 				.find((pkg) => pkg.id === layers.basePackage)
 				?.files.find((file) => file.path === 'sysroot.tar')?.bytes;
 			if (!archive) throw new Error('Pinned LLVM profile has no base sysroot archive');
 			if (profile === 'full') {
-				const cxx = await manager.prepare(layers.cxxPackage, { signal });
-				const delta = cxx.packages
+				const delta = cxx?.packages
 					.find((pkg) => pkg.id === layers.cxxPackage)
 					?.files.find((file) => file.path === 'sysroot.tar')?.bytes;
 				if (!delta) throw new Error('Pinned LLVM profile has no C++ sysroot archive');
 				archive = composeSysrootLayers(archive, delta);
 			}
 		} else
-			archive = prepared.packages
+			archive = prepared?.packages
 				.find((pkg) => pkg.id === 'llvm')
 				?.files.find((file) => file.path === 'sysroot.tar')?.bytes;
 		if (!archive) throw new Error('Pinned LLVM profile has no sysroot archive');
