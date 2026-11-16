@@ -37,6 +37,7 @@ type RuntimeReadinessAudit = EntryReadiness | StaticWorkerReadiness | TerminalRe
  * is the first safe user-visible readiness signal.
  */
 const runtimeReadinessAudit = {
+	GRAPHQL: { strategy: 'static-worker-fallback', hostModule: 'graphql' },
 	GOLFSCRIPT: {
 		strategy: 'entry-signal',
 		hostModule: 'golfscript',

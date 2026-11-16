@@ -2,15 +2,7 @@ import { supportedLanguageIds, type CanonicalLanguageId } from '@wasm-idle/core'
 
 type PlaygroundRuntimeLanguage = Exclude<CanonicalLanguageId, 'PYTHON3'> | 'PYTHON';
 
-const editorOnlyLanguageIds = [
-	'GRAPHQL',
-	'JSON',
-	'YAML',
-	'TOML',
-	'HTML',
-	'CSS',
-	'MARKDOWN'
-] as const;
+const editorOnlyLanguageIds = ['JSON', 'YAML', 'TOML', 'HTML', 'CSS', 'MARKDOWN'] as const;
 
 export type PlaygroundLanguage = PlaygroundRuntimeLanguage | (typeof editorOnlyLanguageIds)[number];
 
@@ -451,7 +443,7 @@ export const playgroundLanguageDescriptors: Readonly<
 		compilerDiagnostics: true,
 		diagnosticMarkers: true
 	},
-	GRAPHQL: { label: 'GraphQL', editorLanguage: 'graphql' },
+	GRAPHQL: { label: 'GraphQL', editorLanguage: 'graphql', diagnosticMarkers: true },
 	DUCKDB: { label: 'SQL — DuckDB', editorLanguage: 'sql', lspLanguageOverride: 'duckdb' },
 	SQLITE: {
 		label: 'SQL — SQLite dialect',

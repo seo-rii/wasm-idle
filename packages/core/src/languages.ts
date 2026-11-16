@@ -62,6 +62,7 @@ const canonicalLanguageIds = [
 	'HASKELL',
 	'R',
 	'OCTAVE',
+	'GRAPHQL',
 	'DUCKDB',
 	'SQLITE',
 	'POSTGRESQL',
@@ -168,6 +169,7 @@ const languageAliasDefinitions = {
 		kind: 'dialect',
 		message: 'SQL selects the SQLite dialect and engine.'
 	},
+	GQL: { canonicalId: 'GRAPHQL', kind: 'spelling' },
 	POSTGRES: { canonicalId: 'POSTGRESQL', kind: 'spelling' },
 	PGSQL: { canonicalId: 'POSTGRESQL', kind: 'spelling' },
 	PGLITE: {

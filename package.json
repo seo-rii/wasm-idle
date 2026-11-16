@@ -206,6 +206,8 @@
 		"sync:wasm-apecode": "node scripts/sync-wasm-apecode.mjs",
 		"test:browser:golfscript": "WASM_IDLE_REQUIRE_BROWSER_TESTS=1 WASM_IDLE_RUN_REAL_BROWSER_GOLFSCRIPT=1 vitest run src/lib/playground/esolangs.playwright.test.ts",
 		"sync:wasm-golfscript": "node scripts/sync-wasm-golfscript.mjs",
+		"sync:wasm-graphql": "node scripts/sync-wasm-graphql.mjs",
+		"test:browser:graphql": "WASM_IDLE_REQUIRE_BROWSER_TESTS=1 WASM_IDLE_RUN_REAL_BROWSER_GRAPHQL=1 vitest run src/lib/playground/graphql.playwright.test.ts",
 		"prepare:container-distribution": "node scripts/prepare-container-distribution.mjs",
 		"verify:container-distribution": "node scripts/verify-container-distribution.mjs",
 		"test:container-distribution": "node --test scripts/container-distribution.test.mjs",
@@ -292,7 +294,8 @@
 		"vite": "^8.3.3",
 		"vitest": "^5.0.5",
 		"waforth": "0.20.1",
-		"webr": "0.6.0"
+		"webr": "0.6.0",
+		"graphql": "17.0.2"
 	},
 	"dependencies": {
 		"@bjorn3/browser_wasi_shim": "^0.4.2",

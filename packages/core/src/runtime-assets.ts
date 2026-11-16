@@ -229,6 +229,10 @@ export interface RuntimeAssetKeySource {
 		systemPascalReceipt?: RuntimeAssetIntegrityEntry;
 		workerReceipt?: RuntimeAssetIntegrityEntry;
 	};
+	graphql?: {
+		workerUrl?: string;
+		workerReceipt?: RuntimeAssetIntegrityEntry;
+	};
 	forth?: {
 		baseUrl?: string;
 		workerUrl?: string;
@@ -1486,6 +1490,13 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'swift', property: 'workerUrl', key: 'swiftWorkerUrl' },
 	{ runtime: 'swift', property: 'manifestUrl', key: 'swiftManifestUrl' },
 	{ runtime: 'postgresql', property: 'moduleUrl', key: 'postgresqlModuleUrl' },
+	{ runtime: 'graphql', property: 'workerUrl', key: 'graphqlWorkerUrl' },
+	{
+		runtime: 'graphql',
+		property: 'workerReceipt',
+		key: 'graphqlWorkerReceipt',
+		serialize: serializeIntegrityEntry
+	},
 	{ runtime: 'sqlite', property: 'moduleUrl', key: 'sqliteModuleUrl' },
 	{ runtime: 'sqlite', property: 'wasmUrl', key: 'sqliteWasmUrl' },
 	{ runtime: 'php', property: 'moduleUrl', key: 'phpModuleUrl' }

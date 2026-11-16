@@ -26,6 +26,14 @@ const THIS_FILE = fileURLToPath(import.meta.url);
 /** @type {RuntimeDefinition[]} */
 export const RUNTIMES = [
 	{
+		name: 'wasm-graphql',
+		module: './sync-wasm-graphql.mjs',
+		exportName: 'syncWasmGraphqlAssets',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir',
+		manual: true
+	},
+	{
 		name: 'wasm-clang',
 		module: './sync-wasm-clang.mjs',
 		exportName: 'syncWasmClangDist',

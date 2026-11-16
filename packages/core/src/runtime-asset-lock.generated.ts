@@ -809,6 +809,8 @@ export const RUNTIME_ASSET_LOCK: RuntimeAssetLockManifest = /* @__PURE__ */ free
 		"wasm-grain/runner-worker.js": {"sha256":"b3650e7f75f4eb21fec429f6cb43fb436e031583902f585ec9851881f021b464","bytes":28417,"mediaType":"text/javascript"},
 		"wasm-grain/runtime-build.json": {"sha256":"227d8e1fa48be982b973ad27b874638bfe56f29d7246a4b4185f71736aed998c","bytes":1913,"mediaType":"application/json"},
 		"wasm-grain/stdlib.pack.gz.bin": {"sha256":"7180475667a3129821be12aa787f449e58de62b0bb5c0e5472077b73b9e5cafa","bytes":1653344,"encoding":"gzip","mediaType":"application/octet-stream","uncompressedSha256":"c56e83cbea649be5dd94ce98ae648b8f98e40203761ef7b1ad0a799048ee08eb","uncompressedBytes":5066092},
+		"wasm-graphql/runner-worker.js": {"sha256":"ce72dc32bb7b679513a02e7059088a68f16def2aebcf393cc3dd7cad1bf78012","bytes":192574,"mediaType":"text/javascript"},
+		"wasm-graphql/runtime-manifest.v1.json": {"sha256":"eb055c003f4a689a9184810ebc2a52c5acd0870e5fa9c434898ea244705fb1e6","bytes":579,"mediaType":"application/json"},
 		"wasm-haskell/bsdtar.wasm": {"sha256":"e13ebb15ca0971f6629a6313bc043c532dd9be3a0e6bb0b7f8a395de835ad0c0","bytes":1240004,"mediaType":"application/wasm","deliveryPath":"wasm-haskell/bsdtar.wasm.gz"},
 		"wasm-haskell/bsdtar.wasm.gz": {"sha256":"1f33a412ff4a5af22a9bcf66021c0b090cb9fb229f599ae5e9aa35c7bfc3bb7a","bytes":417731,"encoding":"gzip","mediaType":"application/wasm","uncompressedSha256":"e13ebb15ca0971f6629a6313bc043c532dd9be3a0e6bb0b7f8a395de835ad0c0","uncompressedBytes":1240004},
 		"wasm-haskell/dyld.mjs": {"sha256":"d2260e7669868741fde2f1ba8cd38a9d63bff532c8ccb53d18b210b60af915d9","bytes":83177,"mediaType":"text/javascript"},

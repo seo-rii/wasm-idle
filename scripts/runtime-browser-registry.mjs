@@ -63,6 +63,7 @@ export const runtimeBrowserRegistry = [
 	runtime('r', 'stdin', { sourceNames: ['r', 'webr'] }),
 	runtime('duckdb', 'stdin'),
 	runtime('sqlite', 'stdin'),
+	runtime('graphql', 'specialized'),
 	runtime('postgresql', 'stdin'),
 	runtime('php', 'stdin'),
 	...[

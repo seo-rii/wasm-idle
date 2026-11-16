@@ -1012,6 +1012,19 @@ export const supportMatrixRows = [
 		}
 	},
 	{
+		language: 'GraphQL',
+		ids: ['GRAPHQL'],
+		runtime: 'graphql-js 17.0.2 / browser Worker',
+		stdin: 'Buffered JSON; EOF before execution',
+		editorSupport: 'GraphQL LSP + execution diagnostics',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/graphql.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_GRAPHQL',
+			language: 'GRAPHQL'
+		}
+	},
+	{
 		language: 'PostgreSQL',
 		ids: ['POSTGRESQL'],
 		runtime: 'PostgreSQL 18 / PGlite',
@@ -1955,6 +1968,14 @@ const runtimeDetailsByLanguage = new Map([
 				`${code('runtimeAssets.postgresql.moduleUrl')} or ` +
 				`${code('PUBLIC_WASM_POSTGRESQL_MODULE_URL')} or ${code('rootUrl')}; ` +
 				`${code('stdin')}, ${code('activePath')}, ${code('workspaceFiles')}`
+		}
+	],
+	[
+		'GraphQL',
+		{
+			packageBase: `self-contained static Worker built from ${npmPackage('graphql')}`,
+			execution: `the reference parser, schema validator and executor run in a fresh browser Worker; SDL is inline or in ${code('schema.graphql')}; JSON stdin supplies ${code('rootValue')}, ${code('variables')} and ${code('operationName')}; prints one GraphQL JSON result; no remote API or JavaScript resolvers`,
+			customization: `${code('runtimeAssets.graphql.workerUrl')}/${code('workerReceipt')} or ${code('rootUrl')}; ${code('stdin')}, ${code('activePath')}, ${code('workspaceFiles')}`
 		}
 	],
 	[

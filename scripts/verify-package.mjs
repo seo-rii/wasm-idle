@@ -59,7 +59,9 @@ export const scenarios = [
 		// Lazy receipt lookup adds three core JavaScript/declaration pairs (789 files measured).
 		// Java 25 adds one bytecode reader JavaScript/declaration pair; ASM is bundled rather than installed.
 		// The measured 7,405,837-byte / 791-file install needs 1 KiB above the previous byte cap.
-		budget: { maxBytes: 7 * MiB + 65 * 1024, maxFiles: 791, maxPackages: 6 },
+		// GraphQL's adapter and receipt add four SDK files; the reference engine stays external.
+		// The measured 7,411,349-byte / 795-file install needs the minimum further 5 KiB.
+		budget: { maxBytes: 7 * MiB + 70 * 1024, maxFiles: 795, maxPackages: 6 },
 		absentPackageNames: [
 			'@katana-project/asm',
 			'java-parser',
@@ -448,7 +450,9 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Baseline CI job 131822775029 measures 42,959,390 bytes / 3,410 files / 66 packages.
 		// Add 64 KiB for the 40,478-byte overflow; file and package limits stay unchanged.
 		// Java 25 CI adds 31,813 bytes and two files to that baseline; allow another 32 KiB / two files.
-		budget: { maxBytes: 40 * MiB + 1_049 * 1024, maxFiles: 3_412, maxPackages: 70 },
+		// GraphQL measures 42,997,156 bytes / 3,416 files / 66 packages: only its four
+		// adapter/receipt files exceed the existing budget; keep byte/package caps unchanged.
+		budget: { maxBytes: 40 * MiB + 1_049 * 1024, maxFiles: 3_416, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

@@ -50,6 +50,10 @@
 			"maxBytes": 25000,
 			"maxFiles": 4
 		},
+		"wasm-graphql": {
+			"maxBytes": 250000,
+			"maxFiles": 3
+		},
 		"wasm-assemblyscript": {
 			"maxBytes": 3500000,
 			"maxFiles": 10

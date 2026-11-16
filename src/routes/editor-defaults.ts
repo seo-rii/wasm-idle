@@ -1309,9 +1309,18 @@ fn main() {
 	mut memo := map[int]i64{}
 	println('fibonacci=\${fibonacci(n, mut memo)}')
 }`,
-	graphql: `# memo cache: 0 => 1, 1 => 1
-query Fibonacci($n: Int = 4) {
-  fibonacci(n: $n)
+	graphql: `# Optional JSON goes in Preloaded stdin before Run.
+# Example: {"rootValue":{"greeting":"Hello GraphQL!","numbers":[1,2,3]},"variables":{"showNumbers":true}}
+# Leave input empty to query the schema and a null greeting.
+type Query {
+  greeting: String
+  numbers: [Int!]!
+}
+
+query Example($showNumbers: Boolean! = false) {
+  __typename
+  greeting
+  numbers @include(if: $showNumbers)
 }`,
 	duckdb: `WITH RECURSIVE memo(n, prev, curr) AS (
     SELECT 0, 1, 1

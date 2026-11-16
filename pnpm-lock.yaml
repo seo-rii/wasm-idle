@@ -291,6 +291,9 @@ importers:
       globals:
         specifier: ^17.13.0
         version: 17.13.0
+      graphql:
+        specifier: 17.0.2
+        version: 17.0.2
       java-parser:
         specifier: 3.0.1
         version: 3.0.1

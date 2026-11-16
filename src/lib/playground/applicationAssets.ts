@@ -69,6 +69,7 @@ import {
 } from './wasmTinyGoVersion';
 import { WASM_TYPESCRIPT_ASSET_VERSION } from './wasmTypeScriptVersion';
 import { WASM_WAT_ASSET_VERSION } from './wasmWatVersion';
+import { WASM_GRAPHQL_RUNNER_RECEIPT } from './wasmGraphqlVersion';
 import { WASM_ZIG_ASSET_RECEIPTS, WASM_ZIG_ASSET_VERSION } from './wasmZigVersion';
 
 export function normalizeApplicationAssetRootUrl(rootUrl: string): string {
@@ -97,6 +98,10 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 	return {
 		rootUrl: normalizedRootUrl,
 		clang: { bundledLanguageSysroots: true },
+		graphql: {
+			workerUrl: asset('wasm-graphql/runner-worker.js', WASM_GRAPHQL_RUNNER_RECEIPT.sha256),
+			workerReceipt: WASM_GRAPHQL_RUNNER_RECEIPT
+		},
 		assemblyscript: {
 			moduleUrl: asset('wasm-assemblyscript/runtime.mjs', STATIC_RUNTIME_MODULE_VERSION)
 		},

@@ -20,6 +20,13 @@ interface SandboxRoute {
 
 const sandboxRoutes = [
 	{
+		languageId: 'GRAPHQL',
+		load: async () => {
+			const { default: Graphql } = await import('$lib/playground/graphql');
+			return new Graphql();
+		}
+	},
+	{
 		languageId: 'SCALA',
 		load: async () => {
 			const { default: Scala } = await import('$lib/playground/scala');

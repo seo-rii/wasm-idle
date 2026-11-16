@@ -208,6 +208,7 @@
 	const traceFallbackLanguages = new Set<PlaygroundLanguage>(['C', 'CPP', 'RUST', 'OBJC']);
 	// Runtimes that consume stdin once at start, even when terminal streaming is available.
 	const preloadedStdinLanguages = new Set<PlaygroundLanguage>([
+		'GRAPHQL',
 		'BASH',
 		'POSTGRESQL',
 		'SCALA',
@@ -5246,17 +5247,19 @@
 							<div>
 								<strong>Preloaded stdin</strong>
 								<span>
-									{language === 'SCALA'
-										? 'Scala.js accepts buffered stdin only. Enter it before Run; extra reads receive EOF. Interactive terminal input is unavailable.'
-										: language === 'BASH'
-											? 'The Bash WASIX package accepts stdin when the process starts. Enter it before Run; extra reads receive EOF.'
-											: language === 'POSTGRESQL'
-												? "PostgreSQL reads this input as the server file '/dev/blob' (COPY ... FROM '/dev/blob' or pg_read_file('/dev/blob')). Enter it before Run."
-												: language === 'CSHARP' ||
-													  language === 'FSHARP' ||
-													  language === 'VBNET'
-													? 'C#, F#, and VB.NET read all stdin when the program starts. Enter it before Run; extra reads receive EOF. Output appears when the program finishes.'
-													: 'SharedArrayBuffer is unavailable here, so terminal input cannot be sent while the program is running. Enter stdin before Run; extra reads receive EOF.'}
+									{language === 'GRAPHQL'
+										? 'Optional JSON input: rootValue, variables and operationName. Leave empty to use the schema alone. Input is read when you click Run.'
+										: language === 'SCALA'
+											? 'Scala.js accepts buffered stdin only. Enter it before Run; extra reads receive EOF. Interactive terminal input is unavailable.'
+											: language === 'BASH'
+												? 'The Bash WASIX package accepts stdin when the process starts. Enter it before Run; extra reads receive EOF.'
+												: language === 'POSTGRESQL'
+													? "PostgreSQL reads this input as the server file '/dev/blob' (COPY ... FROM '/dev/blob' or pg_read_file('/dev/blob')). Enter it before Run."
+													: language === 'CSHARP' ||
+														  language === 'FSHARP' ||
+														  language === 'VBNET'
+														? 'C#, F#, and VB.NET read all stdin when the program starts. Enter it before Run; extra reads receive EOF. Output appears when the program finishes.'
+														: 'SharedArrayBuffer is unavailable here, so terminal input cannot be sent while the program is running. Enter stdin before Run; extra reads receive EOF.'}
 								</span>
 							</div>
 							<textarea

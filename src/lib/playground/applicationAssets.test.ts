@@ -163,6 +163,7 @@ describe('application runtime asset root', () => {
 			'fortran',
 			'gleam',
 			'go',
+			'graphql',
 			'haskell',
 			'j',
 			'janet',
