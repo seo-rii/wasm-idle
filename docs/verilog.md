@@ -40,3 +40,9 @@ Hosts serve `static/wasm-verilog/` under `runtimeAssets.rootUrl`. The worker and
 all compiler/runtime payloads are pinned by length and SHA-256. The source pins,
 original build recipe and license notices are under `runtimes/wasm-verilog/`.
 Run `pnpm test:browser:verilog` for real Chromium compilation and simulation.
+
+The six original engine payloads are stored as inert `*.gz.bin` files. The
+receipt-verified preflight bounds delivery and decompression, verifies the
+original uncompressed byte hashes, and transfers those original bytes to the
+worker. This works without a service worker and survives production asset
+compression; the small host worker and manifest retain their identity URLs.

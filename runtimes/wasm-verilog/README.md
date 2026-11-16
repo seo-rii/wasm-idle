@@ -35,3 +35,9 @@ The worker verifies upstream artifacts before changing only the Wasm memory
 maximum to enforce the execution limit. Parsing, elaboration, simulation and
 system-task semantics remain the upstream implementation. `LICENSE.iverilog`
 and `LICENSE.emscripten` preserve the compiler/VM and runtime licensing.
+
+The six original engine payloads are stored as inert `*.gz.bin` files. The
+receipt-verified preflight bounds delivery and decompression, verifies the
+original uncompressed byte hashes, and transfers those original bytes to the
+worker. This works without a service worker and survives production asset
+compression; the small host worker and manifest retain their identity URLs.

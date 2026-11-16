@@ -1,5 +1,7 @@
 import {
 	RuntimeConfigurationError,
+	AssetIntegrityError,
+	verifyRuntimeAssetIntegrity,
 	preflightRuntimeAssets,
 	type RuntimeRegistryManifest
 } from '@wasm-idle/core';
@@ -9,19 +11,20 @@ import type { SandboxProgress } from './sandbox';
 import { StaticWorkerRuntimeSandbox } from './staticWorkerRuntime';
 import {
 	VERILOG_PROFILE,
+	VERILOG_DELIVERY,
 	VERILOG_WORKER_RECEIPT,
 	VERILOG_MANIFEST_RECEIPT
 } from './wasmVerilogVersion';
 
 const assets = Object.entries(VERILOG_PROFILE.assets).map(([name, receipt]) => ({
 	key: name.replace('.js', 'JavaScript').replace('.wasm', 'Wasm'),
-	path: name,
+	path: VERILOG_DELIVERY[name as keyof typeof VERILOG_DELIVERY].path,
 	mediaType: name.endsWith('.js') ? 'text/javascript' : 'application/wasm',
-	compressedBytes: receipt.bytes,
+	compressedBytes: VERILOG_DELIVERY[name as keyof typeof VERILOG_DELIVERY].bytes,
 	uncompressedBytes: receipt.bytes,
-	compressedSha256: receipt.sha256,
+	compressedSha256: VERILOG_DELIVERY[name as keyof typeof VERILOG_DELIVERY].sha256,
 	uncompressedSha256: receipt.sha256,
-	encoding: 'identity' as const
+	encoding: 'gzip' as const
 }));
 const registry: RuntimeRegistryManifest = {
 	schemaVersion: 2,
@@ -123,13 +126,62 @@ export default class Verilog extends StaticWorkerRuntimeSandbox {
 						context.reportProgress(0.1, `Preflighting Verilog ${progress.assetKey}`);
 					}
 				});
+				const payload: Record<string, Uint8Array> = {};
+				for (const asset of assets) {
+					let bytes = result.assets[asset.key].bytes;
+					if (asset.encoding === 'gzip') {
+						const reader = new Response(Uint8Array.from(bytes))
+							.body!.pipeThrough(new DecompressionStream('gzip'))
+							.getReader();
+						const output = new Uint8Array(asset.uncompressedBytes);
+						let offset = 0;
+						const abort = () => {
+							void reader.cancel(context.signal?.reason).catch(() => {});
+						};
+						context.signal?.addEventListener('abort', abort, { once: true });
+						try {
+							for (;;) {
+								context.signal?.throwIfAborted();
+								const part = await reader.read();
+								if (part.done) break;
+								if (offset + part.value.length > output.length)
+									throw new AssetIntegrityError(
+										'Verilog decompression exceeded its receipt',
+										{ runtimeId: 'VERILOG' }
+									);
+								output.set(part.value, offset);
+								offset += part.value.length;
+							}
+							context.signal?.throwIfAborted();
+						} catch (error) {
+							await reader.cancel().catch(() => {});
+							throw error;
+						} finally {
+							context.signal?.removeEventListener('abort', abort);
+							reader.releaseLock();
+						}
+						if (offset !== output.length)
+							throw new AssetIntegrityError('Verilog decompression size mismatch', {
+								runtimeId: 'VERILOG'
+							});
+						bytes = output;
+					}
+					await verifyRuntimeAssetIntegrity({
+						asset: asset.key,
+						bytes,
+						expected: {
+							bytes: asset.uncompressedBytes,
+							sha256: asset.uncompressedSha256
+						},
+						runtimeId: 'VERILOG'
+					});
+					payload[asset.key] = bytes;
+				}
 				return context.createOwnedDelivery(
 					Object.freeze({
 						protocol: 'wasm-idle-verilog-preflight',
 						profileId: VERILOG_PROFILE.profileId,
-						...Object.fromEntries(
-							assets.map((asset) => [asset.key, result.assets[asset.key].bytes])
-						)
+						...payload
 					})
 				);
 			}

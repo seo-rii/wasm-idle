@@ -2,6 +2,7 @@
 import { readFile, mkdtemp, cp, rm } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
+import { gunzipSync, gzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import {
 	capVerilogWasmMemory,
@@ -9,18 +10,34 @@ import {
 	verilogWorkspacePath
 } from '../../scripts/runtime-workers/verilog-host.mjs';
 import { syncWasmVerilogAssets } from '../../scripts/sync-wasm-verilog.mjs';
+import { compressStaticRuntimeAssets } from '../../scripts/compress-static-runtime-assets.mjs';
 
 describe('original Icarus Verilog distribution', () => {
 	it('verifies the committed original assets, build recipe and generated host/profile', async () => {
 		await syncWasmVerilogAssets({ check: true });
 	});
+	it('preserves verified executable URLs through the actual production compressor', async () => {
+		const temp = await mkdtemp(path.join(os.tmpdir(), 'wasm-idle-verilog-production-'));
+		const targetDir = path.join(temp, 'wasm-verilog');
+		const versionModulePath = path.join(temp, 'version.ts');
+		try {
+			await cp('static/wasm-verilog', targetDir, { recursive: true });
+			await syncWasmVerilogAssets({ targetDir, versionModulePath });
+			await compressStaticRuntimeAssets({ rootDir: temp });
+			await syncWasmVerilogAssets({ check: true, targetDir, versionModulePath });
+		} finally {
+			await rm(temp, { recursive: true, force: true });
+		}
+	});
 	it('rejects corrupted upstream code before writing generated output', async () => {
 		const temp = await mkdtemp(path.join(os.tmpdir(), 'wasm-idle-verilog-pin-'));
 		try {
 			await cp('static/wasm-verilog', temp, { recursive: true });
-			const bytes = await readFile(path.join(temp, 'ivl.wasm'));
+			const bytes = gunzipSync(await readFile(path.join(temp, 'ivl.wasm.gz.bin')));
 			bytes[bytes.length - 1] ^= 1;
-			await (await import('node:fs/promises')).writeFile(path.join(temp, 'ivl.wasm'), bytes);
+			await (
+				await import('node:fs/promises')
+			).writeFile(path.join(temp, 'ivl.wasm.gz.bin'), gzipSync(bytes));
 			await expect(syncWasmVerilogAssets({ check: true, targetDir: temp })).rejects.toThrow(
 				'pinned asset changed'
 			);
@@ -31,7 +48,9 @@ describe('original Icarus Verilog distribution', () => {
 	it.each(['ivlpp', 'ivl', 'vvp'])(
 		'bounds the original %s Wasm without changing instructions',
 		async (name) => {
-			const bytes = new Uint8Array(await readFile(`static/wasm-verilog/${name}.wasm`));
+			const bytes = new Uint8Array(
+				gunzipSync(await readFile(`static/wasm-verilog/${name}.wasm.gz.bin`))
+			);
 			const original = new WebAssembly.Module(bytes);
 			const bounded = new WebAssembly.Module(capVerilogWasmMemory(bytes, 64 * 1024 * 1024));
 			expect(WebAssembly.Module.imports(bounded)).toEqual(

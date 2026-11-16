@@ -28,11 +28,43 @@ export const VERILOG_PROFILE = {
 		}
 	}
 } as const;
+export const VERILOG_DELIVERY = {
+	'ivlpp.js': {
+		path: 'ivlpp.js.gz.bin',
+		bytes: 43621,
+		sha256: 'b48f7dce464f0d0b8e55643ec783c7a8d6b356e3c0cacf1574d5a4dbf7f69db0'
+	},
+	'ivlpp.wasm': {
+		path: 'ivlpp.wasm.gz.bin',
+		bytes: 44330,
+		sha256: 'd4041b95bb9fdd2dd628af633f35c8b2b1693ea408b193a402d7f05f92d800c7'
+	},
+	'ivl.js': {
+		path: 'ivl.js.gz.bin',
+		bytes: 18679,
+		sha256: 'bdc5e91d7b460a0ecd8ae69d996dc97e5724fdd5b56f4286eecc2dee86c9fd90'
+	},
+	'ivl.wasm': {
+		path: 'ivl.wasm.gz.bin',
+		bytes: 551528,
+		sha256: '12ea1663f1da685bb4fb9f5d0c3f5debcab5392c002bc6955ac8b96ddbdbe6e1'
+	},
+	'vvp.js': {
+		path: 'vvp.js.gz.bin',
+		bytes: 18977,
+		sha256: 'd60879789f35ae0dba55e514101ce0b5db146485bfcb7f33a30467b5d7d5b7cd'
+	},
+	'vvp.wasm': {
+		path: 'vvp.wasm.gz.bin',
+		bytes: 325611,
+		sha256: '50cb19495269a0c257382c0b16fc7f373cd16611b2ff8db297d468ed461bb1aa'
+	}
+} as const;
 export const VERILOG_WORKER_RECEIPT = {
 	bytes: 14491,
 	sha256: '3f7d823f73d2ebb96b1a7a99d2499e5973a07e311cf535304527751b174b4677'
 } as const;
 export const VERILOG_MANIFEST_RECEIPT = {
-	bytes: 1817,
-	sha256: 'fe2c1bf216ddceb12051ffc1a9209ccd623e9bb4c8cc80a7df7abece053bbf4f'
+	bytes: 2813,
+	sha256: '9003cb7a8073c8f204bd1c225ed2ccbaa60428f0154b099378e9531447bed047'
 } as const;

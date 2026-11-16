@@ -62,9 +62,9 @@ export const scenarios = [
 		// Picat packed root/core deltas are 16,284 + 1,109 bytes and six files.
 		// Add 17 KiB / six files for its adapter, assets and profile; runtime payloads stay external.
 		// Cumulative Squirrel, Wren, PARI/GP and WASI memory limits add another 27 KiB/12 files.
-		// Merged Verilog measures 7,461,572 bytes / 813 files / five packages.
-		// Its four adapter/profile files and 9,924-byte overflow need only another 10 KiB.
-		budget: { maxBytes: 7 * MiB + 119 * 1024, maxFiles: 813, maxPackages: 6 },
+		// Compressed Verilog measures 7,467,371 bytes / 813 files / five packages.
+		// Four adapter/profile files and a 15,723-byte overflow need only 16 KiB above main.
+		budget: { maxBytes: 7 * MiB + 125 * 1024, maxFiles: 813, maxPackages: 6 },
 		absentPackageNames: [
 			'@katana-project/asm',
 			'java-parser',
@@ -140,7 +140,7 @@ export const scenarios = [
 		// Picat CI job 133036878600 measures 2,856,625 bytes with unchanged files/dependencies.
 		// The four-language core measures 1,619,555 bytes, a 3,193-byte increase.
 		// GCC totals 2,858,709 bytes; a 3 KiB increase retains 299 bytes of headroom.
-		// Merged Verilog shared-core receipts measure 2,860,074 bytes / 196 files / four packages.
+		// Merged Verilog shared-core receipts measure 2,860,946 bytes / 196 files / four packages.
 		// Cover the 1,066-byte overflow with another 2 KiB; files/dependencies stay unchanged.
 		budget: { maxBytes: 2.5 * MiB + 234 * 1024, maxFiles: 196, maxPackages: 4 },
 		absentPackageNames: [
@@ -460,7 +460,7 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Java 25 CI adds 31,813 bytes and two files to that baseline; allow another 32 KiB / two files.
 		// Propagate Picat's measured 17 KiB / six-file SDK increase; dependencies are unchanged.
 		// Keep all four language profile allowances when installing the combined SDK.
-		// Merged Verilog measures 43,047,811 bytes / 3,434 files / 66 packages.
+		// Merged Verilog measures 43,053,610 bytes / 3,434 files / 66 packages.
 		// Its four adapter/profile files fit within the existing byte/dependency limits.
 		budget: { maxBytes: 40 * MiB + 1_093 * 1024, maxFiles: 3_434, maxPackages: 70 },
 		imports: [

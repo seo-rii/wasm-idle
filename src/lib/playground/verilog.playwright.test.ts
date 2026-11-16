@@ -31,6 +31,8 @@ async function runVerilogConsumer(page: Page, browserUrl: string) {
 	});
 	await page.waitForFunction(() => Boolean((globalThis as any).__Verilog));
 	return await page.evaluate(async (base) => {
+		if (navigator.serviceWorker.controller)
+			throw new Error('Expected a cold consumer without a service worker');
 		const sandbox = new (globalThis as any).__Verilog();
 		const rootUrl = new URL(base).pathname.replace(/\/$/u, '');
 		const run = async (
@@ -192,7 +194,7 @@ describe.skipIf(!enabled)('real Icarus Verilog compiler and simulator in Chromiu
 		'compiles and simulates fresh source with original array and module semantics, stdin/EOF, files, arguments, errors and recovery',
 		{ timeout: 180_000, meta: browserMeta },
 		async () => {
-			const context = await browser.newContext();
+			const context = await browser.newContext({ serviceWorkers: 'block' });
 			await addBrowserTestCookies(context, server.browserUrl);
 			const page = await context.newPage();
 			page.setDefaultTimeout(60_000);
