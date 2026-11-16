@@ -61,8 +61,8 @@ export const scenarios = [
 		// The measured 7,405,837-byte / 791-file install needs 1 KiB above the previous byte cap.
 		// Picat packed root/core deltas are 16,284 + 1,109 bytes and six files.
 		// Add 17 KiB / six files for its adapter, assets and profile; runtime payloads stay external.
-		// Cumulative Squirrel, Wren and PARI/GP profiles add another 23 KiB/ten files.
-		budget: { maxBytes: 7 * MiB + 105 * 1024, maxFiles: 807, maxPackages: 6 },
+		// Cumulative Squirrel, Wren, PARI/GP and WASI memory limits add another 27 KiB/12 files.
+		budget: { maxBytes: 7 * MiB + 109 * 1024, maxFiles: 809, maxPackages: 6 },
 		absentPackageNames: [
 			'@katana-project/asm',
 			'java-parser',
@@ -136,8 +136,9 @@ export const scenarios = [
 		// Standard modules CI job 128326182518 measures 2,855,516 bytes / 196 files / four packages.
 		// Another 23 KiB covers the 23,132-byte overflow with 420 bytes of headroom; BMIs stay external.
 		// Picat CI job 133036878600 measures 2,856,625 bytes with unchanged files/dependencies.
-		// The shared core profile adds 1,109 bytes; 1 KiB covers its 689-byte overflow.
-		budget: { maxBytes: 2.5 * MiB + 233 * 1024, maxFiles: 196, maxPackages: 4 },
+		// The four-language core measures 1,619,555 bytes, a 3,193-byte increase.
+		// GCC totals 2,858,709 bytes; a 3 KiB increase retains 299 bytes of headroom.
+		budget: { maxBytes: 2.5 * MiB + 232 * 1024, maxFiles: 196, maxPackages: 4 },
 		absentPackageNames: [
 			'wasm-idle',
 			'@wasm-idle/llvm-core',
@@ -455,7 +456,7 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Java 25 CI adds 31,813 bytes and two files to that baseline; allow another 32 KiB / two files.
 		// Propagate Picat's measured 17 KiB / six-file SDK increase; dependencies are unchanged.
 		// Keep all four language profile allowances when installing the combined SDK.
-		budget: { maxBytes: 40 * MiB + 1_089 * 1024, maxFiles: 3_428, maxPackages: 70 },
+		budget: { maxBytes: 40 * MiB + 1_093 * 1024, maxFiles: 3_430, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
