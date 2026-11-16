@@ -61,7 +61,8 @@ export const scenarios = [
 		// The measured 7,405,837-byte / 791-file install needs 1 KiB above the previous byte cap.
 		// PARI/GP adds 15,625 packed root bytes / six files and 1,339 core bytes.
 		// Reserve the rounded 17 KiB delta for its adapter, asset resolver and version-profile pairs.
-		budget: { maxBytes: 7 * MiB + 82 * 1024, maxFiles: 797, maxPackages: 6 },
+		// Include preceding Squirrel and Wren profiles: another 6 KiB/four files.
+		budget: { maxBytes: 7 * MiB + 88 * 1024, maxFiles: 801, maxPackages: 6 },
 		absentPackageNames: [
 			'@katana-project/asm',
 			'java-parser',
@@ -453,7 +454,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Add 64 KiB for the 40,478-byte overflow; file and package limits stay unchanged.
 		// Java 25 CI adds 31,813 bytes and two files to that baseline; allow another 32 KiB / two files.
 		// Propagate PARI/GP's measured 16,964-byte / six-file delta as 17 KiB / six files.
-		budget: { maxBytes: 40 * MiB + 1_066 * 1024, maxFiles: 3_418, maxPackages: 70 },
+		// Preserve the cumulative Squirrel/Wren allowance of 6 KiB/four files.
+		budget: { maxBytes: 40 * MiB + 1_072 * 1024, maxFiles: 3_422, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

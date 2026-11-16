@@ -538,6 +538,12 @@ describe('playground runtime binding', () => {
 		expect(moduleLoads).toContain('COBOL');
 	});
 
+	it('routes Wren requests through the real-WASM sandbox profile', async () => {
+		const sandbox = await playground('WREN');
+		expect(sandbox).toBeInstanceOf(MockSandbox);
+		expect(sandboxInstances.get('WASM')).toHaveLength(1);
+	});
+
 	it('loads every canonical language declared by Core', async () => {
 		for (const languageId of supportedLanguageIds) {
 			const sandbox = await playground(languageId);
