@@ -120,6 +120,7 @@ describe('all-language browser test runner', () => {
 			'lean4',
 			'commonlisp',
 			'picat',
+			'moonbit',
 			'parigp',
 			'scala'
 		]);
@@ -165,6 +166,7 @@ describe('all-language browser test runner', () => {
 				'lean4',
 				'commonlisp',
 				'picat',
+				'moonbit',
 				'parigp',
 				'scala'
 			]
@@ -509,6 +511,7 @@ describe('all-language browser test runner', () => {
 				'lean4',
 				'commonlisp',
 				'picat',
+				'moonbit',
 				'parigp',
 				'scala'
 			],

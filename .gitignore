@@ -76,3 +76,10 @@ static/wasm-lfortran/
 /static/wasm-scala/
 
 /static/wasm-picat/
+
+# Original MoonBit compiler and matching compiled core are prepared from pinned sources.
+/static/wasm-moonbit/moonc.js
+/static/wasm-moonbit/moonc.js.gz
+/static/wasm-moonbit/moonc.assets
+/static/wasm-moonbit/stdlib.tar
+/static/wasm-moonbit/stdlib.tar.gz

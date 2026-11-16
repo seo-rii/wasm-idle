@@ -20,6 +20,13 @@ interface SandboxRoute {
 
 const sandboxRoutes = [
 	{
+		languageId: 'MOONBIT',
+		load: async () => {
+			const { default: Moonbit } = await import('$lib/playground/moonbit');
+			return new Moonbit();
+		}
+	},
+	{
 		languageId: 'PICAT',
 		load: async () => {
 			const { default: Picat } = await import('$lib/playground/picat');

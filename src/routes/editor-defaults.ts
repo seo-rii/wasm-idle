@@ -21,6 +21,7 @@ export type EditorDefaultLanguage =
 	| 'python'
 	| 'java'
 	| 'scala'
+	| 'moonbit'
 	| 'go'
 	| 'd'
 	| 'csharp'
@@ -80,6 +81,7 @@ export type EditorDefaultLanguage =
 	| 'rust';
 
 export const editorDefaults: Record<
+	| 'moonbit'
 	| 'befunge93'
 	| 'picat'
 	| 'wren'
@@ -158,6 +160,8 @@ export const editorDefaults: Record<
 	| 'markdown',
 	string
 > = {
+	moonbit:
+		'// UTF-8 input; use EOF to finish. The host implements this Wasm FFI.\nextern "wasm" fn read_char() -> Int = "wasm_idle" "read_char"\n\nfn main {\n  let text = StringBuilder()\n  while true {\n    let code = read_char()\n    if code < 0 { break }\n    text.write_char(code.unsafe_to_char())\n  }\n  println(text.to_string())\n}\n',
 	squirrel:
 		"// Echo UTF-8 input; send EOF to finish.\nwhile (true) {\n    try { stdout.writen(stdin.readn('b'), 'b'); }\n    catch (error) {\n        if (stdin.eos()) break;\n        throw error;\n    }\n}\n",
 	uhmlang: '어떻게\n엄식?\n식어!\n이 사람이름이냐ㅋㅋ\n',

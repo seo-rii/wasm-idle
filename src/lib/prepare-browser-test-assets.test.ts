@@ -30,6 +30,18 @@ afterEach(async () => {
 });
 
 describe('browser test asset preparation', () => {
+	it('prepares MoonBit from its pinned producer and requires payload receipts in grouped tests', async () => {
+		const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-idle-moonbit-ci-assets-'));
+		temporaryDirectories.push(root);
+		const prepareMoonbit = vi.fn(async () => undefined);
+		await prepareBrowserTestAssets({ groups: ['moonbit'], staticDir: root, prepareMoonbit });
+		expect(prepareMoonbit).toHaveBeenCalledWith({ targetDir: path.join(root, 'wasm-moonbit') });
+		await expect(
+			verifyBrowserTestAssets({ groups: ['moonbit'], staticDir: root })
+		).rejects.toThrow(
+			'Missing or oversized required browser test asset: wasm-moonbit/moonc.js'
+		);
+	});
 	it('prepares and verifies Scala compiler fixtures from immutable receipts outside the release static tree', async () => {
 		const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-idle-scala-ci-assets-'));
 		temporaryDirectories.push(root);
@@ -854,6 +866,7 @@ describe('browser test asset preparation', () => {
 			'lean4',
 			'commonlisp',
 			'picat',
+			'moonbit',
 			'parigp',
 			'scala'
 		]);

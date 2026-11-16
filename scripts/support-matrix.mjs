@@ -160,6 +160,19 @@ function codeList(values) {
 /** @type {SupportMatrixRow[]} */
 export const supportMatrixRows = [
 	{
+		language: 'MoonBit',
+		ids: ['MOONBIT'],
+		runtime: 'Official MoonBit 0.10.19 Wasm compiler / WasmGC',
+		stdin: 'Yes (host FFI)',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/moonbit.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_MOONBIT',
+			marker: 'original MoonBit compiler in Chromium'
+		}
+	},
+	{
 		language: 'Picat',
 		ids: ['PICAT'],
 		runtime: 'Official Picat WebAssembly playground VM',
@@ -1159,6 +1172,17 @@ function staticWorkerCustomizationFor(runtimeKey, envKey = runtimeKey.toUpperCas
 
 /** @type {Map<string, RuntimeDetail>} */
 const runtimeDetailsByLanguage = new Map([
+	[
+		'MoonBit',
+		{
+			packageBase:
+				'Official v0.10.19+97801ee1b compiler (MoonBit Public Source License), pinned source d4ada10d; matching core 0.1.20261030 (Apache-2.0, original notices retained)',
+			execution:
+				'Compiles unchanged source with the original Wasm compiler and executes WasmGC; 96 original core packages; explicit wasm_idle read_byte/read_char/write_char FFI supplies UTF-8 stdin and EOF; upstream eprintln falls back to stdout on WasmGC',
+			customization:
+				'runtimeAssets.rootUrl, stdin, activePath, same-package workspace .mbt files, moon.pkg.json core imports and programArgs via core/env; cancellation and asset/workspace/output/time limits; WasmGC heap is browser-controlled; no async/native IO, external packages or native process access'
+		}
+	],
 	[
 		'Picat',
 		{

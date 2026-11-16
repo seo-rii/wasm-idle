@@ -26,6 +26,14 @@ const THIS_FILE = fileURLToPath(import.meta.url);
 /** @type {RuntimeDefinition[]} */
 export const RUNTIMES = [
 	{
+		name: 'wasm-moonbit',
+		module: './sync-wasm-moonbit.mjs',
+		exportName: 'syncWasmMoonbitAssets',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir',
+		manual: true
+	},
+	{
 		name: 'wasm-wren',
 		module: './sync-wasm-wren.mjs',
 		exportName: 'syncWasmWrenDist',

@@ -1,4 +1,5 @@
 const canonicalLanguageIds = [
+	'MOONBIT',
 	'PICAT',
 	'WREN',
 	'SQUIRREL',

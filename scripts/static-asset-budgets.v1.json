@@ -1,8 +1,8 @@
 {
 	"schemaVersion": 1,
 	"total": {
-		"maxBytes": 1163600000,
-		"maxFiles": 1997
+		"maxBytes": 1177600000,
+		"maxFiles": 2005
 	},
 	"directories": {
 		"clang": {
@@ -336,6 +336,10 @@
 		"wasm-squirrel": {
 			"maxBytes": 1000000,
 			"maxFiles": 3
+		},
+		"wasm-moonbit": {
+			"maxBytes": 14000000,
+			"maxFiles": 8
 		}
 	}
 }

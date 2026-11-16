@@ -37,6 +37,11 @@ type RuntimeReadinessAudit = EntryReadiness | StaticWorkerReadiness | TerminalRe
  * is the first safe user-visible readiness signal.
  */
 const runtimeReadinessAudit = {
+	MOONBIT: {
+		strategy: 'entry-signal',
+		hostModule: 'moonbit',
+		producerPath: 'scripts/runtime-workers/wasm-moonbit-runner-worker.js'
+	},
 	PICAT: { strategy: 'static-worker-fallback', hostModule: 'picat' },
 	PARIGP: { strategy: 'static-worker-fallback', hostModule: 'parigp' },
 	WREN: {
@@ -304,7 +309,9 @@ describe('runtime progress readiness audit', () => {
 				? readProjectSource('src/lib/playground/python.ts')
 				: ownHostSource.includes('extends Ruby')
 					? readProjectSource('src/lib/playground/ruby.ts')
-					: ownHostSource;
+					: ownHostSource.includes('extends StaticWorkerRuntimeSandbox')
+						? readProjectSource('src/lib/playground/staticWorkerRuntime.ts')
+						: ownHostSource;
 
 			expect(producerSource, `${languageId} producer must emit ready`).toMatch(
 				/kind:\s*['"]ready['"]/u

@@ -78,6 +78,12 @@ export const playgroundLanguages: PlaygroundLanguage[] = [
 export const playgroundLanguageDescriptors: Readonly<
 	Record<PlaygroundLanguage, PlaygroundLanguageDescriptor>
 > = {
+	MOONBIT: {
+		label: 'MoonBit',
+		editorLanguage: 'plaintext',
+		supportsArgs: true,
+		argsLabel: 'Program arguments'
+	},
 	PICAT: { label: 'Picat', editorLanguage: 'plaintext' },
 	PARIGP: { label: 'PARI/GP', editorLanguage: 'plaintext' },
 	WREN: { label: 'Wren', editorLanguage: 'plaintext' },
