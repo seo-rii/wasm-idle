@@ -287,6 +287,7 @@ export function isExecutionRuntimeAssetPath(pathname) {
 		);
 	return (
 		!pathname.includes('/@fs/') &&
+		!pathname.endsWith('/runtimes/wasm-busybox/commands.mjs') &&
 		!/\/wasm-[^/]+-lsp\//u.test(pathname) &&
 		(containerCompiler ||
 			/\/(?:clang\/bin|clangd|pyodide|teavm|webr|wasm-(?!idle(?:\/|$))[^/]+)\//u.test(

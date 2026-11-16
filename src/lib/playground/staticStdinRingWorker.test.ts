@@ -7,12 +7,14 @@ import { describe, expect, it } from 'vitest';
 import { StaticStdinRingHost } from './staticStdinRing';
 
 const readers = [
+	{ language: 'picat', factory: 'createSharedStdinReader', eof: null },
 	{ language: 'j', factory: 'createSharedInputReader', eof: null },
 	{ language: 'bqn', factory: 'createSharedInputReader', eof: null },
 	{ language: 'forth', factory: 'createSharedKeyReader', eof: -1 },
 	{ language: 'tcl', factory: 'createSharedStdinReader', eof: null },
 	{ language: 'lfortran', factory: 'createSharedStdinReader', eof: null },
 	{ language: 'lean4', factory: 'createSharedStdinReader', eof: null },
+	{ language: 'parigp', factory: 'createSharedStdinReader', eof: null },
 	{ language: 'commonlisp', factory: 'createSharedStdinReader', eof: null }
 ] as const;
 

@@ -79,6 +79,10 @@ export const playgroundLanguageDescriptors: Readonly<
 	Record<PlaygroundLanguage, PlaygroundLanguageDescriptor>
 > = {
 	UIUA: { label: 'Uiua', editorLanguage: 'plaintext', supportsArgs: true },
+	PICAT: { label: 'Picat', editorLanguage: 'plaintext' },
+	PARIGP: { label: 'PARI/GP', editorLanguage: 'plaintext' },
+	WREN: { label: 'Wren', editorLanguage: 'plaintext' },
+	SQUIRREL: { label: 'Squirrel', editorLanguage: 'cpp' },
 	UHMLANG: { label: 'UHMLANG (엄준식)', editorLanguage: 'plaintext' },
 	LOLCODE: { label: 'LOLCODE 1.3', editorLanguage: 'plaintext' },
 	APECODE: { label: 'APECode', editorLanguage: 'plaintext' },
