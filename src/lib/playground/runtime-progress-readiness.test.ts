@@ -163,6 +163,11 @@ const runtimeReadinessAudit = {
 		hostModule: 'typescript',
 		producerPath: 'src/lib/playground/worker/typescript.ts'
 	},
+	COFFEESCRIPT: {
+		strategy: 'entry-signal',
+		hostModule: 'typescript',
+		producerPath: 'src/lib/playground/worker/typescript.ts'
+	},
 	TYPESCRIPT: {
 		strategy: 'entry-signal',
 		hostModule: 'typescript',

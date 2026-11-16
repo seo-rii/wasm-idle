@@ -739,6 +739,19 @@ export const supportMatrixRows = [
 		}
 	},
 	{
+		language: 'CoffeeScript',
+		ids: ['COFFEESCRIPT'],
+		runtime: 'CoffeeScript 2.7.0 + JavaScript',
+		stdin: 'Yes',
+		editorSupport: 'syntax + compiler diagnostics',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/coffeescript.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_COFFEESCRIPT',
+			marker: 'runCoffeeScriptBrowserProbe'
+		}
+	},
+	{
 		language: 'JavaScript',
 		ids: ['JAVASCRIPT'],
 		runtime: 'wasm-typescript / TypeScript service',
@@ -1671,6 +1684,14 @@ const runtimeDetailsByLanguage = new Map([
 				`${code('runtimeAssets.ocaml.moduleUrl')}/${code('manifestUrl')} plus ` +
 				`${code('moduleReceipt')}/${code('manifestReceipt')} for a custom generation, or ` +
 				`${code('PUBLIC_WASM_OCAML_*')} for a mirror of the bundled generation; ${code('ocamlBackend')}`
+		}
+	],
+	[
+		'CoffeeScript',
+		{
+			packageBase: `${workspacePackage('runtimes/wasm-typescript')} / ${workspaceDependency('runtimes/wasm-typescript', 'coffeescript')}`,
+			execution: `Official CoffeeScript compiler emits JavaScript executed by the existing browser runner; supports ${code('stdin')} and ${code('programArgs')}`,
+			customization: `${code('runtimeAssets.typescript.coffeeScriptModuleUrl')} or ${code('rootUrl')}; Node builtin modules share the JavaScript runner's documented browser contract`
 		}
 	],
 	[

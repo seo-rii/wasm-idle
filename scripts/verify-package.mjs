@@ -59,7 +59,9 @@ export const scenarios = [
 		// Lazy receipt lookup adds three core JavaScript/declaration pairs (789 files measured).
 		// Java 25 adds one bytecode reader JavaScript/declaration pair; ASM is bundled rather than installed.
 		// The measured 7,405,837-byte / 791-file install needs 1 KiB above the previous byte cap.
-		budget: { maxBytes: 7 * MiB + 65 * 1024, maxFiles: 791, maxPackages: 6 },
+		// CoffeeScript reuses the JS adapter: 7,410,653 bytes / 791 files measured.
+		// Allow the minimum further 4 KiB; file and dependency limits stay unchanged.
+		budget: { maxBytes: 7 * MiB + 69 * 1024, maxFiles: 791, maxPackages: 6 },
 		absentPackageNames: [
 			'@katana-project/asm',
 			'java-parser',

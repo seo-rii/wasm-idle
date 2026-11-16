@@ -40,6 +40,7 @@ const canonicalLanguageIds = [
 	'TINYGO',
 	'OCAML',
 	'JAVASCRIPT',
+	'COFFEESCRIPT',
 	'TYPESCRIPT',
 	'ASSEMBLYSCRIPT',
 	'WAT',
@@ -132,6 +133,7 @@ const languageAliasDefinitions = {
 	VLANG: { canonicalId: 'V', kind: 'spelling' },
 	DLANG: { canonicalId: 'D', kind: 'spelling' },
 	JS: { canonicalId: 'JAVASCRIPT', kind: 'spelling' },
+	COFFEE: { canonicalId: 'COFFEESCRIPT', kind: 'spelling' },
 	AS: { canonicalId: 'ASSEMBLYSCRIPT', kind: 'spelling' },
 	PYTHON: { canonicalId: 'PYTHON3', kind: 'spelling' },
 	PYPY3: {

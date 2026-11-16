@@ -43,6 +43,7 @@ export type EditorDefaultLanguage =
 	| 'rescript'
 	| 'hy'
 	| 'ocaml'
+	| 'coffeescript'
 	| 'javascript'
 	| 'typescript'
 	| 'assemblyscript'
@@ -118,6 +119,7 @@ export const editorDefaults: Record<
 	| 'rescript'
 	| 'hy'
 	| 'ocaml'
+	| 'coffeescript'
 	| 'javascript'
 	| 'typescript'
 	| 'assemblyscript'
@@ -950,6 +952,13 @@ let read_int_or_default default =
 let () =
   let n = read_int_or_default 4 in
   Printf.printf "fibonacci=%d\\n%!" (fibonacci n + bonus)`,
+	coffeescript: `fs = require 'fs'
+n = Number fs.readFileSync(0, 'utf8').trim()
+[a, b] = [0, 1]
+for i in [0...n]
+  [a, b] = [b, a + b]
+console.log "fibonacci=#{a}"
+`,
 	javascript: `const fs = require('fs');
 
 const bonus = 3;
@@ -1627,6 +1636,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.rescript ||
 		source === editorDefaults.hy ||
 		source === editorDefaults.ocaml ||
+		source === editorDefaults.coffeescript ||
 		source === editorDefaults.javascript ||
 		source === editorDefaults.typescript ||
 		source === editorDefaults.assemblyscript ||

@@ -331,6 +331,10 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 			...WASM_TINYGO_RUNTIME_PROFILE
 		},
 		typescript: {
+			coffeeScriptModuleUrl: asset(
+				'wasm-typescript/coffeescript.js',
+				WASM_TYPESCRIPT_ASSET_VERSION
+			),
 			moduleUrl: asset('wasm-typescript/index.js', WASM_TYPESCRIPT_ASSET_VERSION),
 			javascriptModuleUrl: asset(
 				'wasm-typescript/javascript.js',

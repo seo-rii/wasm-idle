@@ -1,8 +1,8 @@
 {
 	"schemaVersion": 1,
 	"total": {
-		"maxBytes": 1151750000,
-		"maxFiles": 1977
+		"maxBytes": 1151950000,
+		"maxFiles": 1979
 	},
 	"directories": {
 		"clang": {
@@ -255,8 +255,8 @@
 			"maxFiles": 45
 		},
 		"wasm-typescript": {
-			"maxBytes": 1700000,
-			"maxFiles": 4
+			"maxBytes": 1900000,
+			"maxFiles": 6
 		},
 		"wasm-wat": {
 			"maxBytes": 400000,

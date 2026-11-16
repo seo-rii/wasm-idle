@@ -318,6 +318,13 @@ export const playgroundLanguageDescriptors: Readonly<
 		compilerDiagnostics: true,
 		diagnosticMarkers: true
 	},
+	COFFEESCRIPT: {
+		label: 'CoffeeScript',
+		editorLanguage: 'coffeescript',
+		supportsArgs: true,
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
 	TYPESCRIPT: {
 		label: 'TypeScript',
 		editorLanguage: 'typescript',
@@ -559,6 +566,8 @@ export const diagnosticMarkerLanguages = new Set(
 );
 export const monacoLanguageContributionLoaders: Record<string, MonacoLanguageContributionLoader> = {
 	c: () => import('monaco-editor/esm/vs/basic-languages/cpp/cpp.contribution.js'),
+	coffeescript: () =>
+		import('monaco-editor/esm/vs/basic-languages/coffee/coffee.contribution.js'),
 	cpp: () => import('monaco-editor/esm/vs/basic-languages/cpp/cpp.contribution.js'),
 	'objective-c': () =>
 		import('monaco-editor/esm/vs/basic-languages/objective-c/objective-c.contribution.js'),

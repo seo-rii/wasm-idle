@@ -388,6 +388,13 @@ const sandboxRoutes = [
 		}
 	},
 	{
+		languageId: 'COFFEESCRIPT',
+		load: async () => {
+			const { default: TypeScriptSandbox } = await import('$lib/playground/typescript');
+			return new TypeScriptSandbox('COFFEESCRIPT');
+		}
+	},
+	{
 		languageId: 'TYPESCRIPT',
 		load: async () => {
 			const { default: TypeScriptSandbox } = await import('$lib/playground/typescript');

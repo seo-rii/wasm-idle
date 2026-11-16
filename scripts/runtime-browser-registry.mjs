@@ -52,6 +52,7 @@ export const runtimeBrowserRegistry = [
 	runtime('elixir', 'stdin'),
 	runtime('javascript', 'stdin', { sourceNames: ['javascript', 'js-sandbox'] }),
 	runtime('typescript', 'stdin', { dependencies: ['javascript'] }),
+	runtime('coffeescript', 'stdin', { dependencies: ['typescript', 'javascript'] }),
 	runtime('assemblyscript', 'stdin'),
 	runtime('wat', 'stdin'),
 	runtime('wasm', 'stdin'),
