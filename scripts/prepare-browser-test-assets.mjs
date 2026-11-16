@@ -460,6 +460,22 @@ export async function verifyBrowserTestAssets({
 		if (fingerprint !== profile.fingerprint)
 			throw new Error('Required OCaml browser bundle fingerprint mismatch');
 	}
+	if (selectedGroups.includes('picat')) {
+		const { WASM_PICAT_PROFILE: profile } = await loadBundledProfile(
+			new URL('../src/lib/playground/wasmPicatVersion.ts', import.meta.url)
+		);
+		for (const [name, receipt] of Object.entries({
+			...profile.storage,
+			...profile.notices,
+			'runner-worker.js': profile.workerReceipt
+		})) {
+			receipts.push({
+				target: `wasm-picat/${name}`,
+				size: receipt.bytes,
+				sha256: receipt.sha256
+			});
+		}
+	}
 	for (const group of ['lean4', 'commonlisp']) {
 		if (!selectedGroups.includes(group)) continue;
 		// Node verification needs the self-contained metadata before the SDK is built.
