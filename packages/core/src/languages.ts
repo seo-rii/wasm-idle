@@ -25,6 +25,7 @@ const canonicalLanguageIds = [
 	'FORTH',
 	'J',
 	'BQN',
+	'SML',
 	'JANET',
 	'JULIA',
 	'NIM',

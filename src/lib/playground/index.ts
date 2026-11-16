@@ -297,6 +297,13 @@ const sandboxRoutes = [
 		}
 	},
 	{
+		languageId: 'SML',
+		load: async () => {
+			const { default: Sml } = await import('$lib/playground/sml');
+			return new Sml();
+		}
+	},
+	{
 		languageId: 'BQN',
 		load: async () => {
 			const { default: Bqn } = await import('$lib/playground/bqn');

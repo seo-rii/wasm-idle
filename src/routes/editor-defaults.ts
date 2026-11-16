@@ -34,6 +34,7 @@ export type EditorDefaultLanguage =
 	| 'pascal'
 	| 'forth'
 	| 'j'
+	| 'sml'
 	| 'bqn'
 	| 'janet'
 	| 'julia'
@@ -109,6 +110,7 @@ export const editorDefaults: Record<
 	| 'pascal'
 	| 'forth'
 	| 'j'
+	| 'sml'
 	| 'bqn'
 	| 'janet'
 	| 'julia'
@@ -791,6 +793,8 @@ fib =: 3 : 0
   end.
 )
 smoutput 'fibonacci=', ": 3 + fib n`,
+	sml: `val _ = print (case TextIO.inputLine TextIO.stdIn of SOME line => line | NONE => "");
+`,
 	bqn: `bonus ← 3
 fibonacci ← {𝕩 ≤ 1 ? 1 ; (fibonacci (𝕩 - 1)) + (fibonacci (𝕩 - 2))}
 n ← •ParseFloat •GetLine @
@@ -1618,6 +1622,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.pascal ||
 		source === editorDefaults.forth ||
 		source === editorDefaults.j ||
+		source === editorDefaults.sml ||
 		source === editorDefaults.bqn ||
 		source === editorDefaults.janet ||
 		source === editorDefaults.julia ||

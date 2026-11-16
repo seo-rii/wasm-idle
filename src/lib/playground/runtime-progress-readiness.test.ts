@@ -37,6 +37,11 @@ type RuntimeReadinessAudit = EntryReadiness | StaticWorkerReadiness | TerminalRe
  * is the first safe user-visible readiness signal.
  */
 const runtimeReadinessAudit = {
+	SML: {
+		strategy: 'entry-signal',
+		hostModule: 'sml',
+		producerPath: 'src/lib/playground/worker/wasm.ts'
+	},
 	GOLFSCRIPT: {
 		strategy: 'entry-signal',
 		hostModule: 'golfscript',
@@ -292,7 +297,9 @@ describe('runtime progress readiness audit', () => {
 				? readProjectSource('src/lib/playground/python.ts')
 				: ownHostSource.includes('extends Ruby')
 					? readProjectSource('src/lib/playground/ruby.ts')
-					: ownHostSource;
+					: ownHostSource.includes('extends Wasm')
+						? readProjectSource('src/lib/playground/wasm.ts')
+						: ownHostSource;
 
 			expect(producerSource, `${languageId} producer must emit ready`).toMatch(
 				/kind:\s*['"]ready['"]/u

@@ -160,6 +160,19 @@ function codeList(values) {
 /** @type {SupportMatrixRow[]} */
 export const supportMatrixRows = [
 	{
+		language: 'Standard ML',
+		ids: ['SML'],
+		runtime: 'Original HaMLet 2.0.1 / MLton WASI',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/sml.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_SML',
+			marker: 'runSmlConsumer'
+		}
+	},
+	{
 		language: 'GolfScript',
 		ids: ['GOLFSCRIPT'],
 		runtime: 'Original GolfScript interpreter on Ruby/WASI',
@@ -1107,6 +1120,15 @@ function staticWorkerCustomizationFor(runtimeKey, envKey = runtimeKey.toUpperCas
 
 /** @type {Map<string, RuntimeDetail>} */
 const runtimeDetailsByLanguage = new Map([
+	[
+		'Standard ML',
+		{
+			packageBase: 'Original HaMLet 2.0.1, MLton 20241230 / WASI build',
+			execution:
+				'Runs the original Standard ML parser, type checker, evaluator and embedded Basis library in a private WASI filesystem; each run starts fresh',
+			customization: `${code('runtimeAssets.rootUrl')}, ${code('stdin')}, ${code('programArgs')}, ${code('activePath')}, ${code('workspaceFiles')}; text execution without native processes or networking`
+		}
+	],
 	[
 		'GolfScript',
 		{

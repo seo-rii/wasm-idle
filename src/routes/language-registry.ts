@@ -266,6 +266,7 @@ export const playgroundLanguageDescriptors: Readonly<
 		diagnosticMarkers: true
 	},
 	J: { label: 'J', editorLanguage: 'j' },
+	SML: { label: 'Standard ML', editorLanguage: 'plaintext', supportsArgs: true },
 	BQN: { label: 'BQN', editorLanguage: 'bqn' },
 	JANET: {
 		label: 'Janet',
