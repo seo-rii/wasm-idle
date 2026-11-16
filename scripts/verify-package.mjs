@@ -59,12 +59,11 @@ export const scenarios = [
 		// Lazy receipt lookup adds three core JavaScript/declaration pairs (789 files measured).
 		// Java 25 adds one bytecode reader JavaScript/declaration pair; ASM is bundled rather than installed.
 		// The measured 7,405,837-byte / 791-file install needs 1 KiB above the previous byte cap.
-		// Squirrel CI job 133012736567 measures 7,408,849 bytes / 793 files.
-		// Its profile JS/declaration pair and host/registry changes add 3,012 bytes; allow 3 KiB / two files.
-		// The shared interpreter memory fix adds 3,501 packed bytes and a helper JS/declaration pair.
-		// Fresh root/core output adds 6,513 bytes / four files over main, projecting 7,412,350 / 795.
-		// Reserve another 4 KiB / two files; runtime assets and production dependencies stay external.
-		budget: { maxBytes: 7 * MiB + 72 * 1024, maxFiles: 795, maxPackages: 6 },
+		// Wren's packed root/core delta is 2,571 bytes and two profile files.
+		// The shared WASI memory guard adds another 3,501 bytes and two files.
+		// Reserve 3 KiB / two files above the measured baseline; dependencies are unchanged.
+		// Include Squirrel's additional 3 KiB/two files when both language profiles are installed.
+		budget: { maxBytes: 7 * MiB + 75 * 1024, maxFiles: 797, maxPackages: 6 },
 		absentPackageNames: [
 			'@katana-project/asm',
 			'java-parser',
@@ -137,7 +136,9 @@ export const scenarios = [
 		// Another 17 KiB covers the 17,099-byte overflow and retains 309 bytes of headroom.
 		// Standard modules CI job 128326182518 measures 2,855,516 bytes / 196 files / four packages.
 		// Another 23 KiB covers the 23,132-byte overflow with 420 bytes of headroom; BMIs stay external.
-		budget: { maxBytes: 2.5 * MiB + 229 * 1024, maxFiles: 196, maxPackages: 4 },
+		// Cumulative Squirrel/Wren core adds 745 bytes; GCC totals 2,856,261 bytes.
+		// Another 1 KiB retains 699 bytes of headroom with unchanged files/dependencies.
+		budget: { maxBytes: 2.5 * MiB + 230 * 1024, maxFiles: 196, maxPackages: 4 },
 		absentPackageNames: [
 			'wasm-idle',
 			'@wasm-idle/llvm-core',
@@ -453,9 +454,9 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Baseline CI job 131822775029 measures 42,959,390 bytes / 3,410 files / 66 packages.
 		// Add 64 KiB for the 40,478-byte overflow; file and package limits stay unchanged.
 		// Java 25 CI adds 31,813 bytes and two files to that baseline; allow another 32 KiB / two files.
-		// Propagate Squirrel's bounded 3 KiB / two-file increase; production dependencies stay unchanged.
-		// Its shared interpreter memory enforcement adds another 4 KiB / two files.
-		budget: { maxBytes: 40 * MiB + 1_056 * 1024, maxFiles: 3_416, maxPackages: 70 },
+		// Propagate Wren's bounded 3 KiB / two-file delta without adding dependencies.
+		// Both Squirrel and Wren add 3 KiB/two files above the Java 25 baseline.
+		budget: { maxBytes: 40 * MiB + 1_059 * 1024, maxFiles: 3_418, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

@@ -26,6 +26,13 @@ const THIS_FILE = fileURLToPath(import.meta.url);
 /** @type {RuntimeDefinition[]} */
 export const RUNTIMES = [
 	{
+		name: 'wasm-wren',
+		module: './sync-wasm-wren.mjs',
+		exportName: 'syncWasmWrenDist',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir'
+	},
+	{
 		name: 'wasm-squirrel',
 		module: './sync-wasm-squirrel.mjs',
 		exportName: 'syncWasmSquirrelAssets',

@@ -2271,6 +2271,8 @@ export const RUNTIME_ASSET_LOCK: RuntimeAssetLockManifest = /* @__PURE__ */ free
 		"wasm-wat/index.js.gz": {"sha256":"5eac3243de41e66861d99eec318348148b16c5b74655cbd06400998b56d8b8bb","bytes":230248,"encoding":"gzip","mediaType":"text/javascript","uncompressedSha256":"76b7c67a84a69307c8f0164e5bb4d79fb1bccc6562294cbf3958673feed671f1","uncompressedBytes":920134},
 		"wasm-whitespace/runtime-build.json": {"sha256":"2e6f7577b883b2fa8f249f85ff37aa2086f12f460b0aa1265b128d9681afeb31","bytes":2367,"mediaType":"application/json"},
 		"wasm-whitespace/whitespace.wasm": {"sha256":"de0846c43446d8dcb01e43324313bed565764b852b82b9885cd7d25e4f36b537","bytes":59270,"mediaType":"application/wasm"},
+		"wasm-wren/runtime-build.json": {"sha256":"41b1692b5f1c151ed27572cd52df4ea1321f48e56ba37e2976e719ac4849769c","bytes":923,"mediaType":"application/json"},
+		"wasm-wren/wren.wasm": {"sha256":"4e4f8a1df214ecc6191adec575f23ca7bddc937800839b7dc5c13fcd5cd38607","bytes":143309,"mediaType":"application/wasm"},
 		"wasm-zig/runtime-build.json": {"sha256":"56e54cb5c15a476a370a3e8bbf6e06a2986b7d7e21b2fe7cbfa58a66da8a581c","bytes":3338,"mediaType":"application/json"},
 		"wasm-zig/std.tar.gz": {"sha256":"a4f8b9403dfb0e0a826444f2a4a7eeb6b86403c79c650b93e34be95104bcb88c","bytes":30362437,"encoding":"gzip","mediaType":"application/octet-stream","uncompressedSha256":"63a671ed94b5b3f41cca3f7cde7ab237c9b2e72aae682bbfadf09799fa803397","uncompressedBytes":217466880},
 		"wasm-zig/zig_small.wasm": {"sha256":"82a101fd16c4cee7925ffc8fa51ccd713b23f32b13591531de383444e1060fd9","bytes":4934128,"mediaType":"application/wasm","deliveryPath":"wasm-zig/zig_small.wasm.gz"},

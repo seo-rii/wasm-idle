@@ -158,6 +158,14 @@ describe('stdin browser probe language selector', () => {
 });
 
 describe('execution asset request classification', () => {
+	it('ignores shell command metadata loaded while the editor boots', () => {
+		expect(isExecutionRuntimeAssetPath('/wasm-idle/runtimes/wasm-busybox/commands.mjs')).toBe(
+			false
+		);
+		expect(
+			isExecutionRuntimeAssetPath('/absproxy/5173/runtimes/wasm-busybox/commands.mjs')
+		).toBe(false);
+	});
 	it('keeps the ReScript execution compiler distinct from its editor server', () => {
 		expect(isExecutionRuntimeAssetPath('/wasm-idle/wasm-rescript/compiler.js.gz.bin')).toBe(
 			true

@@ -160,6 +160,19 @@ function codeList(values) {
 /** @type {SupportMatrixRow[]} */
 export const supportMatrixRows = [
 	{
+		language: 'Wren',
+		ids: ['WREN'],
+		runtime: 'Upstream Wren 0.4.0 VM on WASI',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/esolangs.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_WREN',
+			language: 'WREN'
+		}
+	},
+	{
 		language: 'Squirrel',
 		ids: ['SQUIRREL'],
 		runtime: 'Squirrel 3.2 VM on WASI',
@@ -1120,6 +1133,15 @@ function staticWorkerCustomizationFor(runtimeKey, envKey = runtimeKey.toUpperCas
 
 /** @type {Map<string, RuntimeDetail>} */
 const runtimeDetailsByLanguage = new Map([
+	[
+		'Wren',
+		{
+			packageBase: 'wren-lang/wren 0.4.0 (4a18fc48, MIT), wasi-sdk 33.0 build',
+			execution:
+				'Runs the unchanged upstream VM with classes, fibers, closures, random/meta and workspace imports; host io.Stdin exposes blocking readLine/readByte and io.Stdout exposes write/print/flush; synchronous host bindings do not provide the libuv CLI scheduler or its OS modules',
+			customization: `${code('runtimeAssets.rootUrl')}, ${code('stdin')}, ${code('activePath')}, ${code('workspaceFiles')}; pinned VM and host receipts, fresh WASI state, timeout/output/workspace limits and cancellation`
+		}
+	],
 	[
 		'Squirrel',
 		{

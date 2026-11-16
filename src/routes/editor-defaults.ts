@@ -1,6 +1,7 @@
 import type { RustTargetTriple } from '$lib/playground/options';
 
 export type EditorDefaultLanguage =
+	| 'wren'
 	| 'squirrel'
 	| 'whitespace'
 	| 'malbolge'
@@ -78,6 +79,7 @@ export type EditorDefaultLanguage =
 
 export const editorDefaults: Record<
 	| 'befunge93'
+	| 'wren'
 	| 'squirrel'
 	| 'whitespace'
 	| 'malbolge'
@@ -155,6 +157,7 @@ export const editorDefaults: Record<
 	squirrel:
 		"// Echo UTF-8 input; send EOF to finish.\nwhile (true) {\n    try { stdout.writen(stdin.readn('b'), 'b'); }\n    catch (error) {\n        if (stdin.eos()) break;\n        throw error;\n    }\n}\n",
 	uhmlang: '어떻게\n엄식?\n식어!\n이 사람이름이냐ㅋㅋ\n',
+	wren: 'import "io" for Stdin\nSystem.print(Stdin.readLine())\n',
 	lolcode: 'HAI 1.3\nI HAS A name\nGIMMEH name\nVISIBLE name\nKTHXBYE\n',
 	apecode:
 		'// Input: case count, rock count, then rock weights. Send EOF to finish.\n// Example input: 1\n//                3\n//                3 1 2\nstate main {\n  return true;\n}\n',
@@ -1594,6 +1597,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.malbolge ||
 		source === editorDefaults.aheui ||
 		source === editorDefaults.uhmlang ||
+		source === editorDefaults.wren ||
 		source === editorDefaults.squirrel ||
 		source === editorDefaults.lolcode ||
 		source === editorDefaults.apecode ||

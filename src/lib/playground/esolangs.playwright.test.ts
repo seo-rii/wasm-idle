@@ -258,7 +258,92 @@ state main {
   then {} else { return true; }
 }`;
 
+const wrenEcho =
+	'import "io" for Stdin, Stdout\nwhile (true) {\n  var byte = Stdin.readByte()\n  if (byte == null) break\n  Stdout.write(String.fromByte(byte))\n}\n';
+
 const profiles: InterpreterBrowserProfile[] = [
+	{
+		language: 'WREN',
+		enabled: process.env.WASM_IDLE_RUN_REAL_BROWSER_WREN === '1',
+		defaultSource: () => editorDefaults.wren,
+		echoSource: wrenEcho,
+		infiniteSource: 'while (true) {}',
+		runtimePath: 'wasm-wren/wren.wasm',
+		cases: [
+			{
+				name: 'utf8-explicit-eof',
+				source: wrenEcho,
+				stdin: '첫째 줄 🦀\nsecond line\n',
+				output: '첫째 줄 🦀\nsecond line\n'
+			},
+			{
+				name: 'empty-eof',
+				source: 'import "io" for Stdin\nSystem.print(Stdin.readLine())\nSystem.print(Stdin.readByte())',
+				stdin: '',
+				output: 'null\nnull\n'
+			},
+			{
+				name: 'line-no-final-newline',
+				source: editorDefaults.wren,
+				stdin: '한글 🦀',
+				output: '한글 🦀\n'
+			},
+			{
+				name: 'crlf-lines',
+				source: 'import "io" for Stdin\nSystem.print(Stdin.readLine())\nSystem.print(Stdin.readLine())',
+				stdin: 'first\r\nsecond\r\n',
+				output: 'first\nsecond\n'
+			},
+			{
+				name: 'classes-and-fibers',
+				source: 'class Counter {\n  construct new(n) { _n = n }\n  next {\n    _n = _n + 1\n    return _n\n  }\n}\nvar c = Counter.new(40)\nvar f = Fiber.new {\n  Fiber.yield(c.next)\n  return c.next\n}\nSystem.print(f.call())\nSystem.print(f.call())',
+				stdin: '',
+				output: '41\n42\n'
+			},
+			{
+				name: 'relative-workspace-import',
+				source: 'import "./lib/value" for Value\nSystem.print(Value.answer)',
+				stdin: '',
+				output: '42\n',
+				options: {
+					activePath: 'examples/main.wren',
+					workspaceFiles: [
+						{
+							path: 'examples/lib/value.wren',
+							content: 'class Value { static answer { 42 } }'
+						}
+					]
+				}
+			},
+			{
+				name: 'optional-random-module',
+				source: 'import "random" for Random\nSystem.print(Random.new(42).int(1))',
+				stdin: '',
+				output: '0\n'
+			},
+			{
+				name: 'compile-error',
+				source: 'var broken =',
+				stdin: '',
+				fails: true,
+				failureMessage: '65'
+			},
+			{
+				name: 'runtime-error',
+				source: 'Fiber.abort("wren-failure")',
+				stdin: '',
+				fails: true,
+				failureMessage: '70',
+				failureOutput: 'wren-failure'
+			},
+			{
+				name: 'after-runtime-failure',
+				source: 'System.print(6 * 7)',
+				stdin: '',
+				output: '42\n'
+			}
+		]
+	},
 	{
 		language: 'SQUIRREL',
 		enabled: process.env.WASM_IDLE_RUN_REAL_BROWSER_SQUIRREL === '1',
