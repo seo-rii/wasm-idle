@@ -5,7 +5,10 @@ import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 
-/** Verify the committed, source-built runtime before copying to another asset root. */
+/**
+ * Verify the committed, source-built runtime before copying to another asset root.
+ * @param {{ sourceDir?: string; targetDir?: string }} [options]
+ */
 export async function syncWasmWrenDist({
 	sourceDir = path.join(root, 'static/wasm-wren'),
 	targetDir = sourceDir
@@ -27,11 +30,13 @@ export async function syncWasmWrenDist({
 		throw new Error('Wren license mismatch');
 	if (path.resolve(sourceDir) !== path.resolve(targetDir)) {
 		await mkdir(targetDir, { recursive: true });
-		for (const [name, bytes] of [
+		/** @type {[string, Buffer][]} */
+		const files = [
 			['wren.wasm', wasm],
 			['runtime-build.json', build],
 			['LICENSE', license]
-		]) {
+		];
+		for (const [name, bytes] of files) {
 			await writeFile(path.join(targetDir, name), bytes);
 		}
 	}
