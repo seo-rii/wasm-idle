@@ -61,7 +61,10 @@ export const scenarios = [
 		// The measured 7,405,837-byte / 791-file install needs 1 KiB above the previous byte cap.
 		// Squirrel CI job 133012736567 measures 7,408,849 bytes / 793 files.
 		// Its profile JS/declaration pair and host/registry changes add 3,012 bytes; allow 3 KiB / two files.
-		budget: { maxBytes: 7 * MiB + 68 * 1024, maxFiles: 793, maxPackages: 6 },
+		// The shared interpreter memory fix adds 3,501 packed bytes and a helper JS/declaration pair.
+		// Fresh root/core output adds 6,513 bytes / four files over main, projecting 7,412,350 / 795.
+		// Reserve another 4 KiB / two files; runtime assets and production dependencies stay external.
+		budget: { maxBytes: 7 * MiB + 72 * 1024, maxFiles: 795, maxPackages: 6 },
 		absentPackageNames: [
 			'@katana-project/asm',
 			'java-parser',
@@ -451,7 +454,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Add 64 KiB for the 40,478-byte overflow; file and package limits stay unchanged.
 		// Java 25 CI adds 31,813 bytes and two files to that baseline; allow another 32 KiB / two files.
 		// Propagate Squirrel's bounded 3 KiB / two-file increase; production dependencies stay unchanged.
-		budget: { maxBytes: 40 * MiB + 1_052 * 1024, maxFiles: 3_414, maxPackages: 70 },
+		// Its shared interpreter memory enforcement adds another 4 KiB / two files.
+		budget: { maxBytes: 40 * MiB + 1_056 * 1024, maxFiles: 3_416, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

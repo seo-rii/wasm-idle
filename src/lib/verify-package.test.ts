@@ -186,8 +186,8 @@ describe('package install budgets', () => {
 			Object.fromEntries(scenarios.map((scenario) => [scenario.name, scenario.budget]))
 		).toEqual({
 			'wasm-idle root install': {
-				maxBytes: 7 * MiB + 68 * 1024,
-				maxFiles: 793,
+				maxBytes: 7 * MiB + 72 * 1024,
+				maxFiles: 795,
 				maxPackages: 6
 			},
 			'@wasm-idle/gcc install': {
@@ -216,8 +216,8 @@ describe('package install budgets', () => {
 				maxPackages: 10
 			},
 			'all public packages/adapters aggregate': {
-				maxBytes: 40 * MiB + 1_052 * 1024,
-				maxFiles: 3_414,
+				maxBytes: 40 * MiB + 1_056 * 1024,
+				maxFiles: 3_416,
 				maxPackages: 70
 			}
 		});
@@ -226,16 +226,21 @@ describe('package install budgets', () => {
 	it('accepts measured language installs and rejects every aggregate limit plus one', () => {
 		const root = scenarios.find((entry) => entry.name === 'wasm-idle root install')!;
 		// Squirrel CI job 133012736567, including the emitted profile JS/declaration pair.
-		expect(() =>
-			assertInstallBudget(root, { bytes: 7_408_849, files: 793, packages: 5 })
-		).not.toThrow();
+		// The second projection adds the fresh 3,501-byte memory enforcement output and helper pair.
+		for (const measurement of [
+			{ bytes: 7_408_849, files: 793, packages: 5 },
+			{ bytes: 7_412_350, files: 795, packages: 5 }
+		])
+			expect(() => assertInstallBudget(root, measurement)).not.toThrow();
 		const scenario = scenarios.find(
 			(entry) => entry.name === 'all public packages/adapters aggregate'
 		)!;
 		// Actual baseline job 131822775029 and Java 25 job 131823558365, including all adapters.
 		for (const measurement of [
 			{ bytes: 42_959_390, files: 3_410, packages: 66 },
-			{ bytes: 42_991_203, files: 3_412, packages: 66 }
+			{ bytes: 42_991_203, files: 3_412, packages: 66 },
+			// Project Squirrel and its shared memory fix using the measured 6,513-byte package delta.
+			{ bytes: 42_997_716, files: 3_416, packages: 66 }
 		])
 			expect(() => assertInstallBudget(scenario, measurement)).not.toThrow();
 		const atLimit = {
