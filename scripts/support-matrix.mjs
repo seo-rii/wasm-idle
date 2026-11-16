@@ -160,6 +160,19 @@ function codeList(values) {
 /** @type {SupportMatrixRow[]} */
 export const supportMatrixRows = [
 	{
+		language: 'Picat',
+		ids: ['PICAT'],
+		runtime: 'Official Picat WebAssembly playground VM',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/picat.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_PICAT',
+			marker: 'real PICAT browser interpreter'
+		}
+	},
+	{
 		language: 'PARI/GP',
 		ids: ['PARIGP'],
 		runtime: 'Official PARI/GP 2.19.0 Emscripten wasm32',
@@ -1146,6 +1159,17 @@ function staticWorkerCustomizationFor(runtimeKey, envKey = runtimeKey.toUpperCas
 
 /** @type {Map<string, RuntimeDetail>} */
 const runtimeDetailsByLanguage = new Map([
+	[
+		'Picat',
+		{
+			packageBase:
+				'Receipt-pinned official picat-lang.org playground snapshot (experimental, based on 3.9#12); exact producer revision unavailable',
+			execution:
+				'Real Picat VM, CP and SAT in a fresh Worker; unchanged source, line/byte stdin and EOF; entry module must be absent or named user_code',
+			customization:
+				'runtimeAssets.picat.baseUrl, rootUrl, stdin, activePath and workspace data files; cancellation and bounded Wasm memory; no MIP/SMT, timers, program arguments or ASP pre-transpilation'
+		}
+	],
 	[
 		'PARI/GP',
 		{

@@ -74,3 +74,5 @@ static/wasm-lfortran/
 
 # Scala compiler graph is prepared from the immutable reviewed asset lock.
 /static/wasm-scala/
+
+/static/wasm-picat/

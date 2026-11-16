@@ -28,6 +28,7 @@ const ASSET_GROUPS = [
 	'lfortran',
 	'lean4',
 	'commonlisp',
+	'picat',
 	'parigp',
 	'scala'
 ];
@@ -277,6 +278,12 @@ export async function prepareBrowserTestAssets({
 			reused += result.reused;
 			continue;
 		}
+		if (group === 'picat') {
+			await (
+				await import('./sync-wasm-picat.mjs')
+			).syncWasmPicatAssets({ targetDir: path.join(staticDir, 'wasm-picat'), fetchImpl });
+			continue;
+		}
 		if (group === 'parigp') {
 			await (
 				await import('./sync-wasm-parigp.mjs')
@@ -459,6 +466,22 @@ export async function verifyBrowserTestAssets({
 		);
 		if (fingerprint !== profile.fingerprint)
 			throw new Error('Required OCaml browser bundle fingerprint mismatch');
+	}
+	if (selectedGroups.includes('picat')) {
+		const { WASM_PICAT_PROFILE: profile } = await loadBundledProfile(
+			new URL('../src/lib/playground/wasmPicatVersion.ts', import.meta.url)
+		);
+		for (const [name, receipt] of Object.entries({
+			...profile.storage,
+			...profile.notices,
+			'runner-worker.js': profile.workerReceipt
+		})) {
+			receipts.push({
+				target: `wasm-picat/${name}`,
+				size: receipt.bytes,
+				sha256: receipt.sha256
+			});
+		}
 	}
 	if (selectedGroups.includes('parigp')) {
 		const { WASM_PARIGP_PROFILE: profile } = await loadBundledProfile(

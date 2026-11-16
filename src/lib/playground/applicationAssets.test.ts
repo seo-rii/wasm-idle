@@ -180,6 +180,7 @@ describe('application runtime asset root', () => {
 			'pascal',
 			'perl',
 			'php',
+			'picat',
 			'postgresql',
 			'prolog',
 			'r',
@@ -1243,4 +1244,10 @@ it('selects an independently pinned JavaScript entry and includes it in runtime 
 			}
 		})
 	);
+});
+
+describe('Picat application assets', () => {
+	it('keeps the Picat runtime under the configured application root', () => {
+		expect(createApplicationRuntimeAssets('/demo').picat?.baseUrl).toBe('/demo/wasm-picat/');
+	});
 });

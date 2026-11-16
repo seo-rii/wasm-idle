@@ -186,12 +186,12 @@ describe('package install budgets', () => {
 			Object.fromEntries(scenarios.map((scenario) => [scenario.name, scenario.budget]))
 		).toEqual({
 			'wasm-idle root install': {
-				maxBytes: 7 * MiB + 92 * 1024,
-				maxFiles: 803,
+				maxBytes: 7 * MiB + 109 * 1024,
+				maxFiles: 809,
 				maxPackages: 6
 			},
 			'@wasm-idle/gcc install': {
-				maxBytes: 2.5 * MiB + 231 * 1024,
+				maxBytes: 2.5 * MiB + 232 * 1024,
 				maxFiles: 196,
 				maxPackages: 4
 			},
@@ -216,49 +216,44 @@ describe('package install budgets', () => {
 				maxPackages: 10
 			},
 			'all public packages/adapters aggregate': {
-				maxBytes: 40 * MiB + 1_076 * 1024,
-				maxFiles: 3_424,
+				maxBytes: 40 * MiB + 1_093 * 1024,
+				maxFiles: 3_430,
 				maxPackages: 70
 			}
 		});
 	});
 
-	it('accepts measured PARI/GP root footprint without weakening dependency limits', () => {
-		const scenario = scenarios.find((entry) => entry.name === 'wasm-idle root install')!;
-		// Baseline install plus the measured 16,964-byte / six-file root-and-core delta.
+	it('accepts the measured Picat GCC install while retaining every size/count limit', () => {
+		const scenario = scenarios.find((entry) => entry.name === '@wasm-idle/gcc install')!;
 		expect(() =>
-			assertInstallBudget(scenario, { bytes: 7_422_801, files: 797, packages: 5 })
+			assertInstallBudget(scenario, { bytes: 2_856_625, files: 196, packages: 4 })
 		).not.toThrow();
-		for (const key of ['bytes', 'files', 'packages'] as const) {
-			const limit = {
-				bytes: scenario.budget.maxBytes,
-				files: scenario.budget.maxFiles,
-				packages: scenario.budget.maxPackages
-			};
+		const atLimit = {
+			bytes: scenario.budget.maxBytes,
+			files: scenario.budget.maxFiles,
+			packages: scenario.budget.maxPackages
+		};
+		for (const field of ['bytes', 'files', 'packages'] as const) {
 			expect(() =>
-				assertInstallBudget(scenario, { ...limit, [key]: limit[key] + 1 })
-			).toThrow('Install budget exceeded for wasm-idle root install');
+				assertInstallBudget(scenario, { ...atLimit, [field]: atLimit[field] + 1 })
+			).toThrow('Install budget exceeded for @wasm-idle/gcc install');
 		}
 	});
 
-	it('accepts the measured GCC consumer after PARI/GP core receipt growth', () => {
-		const scenario = scenarios.find((entry) => entry.name === '@wasm-idle/gcc install')!;
-		// PARI/GP CI job 133037276692; no new GCC files or dependencies are installed.
+	it('accepts measured language installs and rejects every aggregate limit plus one', () => {
+		const root = scenarios.find((entry) => entry.name === 'wasm-idle root install')!;
+		// Picat adds 17,393 packed root/core bytes and six files to the measured Java 25 baseline.
 		expect(() =>
-			assertInstallBudget(scenario, { bytes: 2_856_855, files: 196, packages: 4 })
+			assertInstallBudget(root, { bytes: 7_423_230, files: 797, packages: 5 })
 		).not.toThrow();
-		expect(scenario.budget.maxFiles).toBe(196);
-		expect(scenario.budget.maxPackages).toBe(4);
-	});
-
-	it('accepts measured baseline and Java 25 aggregates and rejects every limit plus one', () => {
 		const scenario = scenarios.find(
 			(entry) => entry.name === 'all public packages/adapters aggregate'
 		)!;
 		// Actual baseline job 131822775029 and Java 25 job 131823558365, including all adapters.
 		for (const measurement of [
 			{ bytes: 42_959_390, files: 3_410, packages: 66 },
-			{ bytes: 42_991_203, files: 3_412, packages: 66 }
+			{ bytes: 42_991_203, files: 3_412, packages: 66 },
+			{ bytes: 43_008_596, files: 3_418, packages: 66 }
 		])
 			expect(() => assertInstallBudget(scenario, measurement)).not.toThrow();
 		const atLimit = {

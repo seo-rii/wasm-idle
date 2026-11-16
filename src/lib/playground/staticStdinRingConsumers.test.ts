@@ -29,6 +29,7 @@ const readers = {
 	pascal: 'createSharedByteReader',
 	perl: 'createSharedStdinReader',
 	prolog: 'createSharedStdinReader',
+	picat: 'createSharedStdinReader',
 	rescript: 'createSharedByteReader',
 	tcl: 'createSharedStdinReader'
 };

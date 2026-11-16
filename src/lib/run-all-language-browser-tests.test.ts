@@ -119,10 +119,20 @@ describe('all-language browser test runner', () => {
 			'lfortran',
 			'lean4',
 			'commonlisp',
+			'picat',
 			'parigp',
 			'scala'
 		]);
-		for (const env of ['C3', 'LFORTRAN', 'LEAN4', 'COMMONLISP', 'PARIGP', 'OCAML', 'SCALA']) {
+		for (const env of [
+			'C3',
+			'LFORTRAN',
+			'LEAN4',
+			'COMMONLISP',
+			'PICAT',
+			'PARIGP',
+			'OCAML',
+			'SCALA'
+		]) {
 			expect(specialized.env[`WASM_IDLE_RUN_REAL_BROWSER_${env}`]).toBe('1');
 		}
 		expect(specialized.env).not.toHaveProperty('WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVECXX');
@@ -147,7 +157,17 @@ describe('all-language browser test runner', () => {
 		['workers', ['container']],
 		[
 			'specialized',
-			['container', 'ocaml', 'c3', 'lfortran', 'lean4', 'commonlisp', 'parigp', 'scala']
+			[
+				'container',
+				'ocaml',
+				'c3',
+				'lfortran',
+				'lean4',
+				'commonlisp',
+				'picat',
+				'parigp',
+				'scala'
+			]
 		]
 	] as const)(
 		'prepares assets and requires execution for the added %s family',
@@ -488,6 +508,7 @@ describe('all-language browser test runner', () => {
 				'lfortran',
 				'lean4',
 				'commonlisp',
+				'picat',
 				'parigp',
 				'scala'
 			],

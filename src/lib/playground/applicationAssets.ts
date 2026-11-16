@@ -383,6 +383,7 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 		lfortran: { baseUrl: asset('wasm-lfortran/') },
 		lean4: { baseUrl: asset('wasm-lean4/') },
 		commonlisp: { baseUrl: asset('wasm-commonlisp/') },
+		picat: { baseUrl: asset('wasm-picat/') },
 		parigp: { baseUrl: asset('wasm-parigp/') },
 		fortran: {
 			baseUrl: asset('wasm-fortran/'),

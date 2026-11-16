@@ -394,6 +394,65 @@ describe('browser test asset preparation', () => {
 		);
 	});
 
+	it('verifies every Picat delivery, worker and notice in reused browser builds', async () => {
+		const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-idle-picat-ci-receipts-'));
+		temporaryDirectories.push(root);
+		const receipt = (bytes: Buffer) => ({
+			bytes: bytes.length,
+			sha256: createHash('sha256').update(bytes).digest('hex')
+		});
+		const storage = {
+			'picat.mjs': Buffer.from('verified Picat loader'),
+			'picat.wasm.gz.bin': gzipSync(Buffer.from('verified Picat wasm')),
+			'picat.data.gz.bin': gzipSync(Buffer.from('verified Picat libraries'))
+		};
+		const notices = { LICENSE: Buffer.from('Picat license notice') };
+		const worker = Buffer.from('verified Picat worker');
+		const fixtures = { ...storage, ...notices, 'runner-worker.js': worker };
+		const profileLoader = vi
+			.spyOn(
+				await import('../../scripts/verify-pinned-runtime-assets.mjs'),
+				'loadBundledProfile'
+			)
+			.mockResolvedValue({
+				WASM_PICAT_PROFILE: {
+					storage: Object.fromEntries(
+						Object.entries(storage).map(([name, bytes]) => [name, receipt(bytes)])
+					),
+					notices: Object.fromEntries(
+						Object.entries(notices).map(([name, bytes]) => [name, receipt(bytes)])
+					),
+					workerReceipt: receipt(worker)
+				}
+			});
+		const options = { groups: ['picat'], staticDir: root };
+		try {
+			await expect(verifyBrowserTestAssets(options)).rejects.toThrow(
+				'Missing or oversized required browser test asset: wasm-picat/picat.mjs'
+			);
+			await mkdir(path.join(root, 'wasm-picat'));
+			for (const [name, bytes] of Object.entries(fixtures))
+				await writeFile(path.join(root, 'wasm-picat', name), bytes);
+			await expect(verifyBrowserTestAssets(options)).resolves.toMatchObject({
+				assetCount: 5
+			});
+			for (const [name, bytes] of Object.entries(fixtures)) {
+				const filename = path.join(root, 'wasm-picat', name);
+				await writeFile(filename, Buffer.alloc(bytes.length));
+				await expect(verifyBrowserTestAssets(options)).rejects.toThrow(
+					`Required browser test asset size/SHA-256 mismatch: wasm-picat/${name}`
+				);
+				await rm(filename);
+				await expect(verifyBrowserTestAssets(options)).rejects.toThrow(
+					`Missing or oversized required browser test asset: wasm-picat/${name}`
+				);
+				await writeFile(filename, bytes);
+			}
+		} finally {
+			profileLoader.mockRestore();
+		}
+	});
+
 	it('pins complete C3 and LFortran bundles to the committed consumer profiles', async () => {
 		const manifest = JSON.parse(await readFile('scripts/browser-test-assets.v1.json', 'utf8'));
 		const c3 = await loadBundledProfile(
@@ -794,6 +853,7 @@ describe('browser test asset preparation', () => {
 			'lfortran',
 			'lean4',
 			'commonlisp',
+			'picat',
 			'parigp',
 			'scala'
 		]);
