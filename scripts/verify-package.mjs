@@ -134,7 +134,9 @@ export const scenarios = [
 		// Another 17 KiB covers the 17,099-byte overflow and retains 309 bytes of headroom.
 		// Standard modules CI job 128326182518 measures 2,855,516 bytes / 196 files / four packages.
 		// Another 23 KiB covers the 23,132-byte overflow with 420 bytes of headroom; BMIs stay external.
-		budget: { maxBytes: 2.5 * MiB + 229 * 1024, maxFiles: 196, maxPackages: 4 },
+		// Uiua's shared core receipts measure 2,856,065 bytes / 196 files / four packages.
+		// The 129-byte overflow needs only another 1 KiB; file/dependency caps stay fixed.
+		budget: { maxBytes: 2.5 * MiB + 230 * 1024, maxFiles: 196, maxPackages: 4 },
 		absentPackageNames: [
 			'wasm-idle',
 			'@wasm-idle/llvm-core',
