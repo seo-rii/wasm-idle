@@ -137,7 +137,7 @@ export const scenarios = [
 		// Another 23 KiB covers the 23,132-byte overflow with 420 bytes of headroom; BMIs stay external.
 		// PARI/GP shared-core receipts make CI job 133037276692 measure 2,856,855 bytes.
 		// One KiB covers its 919-byte overflow; file and package limits remain unchanged.
-		budget: { maxBytes: 2.5 * MiB + 230 * 1024, maxFiles: 196, maxPackages: 4 },
+		budget: { maxBytes: 2.5 * MiB + 231 * 1024, maxFiles: 196, maxPackages: 4 },
 		absentPackageNames: [
 			'wasm-idle',
 			'@wasm-idle/llvm-core',
