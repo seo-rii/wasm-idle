@@ -121,6 +121,7 @@ describe('all-language browser test runner', () => {
 			'commonlisp',
 			'picat',
 			'parigp',
+			'dart',
 			'scala'
 		]);
 		for (const env of [
@@ -166,6 +167,7 @@ describe('all-language browser test runner', () => {
 				'commonlisp',
 				'picat',
 				'parigp',
+				'dart',
 				'scala'
 			]
 		]
@@ -510,6 +512,7 @@ describe('all-language browser test runner', () => {
 				'commonlisp',
 				'picat',
 				'parigp',
+				'dart',
 				'scala'
 			],
 			staticDir: path.join(repositoryRoot, 'build')

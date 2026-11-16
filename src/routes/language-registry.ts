@@ -211,6 +211,12 @@ export const playgroundLanguageDescriptors: Readonly<
 		compilerDiagnostics: true,
 		diagnosticMarkers: true
 	},
+	DART: {
+		label: 'Dart 3.14',
+		editorLanguage: 'dart',
+		supportsArgs: true,
+		argsLabel: 'Program arguments'
+	},
 	SCALA: {
 		label: 'Scala 3 — Scala.js (experimental)',
 		editorLanguage: 'scala',
@@ -568,6 +574,7 @@ export const monacoLanguageContributionLoaders: Record<string, MonacoLanguageCon
 		import('monaco-editor/esm/vs/basic-languages/objective-c/objective-c.contribution.js'),
 	csharp: () => import('monaco-editor/esm/vs/basic-languages/csharp/csharp.contribution.js'),
 	clojure: () => import('monaco-editor/esm/vs/basic-languages/clojure/clojure.contribution.js'),
+	dart: () => import('monaco-editor/esm/vs/basic-languages/dart/dart.contribution.js'),
 	css: () => import('monaco-editor/esm/vs/basic-languages/css/css.contribution.js'),
 	elixir: () => import('monaco-editor/esm/vs/basic-languages/elixir/elixir.contribution.js'),
 	go: () => import('monaco-editor/esm/vs/basic-languages/go/go.contribution.js'),

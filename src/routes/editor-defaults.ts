@@ -20,6 +20,7 @@ export type EditorDefaultLanguage =
 	| 'objectivecxx'
 	| 'python'
 	| 'java'
+	| 'dart'
 	| 'scala'
 	| 'go'
 	| 'd'
@@ -99,6 +100,7 @@ export const editorDefaults: Record<
 	| 'objectivecxx'
 	| 'python'
 	| 'java'
+	| 'dart'
 	| 'scala'
 	| 'go'
 	| 'd'
@@ -324,6 +326,12 @@ def fibonacci(n):
 tokens = input().split()
 n = int(tokens[0]) if tokens else 4
 print(f"fibonacci={fibonacci(n) + BONUS}")`,
+	dart: `import 'dart:io';
+
+void main() {
+  print(stdin.readLineSync() ?? '');
+}
+`,
 	scala: `// Enter a name in Preloaded stdin before Run. Extra reads receive EOF.
 // Scala.js supports Scala libraries; JVM-only dependencies are unavailable.
 object Main:
@@ -1618,6 +1626,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.cpp ||
 		source === editorDefaults.python ||
 		source === editorDefaults.java ||
+		source === editorDefaults.dart ||
 		source === editorDefaults.scala ||
 		source === editorDefaults.go ||
 		source === editorDefaults.d ||

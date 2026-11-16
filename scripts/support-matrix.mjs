@@ -160,6 +160,19 @@ function codeList(values) {
 /** @type {SupportMatrixRow[]} */
 export const supportMatrixRows = [
 	{
+		language: 'Dart',
+		ids: ['DART'],
+		runtime: 'Official Dart 3.14 DDC / WebAssembly compiler',
+		stdin: 'Yes',
+		editorSupport: 'Monaco Dart syntax',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/dart.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_DART',
+			marker: 'official Dart 3.14 compiler'
+		}
+	},
+	{
 		language: 'Picat',
 		ids: ['PICAT'],
 		runtime: 'Official Picat WebAssembly playground VM',
@@ -1159,6 +1172,15 @@ function staticWorkerCustomizationFor(runtimeKey, envKey = runtimeKey.toUpperCas
 
 /** @type {Map<string, RuntimeDetail>} */
 const runtimeDetailsByLanguage = new Map([
+	[
+		'Dart',
+		{
+			packageBase: 'Official Dart SDK 3.14.0 DartPad release (BSD-3-Clause)',
+			execution:
+				'Compiles unchanged source with the original DDC in a Wasm Worker, executes with the original Dart web SDK in a fresh Worker; IOOverrides supplies UTF-8 standard streams and exit; supports async, program arguments and workspace Dart imports',
+			customization: `${code('runtimeAssets.rootUrl')}, ${code('stdin')}, ${code('programArgs')}, ${code('activePath')}, ${code('workspaceFiles')}; web language/library semantics, no native filesystem/process/network/FFI, Flutter, DOM or pub dependency downloads`
+		}
+	],
 	[
 		'Picat',
 		{

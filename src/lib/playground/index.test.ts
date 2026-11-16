@@ -75,6 +75,11 @@ vi.mock('$lib/playground/objectivec', () => {
 	};
 });
 
+vi.mock('$lib/playground/dart', () => {
+	moduleLoads.add('DART');
+	return { default: createMockSandboxClass('DART') };
+});
+
 vi.mock('$lib/playground/scala', () => {
 	moduleLoads.add('SCALA');
 	return { default: createMockSandboxClass('SCALA') };

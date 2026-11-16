@@ -50,6 +50,7 @@ export const runtimeBrowserRegistry = [
 	runtime('picat', 'specialized'),
 	runtime('wren', 'esolangs'),
 	runtime('squirrel', 'esolangs'),
+	runtime('dart', 'specialized'),
 	runtime('scala', 'specialized'),
 	runtime('parigp', 'specialized', { sourceNames: ['parigp', 'pari-gp'] }),
 	runtime('java', 'stdin', { sourceNames: ['java', 'teavm'] }),

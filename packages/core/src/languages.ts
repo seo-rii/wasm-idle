@@ -13,6 +13,7 @@ const canonicalLanguageIds = [
 	'RUST',
 	'GO',
 	'D',
+	'DART',
 	'CSHARP',
 	'FSHARP',
 	'VBNET',
