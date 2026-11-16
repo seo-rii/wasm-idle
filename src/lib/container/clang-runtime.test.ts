@@ -853,3 +853,37 @@ describe('website container Clang compilation', () => {
 		expect(f.spawn).toHaveBeenCalledTimes(1);
 	});
 });
+
+describe('website clang prewarm', () => {
+	it('prepares the toolchain and sysroot a default Run uses without compiling', async () => {
+		const layered = fixture([], true);
+		const signal = new AbortController().signal;
+		await expect(layered.runtime.prewarm('C', signal)).resolves.toBe(true);
+		await expect(layered.runtime.prewarm('CPP', signal)).resolves.toBe(true);
+		expect(layered.profile.prepareClang!.mock.calls).toEqual([
+			['c', signal],
+			['full', signal]
+		]);
+		await expect(layered.runtime.prewarm('PYTHON3', signal)).resolves.toBe(false);
+		expect(layered.spawn).not.toHaveBeenCalled();
+		const full = fixture([], true, 'full');
+		await full.runtime.prewarm('C', signal);
+		expect(full.profile.prepareClang).toHaveBeenCalledWith('full', signal);
+	});
+
+	it('falls back to command preparation without creating workspace directories', async () => {
+		const f = fixture();
+		const generation = f.profile.container.fs.generation;
+		await expect(f.runtime.prewarm('CPP', new AbortController().signal)).resolves.toBe(true);
+		expect(f.profile.prepareCommand).toHaveBeenCalledWith(
+			expect.objectContaining({ path: '/usr/local/bin/clang', cwd: '/workspace' }),
+			expect.any(AbortSignal)
+		);
+		expect(f.profile.container.fs.generation).toBe(generation);
+		const cancelled = new AbortController();
+		cancelled.abort();
+		await expect(f.runtime.prewarm('CPP', cancelled.signal)).rejects.toMatchObject({
+			name: 'AbortError'
+		});
+	});
+});

@@ -218,6 +218,35 @@ export class ContainerClangRuntime {
 		}
 		this.#header = undefined;
 	}
+	/**
+	 * Fetch and mount the toolchain and sysroot that a default Run of this language uses.
+	 * Package fetches are shared per consumer signal, so a Run started meanwhile keeps
+	 * its own preparation alive when this speculative request is cancelled.
+	 */
+	async prewarm(language: string, signal: AbortSignal) {
+		if (this.#disposed || (language !== 'C' && language !== 'CPP')) return false;
+		signal.throwIfAborted();
+		if (this.profile.prepareClang)
+			await this.profile.prepareClang(
+				language === 'C' && this.profile.sysrootProfile === 'c-base-v1' ? 'c' : 'full',
+				signal
+			);
+		else
+			await this.profile.prepareCommand(
+				{
+					path: '/usr/local/bin/clang',
+					argv: ['clang'],
+					env: [],
+					// A speculative request must not create workspace directories.
+					cwd: '/workspace',
+					stdin: null,
+					stdout: null,
+					stderr: null
+				},
+				signal
+			);
+		return !signal.aborted;
+	}
 	async prepare(
 		language: string,
 		code: string,

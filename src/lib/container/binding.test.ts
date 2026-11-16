@@ -2,6 +2,42 @@ import { describe, expect, it, vi } from 'vitest';
 import { createContainerPlaygroundBinding } from './binding.js';
 import { createContainerWorkerClient, type ContainerWorkerClient } from './client.js';
 import type { ContainerWorkerEvent } from './protocol.js';
+function prewarmFixture(canStart = true) {
+	const scheduled: (() => void)[] = [];
+	const environment = {
+		canStart: vi.fn(() => canStart),
+		schedule: vi.fn((callback: () => void) => {
+			scheduled.push(callback);
+			return () => scheduled.splice(scheduled.indexOf(callback) >>> 0, 1);
+		})
+	};
+	const calls: { method: string; args?: unknown[]; signal?: AbortSignal }[] = [];
+	const gates: (() => void)[] = [];
+	const client = {
+		call: vi.fn(
+			async (method: string, args?: unknown[], options?: { signal?: AbortSignal }) => {
+				calls.push({ method, args, signal: options?.signal });
+				if (method !== 'prewarm') return undefined;
+				await new Promise<void>((resolve) => gates.push(resolve));
+				return true;
+			}
+		),
+		onEvent: () => () => {},
+		dispose: vi.fn(async () => {})
+	} as unknown as ContainerWorkerClient;
+	const factory = vi.fn(() => client);
+	const binding = createContainerPlaygroundBinding('/runtime/', {
+		applicationRootURL: 'https://example.test/sandbox/',
+		workspaceId: 'prewarm',
+		clientFactory: factory,
+		prewarmEnvironment: environment
+	});
+	const runScheduled = () => scheduled.splice(0).forEach((callback) => callback());
+	const settle = async () => {
+		for (let i = 0; i < 4; i++) await Promise.resolve();
+	};
+	return { binding, environment, calls, gates, factory, runScheduled, settle };
+}
 function fixture() {
 	let listener: (event: ContainerWorkerEvent) => void = () => {};
 	const call = vi.fn(
@@ -425,5 +461,62 @@ describe('existing playground container binding', () => {
 		await live.binding.dispose();
 		await live.binding.endTerminalExecution();
 		expect(live.call.mock.calls.map((row) => row[0])).toEqual(['shellStart', 'shellSuspend']);
+	});
+
+	it('prewarms the selected runtime in the owner once the page is idle', async () => {
+		const f = prewarmFixture();
+		const result = f.binding.prewarm?.('PYTHON3');
+		expect(f.factory).toHaveBeenCalledOnce();
+		expect(f.calls).toEqual([]);
+		f.runScheduled();
+		await f.settle();
+		expect(f.calls.map(({ method, args }) => [method, args])).toEqual([
+			['prewarm', ['PYTHON3']]
+		]);
+		f.gates.shift()?.();
+		await expect(result).resolves.toBe(true);
+		await f.binding.dispose();
+	});
+
+	it('honors the toggle and the data-saving environment, while still booting the owner', async () => {
+		const saving = prewarmFixture(false);
+		await expect(saving.binding.prewarm?.('CPP')).resolves.toBe(false);
+		expect(saving.factory).toHaveBeenCalledOnce();
+		expect(saving.environment.schedule).not.toHaveBeenCalled();
+		const off = prewarmFixture();
+		await off.binding.setPrewarmEnabled?.(false);
+		await expect(off.binding.prewarm?.('CPP')).resolves.toBe(false);
+		expect(off.environment.schedule).not.toHaveBeenCalled();
+		await expect(off.binding.setPrewarmEnabled?.('yes' as never)).rejects.toThrow(TypeError);
+		await Promise.all([saving.binding.dispose(), off.binding.dispose()]);
+	});
+
+	it('keeps a warm-up across an effect re-run but cancels it for another language or the toggle', async () => {
+		const f = prewarmFixture();
+		const first = f.binding.prewarm?.('CPP');
+		f.runScheduled();
+		await f.settle();
+		const signal = f.calls[0]!.signal!;
+		// Svelte cleans up and re-runs the effect in one task.
+		await f.binding.cancelPrewarm?.();
+		const again = f.binding.prewarm?.('CPP');
+		await new Promise((resolve) => setTimeout(resolve, 5));
+		expect(signal.aborted).toBe(false);
+		expect(f.calls).toHaveLength(1);
+		const other = f.binding.prewarm?.('PYTHON3');
+		expect(signal.aborted).toBe(true);
+		await expect(first).resolves.toBe(false);
+		await expect(again).resolves.toBe(false);
+		await f.binding.cancelPrewarm?.();
+		await new Promise((resolve) => setTimeout(resolve, 5));
+		await expect(other).resolves.toBe(false);
+		expect(f.calls).toHaveLength(1);
+		const scheduled = f.binding.prewarm?.('JAVA');
+		f.runScheduled();
+		await f.settle();
+		await f.binding.setPrewarmEnabled?.(false);
+		expect(f.calls[1]!.signal!.aborted).toBe(true);
+		await expect(scheduled).resolves.toBe(false);
+		await f.binding.dispose();
 	});
 });
