@@ -202,3 +202,9 @@ describe('execution asset request classification', () => {
 		);
 	});
 });
+
+it('does not classify the shell command metadata module as a runtime download', () => {
+	expect(isExecutionRuntimeAssetPath('/wasm-idle/runtimes/wasm-busybox/commands.mjs')).toBe(
+		false
+	);
+});

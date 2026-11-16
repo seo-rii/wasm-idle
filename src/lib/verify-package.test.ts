@@ -186,8 +186,8 @@ describe('package install budgets', () => {
 			Object.fromEntries(scenarios.map((scenario) => [scenario.name, scenario.budget]))
 		).toEqual({
 			'wasm-idle root install': {
-				maxBytes: 7 * MiB + 68 * 1024,
-				maxFiles: 793,
+				maxBytes: 7 * MiB + 71 * 1024,
+				maxFiles: 795,
 				maxPackages: 6
 			},
 			'@wasm-idle/gcc install': {
@@ -216,14 +216,19 @@ describe('package install budgets', () => {
 				maxPackages: 10
 			},
 			'all public packages/adapters aggregate': {
-				maxBytes: 40 * MiB + 1_052 * 1024,
-				maxFiles: 3_414,
+				maxBytes: 40 * MiB + 1_055 * 1024,
+				maxFiles: 3_416,
 				maxPackages: 70
 			}
 		});
 	});
 
-	it('accepts measured baseline and Java 25 aggregates and rejects every limit plus one', () => {
+	it('accepts measured language installs and rejects every aggregate limit plus one', () => {
+		const root = scenarios.find((entry) => entry.name === 'wasm-idle root install')!;
+		// Squirrel CI job 133012736567, including the emitted profile JS/declaration pair.
+		expect(() =>
+			assertInstallBudget(root, { bytes: 7_408_849, files: 793, packages: 5 })
+		).not.toThrow();
 		const scenario = scenarios.find(
 			(entry) => entry.name === 'all public packages/adapters aggregate'
 		)!;

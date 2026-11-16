@@ -33,6 +33,14 @@ export const RUNTIMES = [
 		targetArg: 'targetDir'
 	},
 	{
+		name: 'wasm-squirrel',
+		module: './sync-wasm-squirrel.mjs',
+		exportName: 'syncWasmSquirrelAssets',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir',
+		manual: true
+	},
+	{
 		name: 'wasm-clang',
 		module: './sync-wasm-clang.mjs',
 		exportName: 'syncWasmClangDist',

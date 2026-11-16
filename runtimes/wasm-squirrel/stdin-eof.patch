@@ -1,0 +1,12 @@
+--- a/sqstdlib/sqstdio.cpp
++++ b/sqstdlib/sqstdio.cpp
+@@ -102,7 +102,8 @@
+         return sqstd_fseek(_handle,offset,origin);
+     }
+     bool IsValid() { return _handle?true:false; }
+-    bool EOS() { return Tell()==Len()?true:false;}
++    // A terminal is not seekable; seeking also clears libc's EOF state.
++    bool EOS() { return _handle == stdin ? sqstd_feof(_handle) != 0 : Tell()==Len(); }
+     SQFILE GetHandle() {return _handle;}
+ private:
+     SQFILE _handle;

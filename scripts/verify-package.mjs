@@ -61,7 +61,8 @@ export const scenarios = [
 		// The measured 7,405,837-byte / 791-file install needs 1 KiB above the previous byte cap.
 		// Wren's packed root/core delta is 2,571 bytes and two profile files.
 		// Reserve 3 KiB / two files above the measured baseline; dependencies are unchanged.
-		budget: { maxBytes: 7 * MiB + 68 * 1024, maxFiles: 793, maxPackages: 6 },
+		// Include Squirrel's additional 3 KiB/two files when both language profiles are installed.
+		budget: { maxBytes: 7 * MiB + 71 * 1024, maxFiles: 795, maxPackages: 6 },
 		absentPackageNames: [
 			'@katana-project/asm',
 			'java-parser',
@@ -451,7 +452,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Add 64 KiB for the 40,478-byte overflow; file and package limits stay unchanged.
 		// Java 25 CI adds 31,813 bytes and two files to that baseline; allow another 32 KiB / two files.
 		// Propagate Wren's bounded 3 KiB / two-file delta without adding dependencies.
-		budget: { maxBytes: 40 * MiB + 1_052 * 1024, maxFiles: 3_414, maxPackages: 70 },
+		// Both Squirrel and Wren add 3 KiB/two files above the Java 25 baseline.
+		budget: { maxBytes: 40 * MiB + 1_055 * 1024, maxFiles: 3_416, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
