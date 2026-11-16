@@ -71,6 +71,7 @@ export const runtimeBrowserRegistry = [
 		'perl',
 		'tcl',
 		'awk',
+		'verilog',
 		'pascal',
 		'forth',
 		'j',

@@ -160,6 +160,19 @@ function codeList(values) {
 /** @type {SupportMatrixRow[]} */
 export const supportMatrixRows = [
 	{
+		language: 'Verilog',
+		ids: ['VERILOG'],
+		runtime: 'Icarus Verilog 14.0-devel / WebAssembly',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/verilog.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_VERILOG',
+			marker: 'runVerilogConsumer'
+		}
+	},
+	{
 		language: 'GolfScript',
 		ids: ['GOLFSCRIPT'],
 		runtime: 'Original GolfScript interpreter on Ruby/WASI',
@@ -1107,6 +1120,17 @@ function staticWorkerCustomizationFor(runtimeKey, envKey = runtimeKey.toUpperCas
 
 /** @type {Map<string, RuntimeDetail>} */
 const runtimeDetailsByLanguage = new Map([
+	[
+		'Verilog',
+		{
+			packageBase:
+				'Original Icarus Verilog 14.0-devel c7530db / VeriSim ab0ff386 (GPL-2.0-or-later)',
+			execution:
+				'Original ivlpp, ivl and vvp compile fresh Verilog source then simulate it inside a private Worker; Verilog 2012 profile with the statically linked standard system tasks; UTF-8 and delayed stdin/stdout, original diagnostics and exit codes',
+			customization:
+				'`runtimeAssets.rootUrl`, `stdin`, `programArgs`, `activePath`, `workspaceFiles`; .v/.sv sources and include/data files, limits and cancellation; plain-text editor, no native VPI plugins or exported VCD artifacts'
+		}
+	],
 	[
 		'GolfScript',
 		{

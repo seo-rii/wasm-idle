@@ -1,8 +1,8 @@
 {
 	"schemaVersion": 1,
 	"total": {
-		"maxBytes": 1151750000,
-		"maxFiles": 1977
+		"maxBytes": 1154950000,
+		"maxFiles": 1987
 	},
 	"directories": {
 		"clang": {
@@ -318,6 +318,10 @@
 			"maxBytes": 8000000,
 			"maxFiles": 11,
 			"optional": true
+		},
+		"wasm-verilog": {
+			"maxBytes": 3200000,
+			"maxFiles": 10
 		}
 	}
 }

@@ -26,6 +26,14 @@ const THIS_FILE = fileURLToPath(import.meta.url);
 /** @type {RuntimeDefinition[]} */
 export const RUNTIMES = [
 	{
+		name: 'wasm-verilog',
+		module: './sync-wasm-verilog.mjs',
+		exportName: 'syncWasmVerilogAssets',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir',
+		manual: true
+	},
+	{
 		name: 'wasm-clang',
 		module: './sync-wasm-clang.mjs',
 		exportName: 'syncWasmClangDist',

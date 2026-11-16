@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "language": "VERILOG",
+  "implementation": {
+    "name": "Icarus Verilog",
+    "version": "14.0-devel",
+    "revision": "c7530dbcc186de2f21eacde14fd28061b885924c",
+    "repository": "https://github.com/steveicarus/iverilog",
+    "license": "GPL-2.0-or-later"
+  },
+  "port": {
+    "repository": "https://github.com/senolgulgonul/verisim",
+    "revision": "ab0ff3862a8cf8c6535117a64d370c4bf263042f",
+    "toolchain": "Emscripten 6.0.0"
+  },
+  "assets": {
+    "ivlpp.js": {
+      "bytes": 160083,
+      "sha256": "97d41e9cd11588b7bdbc952873cd71658165e6bd7938c5d39275cedb9ddad405"
+    },
+    "ivlpp.wasm": {
+      "bytes": 121092,
+      "sha256": "039bfd9a34d5fb527f1309a680a8361c259bd4d6d4d1e6e91020e28da39487c0"
+    },
+    "ivl.js": {
+      "bytes": 66100,
+      "sha256": "a2f56ba8611135d43971053605fb013550dc30d1671e9808a7f82ab02838e915"
+    },
+    "ivl.wasm": {
+      "bytes": 1670232,
+      "sha256": "8e909e2d9c7e7ee7a59c25694fa923eae3d60b78993b6e42cc2f53701dc42cea"
+    },
+    "vvp.js": {
+      "bytes": 67164,
+      "sha256": "7bb3762198fb5297726bdd0714b4bcc2ac09d99122deefba544d45c6beaebb05"
+    },
+    "vvp.wasm": {
+      "bytes": 909906,
+      "sha256": "c38bf14a399b66a226fecc90285f35f465eeb759bf37aee59f6aed9cb7e948bd"
+    }
+  },
+  "worker": {
+    "bytes": 14491,
+    "sha256": "3f7d823f73d2ebb96b1a7a99d2499e5973a07e311cf535304527751b174b4677"
+  },
+  "inputs": {
+    "upstream.json": {
+      "bytes": 1138,
+      "sha256": "13e012defd03c56b6c32f5d43f7d9a7a365fc77c8a3743b407cabc7b03f4ad6b"
+    },
+    "upstream-build.sh": {
+      "bytes": 5627,
+      "sha256": "2ca075bf545b7405aaa40592ffda582fbb3e6a449310f44440539d70164243d2"
+    },
+    "iverilog-wasm.patch": {
+      "bytes": 1680,
+      "sha256": "bb7640b76077400197ff6fce6270dc1b3cb9b71313d24a7fa147daf216801ac5"
+    }
+  }
+}

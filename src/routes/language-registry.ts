@@ -223,6 +223,14 @@ export const playgroundLanguageDescriptors: Readonly<
 		compilerDiagnostics: true,
 		diagnosticMarkers: true
 	},
+	VERILOG: {
+		label: 'Verilog — Icarus',
+		editorLanguage: 'plaintext',
+		supportsArgs: true,
+		argsLabel: 'Simulation plusargs',
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
 	GRAIN: {
 		label: 'Grain',
 		lspLanguageOverride: 'grain',

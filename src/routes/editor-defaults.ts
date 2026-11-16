@@ -28,6 +28,7 @@ export type EditorDefaultLanguage =
 	| 'prolog'
 	| 'gleam'
 	| 'grain'
+	| 'verilog'
 	| 'perl'
 	| 'tcl'
 	| 'awk'
@@ -103,6 +104,7 @@ export const editorDefaults: Record<
 	| 'prolog'
 	| 'gleam'
 	| 'grain'
+	| 'verilog'
 	| 'perl'
 	| 'tcl'
 	| 'awk'
@@ -616,6 +618,14 @@ pub fn main() {
   }
   io.println("fibonacci=" <> int.to_string(fibonacci(n) + bonus))
 }`,
+	verilog: `module main;
+  integer value;
+  initial begin
+    if ($fscanf(32'h80000000, "%d", value) == 1)
+      $display("value=%0d", value);
+  end
+endmodule
+`,
 	grain: `module Main
 
 from "buffer" include Buffer
@@ -1612,6 +1622,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.prolog ||
 		source === editorDefaults.gleam ||
 		source === editorDefaults.grain ||
+		source === editorDefaults.verilog ||
 		source === editorDefaults.perl ||
 		source === editorDefaults.tcl ||
 		source === editorDefaults.awk ||

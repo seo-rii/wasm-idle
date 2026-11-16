@@ -234,6 +234,13 @@ const sandboxRoutes = [
 		}
 	},
 	{
+		languageId: 'VERILOG',
+		load: async () => {
+			const { default: Verilog } = await import('$lib/playground/verilog');
+			return new Verilog();
+		}
+	},
+	{
 		languageId: 'GRAIN',
 		load: async () => {
 			const { default: Grain } = await import('$lib/playground/grain');

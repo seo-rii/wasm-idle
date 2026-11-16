@@ -89,6 +89,7 @@ const runtimeReadinessAudit = {
 	},
 	C3: { strategy: 'static-worker-fallback', hostModule: 'c3' },
 	GRAIN: { strategy: 'static-worker-fallback', hostModule: 'grain' },
+	VERILOG: { strategy: 'static-worker-fallback', hostModule: 'verilog' },
 	C: { strategy: 'terminal-fallback', hostModule: 'clang' },
 	CPP: { strategy: 'terminal-fallback', hostModule: 'clang' },
 	OBJC: { strategy: 'terminal-fallback', hostModule: 'objectivec' },

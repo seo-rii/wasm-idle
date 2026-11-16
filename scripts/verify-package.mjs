@@ -59,7 +59,9 @@ export const scenarios = [
 		// Lazy receipt lookup adds three core JavaScript/declaration pairs (789 files measured).
 		// Java 25 adds one bytecode reader JavaScript/declaration pair; ASM is bundled rather than installed.
 		// The measured 7,405,837-byte / 791-file install needs 1 KiB above the previous byte cap.
-		budget: { maxBytes: 7 * MiB + 65 * 1024, maxFiles: 791, maxPackages: 6 },
+		// Verilog measures 7,418,041 bytes / 795 files / five packages. The adapter
+		// and pinned profile add four files; cover the 11,449-byte overflow with 12 KiB.
+		budget: { maxBytes: 7 * MiB + 77 * 1024, maxFiles: 795, maxPackages: 6 },
 		absentPackageNames: [
 			'@katana-project/asm',
 			'java-parser',
@@ -132,7 +134,9 @@ export const scenarios = [
 		// Another 17 KiB covers the 17,099-byte overflow and retains 309 bytes of headroom.
 		// Standard modules CI job 128326182518 measures 2,855,516 bytes / 196 files / four packages.
 		// Another 23 KiB covers the 23,132-byte overflow with 420 bytes of headroom; BMIs stay external.
-		budget: { maxBytes: 2.5 * MiB + 229 * 1024, maxFiles: 196, maxPackages: 4 },
+		// Verilog's shared-core receipts measure 2,856,881 bytes / 196 files / four packages.
+		// Cover only the 945-byte overflow with another 1 KiB; files/dependencies stay unchanged.
+		budget: { maxBytes: 2.5 * MiB + 230 * 1024, maxFiles: 196, maxPackages: 4 },
 		absentPackageNames: [
 			'wasm-idle',
 			'@wasm-idle/llvm-core',
@@ -448,7 +452,9 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Baseline CI job 131822775029 measures 42,959,390 bytes / 3,410 files / 66 packages.
 		// Add 64 KiB for the 40,478-byte overflow; file and package limits stay unchanged.
 		// Java 25 CI adds 31,813 bytes and two files to that baseline; allow another 32 KiB / two files.
-		budget: { maxBytes: 40 * MiB + 1_049 * 1024, maxFiles: 3_412, maxPackages: 70 },
+		// Verilog measures 43,004,280 bytes / 3,416 files / 66 packages. Its four
+		// new adapter/profile files fit within the existing byte/dependency limits.
+		budget: { maxBytes: 40 * MiB + 1_049 * 1024, maxFiles: 3_416, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
