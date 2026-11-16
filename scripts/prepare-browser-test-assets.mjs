@@ -28,6 +28,7 @@ const ASSET_GROUPS = [
 	'lfortran',
 	'lean4',
 	'commonlisp',
+	'picat',
 	'scala'
 ];
 const SUPPORTED_GROUPS = new Set(['all', ...ASSET_GROUPS]);
@@ -274,6 +275,12 @@ export async function prepareBrowserTestAssets({
 			);
 			downloaded += result.downloaded;
 			reused += result.reused;
+			continue;
+		}
+		if (group === 'picat') {
+			await (
+				await import('./sync-wasm-picat.mjs')
+			).syncWasmPicatAssets({ targetDir: path.join(staticDir, 'wasm-picat'), fetchImpl });
 			continue;
 		}
 		if (group === 'lean4' || group === 'commonlisp') {

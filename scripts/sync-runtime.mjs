@@ -143,6 +143,14 @@ export const RUNTIMES = [
 		sourceRequired: true
 	},
 	{
+		name: 'wasm-picat',
+		module: './sync-wasm-picat.mjs',
+		exportName: 'syncWasmPicatAssets',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir',
+		manual: true
+	},
+	{
 		name: 'wasm-commonlisp',
 		module: './sync-wasm-commonlisp.mjs',
 		exportName: 'syncWasmCommonLispAssets',

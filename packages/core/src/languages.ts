@@ -1,4 +1,5 @@
 const canonicalLanguageIds = [
+	'PICAT',
 	'C',
 	'C3',
 	'CPP',

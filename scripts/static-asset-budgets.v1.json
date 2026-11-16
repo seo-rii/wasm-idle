@@ -1,8 +1,8 @@
 {
 	"schemaVersion": 1,
 	"total": {
-		"maxBytes": 1151750000,
-		"maxFiles": 1977
+		"maxBytes": 1155250000,
+		"maxFiles": 1985
 	},
 	"directories": {
 		"clang": {
@@ -317,6 +317,11 @@
 		"wasm-nim-lsp": {
 			"maxBytes": 8000000,
 			"maxFiles": 11,
+			"optional": true
+		},
+		"wasm-picat": {
+			"maxBytes": 3500000,
+			"maxFiles": 8,
 			"optional": true
 		}
 	}
