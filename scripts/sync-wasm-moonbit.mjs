@@ -18,18 +18,30 @@ const receipt = (bytes) => ({
 async function prepareOriginalAssets(targetDir) {
 	await execute(
 		'python3',
-		[path.join(root, 'runtimes/wasm-moonbit/prepare.py'), '--output', targetDir],
+		[
+			path.join(root, 'runtimes/wasm-moonbit/prepare.py'),
+			'--local-research',
+			'--output',
+			targetDir
+		],
 		{ timeout: 300_000, maxBuffer: 1024 * 1024 }
 	);
 }
 
-/** @param {{check?: boolean; targetDir?: string; profilePath?: string; prepareAssets?: (targetDir: string) => Promise<void>}} options */
+/** Explicit local research does not grant license permission or enable publication.
+ * @param {{localResearchOnly?: boolean; check?: boolean; targetDir?: string; profilePath?: string; prepareAssets?: (targetDir: string) => Promise<void>}} options */
 export async function syncWasmMoonbitAssets({
+	localResearchOnly = false,
 	check = false,
 	targetDir = path.join(root, 'static/wasm-moonbit'),
 	profilePath = path.join(root, 'src/lib/playground/wasmMoonbitVersion.ts'),
 	prepareAssets = prepareOriginalAssets
 } = {}) {
+	if (localResearchOnly !== true)
+		throw new Error(
+			'MoonBit asset preparation is blocked pending MPSL §14 service-license review. ' +
+				'Explicit --local-research is for local compiler research only and cannot enable publication; see docs/moonbit.md.'
+		);
 	if (!check) {
 		await mkdir(targetDir, { recursive: true });
 		for (const name of [
@@ -127,6 +139,19 @@ export async function syncWasmMoonbitAssets({
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-	await syncWasmMoonbitAssets({ check: process.argv.includes('--check') });
-	console.log('Verified original MoonBit compiler/core and generated browser host');
+	try {
+		const args = process.argv.slice(2);
+		if (args.some((arg) => !['--check', '--local-research'].includes(arg)))
+			throw new Error('Usage: node scripts/sync-wasm-moonbit.mjs --local-research [--check]');
+		await syncWasmMoonbitAssets({
+			localResearchOnly: args.includes('--local-research'),
+			check: args.includes('--check')
+		});
+		console.log(
+			'Verified original MoonBit compiler/core for local research only; publication remains blocked.'
+		);
+	} catch (error) {
+		console.error(error instanceof Error ? error.message : error);
+		process.exitCode = 1;
+	}
 }

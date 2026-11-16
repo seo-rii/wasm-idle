@@ -7,6 +7,20 @@ const { scripts } = JSON.parse(await readFile(new URL('../package.json', import.
 const taskNames = (plan) =>
 	plan.filter((step) => step.args[0] === 'run').map((step) => step.args[1]);
 
+test('local research, skip-verification and reuse flags never omit MoonBit publication containment', () => {
+	for (const skip of [undefined, '1'])
+		for (const reuse of [undefined, '1']) {
+			const plan = createPagePlan(scripts, {
+				WASM_IDLE_SKIP_ASSET_VERIFICATION: skip,
+				WASM_IDLE_PAGE_REUSE_ASSETS: reuse,
+				WASM_IDLE_MOONBIT_LOCAL_RESEARCH: '1'
+			});
+			if (skip || reuse) assert(taskNames(plan).includes('verify:moonbit-policy'));
+			else assert(taskNames(plan).includes('page:build'));
+			assert.deepEqual(plan.at(-1).args, ['gh-pages.js']);
+		}
+});
+
 test('ordinary page deployments verify built assets and smoke-test the page before publishing', () => {
 	const plan = createPagePlan(scripts, {});
 	assert.deepEqual(taskNames(plan), [
@@ -61,9 +75,11 @@ test('host-only deployment reuses static assets and still rebuilds the container
 		WASM_IDLE_PAGE_FULL_AUDIT: '1'
 	});
 	assert.deepEqual(taskNames(plan), [
+		'verify:moonbit-policy',
 		'prepare:page-container',
 		'build',
-		'compress:build-runtimes'
+		'compress:build-runtimes',
+		'verify:moonbit-policy'
 	]);
 	assert.deepEqual(plan.at(-1).args, ['gh-pages.js']);
 });
@@ -71,6 +87,7 @@ test('host-only deployment reuses static assets and still rebuilds the container
 test('asset reuse preserves receipt checks, build checks and the page smoke test', () => {
 	const names = taskNames(createPagePlan(scripts, { WASM_IDLE_PAGE_REUSE_ASSETS: '1' }));
 	assert.deepEqual(names, [
+		'verify:moonbit-policy',
 		'verify:page-c3',
 		'verify:page-lfortran',
 		'check:assets-lock',
@@ -79,6 +96,7 @@ test('asset reuse preserves receipt checks, build checks and the page smoke test
 		'compress:build-runtimes',
 		'verify:page-c3',
 		'verify:page-lfortran',
+		'verify:moonbit-policy',
 		'verify:page-assets',
 		'test:browser:page-smoke'
 	]);

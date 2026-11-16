@@ -1,5 +1,11 @@
 # Original MoonBit browser compiler
 
+Default execution, asset preparation and compiler-payload publication are blocked
+pending MPSL §14 service-license review. The genuine compiler integration remains
+available for explicitly requested loopback-only local research; that technical
+option grants no license permission and cannot enable publication. See the
+[policy and remaining review decision](../../docs/moonbit.md).
+
 The producer uses the official `v0.10.19+97801ee1b` Wasm compiler release:
 
 - Archive: `moonbit-wasm.tar.gz`, 4,176,888 bytes.
@@ -23,8 +29,8 @@ three receipt-verified upstream members; `--build-dir` reuses a marked private
 producer directory. An unmarked existing build output is never cleared.
 
 ```sh
-node scripts/sync-wasm-moonbit.mjs
-node scripts/sync-wasm-moonbit.mjs --check
+node scripts/sync-wasm-moonbit.mjs --local-research
+node scripts/sync-wasm-moonbit.mjs --local-research --check
 ```
 
 Sync downloads and builds missing payloads, verifies existing ones and generates
@@ -45,4 +51,7 @@ download under the MoonBit license. This includes user interfaces and hosting
 software. Service suitability is a PR review item; the host MIT license is not
 changed by this integration. The separately retained compiler-output exception
 covers compiler portions embedded into compiled output and does not remove that
-service condition.
+service condition. Normal build and required browser-test paths withhold the
+compiler payloads. Publication preflight rejects old raw/compressed payloads and
+delivery-index references even when asset verification is skipped or old assets
+are reused; it does not delete local files or accept terms for the operator.

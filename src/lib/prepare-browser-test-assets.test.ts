@@ -30,12 +30,29 @@ afterEach(async () => {
 });
 
 describe('browser test asset preparation', () => {
-	it('prepares MoonBit from its pinned producer and requires payload receipts in grouped tests', async () => {
+	it('blocks ordinary MoonBit preparation before invoking the producer or fetching', async () => {
+		const prepareMoonbit = vi.fn(),
+			fetchImpl = vi.fn<typeof fetch>();
+		await expect(
+			prepareBrowserTestAssets({ groups: ['moonbit'], prepareMoonbit, fetchImpl })
+		).rejects.toThrow('service-license review');
+		expect(prepareMoonbit).not.toHaveBeenCalled();
+		expect(fetchImpl).not.toHaveBeenCalled();
+	});
+	it('requires an explicit local-research option for MoonBit producer and payload receipt checks', async () => {
 		const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-idle-moonbit-ci-assets-'));
 		temporaryDirectories.push(root);
 		const prepareMoonbit = vi.fn(async () => undefined);
-		await prepareBrowserTestAssets({ groups: ['moonbit'], staticDir: root, prepareMoonbit });
-		expect(prepareMoonbit).toHaveBeenCalledWith({ targetDir: path.join(root, 'wasm-moonbit') });
+		await prepareBrowserTestAssets({
+			groups: ['moonbit'],
+			staticDir: root,
+			prepareMoonbit,
+			moonbitLocalResearchOnly: true
+		});
+		expect(prepareMoonbit).toHaveBeenCalledWith({
+			targetDir: path.join(root, 'wasm-moonbit'),
+			localResearchOnly: true
+		});
 		await expect(
 			verifyBrowserTestAssets({ groups: ['moonbit'], staticDir: root })
 		).rejects.toThrow(
@@ -866,7 +883,6 @@ describe('browser test asset preparation', () => {
 			'lean4',
 			'commonlisp',
 			'picat',
-			'moonbit',
 			'parigp',
 			'scala'
 		]);

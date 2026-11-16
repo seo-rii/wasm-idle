@@ -63,7 +63,9 @@ export const scenarios = [
 		// Add 17 KiB / six files for its adapter, assets and profile; runtime payloads stay external.
 		// Cumulative Squirrel, Wren, PARI/GP and WASI memory limits add another 27 KiB/12 files.
 		// MoonBit measures 7,455,731 bytes / 813 files; 4 KiB covers the 4,083-byte overflow.
-		budget: { maxBytes: 7 * MiB + 113 * 1024, maxFiles: 813, maxPackages: 6 },
+		// Service-policy containment measures 7,458,088 bytes / 815 files.
+		// One policy JS/declaration pair needs two files; the minimum 3 KiB covers 2,344 bytes of overflow.
+		budget: { maxBytes: 7 * MiB + 116 * 1024, maxFiles: 815, maxPackages: 6 },
 		absentPackageNames: [
 			'@katana-project/asm',
 			'java-parser',
@@ -460,7 +462,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Propagate Picat's measured 17 KiB / six-file SDK increase; dependencies are unchanged.
 		// Keep all four language profile allowances when installing the combined SDK.
 		// MoonBit measures 43,041,970 bytes / 3,434 files; existing byte/dependency caps suffice.
-		budget: { maxBytes: 40 * MiB + 1_093 * 1024, maxFiles: 3_434, maxPackages: 70 },
+		// Service-policy containment measures 43,044,327 bytes / 3,436 files; existing byte headroom suffices.
+		budget: { maxBytes: 40 * MiB + 1_093 * 1024, maxFiles: 3_436, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

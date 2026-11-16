@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onDestroy, untrack } from 'svelte';
+	import { MOONBIT_SERVICE_POLICY } from '$lib/playground/moonbitServicePolicy';
 	import { parseDebugInteger } from './debugInteger';
 	import Monaco from './Monaco.svelte';
 	import DebuggerLog from './DebuggerLog.svelte';
@@ -484,7 +485,12 @@
 			: {})
 	}));
 	const editorLanguage = $derived(editorLanguages[language]);
-	const executionAvailable = $derived(!editorOnlyLanguages.has(language));
+	const executionUnavailableReason = $derived(
+		language === 'MOONBIT' ? MOONBIT_SERVICE_POLICY.message : ''
+	);
+	const executionAvailable = $derived(
+		!editorOnlyLanguages.has(language) && !executionUnavailableReason
+	);
 	const argsLabel = $derived(argsLabels[language] ?? 'Args');
 	const monacoLspLanguage = $derived(lspLanguageOverrides[language] ?? editorLanguage);
 	const activeRuntimeLspCapability = $derived(runtimeLspCapabilities[language] ?? null);
@@ -3186,7 +3192,7 @@
 	$effect(() => {
 		if (!browser || !workspaceInitialized) return;
 		const binding = playground;
-		const enabled = prewarmEnabled;
+		const enabled = prewarmEnabled && executionAvailable;
 		const selectedLanguage = language;
 		// A run owns its sandbox already. Never replace it with speculative work.
 		// Run must claim the pending warm-up; changing runningMode must not cancel it.
@@ -4718,6 +4724,11 @@
 		</div>
 	</header>
 	<div class="workspace-configuration">
+		{#if executionUnavailableReason}
+			<p role="status" data-testid="runtime-unavailable">
+				{executionUnavailableReason} Editing and saving source remain available.
+			</p>
+		{/if}
 		{#if language === 'PYTHON'}
 			<details class="python-bytecode-options">
 				<summary>Python bytecode options</summary>

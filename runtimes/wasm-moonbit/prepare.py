@@ -179,10 +179,13 @@ def materialize(inputs, build_root, output):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--local-research", action="store_true", help="Local research only; does not authorize publication or grant license permission")
     parser.add_argument("--output", type=Path, default=ROOT / "../../static/wasm-moonbit")
     parser.add_argument("--input-dir", type=Path, help="Reuse the three exact verified release members")
     parser.add_argument("--build-dir", type=Path, help="Reuse an explicitly owned producer scratch directory")
     options = parser.parse_args()
+    if not options.local_research:
+        parser.error("MoonBit preparation is blocked pending MPSL §14 service-license review; --local-research is for local compiler research only, not publication (see docs/moonbit.md)")
     with tempfile.TemporaryDirectory(prefix="wasm-idle-moonbit-") as temporary:
         scratch = Path(temporary)
         inputs = options.input_dir.resolve() if options.input_dir else scratch / "inputs"

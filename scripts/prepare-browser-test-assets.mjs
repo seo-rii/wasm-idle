@@ -189,7 +189,8 @@ export function normalizeBrowserTestAssetGroups(groups) {
 		if (!SUPPORTED_GROUPS.has(group))
 			throw new Error(`Unknown browser test asset group: ${group}`);
 	}
-	if (requested.includes('all')) return ASSET_GROUPS.filter((group) => group !== 'clangd');
+	if (requested.includes('all'))
+		return ASSET_GROUPS.filter((group) => group !== 'clangd' && group !== 'moonbit');
 	return [...new Set(requested)];
 }
 
@@ -212,6 +213,7 @@ export function normalizeBrowserTestAssetGroups(groups) {
  *   prepareLean4?: typeof import('./sync-wasm-lean4.mjs').syncWasmLean4Assets;
  *   prepareCommonLisp?: typeof import('./sync-wasm-commonlisp.mjs').syncWasmCommonLispAssets;
  *   prepareMoonbit?: typeof import('./sync-wasm-moonbit.mjs').syncWasmMoonbitAssets;
+ *   moonbitLocalResearchOnly?: boolean;
  * }} [options]
  */
 export async function prepareBrowserTestAssets({
@@ -237,11 +239,16 @@ export async function prepareBrowserTestAssets({
 		(await import('./sync-wasm-lean4.mjs')).syncWasmLean4Assets(options),
 	prepareCommonLisp = async (options) =>
 		(await import('./sync-wasm-commonlisp.mjs')).syncWasmCommonLispAssets(options),
+	moonbitLocalResearchOnly = false,
 	prepareMoonbit = async (options) =>
 		(await import('./sync-wasm-moonbit.mjs')).syncWasmMoonbitAssets(options)
 } = {}) {
 	const manifest = parseManifest(JSON.parse(await readFile(manifestPath, 'utf8')));
 	const selectedGroups = normalizeBrowserTestAssetGroups(groups);
+	if (selectedGroups.includes('moonbit') && moonbitLocalResearchOnly !== true)
+		throw new Error(
+			'MoonBit asset preparation is blocked pending MPSL §14 service-license review; see docs/moonbit.md.'
+		);
 	const compressionManifest = path.join(staticDir, 'compressed-runtime-assets.v1.json');
 	const compressedTargets = (await stat(compressionManifest).catch(() => null))
 		? new Set(JSON.parse(await readFile(compressionManifest, 'utf8')).assets)
@@ -262,7 +269,10 @@ export async function prepareBrowserTestAssets({
 
 	for (const group of selectedGroups) {
 		if (group === 'moonbit') {
-			await prepareMoonbit({ targetDir: path.join(staticDir, 'wasm-moonbit') });
+			await prepareMoonbit({
+				targetDir: path.join(staticDir, 'wasm-moonbit'),
+				localResearchOnly: true
+			});
 			continue;
 		}
 		if (group === 'scala') {
