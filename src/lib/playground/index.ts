@@ -10,8 +10,10 @@ import {
 	normalizeLanguageId,
 	supportedLanguageIds,
 	type PlaygroundBindingOptions,
-	type CanonicalLanguageId
+	type CanonicalLanguageId,
+	type RuntimeAssetCacheConsumer
 } from '@wasm-idle/core';
+import { RuntimeAssetCache } from './runtimeAssetCache';
 
 interface SandboxRoute {
 	languageId: CanonicalLanguageId;
@@ -561,11 +563,27 @@ export function createPlaygroundBinding(
 	runtimeAssets: SandboxRuntimeAssets,
 	options: PlaygroundBindingOptions = {}
 ): PlaygroundBinding {
-	return createCorePlaygroundBinding(
+	// One owner cache per binding, as createRuntimeSession provides. Without it, runtimes that
+	// compile their toolchain through a host module service (TinyGo, Nim, LFortran, C3, ...)
+	// recompile it for every disposable worker, and each sandbox re-verifies bootstrap bytes.
+	const cache = new RuntimeAssetCache();
+	const binding = createCorePlaygroundBinding(
 		runtimeAssets as never,
-		playground as never,
+		(async (language: string) => {
+			const sandbox = (await playground(language)) as Sandbox &
+				Partial<RuntimeAssetCacheConsumer>;
+			try {
+				sandbox.setRuntimeAssetCache?.(cache);
+			} catch {
+				// A sandbox that cannot adopt the shared cache keeps its own.
+			}
+			return sandbox;
+		}) as never,
 		options
-	) as PlaygroundBinding;
+	) as PlaygroundBinding & { dispose(): Promise<void> };
+	const dispose = binding.dispose.bind(binding);
+	binding.dispose = () => dispose().finally(() => cache.dispose());
+	return binding;
 }
 
 async function playground(language: string): Promise<Sandbox>;
