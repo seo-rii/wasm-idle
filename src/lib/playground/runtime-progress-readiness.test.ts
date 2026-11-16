@@ -37,6 +37,7 @@ type RuntimeReadinessAudit = EntryReadiness | StaticWorkerReadiness | TerminalRe
  * is the first safe user-visible readiness signal.
  */
 const runtimeReadinessAudit = {
+	PARIGP: { strategy: 'static-worker-fallback', hostModule: 'parigp' },
 	GOLFSCRIPT: {
 		strategy: 'entry-signal',
 		hostModule: 'golfscript',

@@ -20,6 +20,13 @@ interface SandboxRoute {
 
 const sandboxRoutes = [
 	{
+		languageId: 'PARIGP',
+		load: async () => {
+			const { default: PariGp } = await import('$lib/playground/parigp');
+			return new PariGp();
+		}
+	},
+	{
 		languageId: 'SCALA',
 		load: async () => {
 			const { default: Scala } = await import('$lib/playground/scala');

@@ -41,6 +41,7 @@ static/wasm-d/runtime/toolchain/toolchain.tar
 /static/wasm-c3/
 # Common Lisp (ECL) assets are downloaded from the pinned wasm-llvm revision, never committed.
 /static/wasm-commonlisp/
+/static/wasm-parigp/
 # LFortran producer artifacts are synced locally, never committed.
 static/wasm-lfortran/
 # Original PostgreSQL language server release files are prepared from pinned receipts.

@@ -253,6 +253,11 @@ vi.mock('$lib/playground/swift', () => {
 	};
 });
 
+vi.mock('$lib/playground/parigp', () => {
+	moduleLoads.add('PARIGP');
+	return { default: createMockSandboxClass('PARIGP') };
+});
+
 vi.mock('$lib/playground/commonlisp', () => {
 	moduleLoads.add('COMMONLISP');
 	return { default: createMockSandboxClass('COMMONLISP') };

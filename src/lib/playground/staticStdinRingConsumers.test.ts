@@ -16,6 +16,7 @@ const readers = {
 	c3: 'c3Stdin',
 	clojurescript: 'createSharedByteReader',
 	commonlisp: 'createSharedStdinReader',
+	parigp: 'createSharedStdinReader',
 	forth: 'createSharedKeyReader',
 	gleam: 'createSharedByteReader',
 	grain: 'grainStdin',

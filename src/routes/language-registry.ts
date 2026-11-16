@@ -78,6 +78,7 @@ export const playgroundLanguages: PlaygroundLanguage[] = [
 export const playgroundLanguageDescriptors: Readonly<
 	Record<PlaygroundLanguage, PlaygroundLanguageDescriptor>
 > = {
+	PARIGP: { label: 'PARI/GP', editorLanguage: 'plaintext' },
 	UHMLANG: { label: 'UHMLANG (엄준식)', editorLanguage: 'plaintext' },
 	LOLCODE: { label: 'LOLCODE 1.3', editorLanguage: 'plaintext' },
 	APECODE: { label: 'APECode', editorLanguage: 'plaintext' },
