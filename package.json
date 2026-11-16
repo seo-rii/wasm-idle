@@ -139,7 +139,7 @@
 		"layer:static-runtimes": "node scripts/build-layered-runtime-assets.mjs static",
 		"asset:sizes": "node scripts/static-asset-sizes.mjs report",
 		"assets:lock": "node scripts/generate-runtime-asset-lock.mjs",
-		"check:assets-lock": "node scripts/generate-runtime-asset-lock.mjs --check",
+		"check:assets-lock": "node scripts/runtime-asset-lock-inputs.mjs --check",
 		"check:asset-sizes": "node scripts/static-asset-sizes.mjs check",
 		"build:page-runtimes": "node scripts/prepare-page-runtimes.mjs",
 		"prepare:page-container": "node scripts/prepare-page-container.mjs",
@@ -246,7 +246,8 @@
 		"sync:wasm-wren": "node scripts/sync-wasm-wren.mjs",
 		"build:wasm-squirrel": "node scripts/build-squirrel-runtime.mjs",
 		"test:browser:squirrel": "WASM_IDLE_RUN_REAL_BROWSER_SQUIRREL=1 WASM_IDLE_REQUIRE_BROWSER_TESTS=1 vitest run src/lib/playground/esolangs.playwright.test.ts",
-		"sync:wasm-squirrel": "node scripts/sync-wasm-squirrel.mjs"
+		"sync:wasm-squirrel": "node scripts/sync-wasm-squirrel.mjs",
+		"prepare:assets-lock": "node scripts/runtime-asset-lock-inputs.mjs --prepare"
 	},
 	"devDependencies": {
 		"acorn": "8.19.0",
