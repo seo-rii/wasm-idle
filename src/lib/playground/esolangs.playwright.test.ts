@@ -260,6 +260,56 @@ state main {
 
 const profiles: InterpreterBrowserProfile[] = [
 	{
+		language: 'SQUIRREL',
+		enabled: process.env.WASM_IDLE_RUN_REAL_BROWSER_SQUIRREL === '1',
+		defaultSource: () => editorDefaults.squirrel,
+		echoSource: editorDefaults.squirrel,
+		infiniteSource: 'while (true) {}',
+		runtimePath: 'wasm-squirrel/squirrel.wasm',
+		cases: [
+			{
+				name: 'utf8-explicit-eof',
+				source: editorDefaults.squirrel,
+				stdin: '한글 🦀\nsecond\n',
+				output: '한글 🦀\nsecond\n'
+			},
+			{ name: 'empty-eof', source: editorDefaults.squirrel, stdin: '', output: '' },
+			{ name: 'binary-input', source: editorDefaults.squirrel, stdin: '\0A', output: '\0A' },
+			{
+				name: 'classes-and-generators',
+				source: 'class Counter { value = 40; function next() { return ++value; } } local c = Counter(); function values() { yield c.next(); yield c.next(); } foreach (n in values()) print(n + "\\n");',
+				stdin: '',
+				output: '41\n42\n'
+			},
+			{
+				name: 'workspace-dofile',
+				source: 'dofile("lib/helper.nut");',
+				stdin: '',
+				output: 'workspace\n',
+				options: {
+					activePath: 'examples/한글.nut',
+					workspaceFiles: [{ path: 'lib/helper.nut', content: 'print("workspace\\n");' }]
+				}
+			},
+			{
+				name: 'compiler-error',
+				source: 'local = ;',
+				stdin: '',
+				fails: true,
+				failureMessage: 'code 1'
+			},
+			{
+				name: 'runtime-error',
+				source: 'throw "squirrel failure";',
+				stdin: '',
+				fails: true,
+				failureMessage: 'code 1',
+				failureOutput: 'squirrel failure'
+			},
+			{ name: 'after-error', source: 'print(6 * 7);', stdin: '', output: '42' }
+		]
+	},
+	{
 		language: 'BRAINFUCK',
 		enabled: process.env.WASM_IDLE_RUN_REAL_BROWSER_BRAINFUCK === '1',
 		defaultSource: () => editorDefaults.brainfuck,

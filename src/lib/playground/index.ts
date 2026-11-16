@@ -20,6 +20,16 @@ interface SandboxRoute {
 
 const sandboxRoutes = [
 	{
+		languageId: 'SQUIRREL',
+		load: async () => {
+			const [{ default: Wasm }, { SQUIRREL_PROFILE }] = await Promise.all([
+				import('$lib/playground/wasm'),
+				import('$lib/playground/squirrelProfile')
+			]);
+			return new Wasm(SQUIRREL_PROFILE);
+		}
+	},
+	{
 		languageId: 'SCALA',
 		load: async () => {
 			const { default: Scala } = await import('$lib/playground/scala');

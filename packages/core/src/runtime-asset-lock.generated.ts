@@ -2221,6 +2221,8 @@ export const RUNTIME_ASSET_LOCK: RuntimeAssetLockManifest = /* @__PURE__ */ free
 		"wasm-sqlite/assets/sql-wasm-C1D_RJuy.wasm.gz": {"sha256":"7825c3e9f978e13ac74918d4bcc75a96b0bd8c191d7a524b6817c71002784eac","bytes":336263,"encoding":"gzip","mediaType":"application/wasm","uncompressedSha256":"f3aaaa47b7957d084f0a70037fb780b5465d7bfb6e58a5bd485d6f23a9576b74","uncompressedBytes":684897},
 		"wasm-sqlite/runtime-manifest.v1.json": {"sha256":"318d812f668cae22eb60a899c1a86d23ce825ba5cc923277fb4c79bb0d9cf047","bytes":580,"mediaType":"application/json"},
 		"wasm-sqlite/runtime.mjs": {"sha256":"713af5aec30f98caf6667cecd3ca5a910dad36461a625bc67bddb414645459d7","bytes":40838,"mediaType":"text/javascript"},
+		"wasm-squirrel/runtime-build.json": {"sha256":"1cb96aead870f4dde6fe5be111a3b062ab50ab55875871211c58a11fcaa8dfc7","bytes":1384,"mediaType":"application/json"},
+		"wasm-squirrel/squirrel.wasm": {"sha256":"ca43b31506cc294c31b7b4b0e2d714ca3ab4fed88c4a3a7dcd9d0ac482b04f14","bytes":305988,"mediaType":"application/wasm"},
 		"wasm-tcl/require.js": {"sha256":"0ca49b7de8f5e006ba5eb976937a3f9fb96b05ebfbb11d685c0b21ead94aacaf","bytes":17831,"mediaType":"text/javascript"},
 		"wasm-tcl/runner-worker.js": {"sha256":"1f0656df1a3be8d8ff1f3da40ec8eb82aa79d4253b095d613e02278fdd945fca","bytes":31944,"mediaType":"text/javascript"},
 		"wasm-tcl/runtime-build.json": {"sha256":"3b426e4332c3e89a80878d4cc1b159192de50e03185757420ceef3699c786834","bytes":1972,"mediaType":"application/json"},

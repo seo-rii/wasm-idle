@@ -78,6 +78,7 @@ export const playgroundLanguages: PlaygroundLanguage[] = [
 export const playgroundLanguageDescriptors: Readonly<
 	Record<PlaygroundLanguage, PlaygroundLanguageDescriptor>
 > = {
+	SQUIRREL: { label: 'Squirrel', editorLanguage: 'cpp' },
 	UHMLANG: { label: 'UHMLANG (엄준식)', editorLanguage: 'plaintext' },
 	LOLCODE: { label: 'LOLCODE 1.3', editorLanguage: 'plaintext' },
 	APECODE: { label: 'APECode', editorLanguage: 'plaintext' },
