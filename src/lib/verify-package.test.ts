@@ -186,8 +186,8 @@ describe('package install budgets', () => {
 			Object.fromEntries(scenarios.map((scenario) => [scenario.name, scenario.budget]))
 		).toEqual({
 			'wasm-idle root install': {
-				maxBytes: 7 * MiB + 65 * 1024,
-				maxFiles: 791,
+				maxBytes: 7 * MiB + 82 * 1024,
+				maxFiles: 797,
 				maxPackages: 6
 			},
 			'@wasm-idle/gcc install': {
@@ -216,11 +216,29 @@ describe('package install budgets', () => {
 				maxPackages: 10
 			},
 			'all public packages/adapters aggregate': {
-				maxBytes: 40 * MiB + 1_049 * 1024,
-				maxFiles: 3_412,
+				maxBytes: 40 * MiB + 1_066 * 1024,
+				maxFiles: 3_418,
 				maxPackages: 70
 			}
 		});
+	});
+
+	it('accepts measured PARI/GP root footprint without weakening dependency limits', () => {
+		const scenario = scenarios.find((entry) => entry.name === 'wasm-idle root install')!;
+		// Baseline install plus the measured 16,964-byte / six-file root-and-core delta.
+		expect(() =>
+			assertInstallBudget(scenario, { bytes: 7_422_801, files: 797, packages: 5 })
+		).not.toThrow();
+		for (const key of ['bytes', 'files', 'packages'] as const) {
+			const limit = {
+				bytes: scenario.budget.maxBytes,
+				files: scenario.budget.maxFiles,
+				packages: scenario.budget.maxPackages
+			};
+			expect(() =>
+				assertInstallBudget(scenario, { ...limit, [key]: limit[key] + 1 })
+			).toThrow('Install budget exceeded for wasm-idle root install');
+		}
 	});
 
 	it('accepts measured baseline and Java 25 aggregates and rejects every limit plus one', () => {
