@@ -52,6 +52,9 @@ class WasmStdin extends Fd {
 	}
 
 	fd_read(size: number) {
+		// wasi-libc readv may put an empty vector before its actual read buffer.
+		// An empty read must not consume a queued chunk or the terminal EOF marker.
+		if (size === 0) return { ret: wasi.ERRNO_SUCCESS, data: new Uint8Array(0) };
 		if (stdinChunkOffsetWasm >= stdinChunkWasm.length) {
 			const nextChunk = this.readNextChunk();
 			if (nextChunk === null) {
