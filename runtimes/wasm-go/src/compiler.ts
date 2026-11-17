@@ -215,10 +215,43 @@ function normalizeToolOutputs(outputs: BrowserGoToolResult['outputs']) {
 	);
 }
 
+// Versioned runtime JSON names fixed content (the query is the distribution's content
+// fingerprint). Keep each parsed copy for the realm instead of fetching, revalidating and
+// parsing the manifest and stdlib index again on every compile. Callers receive clones.
+const MAX_VERSIONED_RUNTIME_JSON = 8;
+const versionedRuntimeJson = new Map<string, unknown>();
+
+export function clearGoRuntimeJsonCache() {
+	versionedRuntimeJson.clear();
+}
+
+async function loadVersionedRuntimeJson<T>(
+	url: string | URL,
+	limits: readonly unknown[],
+	cacheable: boolean,
+	load: () => Promise<T>
+): Promise<T> {
+	const resolved = new URL(url.toString());
+	if (!cacheable || !resolved.search) return load();
+	const key = JSON.stringify([resolved.href, ...limits]);
+	if (versionedRuntimeJson.has(key)) {
+		const value = versionedRuntimeJson.get(key) as T;
+		versionedRuntimeJson.delete(key);
+		versionedRuntimeJson.set(key, value);
+		return structuredClone(value);
+	}
+	const value = await load();
+	versionedRuntimeJson.set(key, structuredClone(value));
+	while (versionedRuntimeJson.size > MAX_VERSIONED_RUNTIME_JSON)
+		versionedRuntimeJson.delete(versionedRuntimeJson.keys().next().value!);
+	return value;
+}
+
 async function resolveCompilerRuntime(
 	options: CreateGoCompilerOptions | PreloadBrowserGoRuntimeOptions,
 	dependencies: CompileGoDependencies = {},
-	reportManifestProgress?: (loaded: number, total?: number) => void
+	reportManifestProgress?: (loaded: number, total?: number) => void,
+	cacheable = false
 ) {
 	const runtimeBaseUrl = options.runtimeBaseUrl || DEFAULT_RUNTIME_BASE_URL;
 	if (options.manifest) {
@@ -232,16 +265,22 @@ async function resolveCompilerRuntime(
 	const derivedRuntimeBaseUrl = new URL('./', manifestUrl.toString());
 	derivedRuntimeBaseUrl.search = new URL(manifestUrl.toString()).search;
 	return {
-		manifest: await (dependencies.loadManifest || loadRuntimeManifest)(
+		manifest: await loadVersionedRuntimeJson(
 			manifestUrl,
-			dependencies.fetchImpl,
-			reportManifestProgress,
-			{
-				signal: options.signal,
-				assetTimeoutMs: options.assetTimeoutMs,
-				maxAssetBytes: options.maxAssetBytes,
-				maxWasmMemoryBytes: options.maxWasmMemoryBytes
-			}
+			['manifest', options.maxAssetBytes, options.maxWasmMemoryBytes],
+			cacheable && !dependencies.loadManifest,
+			() =>
+				(dependencies.loadManifest || loadRuntimeManifest)(
+					manifestUrl,
+					dependencies.fetchImpl,
+					reportManifestProgress,
+					{
+						signal: options.signal,
+						assetTimeoutMs: options.assetTimeoutMs,
+						maxAssetBytes: options.maxAssetBytes,
+						maxWasmMemoryBytes: options.maxWasmMemoryBytes
+					}
+				)
 		),
 		runtimeBaseUrl: options.runtimeBaseUrl || derivedRuntimeBaseUrl
 	};
@@ -481,7 +520,8 @@ async function resolveAutoDependencies(
 	runtimeBaseUrl: string | URL,
 	request: BrowserGoCompileRequest,
 	fetchImpl: typeof fetch,
-	reportAssetProgress?: (asset: string, loaded: number, total?: number) => void
+	reportAssetProgress?: (asset: string, loaded: number, total?: number) => void,
+	cacheable = false
 ) {
 	throwIfAborted(request.signal);
 	const boundary = {
@@ -503,12 +543,20 @@ async function resolveAutoDependencies(
 			: Object.entries(request.files || {}).map(([path, contents]) => ({ path, contents }))
 	) as BrowserGoSourceFile[];
 	if (target.stdlibIndex) {
-		const stdlibIndex = (await fetchRuntimeAssetJson(
-			resolveVersionedAssetUrl(runtimeBaseUrl, target.stdlibIndex.asset),
-			'wasm-go stdlib index',
-			fetchImpl,
-			(loaded, total) => reportAssetProgress?.(target.stdlibIndex!.asset, loaded, total),
-			boundary
+		const stdlibIndexUrl = resolveVersionedAssetUrl(runtimeBaseUrl, target.stdlibIndex.asset);
+		const stdlibIndex = (await loadVersionedRuntimeJson(
+			stdlibIndexUrl,
+			['stdlib-index', boundary.maxAssetBytes],
+			cacheable,
+			() =>
+				fetchRuntimeAssetJson(
+					stdlibIndexUrl,
+					'wasm-go stdlib index',
+					fetchImpl,
+					(loaded, total) =>
+						reportAssetProgress?.(target.stdlibIndex!.asset, loaded, total),
+					boundary
+				)
 		)) as RuntimeStdlibIndex;
 		if (
 			stdlibIndex.format === 'wasm-go-stdlib-index-v1' &&
@@ -552,7 +600,8 @@ async function resolveCompileRequest(
 	manifest: NormalizedRuntimeManifest,
 	runtimeBaseUrl: string | URL,
 	fetchImpl: typeof fetch,
-	reportAssetProgress?: (asset: string, loaded: number, total?: number) => void
+	reportAssetProgress?: (asset: string, loaded: number, total?: number) => void,
+	cacheable = false
 ) {
 	const validationError = validateCompileRequest(request);
 	if (validationError) {
@@ -575,7 +624,8 @@ async function resolveCompileRequest(
 				runtimeBaseUrl,
 				normalizedRequest,
 				fetchImpl,
-				reportAssetProgress
+				reportAssetProgress,
+				cacheable
 			)
 		} satisfies BrowserGoCompileRequest
 	} as const;
@@ -610,13 +660,16 @@ export async function compileGo(
 		emitManifestAssetProgress('runtime-manifest.v1.json', loaded, total);
 	const reportPlanAssetProgress = createStageAssetProgressReporter('plan', progress, 0.45);
 	progress('manifest', 0, 1, 'loading runtime manifest');
+	// Injected fetches (tests, custom hosts) keep their exact per-compile behavior.
+	const cacheableRuntimeJson = !dependencies.fetchImpl;
 	const { manifest, runtimeBaseUrl } = await resolveCompilerRuntime(
 		{ ...options, signal, assetTimeoutMs, maxAssetBytes, maxWasmMemoryBytes },
 		{
 			...dependencies,
 			fetchImpl
 		},
-		reportManifestAssetProgress
+		reportManifestAssetProgress,
+		cacheableRuntimeJson
 	);
 	progress('manifest', 1, 1, `loaded runtime manifest for ${manifest.defaultTarget}`);
 	progress('plan', 0, 1, 'resolving compile inputs');
@@ -625,7 +678,8 @@ export async function compileGo(
 		manifest,
 		runtimeBaseUrl,
 		fetchImpl,
-		reportPlanAssetProgress
+		reportPlanAssetProgress,
+		cacheableRuntimeJson
 	);
 	if ('error' in resolvedRequest) {
 		return failure(resolvedRequest.error || 'invalid compile request', logs.records);

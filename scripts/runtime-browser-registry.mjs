@@ -28,6 +28,7 @@ function runtime(
 
 /** @type {BrowserRuntime[]} */
 export const runtimeBrowserRegistry = [
+	runtime('sml', 'esolangs'),
 	runtime('clang', 'clang', { languages: ['C', 'CPP'] }),
 	runtime('objectivec', 'clang', {
 		languages: ['OBJC', 'OBJECTIVECXX'],
@@ -47,16 +48,23 @@ export const runtimeBrowserRegistry = [
 	runtime('aheui', 'esolangs', { dependencies: ['python'] }),
 	runtime('apecode', 'esolangs', { dependencies: ['python'] }),
 	runtime('golfscript', 'esolangs', { dependencies: ['ruby'] }),
+	runtime('coq', 'workers'),
+	runtime('smalltalk', 'workers'),
+	runtime('bc', 'esolangs'),
+	runtime('uiua', 'esolangs'),
+	runtime('sed', 'esolangs', { dependencies: ['wasm'] }),
 	runtime('picat', 'specialized'),
 	runtime('moonbit', 'specialized'),
 	runtime('wren', 'esolangs'),
 	runtime('squirrel', 'esolangs'),
+	runtime('dart', 'specialized'),
 	runtime('scala', 'specialized'),
 	runtime('parigp', 'specialized', { sourceNames: ['parigp', 'pari-gp'] }),
 	runtime('java', 'stdin', { sourceNames: ['java', 'teavm'] }),
 	runtime('elixir', 'stdin'),
 	runtime('javascript', 'stdin', { sourceNames: ['javascript', 'js-sandbox'] }),
 	runtime('typescript', 'stdin', { dependencies: ['javascript'] }),
+	runtime('coffeescript', 'stdin', { dependencies: ['typescript', 'javascript'] }),
 	runtime('assemblyscript', 'stdin'),
 	runtime('wat', 'stdin'),
 	runtime('wasm', 'stdin'),
@@ -68,6 +76,7 @@ export const runtimeBrowserRegistry = [
 	runtime('r', 'stdin', { sourceNames: ['r', 'webr'] }),
 	runtime('duckdb', 'stdin'),
 	runtime('sqlite', 'stdin'),
+	runtime('graphql', 'specialized'),
 	runtime('postgresql', 'stdin'),
 	runtime('php', 'stdin'),
 	...[
@@ -76,6 +85,7 @@ export const runtimeBrowserRegistry = [
 		'perl',
 		'tcl',
 		'awk',
+		'verilog',
 		'pascal',
 		'forth',
 		'j',

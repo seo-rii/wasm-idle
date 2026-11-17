@@ -40,28 +40,85 @@ function writeChunks(bytes: Uint8Array, chunk: (offset: number, bytes: Uint8Arra
   return total;
 }
 
+// Lookup results depend only on the filesystem revision and on descriptors this
+// process still holds. Errors listed here are deterministic for those inputs; EBADF
+// and resource errors are never reused.
+const reusableErrors = new Set<FsErrorCode>(['ENOENT', 'ENOTDIR', 'EINVAL', 'ELOOP']);
+const reusableOpenErrors = new Set<FsErrorCode>(['ENOENT', 'ENOTDIR']);
+/** Only an open miss is reusable: a successful open allocates a new descriptor. */
+const openMisses = { errors: reusableOpenErrors, values: false } as const;
+const lookups = { errors: reusableErrors, values: true } as const;
+const MAX_LOOKUP_ENTRIES = 4096;
+type Lookup = { value: unknown } | { error: FsErrorCode; message: string };
+
+/**
+ * Reuse repeated lookups (compilers probe the same headers and symlinks thousands of
+ * times) while the owner's published revision is unchanged. A result is recorded only
+ * when the revision was identical before and after its call, so it was computed at
+ * that revision; any later advance, from any process, empties the cache.
+ */
+function createLookupCache(revision: () => number | undefined) {
+  const buckets = new Map<number | 'path', Map<string, Lookup>>();
+  let current: number | undefined, size = 0;
+  const clear = () => { buckets.clear(); size = 0; };
+  const answer = (entry: Lookup) => {
+    if ('error' in entry) throw new FsError(entry.error, entry.message);
+    return structuredClone(entry.value);
+  };
+  return {
+    /** Descriptor numbers are never reused by an owner, but a closed one must fail with EBADF. */
+    forget(fd: unknown) { if (typeof fd === 'number') { size -= buckets.get(fd)?.size ?? 0; buckets.delete(fd); } },
+    lookup<T>(bucket: number | 'path', operation: Operation, args: readonly unknown[], reuse: { errors: ReadonlySet<FsErrorCode>; values: boolean }, run: () => T): T {
+      const before = revision();
+      if (before === undefined || !Number.isSafeInteger(bucket) && bucket !== 'path') return run();
+      if (before !== current) { clear(); current = before; }
+      const key = `${operation}:${JSON.stringify(args)}`;
+      const cached = buckets.get(bucket)?.get(key);
+      if (cached) return answer(cached) as T;
+      let entry: Lookup;
+      try { entry = { value: run() }; }
+      catch (error) {
+        if (error instanceof FsError && reuse.errors.has(error.code) && revision() === before) record(bucket, key, { error: error.code, message: error.message });
+        throw error;
+      }
+      if (reuse.values && revision() === before) record(bucket, key, { value: structuredClone(entry.value) });
+      return entry.value as T;
+    }
+  };
+  function record(bucket: number | 'path', key: string, entry: Lookup) {
+    if (size >= MAX_LOOKUP_ENTRIES) clear();
+    let entries = buckets.get(bucket);
+    if (!entries) buckets.set(bucket, entries = new Map());
+    entries.set(key, entry); size++;
+  }
+}
+
 export function createRemoteFileSystem(call: RpcCall): WasiFileSystem {
+  const cache = createLookupCache(call.revision ?? (() => undefined));
+  const lookup = <T>(bucket: number | 'path', operation: Operation, args: readonly unknown[], reuse: typeof lookups | typeof openMisses = lookups) =>
+    cache.lookup(bucket, operation, args, reuse, () => call(operation, args).value as T);
+  const descriptor = (reference: WasiPathReference) => reference?.directory;
   return {
     paths: {
-      open: (reference, options, follow) => call(Operation.PathOpen, [reference, options, follow]).value as number,
-      stat: (reference, follow) => call(Operation.PathStat, [reference, follow]).value as ReturnType<WasiFileSystem['stat']>,
+      open: (reference, options, follow) => lookup<number>(descriptor(reference), Operation.PathOpen, [reference, options, follow], openMisses),
+      stat: (reference, follow) => lookup(descriptor(reference), Operation.PathStat, [reference, follow]),
       setTimes: (reference, times, follow) => { call(Operation.PathSetTimes, [reference, times, follow]); },
       mkdir: reference => { call(Operation.PathMkdir, [reference]); },
       unlink: reference => { call(Operation.PathUnlink, [reference]); },
       rmdir: reference => { call(Operation.PathRmdir, [reference]); },
-      readlink: reference => call(Operation.PathReadlink, [reference]).value as string,
+      readlink: reference => lookup<string>(descriptor(reference), Operation.PathReadlink, [reference]),
       symlink: (target, reference) => { call(Operation.PathSymlink, [target, reference]); },
       rename: (from, to) => { call(Operation.PathRename, [from, to]); },
-      entries: directory => call(Operation.DirectoryEntries, [directory]).value as WasiDirectoryEntry[]
+      entries: directory => lookup<WasiDirectoryEntry[]>(directory, Operation.DirectoryEntries, [directory])
     },
-    open: (path, options) => call(Operation.Open, [path, options ?? {}]).value as number,
-    close: (fd) => { call(Operation.Close, [fd]); },
-    stat: (path, options) => call(Operation.Stat, [path, options ?? {}]).value as ReturnType<WasiFileSystem['stat']>,
-    lstat: (path, options) => call(Operation.Lstat, [path, options ?? {}]).value as ReturnType<WasiFileSystem['lstat']>,
-    fstat: (fd) => call(Operation.Fstat, [fd]).value as ReturnType<WasiFileSystem['fstat']>,
+    open: (path, options) => lookup<number>('path', Operation.Open, [path, options ?? {}], openMisses),
+    close: (fd) => { cache.forget(fd); call(Operation.Close, [fd]); },
+    stat: (path, options) => lookup('path', Operation.Stat, [path, options ?? {}]),
+    lstat: (path, options) => lookup('path', Operation.Lstat, [path, options ?? {}]),
+    fstat: (fd) => lookup(fd, Operation.Fstat, [fd]),
     setTimes: (path, times, options, follow) => { call(Operation.SetTimes, [path, times, options ?? {}, follow ?? true]); },
     fsetTimes: (fd, times) => { call(Operation.FsetTimes, [fd, times]); },
-    getDirectoryPath: (fd) => call(Operation.DirectoryPath, [fd]).value as string,
+    getDirectoryPath: (fd) => lookup<string>(fd, Operation.DirectoryPath, [fd]),
     read: (fd, length) => readChunks(length, (_, n) => call(Operation.Read, [fd, n]).bytes!),
     pread: (fd, length, offset) => readChunks(length, (done, n) => call(Operation.Pread, [fd, n, offset + done]).bytes!),
     write: (fd, bytes) => writeChunks(bytes, (_, chunk) => call(Operation.Write, [fd], chunk).value as number),
@@ -69,12 +126,12 @@ export function createRemoteFileSystem(call: RpcCall): WasiFileSystem {
     seek: (fd, offset, whence) => call(Operation.Seek, [fd, offset, whence ?? 'set']).value as number,
     tell: (fd) => call(Operation.Tell, [fd]).value as number,
     ftruncate: (fd, size) => { call(Operation.Truncate, [fd, size]); },
-    realpath: (path, options) => call(Operation.Realpath, [path, options ?? {}]).value as string,
-    readdir: (path, options) => call(Operation.Readdir, [path, options ?? {}]).value as string[],
+    realpath: (path, options) => lookup<string>('path', Operation.Realpath, [path, options ?? {}]),
+    readdir: (path, options) => lookup<string[]>('path', Operation.Readdir, [path, options ?? {}]),
     mkdir: (path, options) => { call(Operation.Mkdir, [path, options ?? {}]); },
     unlink: (path, options) => { call(Operation.Unlink, [path, options ?? {}]); },
     rmdir: (path, options) => { call(Operation.Rmdir, [path, options ?? {}]); },
-    readlink: (path, options) => call(Operation.Readlink, [path, options ?? {}]).value as string,
+    readlink: (path, options) => lookup<string>('path', Operation.Readlink, [path, options ?? {}]),
     symlink: (target, path, options) => { call(Operation.Symlink, [target, path, options ?? {}]); },
     rename: (oldPath, newPath, options) => { call(Operation.Rename, [oldPath, newPath, options ?? {}]); }
   };

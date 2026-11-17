@@ -13,6 +13,10 @@ const ASSET_PREPARATION = new Set([
 	'sync:c3-lsp',
 	'sync:v-lsp',
 	'sync:wasm-lean4',
+	'sync:wasm-sml',
+	'sync:wasm-verilog',
+	'sync:wasm-bc',
+	'sync:wasm-uiua',
 	'prepare:test-assets',
 	'build:page-runtimes',
 	'sync:page-runtimes',
@@ -20,6 +24,7 @@ const ASSET_PREPARATION = new Set([
 	'prepare:wasm-debug-release',
 	'sync:wasm-commonlisp',
 	'sync:wasm-moonbit',
+	'sync:wasm-dart',
 	'layer:static-runtimes',
 	'compress:static-runtimes',
 	'assets:lock'

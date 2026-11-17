@@ -67,13 +67,21 @@ function isUnderCompressibleRuntime(rootDir, filePath) {
 	const relativePath = relativeToRoot(rootDir, filePath);
 	// The workspace starts this module Worker before a new page is necessarily
 	// controlled by the decompression service worker. Its initial URL must exist.
-	if (/^_app\/immutable\/workers\/owner\.worker-[^/]+\.js$/u.test(relativePath))
-		return false;
+	if (/^_app\/immutable\/workers\/owner\.worker-[^/]+\.js$/u.test(relativePath)) return false;
 	// TinyGo's receipt-verified executable graph fetches exact identity URLs. Its
 	// service worker deliberately preserves those network Responses, so replacing
 	// these files with .gz siblings makes the verified URLs disappear.
 	if (
 		/^wasm-tinygo\/(?:upstream\.js|assets\/upstream-compile-worker-[^/]+\.js)$/.test(
+			relativePath
+		)
+	)
+		return false;
+	// Coq's SDK preflight fetches these exact receipt-pinned identity URLs before
+	// any service worker controls the page. The library ZIPs are already compressed;
+	// keep the original kernel/archives and the two small profile entry points.
+	if (
+		/^wasm-coq\/(?:jscoq_worker\.bc\.js|(?:init|coq-base)\.coq-pkg\.bin|runner-worker\.js|runtime-build\.json)$/u.test(
 			relativePath
 		)
 	)

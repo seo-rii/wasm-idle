@@ -5,7 +5,8 @@ import { createGoWorkerService } from '../src/index.js';
 const compilerModuleUrl = () =>
 	`data:text/javascript;base64,${Buffer.from(
 		`
-		export async function createGoCompiler() {
+		export async function createGoCompiler(options) {
+			globalThis.__lastGoLspFactoryOptions = options;
 			return {
 				async compile(request) {
 					globalThis.__lastGoLspCompile = request;
@@ -61,6 +62,8 @@ describe('createGoWorkerService', () => {
 			context
 		);
 
+		// Without a configured manifest wasm-go resolves the one next to its module.
+		expect((globalThis as any).__lastGoLspFactoryOptions).toBeUndefined();
 		expect((globalThis as any).__lastGoLspCompile).toMatchObject({
 			code: 'package main\n\nfunc main() { missing }\n',
 			target: 'wasip2/wasm',
@@ -80,5 +83,25 @@ describe('createGoWorkerService', () => {
 		]);
 		expect(reportProgress).toHaveBeenCalledWith('load-go-compiler');
 		expect(reportProgress).toHaveBeenCalledWith('compile', 1, 2);
+	});
+
+	it('loads the runtime manifest that the playground runtime uses', async () => {
+		const service = createGoWorkerService();
+		const context = {
+			documents: new Map(),
+			publishDiagnostics: vi.fn(),
+			reportProgress: vi.fn()
+		};
+		await service.initialize?.(
+			{
+				compilerUrl: compilerModuleUrl(),
+				runtimeManifestUrl:
+					'https://app.example/wasm-go/runtime/runtime-manifest.v1.json?v=7'
+			},
+			context
+		);
+		expect((globalThis as any).__lastGoLspFactoryOptions).toEqual({
+			runtimeManifestUrl: 'https://app.example/wasm-go/runtime/runtime-manifest.v1.json?v=7'
+		});
 	});
 });

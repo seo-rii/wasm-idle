@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "language": "GRAPHQL",
+  "implementation": {
+    "package": "graphql",
+    "version": "17.0.2",
+    "license": "MIT"
+  },
+  "build": {
+    "tool": "esbuild",
+    "version": "0.28.2",
+    "platform": "browser",
+    "format": "iife",
+    "target": "es2022"
+  },
+  "artifacts": {
+    "runner-worker.js": {
+      "bytes": 192574,
+      "sha256": "ce72dc32bb7b679513a02e7059088a68f16def2aebcf393cc3dd7cad1bf78012"
+    },
+    "LICENSE.txt": {
+      "bytes": 1072,
+      "sha256": "35a11da7e877009ddc57405844209908cfc567adda0ec1daf410368c9f5b0d01"
+    }
+  }
+}

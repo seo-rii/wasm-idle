@@ -357,6 +357,28 @@ class Clang {
 		return pending;
 	}
 
+	/**
+	 * Start downloading what a later compile and link of `language` needs, without waiting.
+	 *
+	 * A prewarmed runtime otherwise sits idle after `ready` and downloads the C++ sysroot addon,
+	 * the linker and the long double archive only when the first program runs. The C++ addon is
+	 * needed before compilation, so it starts now (it still mounts only after the base sysroot).
+	 * The linker and archive are needed only after compilation, so they start once the
+	 * compile-critical assets are ready instead of competing with them. Every step reuses the
+	 * memoized loader that compile() and link() await, and a failed prefetch is retried there.
+	 */
+	prefetch(language: ClangSourceLanguage = 'CPP'): void {
+		if (language !== 'C') void this.ensureCppSysroot().catch(() => undefined);
+		void this.ready.then(
+			() => {
+				if (this.signal?.aborted) return;
+				void this.getModule(this.assetUrls.lld).catch(() => undefined);
+				void this.prepareLongDoubleLinkArgs().catch(() => undefined);
+			},
+			() => undefined
+		);
+	}
+
 	private async installCppHeaders(): Promise<void> {
 		installGccCompatibilityHeaders({
 			addDirectory: (path) => this.memfs.addDirectory(path),

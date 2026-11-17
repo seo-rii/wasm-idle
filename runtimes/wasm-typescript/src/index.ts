@@ -2,8 +2,9 @@ import { Buffer } from 'buffer';
 import { transformSync, type Options as SwcTypeScriptOptions } from '@swc/wasm-typescript';
 import { executionParameterNames } from './execution-parameters.js';
 import { GuestSyntaxError, parseGuestBody } from './guest-syntax.js';
+import { compileCoffeeScript } from './coffeescript-compiler.js';
 
-export type BrowserTypeScriptLanguage = 'javascript' | 'typescript';
+export type BrowserTypeScriptLanguage = 'javascript' | 'typescript' | 'coffeescript';
 export type BrowserTypeScriptDiagnosticSeverity = 'error' | 'warning' | 'other';
 
 export interface BrowserTypeScriptDiagnostic {
@@ -74,11 +75,16 @@ class ProcessExit extends Error {
 
 function normalizeLanguage(language: BrowserTypeScriptLanguage | undefined, fileName = '') {
 	if (language) return language;
+	if (/\.(?:coffee|litcoffee)$/iu.test(fileName)) return 'coffeescript';
 	return fileName.toLowerCase().endsWith('.ts') ? 'typescript' : 'javascript';
 }
 
 function defaultFileName(language: BrowserTypeScriptLanguage) {
-	return language === 'typescript' ? 'main.ts' : 'main.js';
+	return language === 'coffeescript'
+		? 'main.coffee'
+		: language === 'typescript'
+			? 'main.ts'
+			: 'main.js';
 }
 
 const NODE_BUILTIN_SPECIFIERS = new Set([
@@ -161,6 +167,16 @@ function normalizeSwcError(error: unknown, fileName: string) {
 	if (error instanceof GuestSyntaxError) {
 		return createDiagnostic(message, fileName, error.loc.line, error.loc.column + 1);
 	}
+	const location = (error as { location?: { first_line?: number; first_column?: number } })
+		?.location;
+	if (location && typeof location.first_line === 'number') {
+		return createDiagnostic(
+			message,
+			fileName,
+			location.first_line + 1,
+			(location.first_column ?? 0) + 1
+		);
+	}
 	return createDiagnostic(message, fileName);
 }
 
@@ -183,7 +199,9 @@ export async function compileTypeScript(
 							...request.compilerOptions?.transform
 						}
 					}).code
-				: request.code;
+				: language === 'coffeescript'
+					? compileCoffeeScript(request.code, fileName)
+					: request.code;
 		const { javascript, diagnostic: unsupportedModuleSyntax } = rewriteNodeBuiltinImports(
 			stripped,
 			fileName

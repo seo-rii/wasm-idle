@@ -46,10 +46,19 @@ const defaultSource = (language: string) =>
 		TYPESCRIPT: 'main.ts'
 	})[language] ?? 'main.txt';
 type EngineSandbox = BoundSandbox & Record<string, unknown>;
+interface Warm {
+	promise: Promise<void>;
+	controller: AbortController;
+	/** A job owns a claimed warm-up; cancelling the speculative request no longer aborts it. */
+	claimed: boolean;
+}
 interface Session {
 	binding: PlaygroundBinding;
 	sandbox: Promise<EngineSandbox>;
 	active?: Job;
+	warm?: Warm;
+	/** The sandbox completed a load and has not been terminated since. */
+	loaded?: boolean;
 	pendingInput: string[];
 	pendingBytes: number;
 	pendingEof: boolean;
@@ -66,6 +75,8 @@ interface Job {
 	signal: AbortSignal;
 	controller: AbortController;
 	finished: Promise<void>;
+	/** A warm-up this job claimed; it settles before the job uses the sandbox. */
+	warm?: Promise<void>;
 	progress?: ProgressLike;
 	result?: boolean | string;
 	error?: unknown;
@@ -143,6 +154,7 @@ export class ContainerRuntimeAdapter {
 					if (chunk.byteLength) output.enqueue(chunk);
 				};
 				const abort = () => {
+					session.loaded = false;
 					void session.sandbox.then((sandbox) => sandbox.terminate()).catch(() => {});
 				};
 				request.signal.addEventListener('abort', abort, { once: true });
@@ -156,6 +168,8 @@ export class ContainerRuntimeAdapter {
 					stderr,
 					run: async () => {
 						try {
+							// A failed warm-up leaves the load to this job, as without prewarming.
+							await job.warm?.catch(() => {});
 							const sandbox = await session.sandbox;
 							request.signal.throwIfAborted();
 							const options = { ...job.options, signal: request.signal };
@@ -167,6 +181,7 @@ export class ContainerRuntimeAdapter {
 									options,
 									job.progress
 								);
+								session.loaded = true;
 								job.result = true;
 							} else {
 								const running = sandbox.run(
@@ -195,10 +210,12 @@ export class ContainerRuntimeAdapter {
 						closed = true;
 						request.signal.removeEventListener('abort', abort);
 						job.readyForInput = false;
-						if (request.signal.aborted)
+						if (request.signal.aborted) {
+							session.loaded = false;
 							await session.sandbox
 								.then((sandbox) => sandbox.terminate())
 								.catch(() => {});
+						}
 						output.close();
 						errors.close();
 					}
@@ -490,6 +507,8 @@ export class ContainerRuntimeAdapter {
 		const finished = new Promise<void>((resolve) => {
 			finish = resolve;
 		});
+		const warm = session.warm;
+		if (warm) warm.claimed = true;
 		const job: Job = {
 			id: String(++this.#nextJob),
 			language,
@@ -501,6 +520,7 @@ export class ContainerRuntimeAdapter {
 			signal,
 			controller,
 			finished,
+			warm: warm?.promise,
 			progress,
 			requestId
 		};
@@ -553,6 +573,63 @@ export class ContainerRuntimeAdapter {
 			finish();
 		}
 	}
+	/**
+	 * Speculatively load a language runtime, as the core playground prewarmer does.
+	 * A job for the language claims an in-flight warm-up instead of racing it, and
+	 * cancelling the request then no longer aborts it. An unclaimed warm-up that is
+	 * cancelled or fails retires its session, so a run starts from a fresh sandbox.
+	 */
+	async prewarm(language: string, signal: AbortSignal): Promise<boolean> {
+		signal.throwIfAborted();
+		const session = this.session(language);
+		if (session.active) return false;
+		if (session.loaded) return true;
+		const warm = (session.warm ??= this.warm(language, session));
+		const abort = () => {
+			if (!warm.claimed) warm.controller.abort(signal.reason);
+		};
+		signal.addEventListener('abort', abort, { once: true });
+		try {
+			await warm.promise;
+			return !signal.aborted;
+		} catch {
+			return false;
+		} finally {
+			signal.removeEventListener('abort', abort);
+		}
+	}
+	private warm(language: string, session: Session): Warm {
+		const controller = new AbortController();
+		const warm: Warm = {
+			controller,
+			claimed: false,
+			promise: (async () => {
+				const sandbox = await session.sandbox;
+				controller.signal.throwIfAborted();
+				await sandbox.load('', false, [], {
+					signal: controller.signal
+				} as SandboxExecutionOptions);
+				controller.signal.throwIfAborted();
+				session.loaded = true;
+			})()
+		};
+		void warm.promise
+			.then(
+				() => {
+					if (session.warm === warm) session.warm = undefined;
+				},
+				async () => {
+					if (session.warm === warm) session.warm = undefined;
+					// A cancelled load can leave its sandbox mid-initialization.
+					if (warm.claimed || session.active || this.#sessions.get(language) !== session)
+						return;
+					this.#sessions.delete(language);
+					await session.binding.dispose?.();
+				}
+			)
+			.catch(() => {});
+		return warm;
+	}
 	private async flushInput(session: Session, sandbox: EngineSandbox) {
 		if (!session.active?.readyForInput) return;
 		for (const value of session.pendingInput.splice(0)) sandbox.write?.(value);
@@ -592,6 +669,9 @@ export class ContainerRuntimeAdapter {
 			await job.finished;
 			return;
 		}
+		if (session.warm && !session.warm.claimed)
+			session.warm.controller.abort(new DOMException('Runtime cancelled', 'AbortError'));
+		session.loaded = false;
 		await session.sandbox
 			.then((sandbox) => {
 				if (this.#sessions.get(language) === session && !session.active)

@@ -107,6 +107,8 @@ export interface EditorLanguageServerRuntimeOptions {
 	};
 	go?: {
 		compilerUrl?: string;
+		/** wasm-go runtime manifest; defaults to the one next to the compiler module. */
+		runtimeManifestUrl?: string;
 		target?: 'wasip1/wasm' | 'wasip2/wasm' | 'wasip3/wasm' | 'js/wasm';
 	};
 	grain?: {

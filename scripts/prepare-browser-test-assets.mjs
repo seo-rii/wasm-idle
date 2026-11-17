@@ -31,6 +31,7 @@ const ASSET_GROUPS = [
 	'picat',
 	'moonbit',
 	'parigp',
+	'dart',
 	'scala'
 ];
 const SUPPORTED_GROUPS = new Set(['all', ...ASSET_GROUPS]);
@@ -202,7 +203,8 @@ export function normalizeBrowserTestAssetGroups(groups) {
  *   staticDir?: string;
  *   cacheDir?: string;
  *   versionModulePath?: string;
- *   prepareOcamlWrapper?: (options: { sourceRoot: string; staticDir: string; versionModulePath?: string }) => Promise<unknown>;
+ *   temporaryParentDir?: string;
+ *   prepareOcamlWrapper?: (options: { sourceRoot: string; staticDir: string; versionModulePath?: string; temporaryParentDir?: string }) => Promise<unknown>;
  *   baseUrl?: string;
  *   clangdSourceDir?: string;
  *   clangdReceiptPath?: string;
@@ -212,6 +214,7 @@ export function normalizeBrowserTestAssetGroups(groups) {
  *   prepareLean4?: typeof import('./sync-wasm-lean4.mjs').syncWasmLean4Assets;
  *   prepareCommonLisp?: typeof import('./sync-wasm-commonlisp.mjs').syncWasmCommonLispAssets;
  *   prepareMoonbit?: typeof import('./sync-wasm-moonbit.mjs').syncWasmMoonbitAssets;
+ *   prepareDart?: typeof import('./sync-wasm-dart.mjs').syncWasmDartAssets;
  * }} [options]
  */
 export async function prepareBrowserTestAssets({
@@ -222,6 +225,7 @@ export async function prepareBrowserTestAssets({
 	scalaLockPath = DEFAULT_SCALA_LOCK_PATH,
 	cacheDir = DEFAULT_CACHE_DIR,
 	versionModulePath,
+	temporaryParentDir,
 	prepareOcamlWrapper = prepareOcamlBrowserWrapper,
 	baseUrl,
 	clangdSourceDir = manifestPath === DEFAULT_MANIFEST_PATH &&
@@ -238,7 +242,9 @@ export async function prepareBrowserTestAssets({
 	prepareCommonLisp = async (options) =>
 		(await import('./sync-wasm-commonlisp.mjs')).syncWasmCommonLispAssets(options),
 	prepareMoonbit = async (options) =>
-		(await import('./sync-wasm-moonbit.mjs')).syncWasmMoonbitAssets(options)
+		(await import('./sync-wasm-moonbit.mjs')).syncWasmMoonbitAssets(options),
+	prepareDart = async (options) =>
+		(await import('./sync-wasm-dart.mjs')).syncWasmDartAssets(options)
 } = {}) {
 	const manifest = parseManifest(JSON.parse(await readFile(manifestPath, 'utf8')));
 	const selectedGroups = normalizeBrowserTestAssetGroups(groups);
@@ -263,6 +269,10 @@ export async function prepareBrowserTestAssets({
 	for (const group of selectedGroups) {
 		if (group === 'moonbit') {
 			await prepareMoonbit({ targetDir: path.join(staticDir, 'wasm-moonbit') });
+			continue;
+		}
+		if (group === 'dart') {
+			await prepareDart({ targetDir: path.join(staticDir, 'wasm-dart') });
 			continue;
 		}
 		if (group === 'scala') {
@@ -388,7 +398,8 @@ export async function prepareBrowserTestAssets({
 			await prepareOcamlWrapper({
 				sourceRoot: inputRoot,
 				staticDir,
-				...(versionModulePath ? { versionModulePath } : {})
+				...(versionModulePath ? { versionModulePath } : {}),
+				...(temporaryParentDir ? { temporaryParentDir } : {})
 			});
 		}
 		if (manifest.generatedWorkers?.some((generatedGroup) => generatedGroup === group)) {
@@ -488,6 +499,24 @@ export async function verifyBrowserTestAssets({
 			'runner-worker.js': profile.worker
 		}))
 			receipts.push({ target: `wasm-moonbit/${name}`, size: pin.bytes, sha256: pin.sha256 });
+	}
+	if (selectedGroups.includes('dart')) {
+		const manifest = JSON.parse(
+			await readFile(path.join(REPO_ROOT, 'static/wasm-dart/upstream.json'), 'utf8')
+		);
+		const { WASM_DART_RUNTIME: profile } = await loadBundledProfile(
+			new URL('../src/lib/playground/wasmDartVersion.ts', import.meta.url)
+		);
+		for (const [name, receipt] of Object.entries({
+			...manifest.assets,
+			'LICENSE.txt': manifest.license,
+			'runner-worker.js': profile.worker
+		}))
+			receipts.push({
+				target: `wasm-dart/${name}`,
+				size: receipt.bytes,
+				sha256: receipt.sha256
+			});
 	}
 	if (selectedGroups.includes('picat')) {
 		const { WASM_PICAT_PROFILE: profile } = await loadBundledProfile(

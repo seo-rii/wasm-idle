@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "language": "SML",
+  "implementation": {
+    "name": "HaMLet",
+    "version": "2.0.1",
+    "url": "https://people.mpi-sws.org/~rossberg/hamlet/hamlet-2.0.1.tar.gz",
+    "bytes": 655727,
+    "sha256": "819f3c90bf253df54a23ec074caf6859162004331a713f754393e25f87917b67"
+  },
+  "producer": {
+    "mlton": "20241230",
+    "target": "wasm32-wasip1",
+    "wasiSdk": "33",
+    "clang": "clang version 22.1.0-wasi-sdk (https://github.com/llvm/llvm-project 4434dabb69916856b824f68a64b029c67175e532)",
+    "sourcePins": {
+      "mlton-native": {
+        "url": "https://github.com/MLton/mlton/releases/download/on-20241230-release/mlton-20241230-1.amd64-linux.ubuntu-22.04_glibc2.35.tgz",
+        "bytes": 19397128,
+        "sha256": "13ac154710b57936c550a7670b0e96da0faf5365d033d09c19a5c3c907f12a25"
+      },
+      "mlton-source": {
+        "url": "https://github.com/MLton/mlton/releases/download/on-20241230-release/mlton-20241230.src.tgz",
+        "bytes": 22724980,
+        "sha256": "cd170218f67b76c3fcb4d487ba8841518babcebb41e4702074668e61156ca6f6"
+      },
+      "hamlet": {
+        "url": "https://people.mpi-sws.org/~rossberg/hamlet/hamlet-2.0.1.tar.gz",
+        "bytes": 655727,
+        "sha256": "819f3c90bf253df54a23ec074caf6859162004331a713f754393e25f87917b67"
+      },
+      "gmp": {
+        "url": "https://gmplib.org/download/gmp/gmp-6.3.0.tar.xz",
+        "bytes": 2094196,
+        "sha256": "a3c2b80201b89e68616f4ad30bc66aee4927c3ce50e33929ca819d5c43538898"
+      }
+    },
+    "inputs": {
+      "build.py": {
+        "bytes": 11037,
+        "sha256": "6e5db05c52a8dc7ccbeabcfd806a853dc72369328a744b056b83037473461eaf"
+      },
+      "sources.json": {
+        "bytes": 855,
+        "sha256": "b488417c81468b705bb35661b1084b3bbacf22bb769b412f9c86fe5d9f04a8f4"
+      },
+      "runner.sml": {
+        "bytes": 845,
+        "sha256": "579563388b50f75505dade6211362b8a97537b8035abed2ec40d2544ba8c65f5"
+      },
+      "node-wasi.mjs": {
+        "bytes": 407,
+        "sha256": "aca04e33c157571d027ef351e125d3ed03c4f4be78efcf7696968cd78d2357e5"
+      },
+      "patches/embedding.patch": {
+        "bytes": 2116,
+        "sha256": "70dd21e5f1d0ce57c7c2fada2f480778887b04913a4f73f0ce96095cc804bd1e"
+      },
+      "patches/mlton-wasi-pointer.patch": {
+        "bytes": 385,
+        "sha256": "6c66c76701a600e9bbb9eab8268cbbf5e958ab73058ef63610b7e33e40787b32"
+      },
+      "licenses/wasi-libraries.txt": {
+        "bytes": 24282,
+        "sha256": "c704e6177b36db9294e8a8745663db64da12b8d06e1378a9f21313462e17f22f"
+      }
+    }
+  },
+  "artifacts": {
+    "sml.wasm": {
+      "bytes": 1962543,
+      "sha256": "75c341ef6cd37a5431e1b1dc0fbfd2e4c0d1ca7755d3a1c788031b6dfb8737c4"
+    },
+    "LICENSE.txt": {
+      "bytes": 1673,
+      "sha256": "f16641818cdfa918297b11059cd20a6176c2a639d19ed354599dad95e99800c3"
+    },
+    "THIRD_PARTY_NOTICES.txt": {
+      "bytes": 105930,
+      "sha256": "60c6cbfdd0b0b0771ac32f8822fede6d2c694faffa197fbaec4cd86d57f73f4a"
+    }
+  },
+  "profile": "Original SML97 parser, elaborator, evaluator and embedded Basis library with real WASI I/O"
+}
