@@ -64,6 +64,7 @@ export const scenarios = [
 		// Cumulative Squirrel, Wren, PARI/GP and WASI memory limits add another 27 KiB/12 files.
 		// Python snapshot startup adds its snapshot cache and builder modules (15,364 bytes / 4 files measured in CI).
 		// The core runtime Wasm module lookup adds one JavaScript/declaration pair (1,950 bytes / 2 files measured in CI).
+		// C/C++ startup prefetch adds 595 bytes to the existing llvm-core runtime (measured in CI).
 		// The combined performance changes install 7,508,140 bytes / 819 files.
 		// Another 5 KiB covers their 4,268-byte overflow without new dependencies.
 		budget: { maxBytes: 7 * MiB + 165 * 1024, maxFiles: 815, maxPackages: 6 },
