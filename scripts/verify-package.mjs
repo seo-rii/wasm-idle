@@ -476,7 +476,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// The language servers' shared persistent module fetch adds two files (module-asset-fetch.js and .d.ts).
 		// Final CI measured 43,294,670 bytes; refreshed core receipts add 21,831 packed bytes.
 		// The 43,316,501-byte projection uses the next KiB; file and dependency counts remain unchanged.
-		budget: { maxBytes: 43317248, maxFiles: 3488, maxPackages: 70 },
+		// The workspace recovery fix adds 3,590 root package bytes; allow 4 KiB for that change.
+		budget: { maxBytes: 43321344, maxFiles: 3488, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

@@ -216,7 +216,7 @@ describe('package install budgets', () => {
 				maxPackages: 10
 			},
 			'all public packages/adapters aggregate': {
-				maxBytes: 43317248,
+				maxBytes: 43321344,
 				maxFiles: 3488,
 				maxPackages: 70
 			}
