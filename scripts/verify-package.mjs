@@ -139,7 +139,8 @@ export const scenarios = [
 		// Picat CI job 133036878600 measures 2,856,625 bytes with unchanged files/dependencies.
 		// The four-language core measures 1,619,555 bytes, a 3,193-byte increase.
 		// GCC totals 2,858,709 bytes; a 3 KiB increase retains 299 bytes of headroom.
-		budget: { maxBytes: 2.5 * MiB + 232 * 1024, maxFiles: 196, maxPackages: 4 },
+		// The core runtime Wasm module lookup adds one JavaScript/declaration pair (1,950 bytes / 2 files).
+		budget: { maxBytes: 2.5 * MiB + 234 * 1024, maxFiles: 198, maxPackages: 4 },
 		absentPackageNames: [
 			'wasm-idle',
 			'@wasm-idle/llvm-core',
@@ -457,7 +458,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Java 25 CI adds 31,813 bytes and two files to that baseline; allow another 32 KiB / two files.
 		// Propagate Picat's measured 17 KiB / six-file SDK increase; dependencies are unchanged.
 		// Keep all four language profile allowances when installing the combined SDK.
-		budget: { maxBytes: 40 * MiB + 1_093 * 1024, maxFiles: 3_430, maxPackages: 70 },
+		// The core runtime Wasm module lookup adds one JavaScript/declaration pair (2 files).
+		budget: { maxBytes: 40 * MiB + 1_093 * 1024, maxFiles: 3_432, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
