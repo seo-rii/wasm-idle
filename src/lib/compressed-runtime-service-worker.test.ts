@@ -767,6 +767,48 @@ describe('compressed runtime service worker', () => {
 		).not.toContain(new URL(layerPath, scope).pathname);
 	});
 
+	it('keeps serving the last loaded manifests when a refresh fails', async () => {
+		const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(10_000);
+		try {
+			const compressedPath = 'wasm-php/assets/php.wasm';
+			const compressedBytes = new TextEncoder().encode('compressed payload');
+			const assetPath = 'wasm-runtime/layered.wasm';
+			const layerPath = '_runtime-layers/layered.bin.gz';
+			const layerBytes = new TextEncoder().encode('layer bytes');
+			const harness = await createServiceWorkerHarness(
+				{ [compressedPath]: compressedBytes },
+				{
+					assets: {
+						[assetPath]: { layer: layerPath, offset: 0, length: layerBytes.byteLength }
+					},
+					layers: { [layerPath]: { bytes: layerBytes } }
+				}
+			);
+			expect(await (await harness.request(compressedPath)).text()).toBe('compressed payload');
+			expect(await (await harness.request(assetPath)).text()).toBe('layer bytes');
+
+			const fetch = harness.fetchMock.getMockImplementation()!;
+			const manifest = /\/(?:compressed|layered)-runtime-assets\.v1\.json$/u;
+			harness.fetchMock.mockImplementation(async (input, init) =>
+				manifest.test(input instanceof Request ? input.url : String(input))
+					? new Response('unavailable', { status: 503 })
+					: fetch(input, init)
+			);
+			nowSpy.mockReturnValue(16_000);
+			// An unlisted path forces a compressed-manifest refresh; age forces a layered one.
+			expect((await harness.request('wasm-php/assets/missing.wasm')).status).toBe(404);
+
+			expect(await (await harness.request(compressedPath)).text()).toBe('compressed payload');
+			expect(await (await harness.request(assetPath)).text()).toBe('layer bytes');
+			const failedRefreshes = harness.fetchMock.mock.calls.filter(([input]) =>
+				manifest.test(input instanceof Request ? input.url : String(input))
+			);
+			expect(failedRefreshes.length).toBeGreaterThanOrEqual(4);
+		} finally {
+			nowSpy.mockRestore();
+		}
+	});
+
 	it('refreshes layered manifests and cache-busts changed layer bytes', async () => {
 		const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(10_000);
 		try {
