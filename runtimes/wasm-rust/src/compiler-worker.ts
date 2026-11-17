@@ -1,5 +1,5 @@
 import { resolveVersionedAssetUrl } from './asset-url.js';
-import { compileRustcThroughPort } from './rustc-module-service.js';
+import { obtainRustcThroughPort } from './rustc-module-service.js';
 import { compileOwnedRustcModule } from './rustc-module.js';
 import type { CompilerDiagnostic } from './types.js';
 import type {
@@ -227,47 +227,67 @@ async function compileRustInWorker(request: CompileWorkerRequest, fetchImpl: typ
 				deliveryOptions
 			)
 		: null;
-	emitCompileWorkerProgress(request, {
-		stage: 'fetch-rustc',
-		completed: 0,
-		total: 1,
-		message: 'fetching rustc.wasm'
-	});
-	const rustcBytes = await fetchRuntimeAssetBytes(
-		rustcUrl,
-		'rustc.wasm',
-		fetchImpl,
-		true,
-		(progress) =>
-			emitCompileWorkerProgress(request, {
-				stage: 'fetch-rustc',
-				completed: 0,
-				total: 1,
-				message: 'fetching rustc.wasm',
-				bytesCompleted: progress.loaded,
-				bytesTotal: progress.total ?? progress.loaded
-			}),
-		deliveryOptions
-	);
-	emitCompileWorkerLog(
-		request,
-		`[wasm-rust:compiler-worker] rustc.wasm fetched bytes=${rustcBytes.byteLength}`
-	);
-	emitCompileWorkerProgress(request, {
-		stage: 'fetch-rustc',
-		completed: 1,
-		total: 1,
-		message: 'rustc.wasm ready',
-		bytesCompleted: rustcBytes.byteLength,
-		bytesTotal: rustcBytes.byteLength
-	});
+	const loadRustcBytes = async () => {
+		emitCompileWorkerProgress(request, {
+			stage: 'fetch-rustc',
+			completed: 0,
+			total: 1,
+			message: 'fetching rustc.wasm'
+		});
+		const rustcBytes = await fetchRuntimeAssetBytes(
+			rustcUrl,
+			'rustc.wasm',
+			fetchImpl,
+			true,
+			(progress) =>
+				emitCompileWorkerProgress(request, {
+					stage: 'fetch-rustc',
+					completed: 0,
+					total: 1,
+					message: 'fetching rustc.wasm',
+					bytesCompleted: progress.loaded,
+					bytesTotal: progress.total ?? progress.loaded
+				}),
+			deliveryOptions
+		);
+		emitCompileWorkerLog(
+			request,
+			`[wasm-rust:compiler-worker] rustc.wasm fetched bytes=${rustcBytes.byteLength}`
+		);
+		emitCompileWorkerProgress(request, {
+			stage: 'fetch-rustc',
+			completed: 1,
+			total: 1,
+			message: 'rustc.wasm ready',
+			bytesCompleted: rustcBytes.byteLength,
+			bytesTotal: rustcBytes.byteLength
+		});
+		return rustcBytes;
+	};
+	// With a module service, ask for the retained compiled rustc first: a warm compile then skips
+	// reading, verifying, copying and transferring the 75 MB compiler from storage.
 	const rustcModulePromise = request.rustcModulePort
-		? compileRustcThroughPort(
-				rustcBytes,
+		? obtainRustcThroughPort(
 				request.rustcModulePort,
+				loadRustcBytes,
 				Math.max(120_000, request.manifest.compiler.compileTimeoutMs)
-			)
-		: compileOwnedRustcModule(rustcBytes);
+			).then(({ module, reused }) => {
+				if (reused) {
+					emitCompileWorkerLog(
+						request,
+						'[wasm-rust:compiler-worker] reused the retained rustc module'
+					);
+					emitCompileWorkerProgress(request, {
+						stage: 'fetch-rustc',
+						completed: 1,
+						total: 1,
+						message: 'rustc.wasm module reused'
+					});
+				}
+				return module;
+			})
+		: loadRustcBytes().then(compileOwnedRustcModule);
+	void rustcModulePromise.catch(() => undefined);
 	let fetchedSysrootFiles = 0;
 	let fetchedSysrootBytes = 0;
 	let rustcModule: WebAssembly.Module;

@@ -423,3 +423,90 @@ describe('container shared editor input boundary', () => {
 		expect(entries.every((entry) => !('content' in entry))).toBe(true);
 	});
 });
+
+describe('container runtime prewarm', () => {
+	it('loads the runtime once speculatively and lets a later Run reuse it', async () => {
+		const f = executionFixture();
+		await expect(f.adapter.prewarm('PYTHON', new AbortController().signal)).resolves.toBe(true);
+		expect(f.sandbox.load).toHaveBeenCalledOnce();
+		expect(f.sandbox.load).toHaveBeenCalledWith('', false, [], {
+			signal: expect.any(AbortSignal)
+		});
+		await expect(f.adapter.prewarm('PYTHON', new AbortController().signal)).resolves.toBe(true);
+		expect(f.sandbox.load).toHaveBeenCalledOnce();
+		await expect(f.run()).resolves.toBe(true);
+		expect(f.binding.load).toHaveBeenCalledOnce();
+	});
+
+	it('lets a job claim an in-flight warm-up so cancelling the request no longer aborts it', async () => {
+		const f = executionFixture(),
+			gate = runtimeGate();
+		f.sandbox.load.mockImplementationOnce(async () => await gate.promise);
+		const request = new AbortController();
+		const warming = f.adapter.prewarm('PYTHON', request.signal);
+		await new Promise<void>((resolve) => setImmediate(resolve));
+		const loading = f.adapter.execute(
+			'load',
+			'PYTHON',
+			'print(1)',
+			true,
+			[],
+			{},
+			new AbortController().signal
+		);
+		await new Promise<void>((resolve) => setImmediate(resolve));
+		request.abort();
+		const warmSignal = (f.sandbox.load.mock.calls[0] as unknown[])[3] as {
+			signal: AbortSignal;
+		};
+		expect(warmSignal.signal.aborted).toBe(false);
+		expect(f.sandbox.load).toHaveBeenCalledOnce();
+		gate.resolve();
+		await expect(warming).resolves.toBe(false);
+		await expect(loading).resolves.toBeUndefined();
+		expect(f.sandbox.load).toHaveBeenCalledTimes(2);
+		expect(f.binding.dispose).not.toHaveBeenCalled();
+	});
+
+	it('retires the session of a cancelled warm-up so the next Run starts fresh', async () => {
+		const f = executionFixture();
+		f.sandbox.load.mockImplementationOnce(
+			async (
+				_code?: string,
+				_log?: boolean,
+				_args?: string[],
+				options?: { signal?: AbortSignal }
+			) =>
+				await new Promise<void>((_, reject) =>
+					options?.signal?.addEventListener('abort', () => reject(options.signal!.reason))
+				)
+		);
+		const request = new AbortController();
+		const warming = f.adapter.prewarm('PYTHON', request.signal);
+		await new Promise<void>((resolve) => setImmediate(resolve));
+		request.abort();
+		await expect(warming).resolves.toBe(false);
+		await vi.waitFor(() => expect(f.binding.dispose).toHaveBeenCalledOnce());
+		await expect(f.run()).resolves.toBe(true);
+		expect(f.binding.load).toHaveBeenCalledTimes(2);
+	});
+
+	it('does not warm a language with an active job and forgets a load after Stop', async () => {
+		const f = executionFixture(),
+			gate = runtimeGate<boolean>();
+		f.sandbox.run.mockImplementationOnce(async () => await gate.promise);
+		const running = f.run();
+		await vi.waitFor(() => expect(f.sandbox.run).toHaveBeenCalledOnce());
+		await expect(f.adapter.prewarm('PYTHON', new AbortController().signal)).resolves.toBe(
+			false
+		);
+		expect(f.sandbox.load).not.toHaveBeenCalled();
+		gate.resolve(true);
+		await expect(running).resolves.toBe(true);
+		await expect(f.adapter.prewarm('PYTHON', new AbortController().signal)).resolves.toBe(true);
+		await f.adapter.stop('PYTHON');
+		expect(f.sandbox.terminate).toHaveBeenCalledOnce();
+		await expect(f.adapter.prewarm('PYTHON', new AbortController().signal)).resolves.toBe(true);
+		expect(f.sandbox.load).toHaveBeenCalledTimes(2);
+	});
+});

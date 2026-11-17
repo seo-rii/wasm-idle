@@ -1,1 +1,1 @@
-export const WASM_GO_ASSET_VERSION = '74214135e06c0e21';
+export const WASM_GO_ASSET_VERSION = 'e63d378d588d2b64';

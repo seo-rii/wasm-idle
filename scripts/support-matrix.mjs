@@ -173,6 +173,58 @@ export const supportMatrixRows = [
 		}
 	},
 	{
+		language: 'Picat',
+		ids: ['PICAT'],
+		runtime: 'Official Picat WebAssembly playground VM',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/picat.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_PICAT',
+			marker: 'real PICAT browser interpreter'
+		}
+	},
+	{
+		language: 'PARI/GP',
+		ids: ['PARIGP'],
+		runtime: 'Official PARI/GP 2.19.0 Emscripten wasm32',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/parigp.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_PARIGP',
+			marker: 'real PARI/GP'
+		}
+	},
+	{
+		language: 'Wren',
+		ids: ['WREN'],
+		runtime: 'Upstream Wren 0.4.0 VM on WASI',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/esolangs.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_WREN',
+			language: 'WREN'
+		}
+	},
+	{
+		language: 'Squirrel',
+		ids: ['SQUIRREL'],
+		runtime: 'Squirrel 3.2 VM on WASI',
+		stdin: 'Yes',
+		editorSupport: 'C++ syntax',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/esolangs.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_SQUIRREL',
+			language: 'SQUIRREL'
+		}
+	},
+	{
 		language: 'GolfScript',
 		ids: ['GOLFSCRIPT'],
 		runtime: 'Original GolfScript interpreter on Ruby/WASI',
@@ -752,6 +804,19 @@ export const supportMatrixRows = [
 		}
 	},
 	{
+		language: 'CoffeeScript',
+		ids: ['COFFEESCRIPT'],
+		runtime: 'CoffeeScript 2.7.0 + JavaScript',
+		stdin: 'Yes',
+		editorSupport: 'syntax + compiler diagnostics',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/coffeescript.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_COFFEESCRIPT',
+			marker: 'runCoffeeScriptBrowserProbe'
+		}
+	},
+	{
 		language: 'JavaScript',
 		ids: ['JAVASCRIPT'],
 		runtime: 'wasm-typescript / TypeScript service',
@@ -1025,6 +1090,19 @@ export const supportMatrixRows = [
 		}
 	},
 	{
+		language: 'GraphQL',
+		ids: ['GRAPHQL'],
+		runtime: 'graphql-js 17.0.2 / browser Worker',
+		stdin: 'Buffered JSON; EOF before execution',
+		editorSupport: 'GraphQL LSP + execution diagnostics',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/graphql.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_GRAPHQL',
+			language: 'GRAPHQL'
+		}
+	},
+	{
 		language: 'PostgreSQL',
 		ids: ['POSTGRESQL'],
 		runtime: 'PostgreSQL 18 / PGlite',
@@ -1127,6 +1205,47 @@ const runtimeDetailsByLanguage = new Map([
 			execution:
 				'Runs the original sed applet with -f and the active source file; supports patterns, substitutions, hold space, branching, extended regular expressions and input files; stdin streams to EOF; the upstream WASI profile rejects -i',
 			customization: `${code('runtimeAssets.rootUrl')}, ${code('stdin')}, ${code('programArgs')}, ${code('activePath')}, ${code('workspaceFiles')}; readonly source snapshots, private per-run filesystem, execution limits and cancellation; prepare compiles the interpreter without executing user source`
+		}
+	],
+	[
+		'Picat',
+		{
+			packageBase:
+				'Receipt-pinned official picat-lang.org playground snapshot (experimental, based on 3.9#12); exact producer revision unavailable',
+			execution:
+				'Real Picat VM, CP and SAT in a fresh Worker; unchanged source, line/byte stdin and EOF; entry module must be absent or named user_code',
+			customization:
+				'runtimeAssets.picat.baseUrl, rootUrl, stdin, activePath and workspace data files; cancellation and bounded Wasm memory; no MIP/SMT, timers, program arguments or ASP pre-transpilation'
+		}
+	],
+	[
+		'PARI/GP',
+		{
+			packageBase:
+				'Official PARI/GP 2.19.0 Emscripten wasm32 (GPL-2.0-or-later), SHA-256 pinned upstream binaries',
+			execution:
+				'Fresh Worker per run executes unchanged GP source through the upstream gp_embedded multiline reader; streaming stdin, EOF, workspace files, errors and cancellation; bounded Wasm memory; plots, external processes and optional database downloads unavailable',
+			customization:
+				'runtimeAssets.parigp.baseUrl, runtimeAssets.rootUrl, stdin, activePath, workspaceFiles; no program arguments'
+		}
+	],
+	[
+		'Wren',
+		{
+			packageBase: 'wren-lang/wren 0.4.0 (4a18fc48, MIT), wasi-sdk 33.0 build',
+			execution:
+				'Runs the unchanged upstream VM with classes, fibers, closures, random/meta and workspace imports; host io.Stdin exposes blocking readLine/readByte and io.Stdout exposes write/print/flush; synchronous host bindings do not provide the libuv CLI scheduler or its OS modules',
+			customization: `${code('runtimeAssets.rootUrl')}, ${code('stdin')}, ${code('activePath')}, ${code('workspaceFiles')}; pinned VM and host receipts, fresh WASI state, timeout/output/workspace limits and cancellation`
+		}
+	],
+	[
+		'Squirrel',
+		{
+			packageBase: 'albertodemichelis/squirrel 3.2 (f92bc298, MIT), wasi-sdk 33.0',
+			execution:
+				'Original Squirrel VM and standard libraries in a fresh WASI instance; 32-bit integers, 64-bit floats, byte stdin/stdout, workspace dofile and runtime/compiler diagnostics',
+			customization:
+				'runtimeAssets.rootUrl, stdin, activePath, workspaceFiles; fixed script argv; execution/output/memory limits and cancellation; OS subprocesses unavailable'
 		}
 	],
 	[
@@ -1696,6 +1815,14 @@ const runtimeDetailsByLanguage = new Map([
 		}
 	],
 	[
+		'CoffeeScript',
+		{
+			packageBase: `${workspacePackage('runtimes/wasm-typescript')} / ${workspaceDependency('runtimes/wasm-typescript', 'coffeescript')}`,
+			execution: `Official CoffeeScript compiler emits JavaScript executed by the existing browser runner; supports ${code('stdin')} and ${code('programArgs')}`,
+			customization: `${code('runtimeAssets.typescript.coffeeScriptModuleUrl')} or ${code('rootUrl')}; Node builtin modules share the JavaScript runner's documented browser contract`
+		}
+	],
+	[
 		'JavaScript',
 		{
 			packageBase: `${workspacePackage('runtimes/wasm-typescript')} / ${workspaceDependency(
@@ -1977,6 +2104,14 @@ const runtimeDetailsByLanguage = new Map([
 				`${code('runtimeAssets.postgresql.moduleUrl')} or ` +
 				`${code('PUBLIC_WASM_POSTGRESQL_MODULE_URL')} or ${code('rootUrl')}; ` +
 				`${code('stdin')}, ${code('activePath')}, ${code('workspaceFiles')}`
+		}
+	],
+	[
+		'GraphQL',
+		{
+			packageBase: `self-contained static Worker built from ${npmPackage('graphql')}`,
+			execution: `the reference parser, schema validator and executor run in a fresh browser Worker; SDL is inline or in ${code('schema.graphql')}; JSON stdin supplies ${code('rootValue')}, ${code('variables')} and ${code('operationName')}; prints one GraphQL JSON result; no remote API or JavaScript resolvers`,
+			customization: `${code('runtimeAssets.graphql.workerUrl')}/${code('workerReceipt')} or ${code('rootUrl')}; ${code('stdin')}, ${code('activePath')}, ${code('workspaceFiles')}`
 		}
 	],
 	[

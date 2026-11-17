@@ -144,6 +144,7 @@ describe('application runtime asset root', () => {
 		expect(assets.lfortran).toEqual({ baseUrl: '/foo/bar/wasm-lfortran/' });
 		expect(assets.lean4).toEqual({ baseUrl: '/foo/bar/wasm-lean4/' });
 		expect(assets.commonlisp).toEqual({ baseUrl: '/foo/bar/wasm-commonlisp/' });
+		expect(assets.parigp).toEqual({ baseUrl: '/foo/bar/wasm-parigp/' });
 		expect(Object.keys(assets).sort()).toEqual([
 			'assemblyscript',
 			'awk',
@@ -163,6 +164,7 @@ describe('application runtime asset root', () => {
 			'fortran',
 			'gleam',
 			'go',
+			'graphql',
 			'haskell',
 			'j',
 			'janet',
@@ -175,9 +177,11 @@ describe('application runtime asset root', () => {
 			'objectivec',
 			'ocaml',
 			'octave',
+			'parigp',
 			'pascal',
 			'perl',
 			'php',
+			'picat',
 			'postgresql',
 			'prolog',
 			'r',
@@ -1241,4 +1245,26 @@ it('selects an independently pinned JavaScript entry and includes it in runtime 
 			}
 		})
 	);
+});
+
+it('pins the independent CoffeeScript entry and includes it in runtime cache identity', () => {
+	const assets = createApplicationRuntimeAssets('/foo/bar');
+	expect(assets.typescript?.coffeeScriptModuleUrl).toBe(
+		`/foo/bar/wasm-typescript/coffeescript.js?v=${WASM_TYPESCRIPT_ASSET_VERSION}`
+	);
+	expect(createRuntimeAssetsKey(assets)).not.toBe(
+		createRuntimeAssetsKey({
+			...assets,
+			typescript: {
+				...assets.typescript,
+				coffeeScriptModuleUrl: 'https://replacement.test/coffeescript.js'
+			}
+		})
+	);
+});
+
+describe('Picat application assets', () => {
+	it('keeps the Picat runtime under the configured application root', () => {
+		expect(createApplicationRuntimeAssets('/demo').picat?.baseUrl).toBe('/demo/wasm-picat/');
+	});
 });

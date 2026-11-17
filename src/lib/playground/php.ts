@@ -22,6 +22,7 @@ import {
 	RuntimeConfigurationError,
 	TimeoutError,
 	resolveExecutionLimits,
+	resolveRuntimeAssetCacheOptions,
 	validateExecutionWorkspace
 } from '@wasm-idle/core';
 
@@ -56,6 +57,7 @@ class Php implements Sandbox {
 	uid = 0;
 	exit = true;
 	moduleUrl = '';
+	private persistentCacheKey = '';
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	waitingForInput = false;
 	pendingEof = false;
@@ -325,8 +327,19 @@ class Php implements Sandbox {
 				const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
 				const nextModuleUrl = resolvePhpRuntimeModuleUrl(runtimeAssets, currentUrl);
 				if (!this.isOperationActive(activeOperation)) return;
-				if (this.worker && this.moduleUrl !== nextModuleUrl) this.workerSession.reset();
+				const persistentCache = resolveRuntimeAssetCacheOptions(
+					typeof runtimeAssets === 'object' ? runtimeAssets.persistentCache : undefined,
+					options.persistentCache
+				);
+				const nextPersistentCacheKey = JSON.stringify(persistentCache);
+				if (
+					this.worker &&
+					(this.moduleUrl !== nextModuleUrl ||
+						this.persistentCacheKey !== nextPersistentCacheKey)
+				)
+					this.workerSession.reset();
 				this.moduleUrl = nextModuleUrl;
+				this.persistentCacheKey = nextPersistentCacheKey;
 				if (!this.isOperationActive(activeOperation)) return;
 				if (!this.worker) {
 					const WorkerConstructor = (await import('$lib/playground/worker/php?worker'))
@@ -384,6 +397,7 @@ class Php implements Sandbox {
 					worker.postMessage({
 						load: true,
 						moduleUrl: this.moduleUrl,
+						persistentCache,
 						log: _log
 					});
 				} else {

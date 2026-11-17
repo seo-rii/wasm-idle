@@ -65,6 +65,9 @@ Lisp).
 - [ ] **Size budget**: a `wasm-<lang>` entry in `scripts/static-asset-budgets.v1.json`
       (`"optional": true` for ignored bundles) and a raised `total` if needed; checked by
       `pnpm run check:asset-sizes`.
+- [ ] **Release inputs**: `pnpm run prepare:assets-lock` restores the current full
+      graph from pinned sources before changing assets; the strict check reports
+      all missing/corrupt deliveries, including ignored compiler payloads.
 - [ ] **Release lock**: `pnpm run assets:lock` regenerates
       `packages/core/src/runtime-asset-lock.generated.ts`, which covers the files under
       `static/wasm-*` (see

@@ -819,7 +819,7 @@ describe('example route debug actions', () => {
 			/const sharedBufferAvailable = \$derived\(\s*!browser \|\| isSharedArrayBufferAvailable\(\)\s*\);/s
 		);
 		expect(source).toMatch(
-			/const preloadedStdinLanguages = new Set<PlaygroundLanguage>\(\[\s*'BASH',\s*'POSTGRESQL',\s*'SCALA',\s*'CSHARP',\s*'FSHARP',\s*'VBNET'\s*\]\);/
+			/const preloadedStdinLanguages = new Set<PlaygroundLanguage>\(\[\s*'GRAPHQL',\s*'BASH',\s*'POSTGRESQL',\s*'SCALA',\s*'CSHARP',\s*'FSHARP',\s*'VBNET'\s*\]\);/
 		);
 		expect(source).toMatch(
 			/const preloadedStdin =\s+sharedBufferAvailable && !preloadedStdinLanguages\.has\(language\)\s+\? undefined\s+: stdinInput;/s
@@ -1582,8 +1582,8 @@ describe('example route debug actions', () => {
 			expectPlaygroundLanguage(language);
 			expect(languageLabels[language]).toBe(label);
 		}
+		expect(editorOnlyLanguages.has('GRAPHQL')).toBe(false);
 		for (const language of [
-			'GRAPHQL',
 			'JSON',
 			'YAML',
 			'TOML',

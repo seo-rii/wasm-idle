@@ -1,6 +1,9 @@
 import type { RustTargetTriple } from '$lib/playground/options';
 
 export type EditorDefaultLanguage =
+	| 'picat'
+	| 'wren'
+	| 'squirrel'
 	| 'whitespace'
 	| 'malbolge'
 	| 'aheui'
@@ -44,6 +47,7 @@ export type EditorDefaultLanguage =
 	| 'rescript'
 	| 'hy'
 	| 'ocaml'
+	| 'coffeescript'
 	| 'javascript'
 	| 'typescript'
 	| 'assemblyscript'
@@ -54,6 +58,7 @@ export type EditorDefaultLanguage =
 	| 'zig'
 	| 'lisp'
 	| 'commonlisp'
+	| 'parigp'
 	| 'ruby'
 	| 'haskell'
 	| 'r'
@@ -78,6 +83,9 @@ export type EditorDefaultLanguage =
 
 export const editorDefaults: Record<
 	| 'befunge93'
+	| 'picat'
+	| 'wren'
+	| 'squirrel'
 	| 'whitespace'
 	| 'malbolge'
 	| 'aheui'
@@ -120,6 +128,7 @@ export const editorDefaults: Record<
 	| 'rescript'
 	| 'hy'
 	| 'ocaml'
+	| 'coffeescript'
 	| 'javascript'
 	| 'typescript'
 	| 'assemblyscript'
@@ -130,6 +139,7 @@ export const editorDefaults: Record<
 	| 'zig'
 	| 'lisp'
 	| 'commonlisp'
+	| 'parigp'
 	| 'ruby'
 	| 'haskell'
 	| 'r'
@@ -152,7 +162,12 @@ export const editorDefaults: Record<
 	| 'markdown',
 	string
 > = {
+	squirrel:
+		"// Echo UTF-8 input; send EOF to finish.\nwhile (true) {\n    try { stdout.writen(stdin.readn('b'), 'b'); }\n    catch (error) {\n        if (stdin.eos()) break;\n        throw error;\n    }\n}\n",
 	uhmlang: '어떻게\n엄식?\n식어!\n이 사람이름이냐ㅋㅋ\n',
+	picat: 'main =>\n    print("Name? "),\n    flush(),\n    Name = read_line(),\n    println("Hello, " ++ Name).\n',
+	parigp: 'n = input();\nprint(sum(i = 1, n, i));\n',
+	wren: 'import "io" for Stdin\nSystem.print(Stdin.readLine())\n',
 	lolcode: 'HAI 1.3\nI HAS A name\nGIMMEH name\nVISIBLE name\nKTHXBYE\n',
 	apecode:
 		'// Input: case count, rock count, then rock weights. Send EOF to finish.\n// Example input: 1\n//                3\n//                3 1 2\nstate main {\n  return true;\n}\n',
@@ -955,6 +970,13 @@ let read_int_or_default default =
 let () =
   let n = read_int_or_default 4 in
   Printf.printf "fibonacci=%d\\n%!" (fibonacci n + bonus)`,
+	coffeescript: `fs = require 'fs'
+n = Number fs.readFileSync(0, 'utf8').trim()
+[a, b] = [0, 1]
+for i in [0...n]
+  [a, b] = [b, a + b]
+console.log "fibonacci=#{a}"
+`,
 	javascript: `const fs = require('fs');
 
 const bonus = 3;
@@ -1314,9 +1336,18 @@ fn main() {
 	mut memo := map[int]i64{}
 	println('fibonacci=\${fibonacci(n, mut memo)}')
 }`,
-	graphql: `# memo cache: 0 => 1, 1 => 1
-query Fibonacci($n: Int = 4) {
-  fibonacci(n: $n)
+	graphql: `# Optional JSON goes in Preloaded stdin before Run.
+# Example: {"rootValue":{"greeting":"Hello GraphQL!","numbers":[1,2,3]},"variables":{"showNumbers":true}}
+# Leave input empty to query the schema and a null greeting.
+type Query {
+  greeting: String
+  numbers: [Int!]!
+}
+
+query Example($showNumbers: Boolean! = false) {
+  __typename
+  greeting
+  numbers @include(if: $showNumbers)
 }`,
 	duckdb: `WITH RECURSIVE memo(n, prev, curr) AS (
     SELECT 0, 1, 1
@@ -1595,6 +1626,10 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.malbolge ||
 		source === editorDefaults.aheui ||
 		source === editorDefaults.uhmlang ||
+		source === editorDefaults.picat ||
+		source === editorDefaults.parigp ||
+		source === editorDefaults.wren ||
+		source === editorDefaults.squirrel ||
 		source === editorDefaults.lolcode ||
 		source === editorDefaults.apecode ||
 		source === editorDefaults.golfscript ||
@@ -1633,6 +1668,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.rescript ||
 		source === editorDefaults.hy ||
 		source === editorDefaults.ocaml ||
+		source === editorDefaults.coffeescript ||
 		source === editorDefaults.javascript ||
 		source === editorDefaults.typescript ||
 		source === editorDefaults.assemblyscript ||

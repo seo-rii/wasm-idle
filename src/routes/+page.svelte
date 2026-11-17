@@ -208,6 +208,7 @@
 	const traceFallbackLanguages = new Set<PlaygroundLanguage>(['C', 'CPP', 'RUST', 'OBJC']);
 	// Runtimes that consume stdin once at start, even when terminal streaming is available.
 	const preloadedStdinLanguages = new Set<PlaygroundLanguage>([
+		'GRAPHQL',
 		'BASH',
 		'POSTGRESQL',
 		'SCALA',
@@ -573,6 +574,11 @@
 	const pascalLspRuntime = $derived(pascalLspEnabled ? runtimeAssets.pascal : undefined);
 	const goLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'go');
 	const goLspCompilerUrl = $derived(goLspEnabled ? runtimeAssets.go?.compilerUrl : undefined);
+	const goLspManifestUrl = $derived(goLspEnabled ? runtimeAssets.go?.manifestUrl : undefined);
+	// Language servers verify runtime files against the bundled lock under this root.
+	const lspAssetRootUrl = browser
+		? new URL(`${applicationRootUrl.replace(/\/$/, '')}/`, location.href).href
+		: undefined;
 	const rustLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'rust');
 	const rustLspCompilerUrl = $derived(
 		rustLspEnabled ? runtimeAssets.rust?.compilerUrl : undefined
@@ -992,6 +998,10 @@
 			'.aheui': 'AHEUI',
 			'.um': 'UHMLANG',
 			'.umm': 'UHMLANG',
+			'.pi': 'PICAT',
+			'.gp': 'PARIGP',
+			'.wren': 'WREN',
+			'.nut': 'SQUIRREL',
 			'.lol': 'LOLCODE',
 			'.ape': 'APECODE',
 			'.gs': 'GOLFSCRIPT',
@@ -1053,6 +1063,8 @@
 			'.res': 'RESCRIPT',
 			'.ml': 'OCAML',
 			'.mli': 'OCAML',
+			'.coffee': 'COFFEESCRIPT',
+			'.litcoffee': 'COFFEESCRIPT',
 			'.js': 'JAVASCRIPT',
 			'.mjs': 'JAVASCRIPT',
 			'.cjs': 'JAVASCRIPT',
@@ -1144,6 +1156,7 @@
 			HY: 'main.hy',
 			TINYGO: 'main.go',
 			OCAML: 'main.ml',
+			COFFEESCRIPT: 'main.coffee',
 			JAVASCRIPT: 'main.js',
 			TYPESCRIPT: 'main.ts',
 			ASSEMBLYSCRIPT: 'main.as.ts',
@@ -1153,6 +1166,10 @@
 			MALBOLGE: 'main.mal',
 			AHEUI: 'main.aheui',
 			UHMLANG: 'main.um',
+			PICAT: 'main.pi',
+			PARIGP: 'main.gp',
+			WREN: 'main.wren',
+			SQUIRREL: 'main.nut',
 			LOLCODE: 'main.lol',
 			APECODE: 'main.ape',
 			GOLFSCRIPT: 'main.gs',
@@ -1225,6 +1242,7 @@
 			HY: 'hy',
 			TINYGO: 'go',
 			OCAML: 'ocaml',
+			COFFEESCRIPT: 'coffeescript',
 			JAVASCRIPT: 'javascript',
 			TYPESCRIPT: 'typescript',
 			ASSEMBLYSCRIPT: 'assemblyscript',
@@ -1234,6 +1252,10 @@
 			MALBOLGE: 'malbolge',
 			AHEUI: 'aheui',
 			UHMLANG: 'uhmlang',
+			PICAT: 'picat',
+			PARIGP: 'parigp',
+			WREN: 'wren',
+			SQUIRREL: 'squirrel',
 			LOLCODE: 'lolcode',
 			APECODE: 'apecode',
 			GOLFSCRIPT: 'golfscript',
@@ -2233,6 +2255,12 @@
 			uhmlang: 'UHMLANG',
 			umjunsik: 'UHMLANG',
 			엄준식: 'UHMLANG',
+			picat: 'PICAT',
+			parigp: 'PARIGP',
+			'pari/gp': 'PARIGP',
+			gp: 'PARIGP',
+			wren: 'WREN',
+			squirrel: 'SQUIRREL',
 			lolcode: 'LOLCODE',
 			lol: 'LOLCODE',
 			apecode: 'APECODE',
@@ -2310,6 +2338,8 @@
 			hy: 'HY',
 			hylang: 'HY',
 			ocaml: 'OCAML',
+			coffeescript: 'COFFEESCRIPT',
+			coffee: 'COFFEESCRIPT',
 			javascript: 'JAVASCRIPT',
 			js: 'JAVASCRIPT',
 			typescript: 'TYPESCRIPT',
@@ -5008,6 +5038,8 @@
 							{pascalLspRuntime}
 							{goLspEnabled}
 							{goLspCompilerUrl}
+							{goLspManifestUrl}
+							{lspAssetRootUrl}
 							{rustLspEnabled}
 							{rustLspCompilerUrl}
 							{zigLspEnabled}
@@ -5250,17 +5282,19 @@
 							<div>
 								<strong>Preloaded stdin</strong>
 								<span>
-									{language === 'SCALA'
-										? 'Scala.js accepts buffered stdin only. Enter it before Run; extra reads receive EOF. Interactive terminal input is unavailable.'
-										: language === 'BASH'
-											? 'The Bash WASIX package accepts stdin when the process starts. Enter it before Run; extra reads receive EOF.'
-											: language === 'POSTGRESQL'
-												? "PostgreSQL reads this input as the server file '/dev/blob' (COPY ... FROM '/dev/blob' or pg_read_file('/dev/blob')). Enter it before Run."
-												: language === 'CSHARP' ||
-													  language === 'FSHARP' ||
-													  language === 'VBNET'
-													? 'C#, F#, and VB.NET read all stdin when the program starts. Enter it before Run; extra reads receive EOF. Output appears when the program finishes.'
-													: 'SharedArrayBuffer is unavailable here, so terminal input cannot be sent while the program is running. Enter stdin before Run; extra reads receive EOF.'}
+									{language === 'GRAPHQL'
+										? 'Optional JSON input: rootValue, variables and operationName. Leave empty to use the schema alone. Input is read when you click Run.'
+										: language === 'SCALA'
+											? 'Scala.js accepts buffered stdin only. Enter it before Run; extra reads receive EOF. Interactive terminal input is unavailable.'
+											: language === 'BASH'
+												? 'The Bash WASIX package accepts stdin when the process starts. Enter it before Run; extra reads receive EOF.'
+												: language === 'POSTGRESQL'
+													? "PostgreSQL reads this input as the server file '/dev/blob' (COPY ... FROM '/dev/blob' or pg_read_file('/dev/blob')). Enter it before Run."
+													: language === 'CSHARP' ||
+														  language === 'FSHARP' ||
+														  language === 'VBNET'
+														? 'C#, F#, and VB.NET read all stdin when the program starts. Enter it before Run; extra reads receive EOF. Output appears when the program finishes.'
+														: 'SharedArrayBuffer is unavailable here, so terminal input cannot be sent while the program is running. Enter stdin before Run; extra reads receive EOF.'}
 								</span>
 							</div>
 							<textarea

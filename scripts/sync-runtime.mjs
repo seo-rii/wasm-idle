@@ -26,6 +26,29 @@ const THIS_FILE = fileURLToPath(import.meta.url);
 /** @type {RuntimeDefinition[]} */
 export const RUNTIMES = [
 	{
+		name: 'wasm-graphql',
+		module: './sync-wasm-graphql.mjs',
+		exportName: 'syncWasmGraphqlAssets',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir',
+		manual: true
+	},
+	{
+		name: 'wasm-wren',
+		module: './sync-wasm-wren.mjs',
+		exportName: 'syncWasmWrenDist',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir'
+	},
+	{
+		name: 'wasm-squirrel',
+		module: './sync-wasm-squirrel.mjs',
+		exportName: 'syncWasmSquirrelAssets',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir',
+		manual: true
+	},
+	{
 		name: 'wasm-clang',
 		module: './sync-wasm-clang.mjs',
 		exportName: 'syncWasmClangDist',
@@ -141,6 +164,22 @@ export const RUNTIMES = [
 		targetArg: 'targetDir',
 		manual: true,
 		sourceRequired: true
+	},
+	{
+		name: 'wasm-picat',
+		module: './sync-wasm-picat.mjs',
+		exportName: 'syncWasmPicatAssets',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir',
+		manual: true
+	},
+	{
+		name: 'wasm-parigp',
+		module: './sync-wasm-parigp.mjs',
+		exportName: 'syncWasmPariGpAssets',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir',
+		manual: true
 	},
 	{
 		name: 'wasm-commonlisp',

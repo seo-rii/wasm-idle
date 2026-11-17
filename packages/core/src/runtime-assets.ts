@@ -78,7 +78,12 @@ export interface RuntimeAssetKeySource {
 		manifestReceipt?: RuntimeAssetIntegrityEntry;
 		assetReceipts?: RuntimeAssetIntegrityMap;
 	};
-	typescript?: { moduleUrl?: string; javascriptModuleUrl?: string; libUrl?: string };
+	typescript?: {
+		moduleUrl?: string;
+		javascriptModuleUrl?: string;
+		coffeeScriptModuleUrl?: string;
+		libUrl?: string;
+	};
 	wat?: { moduleUrl?: string };
 	lua?: { moduleUrl?: string };
 	fennel?: { compilerUrl?: string };
@@ -93,6 +98,8 @@ export interface RuntimeAssetKeySource {
 	lfortran?: { baseUrl?: string };
 	lean4?: { baseUrl?: string };
 	commonlisp?: { baseUrl?: string };
+	picat?: { baseUrl?: string };
+	parigp?: { baseUrl?: string };
 	fortran?: {
 		baseUrl?: string;
 		f2cWasmUrl?: string;
@@ -227,6 +234,10 @@ export interface RuntimeAssetKeySource {
 		compilerJavaScriptReceipt?: RuntimeAssetIntegrityEntry;
 		rtlJavaScriptReceipt?: RuntimeAssetIntegrityEntry;
 		systemPascalReceipt?: RuntimeAssetIntegrityEntry;
+		workerReceipt?: RuntimeAssetIntegrityEntry;
+	};
+	graphql?: {
+		workerUrl?: string;
 		workerReceipt?: RuntimeAssetIntegrityEntry;
 	};
 	forth?: {
@@ -765,6 +776,7 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	},
 	{ runtime: 'typescript', property: 'moduleUrl', key: 'typeScriptModuleUrl' },
 	{ runtime: 'typescript', property: 'javascriptModuleUrl', key: 'javaScriptModuleUrl' },
+	{ runtime: 'typescript', property: 'coffeeScriptModuleUrl', key: 'coffeeScriptModuleUrl' },
 	{ runtime: 'typescript', property: 'libUrl', key: 'typeScriptLibUrl' },
 	{ runtime: 'wat', property: 'moduleUrl', key: 'watModuleUrl' },
 	{ runtime: 'lua', property: 'moduleUrl', key: 'luaModuleUrl' },
@@ -788,6 +800,8 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'lfortran', property: 'baseUrl', key: 'lfortranBaseUrl' },
 	{ runtime: 'lean4', property: 'baseUrl', key: 'lean4BaseUrl' },
 	{ runtime: 'commonlisp', property: 'baseUrl', key: 'commonlispBaseUrl' },
+	{ runtime: 'picat', property: 'baseUrl', key: 'picatBaseUrl' },
+	{ runtime: 'parigp', property: 'baseUrl', key: 'parigpBaseUrl' },
 	{ runtime: 'fortran', property: 'baseUrl', key: 'fortranBaseUrl' },
 	{ runtime: 'fortran', property: 'f2cWasmUrl', key: 'fortranF2cWasmUrl' },
 	{ runtime: 'fortran', property: 'libf2cUrl', key: 'fortranLibf2cUrl' },
@@ -1486,6 +1500,13 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'swift', property: 'workerUrl', key: 'swiftWorkerUrl' },
 	{ runtime: 'swift', property: 'manifestUrl', key: 'swiftManifestUrl' },
 	{ runtime: 'postgresql', property: 'moduleUrl', key: 'postgresqlModuleUrl' },
+	{ runtime: 'graphql', property: 'workerUrl', key: 'graphqlWorkerUrl' },
+	{
+		runtime: 'graphql',
+		property: 'workerReceipt',
+		key: 'graphqlWorkerReceipt',
+		serialize: serializeIntegrityEntry
+	},
 	{ runtime: 'sqlite', property: 'moduleUrl', key: 'sqliteModuleUrl' },
 	{ runtime: 'sqlite', property: 'wasmUrl', key: 'sqliteWasmUrl' },
 	{ runtime: 'php', property: 'moduleUrl', key: 'phpModuleUrl' }

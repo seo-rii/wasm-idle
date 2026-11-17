@@ -8,12 +8,13 @@ import {
 	WASIProcExit,
 	wasi
 } from '@bjorn3/browser_wasi_shim';
-import { validateExecutionWorkspace } from '@wasm-idle/core';
+import { resolveExecutionLimits, validateExecutionWorkspace } from '@wasm-idle/core';
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 import type { SandboxWorkspaceFile } from '$lib/playground/options';
 import type { WasiInterpreterProfile } from '$lib/playground/wasiInterpreters';
 import { fetchRuntimeAssetBytes } from './runtimeAssetFetch';
 import { createBusyboxTextImports } from './busyboxTextImports';
+import { limitWasmMemory } from '../wasmMemory.js';
 
 declare var self: any;
 
@@ -53,6 +54,9 @@ class WasmStdin extends Fd {
 	}
 
 	fd_read(size: number) {
+		// wasi-libc readv may put an empty vector before its actual read buffer.
+		// An empty read must not consume a queued chunk or the terminal EOF marker.
+		if (size === 0) return { ret: wasi.ERRNO_SUCCESS, data: new Uint8Array(0) };
 		if (stdinChunkOffsetWasm >= stdinChunkWasm.length) {
 			const nextChunk = this.readNextChunk();
 			if (nextChunk === null) {
@@ -248,9 +252,19 @@ self.onmessage = async (event: { data: any }) => {
 					persistentCache: event.data.persistentCache,
 					integrityContext: { runtimeId: profile.id }
 				});
-				await WebAssembly.compile(bytes);
+				const { evidence } = await limitWasmMemory(
+					bytes,
+					resolveExecutionLimits(
+						event.data.maxWasmMemoryBytes === undefined
+							? undefined
+							: { maxWasmMemoryBytes: event.data.maxWasmMemoryBytes }
+					).maxWasmMemoryBytes,
+					{ runtimeLabel: profile.id }
+				);
 				interpreter = profile;
 				interpreterBytes = bytes;
+				postMessage({ load: true, initialMemoryBytes: evidence.initialBytes });
+				return;
 			}
 			postMessage({ load: true });
 			return;
@@ -286,7 +300,20 @@ self.onmessage = async (event: { data: any }) => {
 			);
 		}
 		const source = sourceFromWorkspace(code, activePath, workspaceFiles);
-		const bytes = interpreterBytes ?? decodeWasmBytes(source);
+		const bytes =
+			interpreter && interpreterBytes
+				? (
+						await limitWasmMemory(
+							interpreterBytes,
+							resolveExecutionLimits(
+								event.data.maxWasmMemoryBytes === undefined
+									? undefined
+									: { maxWasmMemoryBytes: event.data.maxWasmMemoryBytes }
+							).maxWasmMemoryBytes,
+							{ runtimeLabel: interpreter.id }
+						)
+					).bytes
+				: decodeWasmBytes(source);
 		const wasmBuffer = new ArrayBuffer(bytes.byteLength);
 		new Uint8Array(wasmBuffer).set(bytes);
 		if (prepare) {
@@ -458,6 +485,11 @@ self.onmessage = async (event: { data: any }) => {
 		if (log) {
 			console.error('[wasm-idle:wasm-worker] failed', error);
 		}
-		postMessage({ error: error?.message || String(error) });
+		postMessage({
+			error: error?.message || String(error),
+			...(error?.code === 'resource-limit' && error?.resource === 'wasm-memory'
+				? { memoryLimit: { actual: error.actual, limit: error.limit } }
+				: {})
+		});
 	}
 };

@@ -1,4 +1,7 @@
 const canonicalLanguageIds = [
+	'PICAT',
+	'WREN',
+	'SQUIRREL',
 	'C',
 	'C3',
 	'CPP',
@@ -41,6 +44,7 @@ const canonicalLanguageIds = [
 	'TINYGO',
 	'OCAML',
 	'JAVASCRIPT',
+	'COFFEESCRIPT',
 	'TYPESCRIPT',
 	'ASSEMBLYSCRIPT',
 	'WAT',
@@ -59,10 +63,12 @@ const canonicalLanguageIds = [
 	'ZIG',
 	'LISP',
 	'COMMONLISP',
+	'PARIGP',
 	'RUBY',
 	'HASKELL',
 	'R',
 	'OCTAVE',
+	'GRAPHQL',
 	'DUCKDB',
 	'SQLITE',
 	'POSTGRESQL',
@@ -96,6 +102,8 @@ export const DEFAULT_DEFERRED_PROGRESS_LANGUAGES: ReadonlySet<string> = new Set(
 );
 
 const languageAliasDefinitions = {
+	'PARI/GP': { canonicalId: 'PARIGP', kind: 'spelling' },
+	GP: { canonicalId: 'PARIGP', kind: 'implementation' },
 	BEFUNGE: { canonicalId: 'BEFUNGE93', kind: 'dialect' },
 	'BEFUNGE-93': { canonicalId: 'BEFUNGE93', kind: 'spelling' },
 	BF: { canonicalId: 'BRAINFUCK', kind: 'spelling' },
@@ -133,6 +141,7 @@ const languageAliasDefinitions = {
 	VLANG: { canonicalId: 'V', kind: 'spelling' },
 	DLANG: { canonicalId: 'D', kind: 'spelling' },
 	JS: { canonicalId: 'JAVASCRIPT', kind: 'spelling' },
+	COFFEE: { canonicalId: 'COFFEESCRIPT', kind: 'spelling' },
 	AS: { canonicalId: 'ASSEMBLYSCRIPT', kind: 'spelling' },
 	PYTHON: { canonicalId: 'PYTHON3', kind: 'spelling' },
 	PYPY3: {
@@ -169,6 +178,7 @@ const languageAliasDefinitions = {
 		kind: 'dialect',
 		message: 'SQL selects the SQLite dialect and engine.'
 	},
+	GQL: { canonicalId: 'GRAPHQL', kind: 'spelling' },
 	POSTGRES: { canonicalId: 'POSTGRESQL', kind: 'spelling' },
 	PGSQL: { canonicalId: 'POSTGRESQL', kind: 'spelling' },
 	PGLITE: {
