@@ -80,14 +80,10 @@ describe('lock-verified runtime fetch', () => {
 		await f.fetch(pinned, { headers: { range: 'bytes=0-1' } });
 		await f.fetch(`${pinned}?v=1&debug=1`);
 		await f.fetch(new Request(pinned));
-		f.network.mockResolvedValueOnce(
-			new Response(bytes.slice(), { headers: { 'content-encoding': 'gzip' } })
-		);
-		await f.fetch(pinned);
 		f.network.mockResolvedValueOnce(new Response('missing', { status: 404 }));
 		expect((await f.fetch(pinned)).status).toBe(404);
 		await flush();
-		expect(f.network).toHaveBeenCalledTimes(7);
+		expect(f.network).toHaveBeenCalledTimes(6);
 		expect(storage.write).not.toHaveBeenCalled();
 	});
 
@@ -118,5 +114,52 @@ describe('lock-verified runtime fetch', () => {
 			f.fetch(`${root}runtime/tools/compile.wasm.gz`, { signal: aborted.signal })
 		).rejects.toMatchObject({ name: 'AbortError' });
 		expect(f.network).toHaveBeenCalledOnce();
+	});
+
+	it('stores a browser-decoded .gz body under the logical receipt and serves it again', async () => {
+		const logical = new TextEncoder().encode('decoded compile tool');
+		const gz = {
+			...receipt,
+			uncompressedSha256: createHash('sha256').update(logical).digest('hex'),
+			uncompressedBytes: logical.byteLength
+		};
+		storage.read.mockResolvedValue(undefined);
+		storage.write.mockResolvedValue(true);
+		const f = fixture();
+		f.lookup.mockResolvedValue(gz as never);
+		f.network.mockResolvedValueOnce(
+			new Response(logical.slice(), { headers: { 'content-encoding': 'gzip' } })
+		);
+		const url = `${root}runtime/tools/compile.wasm.gz`;
+		expect(new Uint8Array(await (await f.fetch(url)).arrayBuffer())).toEqual(logical);
+		await flush();
+		const decodedIdentity = {
+			url,
+			sha256: gz.uncompressedSha256,
+			bytes: gz.uncompressedBytes,
+			validationKey: 'wasm-go-worker-v1'
+		};
+		expect(storage.write).toHaveBeenCalledWith(
+			expect.objectContaining({ identity: decodedIdentity, bytes: logical })
+		);
+		// The stored-byte identity is tried first, then the logical one.
+		storage.read.mockReset();
+		storage.read.mockResolvedValue(undefined);
+		storage.read.mockResolvedValueOnce(undefined).mockResolvedValueOnce(logical.slice());
+		expect(new Uint8Array(await (await f.fetch(url)).arrayBuffer())).toEqual(logical);
+		expect(storage.read.mock.calls.map(([request]) => request.identity.sha256)).toEqual([
+			gz.sha256,
+			gz.uncompressedSha256
+		]);
+		expect(f.network).toHaveBeenCalledOnce();
+		// Without a logical receipt a decoded body is passed through uncached.
+		storage.write.mockClear();
+		const plain = fixture();
+		plain.network.mockResolvedValueOnce(
+			new Response(bytes.slice(), { headers: { 'content-encoding': 'gzip' } })
+		);
+		await plain.fetch(url);
+		await flush();
+		expect(storage.write).not.toHaveBeenCalled();
 	});
 });

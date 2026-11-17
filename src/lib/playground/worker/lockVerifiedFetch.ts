@@ -94,15 +94,24 @@ export function createLockVerifiedFetch(options: LockVerifiedFetchOptions): type
 			: undefined;
 		if (signal?.aborted) throw abortError(signal);
 		if (!receipt) return network(input, init);
-		const identity = {
+		const identity = (sha256: string, bytes: number | undefined) => ({
 			url: url.href,
-			sha256: receipt.sha256,
-			bytes: receipt.bytes,
+			sha256,
+			bytes,
 			validationKey: options.validationKey
-		};
-		const hit = await readPersistentRuntimeAsset({ identity, cache, signal }).catch(
-			() => undefined
-		);
+		});
+		const stored = identity(receipt.sha256, receipt.bytes);
+		// Hosts that send a .gz file with Content-Encoding hand over the decoded body, so
+		// such deployments store and reuse the lock's logical receipt instead.
+		const decoded =
+			receipt.uncompressedSha256 !== undefined && receipt.uncompressedBytes !== undefined
+				? identity(receipt.uncompressedSha256, receipt.uncompressedBytes)
+				: undefined;
+		const read = (candidate: typeof stored) =>
+			readPersistentRuntimeAsset({ identity: candidate, cache, signal }).catch(
+				() => undefined
+			);
+		const hit = (await read(stored)) ?? (decoded ? await read(decoded) : undefined);
 		if (signal?.aborted) throw abortError(signal);
 		if (hit)
 			return new Response(hit as Uint8Array<ArrayBuffer>, {
@@ -113,13 +122,12 @@ export function createLockVerifiedFetch(options: LockVerifiedFetchOptions): type
 				}
 			});
 		const response = await network(input, init);
-		// A browser-decoded body no longer has the receipt's bytes.
-		if (response.status !== 200 || !response.body || response.headers.has('content-encoding'))
-			return response;
+		const target = response.headers.has('content-encoding') ? decoded : stored;
+		if (response.status !== 200 || !response.body || !target) return response;
 		const [caller, store] = response.body.tee();
-		void collect(store, receipt.bytes ?? Math.min(cache.maxBytes, cache.maxEntryBytes))
+		void collect(store, target.bytes ?? Math.min(cache.maxBytes, cache.maxEntryBytes))
 			.then((bytes) =>
-				bytes ? writePersistentRuntimeAsset({ identity, cache, bytes }) : false
+				bytes ? writePersistentRuntimeAsset({ identity: target, cache, bytes }) : false
 			)
 			// The write verifies the receipt; a mismatch or full storage only skips caching.
 			.catch(() => false);
