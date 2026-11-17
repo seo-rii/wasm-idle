@@ -67,7 +67,8 @@ export const scenarios = [
 		// C/C++ startup prefetch adds 595 bytes to the existing llvm-core runtime (measured in CI).
 		// Container prewarm adds owner and binding wiring: 6,339 bytes measured in CI, no files.
 		// Persistent runtime caching for Go, .NET, PHP and PostgreSQL adds two worker JavaScript/declaration pairs (9,768 bytes / 4 files measured in CI).
-		budget: { maxBytes: 7 * MiB + 147 * 1024, maxFiles: 819, maxPackages: 6 },
+		// Container PCH persistence and background builds add 8,808 bytes to two container modules (svelte-package output), no files.
+		budget: { maxBytes: 7 * MiB + 157 * 1024, maxFiles: 819, maxPackages: 6 },
 		absentPackageNames: [
 			'@katana-project/asm',
 			'java-parser',

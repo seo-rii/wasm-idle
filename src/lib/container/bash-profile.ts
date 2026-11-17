@@ -120,6 +120,23 @@ const digest = async (bytes: Uint8Array) =>
 		new Uint8Array(await crypto.subtle.digest('SHA-256', Uint8Array.from(bytes))),
 		(value) => value.toString(16).padStart(2, '0')
 	).join('');
+/** Frame names and lengths so different file sets cannot produce ambiguous concatenations. */
+const frameFiles = (files: readonly [string, Uint8Array][]) => {
+	const encoder = new TextEncoder();
+	const parts = [...files]
+		.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+		.flatMap(([path, data]) => [
+			encoder.encode(`${JSON.stringify([path, data.byteLength])}\n`),
+			data
+		]);
+	const framed = new Uint8Array(parts.reduce((size, part) => size + part.byteLength, 0));
+	let offset = 0;
+	for (const part of parts) {
+		framed.set(part, offset);
+		offset += part.byteLength;
+	}
+	return framed;
+};
 
 /** Compose verified USTAR layers without changing retained header or file bytes. */
 export function composeSysrootLayers(base: Uint8Array, cxx: Uint8Array) {
@@ -259,6 +276,18 @@ export async function createBashProfile({
 		...shellRoutes
 	};
 	const sysroots = new Map<string, { sha256: string; entries: number; files: number }>();
+	// The verified archive plus the application's SIMD headers fully determine each sysroot tree.
+	const sysrootIdentities = new Map<string, string>();
+	// The SIMD headers are the same for every profile; digest them once, outside the mount check.
+	const simdSha256 = (async () => {
+		const files: [string, Uint8Array][] = [];
+		installClangSimdHeaders({
+			mkdirTree() {},
+			writeFile: (path, data) => files.push([path, data])
+		});
+		return await digest(frameFiles(files));
+	})();
+	void simdSha256.catch(() => {});
 	let session: WasixShellSession | undefined;
 	let starting: Promise<WasixShellSession> | undefined;
 	let disposal: Promise<void> | undefined;
@@ -324,6 +353,7 @@ export async function createBashProfile({
 			entries: entries.length,
 			files: entries.filter((file) => file.type === 'file').length
 		};
+		const simd = await simdSha256;
 		signal.throwIfAborted();
 		if (!sysroots.has(profile)) {
 			// The archive identity describes upstream bytes. Add the trusted application's
@@ -352,6 +382,7 @@ export async function createBashProfile({
 			});
 			container.fs.mountReadonly(root, withCanonicalWasiPaths([...mounted.values()]));
 			sysroots.set(profile, metadata);
+			sysrootIdentities.set(profile, JSON.stringify([sha256, simd]));
 		}
 		return args;
 	};
@@ -368,6 +399,13 @@ export async function createBashProfile({
 		clangFilesystem: filesystem,
 		sysrootProfile: layers ? ('c-base-v1' as const) : ('full' as const),
 		inspectSysroot: (profile = 'full') => sysroots.get(profile) ?? null,
+		/** Pinned compiler and mounted sysroot identity, once that sysroot is prepared. */
+		toolchainIdentity: (profile: 'c' | 'full' = 'full') => {
+			const sysroot = sysrootIdentities.get(profile);
+			return sysroot
+				? JSON.stringify([config.clangSha256, config.linkerSha256, sysroot])
+				: undefined;
+		},
 		prepareCommand,
 		prepareClang(profile: 'c' | 'full', signal: AbortSignal) {
 			onInvocation?.({

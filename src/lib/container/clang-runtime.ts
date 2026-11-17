@@ -9,7 +9,12 @@ import {
 	resolveSandboxExecutionArgs,
 	type SandboxExecutionOptions
 } from '../playground/options.js';
-import type { ProgressLike } from '@wasm-idle/core';
+import {
+	createRuntimeGeneratedAssetCacheBackend,
+	resolveRuntimeAssetCacheOptions,
+	type ProgressLike,
+	type RuntimeGeneratedAssetCacheBackend
+} from '@wasm-idle/core';
 import {
 	CLANG_WASI_DRIVER_TARGET,
 	resolveClangLanguageArgs
@@ -23,7 +28,26 @@ type Profile = {
 	sysrootProfile?: 'full' | 'c-base-v1';
 	prepareCommand(invocation: HostCommandInvocation, signal: AbortSignal): Promise<void>;
 	prepareClang?(profile: 'c' | 'full', signal: AbortSignal): Promise<readonly string[]>;
+	/** Pinned compiler and prepared sysroot identity; enables persisting the header. */
+	toolchainIdentity?(profile: 'c' | 'full'): string | undefined;
 };
+interface Header {
+	key: string;
+	path: string;
+	bytes: Uint8Array;
+	persistentKey?: string;
+}
+interface HeaderPlan {
+	key: string;
+	persistentKey?: string;
+	language: string;
+	argv: string[];
+	cwd: string;
+	env?: Record<string, string>;
+}
+// Clang rejects an incompatible precompiled header with one of these diagnostics.
+const headerRejection = /precompiled (header|file)|PCH file|AST file/i;
+const MAX_HEADER_BYTES = 32 * 1024 * 1024;
 interface Execution {
 	language: string;
 	phase: 'prepare' | 'run';
@@ -44,13 +68,29 @@ export class ContainerClangRuntime {
 	#active = new Map<string, Execution>();
 	#prepared = new Map<string, PreparedProgram>();
 	#input = new Map<string, { chunks: string[]; size: number; eof: boolean }>();
-	#header?: { key: string; path: string; bytes: Uint8Array };
+	#header?: Header;
+	#pendingHeader?: HeaderPlan;
+	#headerBuild?: {
+		key: string;
+		language: string;
+		controller: AbortController;
+		promise: Promise<void>;
+	};
+	#headerCache?: RuntimeGeneratedAssetCacheBackend;
 	#disposed = false;
 	constructor(
 		private readonly profile: Profile,
 		private readonly files: WebsiteRuntimeAdapter,
-		private readonly emit: (event: ContainerWorkerEvent) => void
-	) {}
+		private readonly emit: (event: ContainerWorkerEvent) => void,
+		options: { headerCache?: RuntimeGeneratedAssetCacheBackend } = {}
+	) {
+		this.#headerCache = options.headerCache;
+	}
+	private get headerCache() {
+		return (this.#headerCache ??= createRuntimeGeneratedAssetCacheBackend(
+			resolveRuntimeAssetCacheOptions()
+		));
+	}
 	private queue(language: string) {
 		let value = this.#input.get(language);
 		if (!value) this.#input.set(language, (value = { chunks: [], size: 0, eof: false }));
@@ -446,13 +486,13 @@ export class ContainerClangRuntime {
 				'-fno-exceptions',
 				...compileArgs
 			];
-			const compile = async (argv: string[], quiet = false) => {
+			const compile = async (argv: string[], quiet = false, sink = emit) => {
 				job.process = await this.spawn(job, 'clang', argv, {
 					cwd,
 					env: options.env
 				});
 				mutationSources.add(job.process.mutationSource ?? job.process.pid);
-				const drained = this.drain(job.process, language, requestId, !quiet, quiet, emit);
+				const drained = this.drain(job.process, language, requestId, !quiet, quiet, sink);
 				await job.process.stdin.getWriter().close();
 				const result = await drained;
 				return this.success(result, job.signal);
@@ -465,7 +505,53 @@ export class ContainerClangRuntime {
 				cwd,
 				standard
 			);
+			// A Run started during the background header build waits for that build rather
+			// than parsing the header itself; a different header supersedes it.
+			const building = this.#headerBuild;
+			if (building) {
+				if (building.key !== headerKey)
+					building.controller.abort(
+						new DOMException('Header build superseded', 'AbortError')
+					);
+				const stopBuild = () => building.controller.abort(signal.reason);
+				signal.addEventListener('abort', stopBuild, { once: true });
+				try {
+					await building.promise;
+				} finally {
+					signal.removeEventListener('abort', stopBuild);
+				}
+				signal.throwIfAborted();
+			}
+			// No timestamps: every page load mounts the sysroot afresh, so mtimes always differ.
+			// The persistent key pins the compiler, the mounted sysroot and these arguments.
+			const headerArgs = [
+				...common,
+				'-Xclang',
+				'-fno-pch-timestamp',
+				'-c',
+				'-x',
+				'c++-header',
+				'/usr/share/wasm-sysroot/include/bits/stdc++.h',
+				'-o'
+			];
+			const identity = headerKey ? this.profile.toolchainIdentity?.('full') : undefined;
+			const persistentKey = identity
+				? JSON.stringify(['container-stdcpp-pch-v1', identity, headerKey, headerArgs])
+				: undefined;
 			if (headerKey && this.#header?.key !== headerKey) this.discardHeader(job);
+			if (headerKey && !this.#header && persistentKey) {
+				const bytes = await this.headerCache
+					.read(persistentKey, signal)
+					.catch(() => undefined);
+				signal.throwIfAborted();
+				if (bytes?.byteLength && bytes.byteLength <= MAX_HEADER_BYTES && !this.#header)
+					this.#header = {
+						key: headerKey,
+						path: `/tmp/wasm-idle-stdcpp-${crypto.randomUUID()}.pch`,
+						bytes,
+						persistentKey
+					};
+			}
 			let header = headerKey === this.#header?.key ? this.#header : undefined;
 			if (header) {
 				// Restore owned bytes instead of trusting a writable temporary file.
@@ -484,60 +570,53 @@ export class ContainerClangRuntime {
 					header = undefined;
 				}
 			}
-			let okay = await compile([
+			const textual = [
 				...common,
-				...(header ? ['-include-pch', header.path] : []),
 				input.options.activePath!,
 				'-lc-printscan-long-double',
 				'-o',
 				artifact
-			]);
-			if (header && okay) progress?.set?.(95, 'Compiled with precompiled <bits/stdc++.h>');
-			else if (header) {
-				this.discardHeader(job);
-				okay = await compile([
-					...common,
-					input.options.activePath!,
-					'-lc-printscan-long-double',
-					'-o',
-					artifact
-				]);
-			}
-			if (okay && headerKey && !this.#header) {
-				const path = `/tmp/wasm-idle-stdcpp-${crypto.randomUUID()}.pch`;
-				try {
-					if (
-						await compile(
-							[
-								...common,
-								'-c',
-								'-x',
-								'c++-header',
-								'/usr/share/wasm-sysroot/include/bits/stdc++.h',
-								'-o',
-								path
-							],
-							true
-						)
-					) {
-						const bytes = this.profile.container.fs.readFile(path);
-						if (bytes.byteLength > 0 && bytes.byteLength <= 32 * 1024 * 1024)
-							this.#header = { key: headerKey, path, bytes };
+			];
+			let okay: boolean;
+			if (header) {
+				// Hold output until Clang accepts the header, as the worker runtime does, so a
+				// rejected header never shows its errors next to the textual compile's.
+				const buffered: ContainerWorkerEvent[] = [];
+				okay = await compile(
+					[...common, '-include-pch', header.path, ...textual.slice(common.length)],
+					false,
+					(event) => {
+						buffered.push(event);
 					}
-				} catch (error) {
-					if (job.signal.aborted) throw error;
-				} finally {
-					if (this.#header?.path !== path) {
-						try {
-							this.profile.container.fs.withMutationSource(job, () =>
-								this.profile.container.fs.unlink(path)
-							);
-						} catch {
-							/* No usable header. */
-						}
-					}
+				);
+				const output = buffered
+					.map((event) =>
+						event.name === 'output' && typeof event.data === 'string' ? event.data : ''
+					)
+					.join('');
+				if (!okay && headerRejection.test(output)) {
+					const rejected = header;
+					this.discardHeader(job);
+					if (rejected.persistentKey)
+						void this.headerCache.remove(rejected.persistentKey).catch(() => {});
+					okay = await compile(textual);
+				} else {
+					// Ordinary source errors keep the header: they would recur without it.
+					for (const event of buffered) emit(event);
+					if (okay) progress?.set?.(95, 'Compiled with precompiled <bits/stdc++.h>');
 				}
-			}
+			} else okay = await compile(textual);
+			// Build the header once the program has run (see run), so the first Run does not
+			// wait for it and the build never competes with the program for the CPU.
+			if (okay && headerKey && !this.#header)
+				this.#pendingHeader = {
+					key: headerKey,
+					persistentKey,
+					language,
+					argv: headerArgs,
+					cwd,
+					env: options.env
+				};
 			if (okay) {
 				if (mutations?.hasChangesOutside(mutationSources)) reusable = false;
 				signal.throwIfAborted();
@@ -644,7 +723,76 @@ export class ContainerClangRuntime {
 			job.writer?.releaseLock();
 			this.#input.delete(language);
 			if (this.#active.get(language) === job) this.#active.delete(language);
+			if (this.#pendingHeader) void this.buildPendingHeader();
 		}
+	}
+	/**
+	 * Build the header an earlier compile planned. Run starts this after its program exits;
+	 * the next compile of the same header waits for it, and a different header aborts it.
+	 */
+	buildPendingHeader(): Promise<void> {
+		if (this.#headerBuild) return this.#headerBuild.promise;
+		const plan = this.#pendingHeader;
+		this.#pendingHeader = undefined;
+		if (!plan || this.#disposed) return Promise.resolve();
+		const controller = new AbortController();
+		const job: Execution = {
+			language: plan.language,
+			phase: 'prepare',
+			controller,
+			signal: controller.signal
+		};
+		const fs = this.profile.container.fs;
+		const path = `/tmp/wasm-idle-stdcpp-${crypto.randomUUID()}.pch`;
+		let mutations: ReturnType<Container['fs']['observeMutations']> | undefined;
+		try {
+			mutations = fs.observeMutations();
+		} catch {
+			/* A compiled program is then simply rebuilt after this header write. */
+		}
+		const generation = fs.generation;
+		const sources = new Set<unknown>([job]);
+		const promise = (async () => {
+			let built: Header | undefined;
+			try {
+				const process = await this.spawn(job, 'clang', [...plan.argv, path], {
+					cwd: plan.cwd,
+					env: plan.env
+				});
+				sources.add(process.mutationSource ?? process.pid);
+				await process.stdin.getWriter().close();
+				const result = await this.drain(process, plan.language, 0, false, true);
+				if (this.success(result, job.signal)) {
+					const bytes = fs.readFile(path);
+					if (bytes.byteLength > 0 && bytes.byteLength <= MAX_HEADER_BYTES)
+						built = { key: plan.key, path, bytes, persistentKey: plan.persistentKey };
+				}
+			} catch {
+				/* Without a header the next compile parses it textually. */
+			}
+			if (built && !controller.signal.aborted && !this.#disposed) {
+				this.discardHeader(job);
+				this.#header = built;
+				if (built.persistentKey)
+					void this.headerCache
+						.write(built.persistentKey, built.bytes)
+						.catch(() => false);
+			} else {
+				try {
+					fs.withMutationSource(job, () => fs.unlink(path));
+				} catch {
+					/* Never written. */
+				}
+			}
+			// Only this build's own files changed: a compiled program remains current.
+			if (mutations && !mutations.hasChangesOutside(sources))
+				for (const program of this.#prepared.values())
+					if (program.generation === generation) program.generation = fs.generation;
+			mutations?.dispose();
+			if (this.#headerBuild?.controller === controller) this.#headerBuild = undefined;
+		})();
+		this.#headerBuild = { key: plan.key, language: plan.language, controller, promise };
+		return promise;
 	}
 	private async flush(language: string) {
 		const writer = this.#active.get(language)?.writer;
@@ -673,6 +821,8 @@ export class ContainerClangRuntime {
 	}
 	async stop(language: string) {
 		this.#input.delete(language);
+		if (this.#headerBuild?.language === language)
+			this.#headerBuild.controller.abort(new DOMException('Command cancelled', 'AbortError'));
 		const job = this.#active.get(language);
 		job?.controller.abort(new DOMException('Command cancelled', 'AbortError'));
 		await job?.process?.terminate();
@@ -691,7 +841,14 @@ export class ContainerClangRuntime {
 	async dispose() {
 		this.#disposed = true;
 		this.#prepared.clear();
-		await Promise.allSettled([...this.#active.keys()].map((language) => this.stop(language)));
+		this.#pendingHeader = undefined;
+		this.#headerBuild?.controller.abort(
+			new DOMException('Clang runtime disposed', 'AbortError')
+		);
+		await Promise.allSettled([
+			...[...this.#active.keys()].map((language) => this.stop(language)),
+			this.#headerBuild?.promise
+		]);
 		this.discardHeader();
 	}
 }
