@@ -68,6 +68,7 @@ export const scenarios = [
 		// Container prewarm adds owner and binding wiring: 6,339 bytes measured in CI, no files.
 		// Persistent runtime caching for Go, .NET, PHP and PostgreSQL adds two worker JavaScript/declaration pairs (9,768 bytes / 4 files measured in CI).
 		// Container PCH persistence and background builds add 8,808 bytes to two container modules (svelte-package output), no files.
+		// The Go worker's fmt-build preload and the in-flight write map add 2,568 bytes; allow 3 KiB.
 		// The combined performance changes install 7,508,140 bytes / 819 files.
 		// Another 5 KiB covers their 4,268-byte overflow without new dependencies.
 		budget: { maxBytes: 7 * MiB + 165 * 1024, maxFiles: 819, maxPackages: 6 },
