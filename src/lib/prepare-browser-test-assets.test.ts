@@ -217,7 +217,12 @@ describe('browser test asset preparation', () => {
 			)
 			.find((entry) => ts.isIdentifier(entry.name) && entry.name.text === 'release');
 		expect(declaration?.initializer).toBeDefined();
-		const release = JSON.parse(declaration!.initializer!.getText(source));
+		const initializer = declaration!.initializer!;
+		const release = JSON.parse(
+			(ts.isSatisfiesExpression(initializer) ? initializer.expression : initializer).getText(
+				source
+			)
+		);
 		const assets: Array<{
 			source: string;
 			target: string;
