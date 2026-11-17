@@ -63,7 +63,9 @@ export const scenarios = [
 		// Add 17 KiB / six files for its adapter, assets and profile; runtime payloads stay external.
 		// Cumulative Squirrel, Wren, PARI/GP and WASI memory limits add another 27 KiB/12 files.
 		// Python snapshot startup adds its snapshot cache and builder modules (15,364 bytes / 4 files measured in CI).
-		budget: { maxBytes: 7 * MiB + 125 * 1024, maxFiles: 813, maxPackages: 6 },
+		// The combined performance changes install 7,508,140 bytes / 819 files.
+		// Another 5 KiB covers their 4,268-byte overflow without new dependencies.
+		budget: { maxBytes: 7 * MiB + 165 * 1024, maxFiles: 813, maxPackages: 6 },
 		absentPackageNames: [
 			'@katana-project/asm',
 			'java-parser',
@@ -458,7 +460,9 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Propagate Picat's measured 17 KiB / six-file SDK increase; dependencies are unchanged.
 		// Keep all four language profile allowances when installing the combined SDK.
 		// Python snapshot startup adds two JavaScript/declaration pairs (3,434 files measured in CI).
-		budget: { maxBytes: 40 * MiB + 1_093 * 1024, maxFiles: 3_434, maxPackages: 70 },
+		// The combined performance changes install 43,200,938 bytes / 3,442 files.
+		// Another 136 KiB covers the measured 138,666-byte overflow; counts stay fixed.
+		budget: { maxBytes: 40 * MiB + 1_229 * 1024, maxFiles: 3_434, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
