@@ -63,7 +63,8 @@ export const scenarios = [
 		// Add 17 KiB / six files for its adapter, assets and profile; runtime payloads stay external.
 		// Cumulative Squirrel, Wren, PARI/GP and WASI memory limits add another 27 KiB/12 files.
 		// Python snapshot startup adds its snapshot cache and builder modules (15,364 bytes / 4 files measured in CI).
-		budget: { maxBytes: 7 * MiB + 125 * 1024, maxFiles: 813, maxPackages: 6 },
+		// The core runtime Wasm module lookup adds one JavaScript/declaration pair (1,950 bytes / 2 files measured in CI).
+		budget: { maxBytes: 7 * MiB + 128 * 1024, maxFiles: 815, maxPackages: 6 },
 		absentPackageNames: [
 			'@katana-project/asm',
 			'java-parser',
@@ -139,7 +140,8 @@ export const scenarios = [
 		// Picat CI job 133036878600 measures 2,856,625 bytes with unchanged files/dependencies.
 		// The four-language core measures 1,619,555 bytes, a 3,193-byte increase.
 		// GCC totals 2,858,709 bytes; a 3 KiB increase retains 299 bytes of headroom.
-		budget: { maxBytes: 2.5 * MiB + 232 * 1024, maxFiles: 196, maxPackages: 4 },
+		// The core runtime Wasm module lookup adds one JavaScript/declaration pair (CI measures 2,862,838 bytes / 198 files).
+		budget: { maxBytes: 2.5 * MiB + 237 * 1024, maxFiles: 198, maxPackages: 4 },
 		absentPackageNames: [
 			'wasm-idle',
 			'@wasm-idle/llvm-core',
@@ -458,7 +460,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Propagate Picat's measured 17 KiB / six-file SDK increase; dependencies are unchanged.
 		// Keep all four language profile allowances when installing the combined SDK.
 		// Python snapshot startup adds two JavaScript/declaration pairs (3,434 files measured in CI).
-		budget: { maxBytes: 40 * MiB + 1_093 * 1024, maxFiles: 3_434, maxPackages: 70 },
+		// The core runtime Wasm module lookup adds one JavaScript/declaration pair (2 files).
+		budget: { maxBytes: 40 * MiB + 1_093 * 1024, maxFiles: 3_436, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
