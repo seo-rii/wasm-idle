@@ -72,6 +72,9 @@ export function createLockVerifiedFetch(options: LockVerifiedFetchOptions): type
 	const lookup = options.lookup ?? loadRuntimeAssetLockEntry;
 	const root = new URL(options.assetRoot);
 	const location = { assetRoot: root.href, assetPrefix: options.assetPrefix };
+	// Writes that are still storing a network body, by URL. A request for the same file
+	// waits for its write instead of downloading the file a second time.
+	const pending = new Map<string, Promise<unknown>>();
 	// Start the one-time inventory import before the runtime's first asset request.
 	// An empty relative path would return before importing, so probe a named file.
 	void Promise.resolve()
@@ -111,6 +114,17 @@ export function createLockVerifiedFetch(options: LockVerifiedFetchOptions): type
 			readPersistentRuntimeAsset({ identity: candidate, cache, signal }).catch(
 				() => undefined
 			);
+		const writing = pending.get(url.href);
+		if (writing) {
+			await new Promise<void>((resolve, reject) => {
+				const abort = () => reject(abortError(signal!));
+				signal?.addEventListener('abort', abort, { once: true });
+				void writing.finally(() => {
+					signal?.removeEventListener('abort', abort);
+					resolve();
+				});
+			});
+		}
 		const hit = (await read(stored)) ?? (decoded ? await read(decoded) : undefined);
 		if (signal?.aborted) throw abortError(signal);
 		if (hit)
@@ -121,16 +135,34 @@ export function createLockVerifiedFetch(options: LockVerifiedFetchOptions): type
 					'content-length': String(hit.byteLength)
 				}
 			});
-		const response = await network(input, init);
+		// Register before the request starts so that a request made meanwhile waits too.
+		let release = () => {};
+		const write = new Promise<void>((resolve) => (release = resolve));
+		pending.set(url.href, write);
+		const settle = () => {
+			if (pending.get(url.href) === write) pending.delete(url.href);
+			release();
+		};
+		let response: Response;
+		try {
+			response = await network(input, init);
+		} catch (error) {
+			settle();
+			throw error;
+		}
 		const target = response.headers.has('content-encoding') ? decoded : stored;
-		if (response.status !== 200 || !response.body || !target) return response;
+		if (response.status !== 200 || !response.body || !target) {
+			settle();
+			return response;
+		}
 		const [caller, store] = response.body.tee();
 		void collect(store, target.bytes ?? Math.min(cache.maxBytes, cache.maxEntryBytes))
 			.then((bytes) =>
 				bytes ? writePersistentRuntimeAsset({ identity: target, cache, bytes }) : false
 			)
 			// The write verifies the receipt; a mismatch or full storage only skips caching.
-			.catch(() => false);
+			.catch(() => false)
+			.finally(settle);
 		return new Response(caller, {
 			status: response.status,
 			statusText: response.statusText,

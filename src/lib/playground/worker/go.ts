@@ -48,6 +48,7 @@ let compilerPromise: Promise<{
 		stdout: string;
 		stderr: string;
 	}>;
+	preloaded: Promise<void>;
 }> | null = null;
 let compiledArtifact: any = null;
 let compiledCacheKey = '';
@@ -66,7 +67,81 @@ interface GoDebugState {
 	stepOutDepth: number | null;
 }
 
-async function loadCompiler(url: string, runtimeManifestUrl: string, limits?: GoRuntimeLimits) {
+// Most first programs import fmt; its dependency closure selects the sysroot chunks to fetch.
+const PRELOAD_PROGRAM = 'package main\n\nimport "fmt"\n\nfunc main() {\n\tfmt.Println()\n}\n';
+const PRELOAD_CONCURRENCY = 4;
+
+/**
+ * Download what the first build of a fmt program needs as soon as the compiler is ready, so
+ * that a load ahead of the first Run (prewarm, or a user still editing) also fetches it. The
+ * sysroot chunks go into wasm-go's in-memory pack cache, where a compile joins a download
+ * still in flight. The tools are fetched only through the persistent cache, which a compile's
+ * request for the same file waits on; without it that request could download them again.
+ * A compile never waits for the preload itself, so it fetches nothing it does not need.
+ */
+function preloadFirstBuild(
+	module: any,
+	compiler: any,
+	runtimeManifestUrl: string,
+	limits: GoRuntimeLimits | undefined,
+	preloadTools: boolean
+): Promise<void> {
+	const boundary = {
+		assetTimeoutMs: limits?.assetTimeoutMs,
+		maxAssetBytes: limits?.maxAssetBytes,
+		maxWasmMemoryBytes: limits?.maxWasmMemoryBytes
+	};
+	const tools = async () => {
+		if (!preloadTools || typeof module.preloadBrowserGoRuntime !== 'function') return;
+		await module.preloadBrowserGoRuntime({
+			...(runtimeManifestUrl ? { runtimeManifestUrl } : {}),
+			target: 'wasip1/wasm',
+			includeSysroot: false,
+			...boundary
+		});
+	};
+	const sysroot = async () => {
+		if (
+			!runtimeManifestUrl ||
+			typeof compiler.plan !== 'function' ||
+			typeof module.loadRuntimePackEntries !== 'function'
+		)
+			return;
+		const plan = await compiler.plan({
+			code: PRELOAD_PROGRAM,
+			target: 'wasip1/wasm',
+			...boundary
+		});
+		const chunks: unknown[] = Array.isArray(plan?.sysrootChunks) ? plan.sysrootChunks : [];
+		// The compiler resolves chunks against the manifest directory with its version query.
+		const base = new URL('./', runtimeManifestUrl);
+		base.search = new URL(runtimeManifestUrl).search;
+		let cursor = 0;
+		await Promise.all(
+			Array.from({ length: Math.min(PRELOAD_CONCURRENCY, chunks.length) }, async () => {
+				while (cursor < chunks.length) {
+					const chunk = chunks[cursor++];
+					// No signal: wasm-go shares only unsignalled loads with later callers.
+					await module.loadRuntimePackEntries(
+						base.href,
+						chunk,
+						globalThis.fetch,
+						undefined,
+						boundary
+					);
+				}
+			})
+		);
+	};
+	return Promise.allSettled([tools(), sysroot()]).then(() => undefined);
+}
+
+async function loadCompiler(
+	url: string,
+	runtimeManifestUrl: string,
+	limits?: GoRuntimeLimits,
+	preloadTools = false
+) {
 	if (!url) {
 		throw new Error('Go runtime is not configured. Set runtimeAssets.go.compilerUrl.');
 	}
@@ -98,16 +173,18 @@ async function loadCompiler(url: string, runtimeManifestUrl: string, limits?: Go
 		if (typeof module.executeBrowserGoArtifact !== 'function') {
 			throw new Error('wasm-go module must export executeBrowserGoArtifact');
 		}
+		const compiler = await factory({
+			...(runtimeManifestUrl ? { runtimeManifestUrl } : {}),
+			assetTimeoutMs: limits?.assetTimeoutMs,
+			compileTimeoutMs: limits?.compileTimeoutMs,
+			linkTimeoutMs: limits?.compileTimeoutMs,
+			maxAssetBytes: limits?.maxAssetBytes,
+			maxWasmMemoryBytes: limits?.maxWasmMemoryBytes
+		});
 		return {
-			compiler: await factory({
-				...(runtimeManifestUrl ? { runtimeManifestUrl } : {}),
-				assetTimeoutMs: limits?.assetTimeoutMs,
-				compileTimeoutMs: limits?.compileTimeoutMs,
-				linkTimeoutMs: limits?.compileTimeoutMs,
-				maxAssetBytes: limits?.maxAssetBytes,
-				maxWasmMemoryBytes: limits?.maxWasmMemoryBytes
-			}),
-			executeBrowserGoArtifact: module.executeBrowserGoArtifact
+			compiler,
+			executeBrowserGoArtifact: module.executeBrowserGoArtifact,
+			preloaded: preloadFirstBuild(module, compiler, runtimeManifestUrl, limits, preloadTools)
 		};
 	})();
 	return await compilerPromise;
@@ -308,7 +385,13 @@ self.onmessage = async (event: { data: any }) => {
 			if (log) {
 				console.log(`[wasm-idle:go-worker] load compilerUrl=${compilerUrl}`);
 			}
-			await loadCompiler(compilerUrl, manifestUrl, compilerLimits);
+			// Tools are preloaded only where the persistent cache serves the compile's requests.
+			await loadCompiler(
+				compilerUrl,
+				manifestUrl,
+				compilerLimits,
+				globalThis.fetch !== networkFetch
+			);
 			postMessage({ load: true });
 			return;
 		}
