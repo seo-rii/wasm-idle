@@ -92,7 +92,18 @@ function fixture(
 	adapter.attach(profile.container);
 	const progress = { set: vi.fn(), report: vi.fn() };
 	const emit = vi.fn();
-	const runtime = new WebsiteClangRuntime(profile, adapter, emit);
+	const stored = new Map<string, Uint8Array>();
+	const headerCache = {
+		read: vi.fn(async (key: string) => stored.get(key)?.slice()),
+		write: vi.fn(async (key: string, bytes: Uint8Array) => {
+			stored.set(key, bytes.slice());
+			return true;
+		}),
+		remove: vi.fn(async (key: string) => {
+			stored.delete(key);
+		})
+	};
+	const runtime = new WebsiteClangRuntime(profile, adapter, emit, { headerCache });
 	const published = new Map<string, { path: string; content: string }[]>();
 	const prepare = (
 		code: string,
@@ -124,6 +135,8 @@ function fixture(
 		);
 	return {
 		runtime,
+		headerCache,
+		stored,
 		prepare,
 		run,
 		spawn,
@@ -557,10 +570,14 @@ describe('website container Clang compilation', () => {
 		expect(argv.indexOf('-lc-printscan-long-double')).toBeGreaterThan(argv.indexOf('main.c'));
 	});
 	it('builds and reuses a real header only with the same standard', async () => {
-		const { prepare, spawn, progress } = fixture();
+		const { prepare, spawn, progress, runtime } = fixture();
 		expect(await prepare(source)).toBe(true);
+		// The header is planned, not built, so the first Run never waits for it.
+		expect(spawn).toHaveBeenCalledTimes(1);
+		await runtime.buildPendingHeader();
 		expect(spawn.mock.calls[1][1]).toContain('c++-header');
 		expect(spawn.mock.calls[1][1]).toContain('-c');
+		expect(spawn.mock.calls[1][1]).toContain('-fno-pch-timestamp');
 		expect(spawn.mock.calls[1][1]).not.toContain('-lc-printscan-long-double');
 		expect(await prepare(source.replace('main()', 'main(int, char**)'))).toBe(true);
 		expect(spawn.mock.calls[2][1]).toContain('-include-pch');
@@ -570,6 +587,7 @@ describe('website container Clang compilation', () => {
 		);
 		await prepare(source, { cppVersion: 'CPP23' });
 		expect(spawn.mock.calls[3][1]).not.toContain('-include-pch');
+		await runtime.buildPendingHeader();
 		expect(spawn.mock.calls[4][1]).toContain('c++-header');
 	});
 	it.each([
@@ -583,8 +601,11 @@ describe('website container Clang compilation', () => {
 		expect(spawn).toHaveBeenCalledTimes(1);
 	});
 	it('retries a rejected cached header textually without claiming a cache hit', async () => {
-		const { prepare, spawn, progress, codes } = fixture();
+		const { prepare, spawn, progress, codes, runtime } = fixture([
+			'fatal error: PCH file was built from a different branch\n'
+		]);
 		await prepare(source);
+		await runtime.buildPendingHeader();
 		codes.push(1, 0, 0);
 		expect(await prepare(source + '\n')).toBe(true);
 		expect(spawn.mock.calls[2][1]).toContain('-include-pch');
@@ -594,6 +615,7 @@ describe('website container Clang compilation', () => {
 	it('clears its bounded temporary header on disposal', async () => {
 		const { prepare, runtime, fs } = fixture();
 		await prepare(source);
+		await runtime.buildPendingHeader();
 		expect(fs.readdir('/tmp')).toHaveLength(1);
 		await runtime.dispose();
 		expect(fs.readdir('/tmp')).toHaveLength(0);
@@ -769,6 +791,7 @@ describe('website container Clang compilation', () => {
 	it('keeps observing input mutations between compiler completion and PCH progress callbacks', async () => {
 		const f = fixture();
 		await f.prepare(source);
+		await f.runtime.buildPendingHeader();
 		f.progress.set.mockImplementation(() => {
 			f.fs.writeFile(
 				'/workspace/CPP/late.h',
@@ -851,5 +874,78 @@ describe('website container Clang compilation', () => {
 			4
 		);
 		expect(f.spawn).toHaveBeenCalledTimes(1);
+	});
+});
+
+describe('website clang header lifecycle', () => {
+	it('builds the header after the program has run and keeps that program reusable', async () => {
+		const f = fixture();
+		expect(await f.run(source)).toBe(true);
+		const clang = () => f.spawn.mock.calls.filter(([name]) => name === 'clang');
+		await vi.waitFor(() => expect(clang().at(-1)?.[1]).toContain('c++-header'));
+		await f.runtime.buildPendingHeader();
+		expect(clang()).toHaveLength(2);
+		// The header build's own /tmp write does not invalidate the compiled program.
+		expect(await f.run(source)).toBe(true);
+		expect(clang()).toHaveLength(2);
+		expect(await f.prepare(`${source}\n`)).toBe(true);
+		expect(clang().at(-1)?.[1]).toContain('-include-pch');
+	});
+
+	it('makes a compile started during the build wait for it and use the header', async () => {
+		const f = fixture();
+		await f.prepare(source);
+		let release!: () => void;
+		f.hooks.compile = () => new Promise<void>((resolve) => (release = resolve));
+		const building = f.runtime.buildPendingHeader();
+		await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+		const compiling = f.prepare(`${source}\n`);
+		await new Promise((resolve) => setTimeout(resolve, 5));
+		expect(f.spawn).toHaveBeenCalledTimes(2);
+		delete f.hooks.compile;
+		release();
+		await building;
+		expect(await compiling).toBe(true);
+		expect(f.spawn.mock.calls[2][1]).toContain('-include-pch');
+	});
+
+	it('restores a persisted header after reload without building it again', async () => {
+		const identity = vi.fn(() => '["clang","lld","sysroot"]');
+		const first = fixture();
+		Object.assign(first.profile, { toolchainIdentity: identity });
+		await first.prepare(source);
+		await first.runtime.buildPendingHeader();
+		expect(first.headerCache.write).toHaveBeenCalledOnce();
+		const [key, bytes] = first.headerCache.write.mock.calls[0]!;
+		expect(JSON.parse(key)[0]).toBe('container-stdcpp-pch-v1');
+		const reloaded = fixture();
+		Object.assign(reloaded.profile, { toolchainIdentity: identity });
+		reloaded.stored.set(key, bytes);
+		expect(await reloaded.prepare(source)).toBe(true);
+		expect(reloaded.spawn).toHaveBeenCalledOnce();
+		expect(reloaded.spawn.mock.calls[0][1]).toContain('-include-pch');
+		await reloaded.runtime.buildPendingHeader();
+		expect(reloaded.spawn).toHaveBeenCalledOnce();
+		// Another compiler or sysroot never reads that entry.
+		const other = fixture();
+		Object.assign(other.profile, { toolchainIdentity: () => '["other","lld","sysroot"]' });
+		other.stored.set(key, bytes);
+		await other.prepare(source);
+		expect(other.spawn.mock.calls[0][1]).not.toContain('-include-pch');
+	});
+
+	it('keeps the header and shows errors once when the source itself fails', async () => {
+		const f = fixture(['main.cpp:3:1: error: expected expression\n']);
+		await f.prepare(source);
+		await f.runtime.buildPendingHeader();
+		f.emit.mockClear();
+		f.codes.push(1);
+		expect(await f.prepare(`${source}\nint x = ;`)).toBe(false);
+		expect(f.spawn).toHaveBeenCalledTimes(3);
+		expect(f.spawn.mock.calls[2][1]).toContain('-include-pch');
+		const outputs = f.emit.mock.calls.filter(([event]) => event.name === 'output');
+		expect(outputs).toHaveLength(1);
+		expect(await f.prepare(`${source}\nint y;`)).toBe(true);
+		expect(f.spawn.mock.calls[3][1]).toContain('-include-pch');
 	});
 });
