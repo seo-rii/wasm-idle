@@ -1,4 +1,9 @@
-export {};
+import type { RuntimeAssetCacheOptions } from '@wasm-idle/core';
+import { createModuleAssetFetch } from './moduleAssetCache';
+
+// The runtime loader reads the global fetch at call time; each load installs the cached
+// variant over the fetch this Worker started with.
+let networkFetch: typeof fetch | undefined;
 
 const workerSelf = globalThis as any;
 
@@ -106,7 +111,8 @@ workerSelf.onmessage = async (event: { data: any }) => {
 		args = [],
 		stdin = '',
 		maxOutputBytes = 1024 * 1024,
-		log
+		log,
+		persistentCache
 	} = event.data;
 	try {
 		if (load) {
@@ -114,6 +120,13 @@ workerSelf.onmessage = async (event: { data: any }) => {
 			if (log) {
 				console.log(`[wasm-idle:dotnet-worker] load moduleUrl=${moduleUrl}`);
 			}
+			networkFetch ??= globalThis.fetch.bind(globalThis);
+			globalThis.fetch = createModuleAssetFetch(
+				moduleUrl,
+				'wasm-dotnet',
+				persistentCache as RuntimeAssetCacheOptions | undefined,
+				networkFetch
+			);
 			await loadRuntime(moduleUrl);
 			// Older/custom runtime modules remain compatible without this optional API.
 			await compiler?.prepare?.({ language });

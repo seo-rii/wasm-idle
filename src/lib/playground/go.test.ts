@@ -289,6 +289,28 @@ func main() {
 		);
 	});
 
+	it('passes the resolved persistent cache policy and restarts the worker when it changes', async () => {
+		const sandbox = new Go();
+		const assets = { ...TEST_RUNTIME_ASSETS, persistentCache: { maxEntryBytes: 1024 } };
+		await sandbox.load(assets);
+		expect(workerInstances[0]?.postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				load: true,
+				persistentCache: expect.objectContaining({ enabled: true, maxEntryBytes: 1024 })
+			})
+		);
+		await sandbox.load(assets);
+		expect(workerInstances).toHaveLength(1);
+		await sandbox.load(assets, '', true, [], { persistentCache: false });
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[0]?.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances[1]?.postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				persistentCache: expect.objectContaining({ enabled: false })
+			})
+		);
+	});
+
 	it('derives the bundled manifest URL from the compiler URL and preserves its version', async () => {
 		const sandbox = new Go();
 

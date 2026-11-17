@@ -22,7 +22,8 @@
 	"dependencies": {
 		"@swc/wasm-typescript": "^1.16.20",
 		"acorn": "8.19.0",
-		"buffer": "^6.0.3"
+		"buffer": "^6.0.3",
+		"coffeescript": "2.7.0"
 	},
 	"devDependencies": {
 		"@types/node": "^24.19.2",

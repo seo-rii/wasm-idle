@@ -139,7 +139,7 @@
 		"layer:static-runtimes": "node scripts/build-layered-runtime-assets.mjs static",
 		"asset:sizes": "node scripts/static-asset-sizes.mjs report",
 		"assets:lock": "node scripts/generate-runtime-asset-lock.mjs",
-		"check:assets-lock": "node scripts/generate-runtime-asset-lock.mjs --check",
+		"check:assets-lock": "node scripts/runtime-asset-lock-inputs.mjs --check",
 		"check:asset-sizes": "node scripts/static-asset-sizes.mjs check",
 		"build:page-runtimes": "node scripts/prepare-page-runtimes.mjs",
 		"prepare:page-container": "node scripts/prepare-page-container.mjs",
@@ -175,6 +175,7 @@
 		"sync:wasm-grain": "node scripts/sync-wasm-grain.mjs",
 		"test:browser:grain": "WASM_IDLE_RUN_REAL_BROWSER_GRAIN=1 pnpm exec vitest run src/lib/playground/grain.playwright.test.ts",
 		"sync:wasm-hy": "node scripts/sync-wasm-hy.mjs",
+		"test:browser:coffeescript": "WASM_IDLE_REQUIRE_BROWSER_TESTS=1 WASM_IDLE_RUN_REAL_BROWSER_COFFEESCRIPT=1 vitest run src/lib/playground/coffeescript.playwright.test.ts",
 		"test:browser:hy": "WASM_IDLE_RUN_REAL_BROWSER_HY=1 pnpm exec vitest run src/lib/playground/hy.playwright.test.ts",
 		"test:browser:c3": "WASM_IDLE_RUN_REAL_BROWSER_C3=1 pnpm exec vitest run src/lib/playground/c3.playwright.test.ts",
 		"test:unit:c3": "node --test scripts/c3-memory.test.mjs scripts/c3-stdin.test.mjs scripts/sync-wasm-c3.test.mjs",
@@ -206,6 +207,8 @@
 		"sync:wasm-apecode": "node scripts/sync-wasm-apecode.mjs",
 		"test:browser:golfscript": "WASM_IDLE_REQUIRE_BROWSER_TESTS=1 WASM_IDLE_RUN_REAL_BROWSER_GOLFSCRIPT=1 vitest run src/lib/playground/esolangs.playwright.test.ts",
 		"sync:wasm-golfscript": "node scripts/sync-wasm-golfscript.mjs",
+		"sync:wasm-graphql": "node scripts/sync-wasm-graphql.mjs",
+		"test:browser:graphql": "WASM_IDLE_REQUIRE_BROWSER_TESTS=1 WASM_IDLE_RUN_REAL_BROWSER_GRAPHQL=1 vitest run src/lib/playground/graphql.playwright.test.ts",
 		"prepare:container-distribution": "node scripts/prepare-container-distribution.mjs",
 		"verify:container-distribution": "node scripts/verify-container-distribution.mjs",
 		"test:container-distribution": "node --test scripts/container-distribution.test.mjs",
@@ -236,6 +239,8 @@
 		"sync:wasm-scala": "node scripts/sync-wasm-scala.mjs",
 		"test:scala": "vitest run --config vitest.scala.config.ts",
 		"test:browser:scala": "WASM_IDLE_RUN_REAL_BROWSER_SCALA=1 vitest run --config vitest.scala.config.ts src/lib/playground/scala.playwright.test.ts",
+		"test:browser:sed": "WASM_IDLE_REQUIRE_BROWSER_TESTS=1 WASM_IDLE_RUN_REAL_BROWSER_SED=1 vitest run src/lib/playground/esolangs.playwright.test.ts",
+		"sync:wasm-sed": "node scripts/sync-wasm-sed.mjs",
 		"sync:wasm-picat": "node scripts/sync-wasm-picat.mjs",
 		"test:browser:picat": "WASM_IDLE_RUN_REAL_BROWSER_PICAT=1 pnpm exec vitest run src/lib/playground/picat.playwright.test.ts",
 		"test:node:picat": "WASM_IDLE_RUN_REAL_NODE_PICAT=1 pnpm exec vitest run src/lib/playground/picat.runtime.test.ts",
@@ -248,7 +253,8 @@
 		"test:browser:squirrel": "WASM_IDLE_RUN_REAL_BROWSER_SQUIRREL=1 WASM_IDLE_REQUIRE_BROWSER_TESTS=1 vitest run src/lib/playground/esolangs.playwright.test.ts",
 		"sync:wasm-squirrel": "node scripts/sync-wasm-squirrel.mjs",
 		"sync:wasm-uiua": "node scripts/sync-wasm-uiua.mjs",
-		"test:browser:uiua": "WASM_IDLE_REQUIRE_BROWSER_TESTS=1 WASM_IDLE_RUN_REAL_BROWSER_UIUA=1 vitest run src/lib/playground/uiua.playwright.test.ts"
+		"test:browser:uiua": "WASM_IDLE_REQUIRE_BROWSER_TESTS=1 WASM_IDLE_RUN_REAL_BROWSER_UIUA=1 vitest run src/lib/playground/uiua.playwright.test.ts",
+		"prepare:assets-lock": "node scripts/runtime-asset-lock-inputs.mjs --prepare"
 	},
 	"devDependencies": {
 		"acorn": "8.19.0",
@@ -305,7 +311,8 @@
 		"vite": "^8.3.3",
 		"vitest": "^5.0.5",
 		"waforth": "0.20.1",
-		"webr": "0.6.0"
+		"webr": "0.6.0",
+		"graphql": "17.0.2"
 	},
 	"dependencies": {
 		"@bjorn3/browser_wasi_shim": "^0.4.2",

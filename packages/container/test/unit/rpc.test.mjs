@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MemoryFileSystem, FsError } from '../../dist/fs/index.js';
-import { createRpcBuffer, createRpcServer, Operation, RPC_BYTES } from '../../dist/transport/rpc.js';
+import { createRpcBuffer, createRpcClient, createRpcRevisionPublisher, createRpcServer, Operation, RPC_BYTES } from '../../dist/transport/rpc.js';
 import { createLiveIo, createRemoteFileSystem } from '../../dist/adapters/wasi-live/io.js';
 const limits = { maxInputBytes: 1024, maxOutputBytes: 1024 };
 function request(buffer, generation, id, op, args = [], payload = new Uint8Array()) {
@@ -168,4 +168,105 @@ test('remote timestamp bindings retain NOW and explicit nofollow semantics acros
     [Operation.FsetTimes, [7, { mtimeMs: 0 }]],
     [Operation.PathSetTimes, [ref, { atimeMs: 1 }, false]]
   ]);
+});
+
+// A synchronous owner double: local descriptors are the filesystem's own, and the
+// revision is read straight from the filesystem, as a published channel would be.
+function lookupOwner(fs, { tracked = true } = {}) {
+  const calls = [];
+  const call = (operation, args) => {
+    calls.push(operation);
+    const [a, b] = JSON.parse(JSON.stringify(args));
+    const reference = value => ({ path: value.path, cwd: fs.getDirectoryPath(value.directory), root: value.root });
+    switch (operation) {
+      case Operation.Stat: return { value: fs.stat(a, b) };
+      case Operation.Lstat: return { value: fs.lstat(a, b) };
+      case Operation.Readlink: return { value: fs.readlink(a, b) };
+      case Operation.Fstat: return { value: fs.fstat(a) };
+      case Operation.Open: return { value: fs.open(a, b) };
+      case Operation.Close: fs.close(a); return {};
+      case Operation.PathReadlink: { const ref = reference(a); return { value: fs.readlink(ref.path, ref) }; }
+      case Operation.PathOpen: { const ref = reference(a); return { value: fs.open(ref.path, { ...b, cwd: ref.cwd, root: ref.root }) }; }
+      default: throw new Error(`unexpected operation ${operation}`);
+    }
+  };
+  if (tracked) call.revision = () => fs.generation | 0;
+  return { call, calls, count: operation => calls.filter(seen => seen === operation).length };
+}
+
+test('remote lookups are reused only while the owner revision is unchanged', () => {
+  const fs = new MemoryFileSystem(); fs.writeFile('/workspace/file', new Uint8Array([1]));
+  const owner = lookupOwner(fs), remote = createRemoteFileSystem(owner.call);
+  const first = remote.stat('/workspace/file');
+  first.size = 99;
+  assert.equal(remote.stat('/workspace/file').size, 1, 'a reused stat is a private copy');
+  assert.equal(owner.count(Operation.Stat), 1);
+  for (let i = 0; i < 3; i++) assert.throws(() => remote.readlink('/workspace/file'), { code: 'EINVAL' });
+  for (let i = 0; i < 3; i++) assert.throws(() => remote.lstat('/workspace/missing'), { code: 'ENOENT' });
+  assert.equal(owner.count(Operation.Readlink), 1); assert.equal(owner.count(Operation.Lstat), 1);
+  // Another process (here the owner itself) mutates: every reused answer is dropped.
+  fs.writeFile('/workspace/file', new Uint8Array([1, 2, 3])); fs.writeFile('/workspace/missing', new Uint8Array());
+  assert.equal(remote.stat('/workspace/file').size, 3);
+  assert.equal(remote.lstat('/workspace/missing').type, 'file');
+  assert.equal(owner.count(Operation.Stat), 2); assert.equal(owner.count(Operation.Lstat), 2);
+});
+
+test('remote opens reuse only misses, and a closed descriptor never answers from the cache', () => {
+  const fs = new MemoryFileSystem(); fs.writeFile('/workspace/file', new Uint8Array([1])); fs.symlink('file', '/workspace/link');
+  const owner = lookupOwner(fs), remote = createRemoteFileSystem(owner.call);
+  for (let i = 0; i < 2; i++) assert.throws(() => remote.open('/workspace/absent', { read: true }), { code: 'ENOENT' });
+  assert.equal(owner.count(Operation.Open), 1);
+  const a = remote.open('/workspace/file', { read: true }), b = remote.open('/workspace/file', { read: true });
+  assert.notEqual(a, b, 'each successful open allocates its own descriptor');
+  assert.equal(owner.count(Operation.Open), 3);
+  assert.equal(remote.fstat(a).size, 1); assert.equal(remote.fstat(a).size, 1);
+  assert.equal(owner.count(Operation.Fstat), 1);
+  remote.close(a);
+  assert.throws(() => remote.fstat(a), { code: 'EBADF' });
+  assert.throws(() => remote.fstat(a), { code: 'EBADF' });
+  assert.equal(owner.count(Operation.Fstat), 3, 'EBADF is never reused');
+  const directory = remote.open('/workspace', { directory: true }), reference = { directory, path: 'link', root: '/' };
+  assert.equal(remote.paths.readlink(reference), 'file'); assert.equal(remote.paths.readlink(reference), 'file');
+  assert.equal(owner.count(Operation.PathReadlink), 1);
+  for (let i = 0; i < 2; i++) assert.throws(() => remote.paths.open({ ...reference, path: 'nope' }, { read: true }, true), { code: 'ENOENT' });
+  assert.equal(owner.count(Operation.PathOpen), 1);
+  remote.close(directory);
+  assert.throws(() => remote.paths.readlink(reference), { code: 'EBADF' }, 'references to a closed directory are forgotten');
+  remote.close(b);
+});
+
+test('remote lookups are not recorded across a concurrent mutation, nor without a published revision', () => {
+  const fs = new MemoryFileSystem(); fs.writeFile('/workspace/file', new Uint8Array([1]));
+  const owner = lookupOwner(fs);
+  const racing = createRemoteFileSystem(Object.assign((operation, args) => {
+    const reply = owner.call(operation, args);
+    // A mutation lands after the owner answered but before the worker resumed.
+    if (owner.calls.length === 1) fs.writeFile('/workspace/file', new Uint8Array([1, 2]));
+    return reply;
+  }, { revision: owner.call.revision }));
+  assert.equal(racing.stat('/workspace/file').size, 1);
+  assert.equal(racing.stat('/workspace/file').size, 2, 'an answer straddling a revision change is not reused');
+  const untracked = lookupOwner(fs, { tracked: false }), plain = createRemoteFileSystem(untracked.call);
+  plain.stat('/workspace/file'); plain.stat('/workspace/file');
+  assert.equal(untracked.count(Operation.Stat), 2, 'an owner without revisions is always asked');
+});
+
+test('owners publish every filesystem revision into the RPC header for clients', () => {
+  const fs = new MemoryFileSystem(), buffer = createRpcBuffer(5), seen = [];
+  const client = createRpcClient(buffer, 5, () => {}, 1000);
+  assert.equal(client.revision(), undefined, 'an older owner never publishes a revision');
+  const publish = createRpcRevisionPublisher(buffer, 5);
+  const stop = fs.onGenerationChange(publish), observe = fs.onGenerationChange(value => seen.push(value));
+  publish(fs.generation);
+  assert.equal(client.revision(), fs.generation);
+  fs.writeFile('/workspace/a', new Uint8Array([1]));
+  assert.equal(client.revision(), fs.generation, 'published before the mutating call returns');
+  assert.deepEqual(seen, [fs.generation]);
+  stop(); fs.writeFile('/workspace/b', new Uint8Array());
+  assert.equal(client.revision(), fs.generation - 1);
+  observe();
+  assert.throws(() => publish(-1), /Invalid filesystem revision/);
+  const failing = fs.onGenerationChange(() => { throw new Error('listener failed'); });
+  fs.writeFile('/workspace/c', new Uint8Array()); failing();
+  assert.equal(fs.readFile('/workspace/c').length, 0, 'a failing listener never vetoes a mutation');
 });

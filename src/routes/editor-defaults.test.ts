@@ -89,12 +89,12 @@ describe('editor defaults', () => {
 		expect(editorDefaults.sqlite).toContain("'fibonacci='");
 		expect(editorDefaults.duckdb).toContain('WITH RECURSIVE memo');
 		expect(editorDefaults.duckdb).toContain("'fibonacci='");
-		expect(editorDefaults.graphql).toContain('query Fibonacci');
-		expect(editorDefaults.graphql).toContain('$n: Int = 4');
-		expect(editorDefaults.graphql).toContain('fibonacci(n: $n)');
+		expect(editorDefaults.graphql).toContain('query Example');
+		expect(editorDefaults.graphql).toContain('$showNumbers: Boolean! = false');
+		expect(editorDefaults.graphql).toContain('numbers @include(if: $showNumbers)');
 		expect(editorDefaults.php).toContain("file_get_contents('php://input')");
 		expect(editorDefaults.php).toContain('fibonacci=');
-		expect(editorDefaults.graphql).toContain('fibonacci');
+		expect(editorDefaults.graphql).toContain('rootValue');
 		expect(editorDefaults.json).toContain('"lsp": true');
 		expect(editorDefaults.json).toContain('"memo"');
 		expect(editorDefaults.json).toContain('"bonus": 3');

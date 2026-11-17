@@ -48,6 +48,7 @@ export const runtimeBrowserRegistry = [
 	runtime('apecode', 'esolangs', { dependencies: ['python'] }),
 	runtime('golfscript', 'esolangs', { dependencies: ['ruby'] }),
 	runtime('uiua', 'esolangs'),
+	runtime('sed', 'esolangs', { dependencies: ['wasm'] }),
 	runtime('picat', 'specialized'),
 	runtime('wren', 'esolangs'),
 	runtime('squirrel', 'esolangs'),
@@ -57,6 +58,7 @@ export const runtimeBrowserRegistry = [
 	runtime('elixir', 'stdin'),
 	runtime('javascript', 'stdin', { sourceNames: ['javascript', 'js-sandbox'] }),
 	runtime('typescript', 'stdin', { dependencies: ['javascript'] }),
+	runtime('coffeescript', 'stdin', { dependencies: ['typescript', 'javascript'] }),
 	runtime('assemblyscript', 'stdin'),
 	runtime('wat', 'stdin'),
 	runtime('wasm', 'stdin'),
@@ -68,6 +70,7 @@ export const runtimeBrowserRegistry = [
 	runtime('r', 'stdin', { sourceNames: ['r', 'webr'] }),
 	runtime('duckdb', 'stdin'),
 	runtime('sqlite', 'stdin'),
+	runtime('graphql', 'specialized'),
 	runtime('postgresql', 'stdin'),
 	runtime('php', 'stdin'),
 	...[

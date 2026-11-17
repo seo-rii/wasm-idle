@@ -1,7 +1,7 @@
 import { createBrowserGoBuildPlan } from './build-planner.js';
 import { resolveVersionedAssetUrl } from './asset-url.js';
 import { fetchRuntimeAssetJson, fetchRuntimeAssetBytes, loadRuntimePackEntries, loadRuntimeSysrootChunks, loadRuntimePackIndex } from './runtime-asset.js';
-import { executeGoToolInvocation } from './tool-runtime.js';
+import { executeGoToolInvocation, prepareGoToolModule } from './tool-runtime.js';
 import { collectGoFileImports, collectCompilerDiagnosticText, createSysrootDependency, normalizeCompileRequestSource, normalizePackageImportPath, normalizeRequestedTarget, parseCompilerDiagnostics, resolveStdlibDependencies, validateCompileRequest } from './compiler-support.js';
 import { loadRuntimeManifest, normalizeRuntimeManifest, resolveTargetManifest } from './runtime-manifest.js';
 const DEFAULT_RUNTIME_MANIFEST_URL = new URL('./runtime/runtime-manifest.v1.json', import.meta.url);
@@ -104,7 +104,32 @@ function normalizeToolOutputs(outputs) {
     }
     return Object.fromEntries(Object.entries(outputs).map(([path, bytes]) => [path, toStandaloneBytes(bytes)]));
 }
-async function resolveCompilerRuntime(options, dependencies = {}, reportManifestProgress) {
+// Versioned runtime JSON names fixed content (the query is the distribution's content
+// fingerprint). Keep each parsed copy for the realm instead of fetching, revalidating and
+// parsing the manifest and stdlib index again on every compile. Callers receive clones.
+const MAX_VERSIONED_RUNTIME_JSON = 8;
+const versionedRuntimeJson = new Map();
+export function clearGoRuntimeJsonCache() {
+    versionedRuntimeJson.clear();
+}
+async function loadVersionedRuntimeJson(url, limits, cacheable, load) {
+    const resolved = new URL(url.toString());
+    if (!cacheable || !resolved.search)
+        return load();
+    const key = JSON.stringify([resolved.href, ...limits]);
+    if (versionedRuntimeJson.has(key)) {
+        const value = versionedRuntimeJson.get(key);
+        versionedRuntimeJson.delete(key);
+        versionedRuntimeJson.set(key, value);
+        return structuredClone(value);
+    }
+    const value = await load();
+    versionedRuntimeJson.set(key, structuredClone(value));
+    while (versionedRuntimeJson.size > MAX_VERSIONED_RUNTIME_JSON)
+        versionedRuntimeJson.delete(versionedRuntimeJson.keys().next().value);
+    return value;
+}
+async function resolveCompilerRuntime(options, dependencies = {}, reportManifestProgress, cacheable = false) {
     const runtimeBaseUrl = options.runtimeBaseUrl || DEFAULT_RUNTIME_BASE_URL;
     if (options.manifest) {
         return {
@@ -117,12 +142,12 @@ async function resolveCompilerRuntime(options, dependencies = {}, reportManifest
     const derivedRuntimeBaseUrl = new URL('./', manifestUrl.toString());
     derivedRuntimeBaseUrl.search = new URL(manifestUrl.toString()).search;
     return {
-        manifest: await (dependencies.loadManifest || loadRuntimeManifest)(manifestUrl, dependencies.fetchImpl, reportManifestProgress, {
+        manifest: await loadVersionedRuntimeJson(manifestUrl, ['manifest', options.maxAssetBytes, options.maxWasmMemoryBytes], cacheable && !dependencies.loadManifest, () => (dependencies.loadManifest || loadRuntimeManifest)(manifestUrl, dependencies.fetchImpl, reportManifestProgress, {
             signal: options.signal,
             assetTimeoutMs: options.assetTimeoutMs,
             maxAssetBytes: options.maxAssetBytes,
             maxWasmMemoryBytes: options.maxWasmMemoryBytes
-        }),
+        })),
         runtimeBaseUrl: options.runtimeBaseUrl || derivedRuntimeBaseUrl
     };
 }
@@ -301,7 +326,7 @@ export async function preloadBrowserGoRuntime(options = {}) {
         parentSignal?.removeEventListener('abort', relayAbort);
     }
 }
-async function resolveAutoDependencies(manifest, runtimeBaseUrl, request, fetchImpl, reportAssetProgress) {
+async function resolveAutoDependencies(manifest, runtimeBaseUrl, request, fetchImpl, reportAssetProgress, cacheable = false) {
     throwIfAborted(request.signal);
     const boundary = {
         signal: request.signal,
@@ -320,7 +345,8 @@ async function resolveAutoDependencies(manifest, runtimeBaseUrl, request, fetchI
         ? request.files
         : Object.entries(request.files || {}).map(([path, contents]) => ({ path, contents })));
     if (target.stdlibIndex) {
-        const stdlibIndex = (await fetchRuntimeAssetJson(resolveVersionedAssetUrl(runtimeBaseUrl, target.stdlibIndex.asset), 'wasm-go stdlib index', fetchImpl, (loaded, total) => reportAssetProgress?.(target.stdlibIndex.asset, loaded, total), boundary));
+        const stdlibIndexUrl = resolveVersionedAssetUrl(runtimeBaseUrl, target.stdlibIndex.asset);
+        const stdlibIndex = (await loadVersionedRuntimeJson(stdlibIndexUrl, ['stdlib-index', boundary.maxAssetBytes], cacheable, () => fetchRuntimeAssetJson(stdlibIndexUrl, 'wasm-go stdlib index', fetchImpl, (loaded, total) => reportAssetProgress?.(target.stdlibIndex.asset, loaded, total), boundary)));
         if (stdlibIndex.format === 'wasm-go-stdlib-index-v1' &&
             Array.isArray(stdlibIndex.packages)) {
             return resolveStdlibDependencies(stdlibIndex, collectGoFileImports(sourceFiles), request.packageKind);
@@ -345,7 +371,7 @@ async function resolveAutoDependencies(manifest, runtimeBaseUrl, request, fetchI
     }
     return [];
 }
-async function resolveCompileRequest(request, manifest, runtimeBaseUrl, fetchImpl, reportAssetProgress) {
+async function resolveCompileRequest(request, manifest, runtimeBaseUrl, fetchImpl, reportAssetProgress, cacheable = false) {
     const validationError = validateCompileRequest(request);
     if (validationError) {
         return {
@@ -362,7 +388,7 @@ async function resolveCompileRequest(request, manifest, runtimeBaseUrl, fetchImp
             ...normalizedRequest,
             target: normalizeRequestedTarget(request),
             packageImportPath: normalizePackageImportPath(request),
-            dependencies: await resolveAutoDependencies(manifest, runtimeBaseUrl, normalizedRequest, fetchImpl, reportAssetProgress)
+            dependencies: await resolveAutoDependencies(manifest, runtimeBaseUrl, normalizedRequest, fetchImpl, reportAssetProgress, cacheable)
         }
     };
 }
@@ -387,13 +413,15 @@ export async function compileGo(request, options = {}) {
     const reportManifestAssetProgress = (loaded, total) => emitManifestAssetProgress('runtime-manifest.v1.json', loaded, total);
     const reportPlanAssetProgress = createStageAssetProgressReporter('plan', progress, 0.45);
     progress('manifest', 0, 1, 'loading runtime manifest');
+    // Injected fetches (tests, custom hosts) keep their exact per-compile behavior.
+    const cacheableRuntimeJson = !dependencies.fetchImpl;
     const { manifest, runtimeBaseUrl } = await resolveCompilerRuntime({ ...options, signal, assetTimeoutMs, maxAssetBytes, maxWasmMemoryBytes }, {
         ...dependencies,
         fetchImpl
-    }, reportManifestAssetProgress);
+    }, reportManifestAssetProgress, cacheableRuntimeJson);
     progress('manifest', 1, 1, `loaded runtime manifest for ${manifest.defaultTarget}`);
     progress('plan', 0, 1, 'resolving compile inputs');
-    const resolvedRequest = await resolveCompileRequest(boundedRequest, manifest, runtimeBaseUrl, fetchImpl, reportPlanAssetProgress);
+    const resolvedRequest = await resolveCompileRequest(boundedRequest, manifest, runtimeBaseUrl, fetchImpl, reportPlanAssetProgress, cacheableRuntimeJson);
     if ('error' in resolvedRequest) {
         return failure(resolvedRequest.error || 'invalid compile request', logs.records);
     }
@@ -452,6 +480,7 @@ export async function compileGo(request, options = {}) {
         linkStageWeights.set(plan.link.toolAsset, 0.55);
     }
     const linkStageExecutionWeight = 0.45;
+    let linkStageStarted = false;
     const emitLinkStage = (message) => {
         let completed = linkStageExecutionFraction * linkStageExecutionWeight;
         for (const [asset, fraction] of linkStageFractions) {
@@ -464,119 +493,154 @@ export async function compileGo(request, options = {}) {
             return;
         const fraction = total && total > 0 ? Math.min(loaded / total, 1) : loaded > 0 ? 1 : 0;
         linkStageFractions.set(asset, fraction);
-        emitLinkStage(`loading ${asset.split('/').at(-1) || asset}`);
+        if (linkStageStarted)
+            emitLinkStage(`loading ${asset.split('/').at(-1) || asset}`);
     };
+    const linkPreparationController = new AbortController();
+    const abortLinkPreparation = () => linkPreparationController.abort(signal?.reason);
+    let preparedLinkModule;
     const runTool = dependencies.runTool ||
-        ((invocation, context) => executeGoToolInvocation(invocation, plan, runtimeBaseUrl, fetchImpl, context?.reportAssetProgress, context));
-    if (useDetailedRuntimeProgress) {
-        emitCompileStage('preparing compile runtime');
-    }
-    else {
-        progress('compile', 0, 1, 'running compile');
-    }
-    logs.push(`[wasm-go] compile ${plan.compile.args.join(' ')}`);
-    let compileResult;
+        (async (invocation, context) => {
+            const module = invocation.tool === 'link' && preparedLinkModule
+                ? await (context?.signal
+                    ? waitForSignal(preparedLinkModule, context.signal)
+                    : preparedLinkModule)
+                : undefined;
+            return executeGoToolInvocation(invocation, plan, runtimeBaseUrl, fetchImpl, context?.reportAssetProgress, context, module);
+        });
     try {
-        const compileTimeoutMs = Math.min(positiveLimit(request.compileTimeoutMs ?? options.compileTimeoutMs, manifest.compiler.compileTimeoutMs, 'compileTimeoutMs'), manifest.compiler.compileTimeoutMs);
-        compileResult = await runWithDeadline((phaseSignal) => runTool(plan.compile, {
-            reportAssetProgress: updateCompileAssetProgress,
-            signal: phaseSignal,
-            assetTimeoutMs,
-            maxAssetBytes,
-            maxWasmMemoryBytes
-        }), compileTimeoutMs, 'Go compile tool', signal);
-    }
-    catch (error) {
-        throwIfAborted(signal);
-        return failure(error instanceof Error ? error.message : String(error), logs.records, plan);
-    }
-    const compileOutputs = normalizeToolOutputs(compileResult.outputs);
-    if (useDetailedRuntimeProgress) {
-        compileStageExecutionFraction = 1;
-        emitCompileStage('compile finished');
-    }
-    else {
+        if (useDetailedRuntimeProgress) {
+            emitCompileStage('preparing compile runtime');
+        }
+        else {
+            progress('compile', 0, 1, 'running compile');
+        }
+        logs.push(`[wasm-go] compile ${plan.compile.args.join(' ')}`);
+        let compileResult;
+        try {
+            const compileTimeoutMs = Math.min(positiveLimit(request.compileTimeoutMs ?? options.compileTimeoutMs, manifest.compiler.compileTimeoutMs, 'compileTimeoutMs'), manifest.compiler.compileTimeoutMs);
+            compileResult = await runWithDeadline((phaseSignal) => {
+                if (plan.link && !dependencies.runTool) {
+                    signal?.addEventListener('abort', abortLinkPreparation, { once: true });
+                    if (signal?.aborted)
+                        abortLinkPreparation();
+                    // Only prepare immutable linker code. Its instance and inputs still belong
+                    // to the later link phase, after compilation produces the main archive.
+                    preparedLinkModule = prepareGoToolModule(plan.link, runtimeBaseUrl, fetchImpl, updateLinkAssetProgress, {
+                        signal: linkPreparationController.signal,
+                        assetTimeoutMs,
+                        maxAssetBytes,
+                        maxWasmMemoryBytes
+                    });
+                    // Keep compile diagnostics authoritative when both branches fail.
+                    void preparedLinkModule.catch(() => undefined);
+                }
+                return runTool(plan.compile, {
+                    reportAssetProgress: updateCompileAssetProgress,
+                    signal: phaseSignal,
+                    assetTimeoutMs,
+                    maxAssetBytes,
+                    maxWasmMemoryBytes
+                });
+            }, compileTimeoutMs, 'Go compile tool', signal);
+        }
+        catch (error) {
+            throwIfAborted(signal);
+            return failure(error instanceof Error ? error.message : String(error), logs.records, plan);
+        }
+        const compileOutputs = normalizeToolOutputs(compileResult.outputs);
+        if (useDetailedRuntimeProgress) {
+            compileStageExecutionFraction = 1;
+            emitCompileStage('compile finished');
+        }
+        else {
+            progress('compile', 1, 1, 'compile finished');
+        }
+        if (compileResult.exitCode !== 0) {
+            return failure(compileResult.stderr || 'go compile failed', logs.records, plan, compileResult.stdout, parseCompilerDiagnostics(collectCompilerDiagnosticText(compileResult.stderr, compileResult.stdout)));
+        }
         progress('compile', 1, 1, 'compile finished');
-    }
-    if (compileResult.exitCode !== 0) {
-        return failure(compileResult.stderr || 'go compile failed', logs.records, plan, compileResult.stdout, parseCompilerDiagnostics(collectCompilerDiagnosticText(compileResult.stderr, compileResult.stdout)));
-    }
-    progress('compile', 1, 1, 'compile finished');
-    let stdout = compileResult.stdout || '';
-    let stderr = compileResult.stderr || '';
-    if (!plan.link) {
-        const archive = compileOutputs[plan.compile.outputPath];
-        if (!archive) {
+        let stdout = compileResult.stdout || '';
+        let stderr = compileResult.stderr || '';
+        if (!plan.link) {
+            const archive = compileOutputs[plan.compile.outputPath];
+            if (!archive) {
+                return failure(`compile completed without producing ${plan.compile.outputPath}`, logs.records, plan, stdout);
+            }
+            progress('done', 1, 1, 'archive ready');
+            return success({
+                bytes: archive,
+                target: plan.target,
+                format: 'go-archive'
+            }, logs.records, plan, stdout, stderr);
+        }
+        const compileArchive = compileOutputs[plan.compile.outputPath];
+        if (!compileArchive) {
             return failure(`compile completed without producing ${plan.compile.outputPath}`, logs.records, plan, stdout);
         }
-        progress('done', 1, 1, 'archive ready');
+        linkStageStarted = true;
+        if (useDetailedRuntimeProgress) {
+            emitLinkStage('preparing link runtime');
+        }
+        else {
+            progress('link', 0, 1, 'running link');
+        }
+        logs.push(`[wasm-go] link ${plan.link.args.join(' ')}`);
+        const linkInputs = {
+            ...plan.link,
+            inputFiles: [
+                ...plan.link.inputFiles,
+                {
+                    path: plan.compile.outputPath,
+                    contents: compileArchive
+                }
+            ]
+        };
+        let linkResult;
+        try {
+            const linkTimeoutMs = Math.min(positiveLimit(request.linkTimeoutMs ?? options.linkTimeoutMs, manifest.compiler.linkTimeoutMs, 'linkTimeoutMs'), manifest.compiler.linkTimeoutMs);
+            linkResult = await runWithDeadline((phaseSignal) => runTool(linkInputs, {
+                reportAssetProgress: updateLinkAssetProgress,
+                signal: phaseSignal,
+                assetTimeoutMs,
+                maxAssetBytes,
+                maxWasmMemoryBytes
+            }), linkTimeoutMs, 'Go link tool', signal);
+        }
+        catch (error) {
+            throwIfAborted(signal);
+            return failure(error instanceof Error ? error.message : String(error), logs.records, plan, stdout, parseCompilerDiagnostics(collectCompilerDiagnosticText(stderr, stdout)));
+        }
+        const linkOutputs = normalizeToolOutputs(linkResult.outputs);
+        if (useDetailedRuntimeProgress) {
+            linkStageExecutionFraction = 1;
+            emitLinkStage('link finished');
+        }
+        else {
+            progress('link', 1, 1, 'link finished');
+        }
+        stdout += linkResult.stdout || '';
+        stderr += linkResult.stderr || '';
+        if (linkResult.exitCode !== 0) {
+            return failure(linkResult.stderr || 'go link failed', logs.records, plan, stdout, parseCompilerDiagnostics(collectCompilerDiagnosticText(linkResult.stderr, linkResult.stdout)));
+        }
+        progress('link', 1, 1, 'link finished');
+        const linkedArtifact = linkOutputs[plan.link.outputPath];
+        if (!linkedArtifact) {
+            return failure(`link completed without producing ${plan.link.outputPath}`, logs.records, plan, stdout);
+        }
+        progress('done', 1, 1, 'artifact ready');
         return success({
-            bytes: archive,
+            bytes: linkedArtifact,
+            wasm: linkedArtifact,
             target: plan.target,
-            format: 'go-archive'
+            format: plan.artifactFormat
         }, logs.records, plan, stdout, stderr);
     }
-    const compileArchive = compileOutputs[plan.compile.outputPath];
-    if (!compileArchive) {
-        return failure(`compile completed without producing ${plan.compile.outputPath}`, logs.records, plan, stdout);
+    finally {
+        linkPreparationController.abort();
+        signal?.removeEventListener('abort', abortLinkPreparation);
     }
-    if (useDetailedRuntimeProgress) {
-        emitLinkStage('preparing link runtime');
-    }
-    else {
-        progress('link', 0, 1, 'running link');
-    }
-    logs.push(`[wasm-go] link ${plan.link.args.join(' ')}`);
-    const linkInputs = {
-        ...plan.link,
-        inputFiles: [
-            ...plan.link.inputFiles,
-            {
-                path: plan.compile.outputPath,
-                contents: compileArchive
-            }
-        ]
-    };
-    let linkResult;
-    try {
-        const linkTimeoutMs = Math.min(positiveLimit(request.linkTimeoutMs ?? options.linkTimeoutMs, manifest.compiler.linkTimeoutMs, 'linkTimeoutMs'), manifest.compiler.linkTimeoutMs);
-        linkResult = await runWithDeadline((phaseSignal) => runTool(linkInputs, {
-            reportAssetProgress: updateLinkAssetProgress,
-            signal: phaseSignal,
-            assetTimeoutMs,
-            maxAssetBytes,
-            maxWasmMemoryBytes
-        }), linkTimeoutMs, 'Go link tool', signal);
-    }
-    catch (error) {
-        throwIfAborted(signal);
-        return failure(error instanceof Error ? error.message : String(error), logs.records, plan, stdout, parseCompilerDiagnostics(collectCompilerDiagnosticText(stderr, stdout)));
-    }
-    const linkOutputs = normalizeToolOutputs(linkResult.outputs);
-    if (useDetailedRuntimeProgress) {
-        linkStageExecutionFraction = 1;
-        emitLinkStage('link finished');
-    }
-    else {
-        progress('link', 1, 1, 'link finished');
-    }
-    stdout += linkResult.stdout || '';
-    stderr += linkResult.stderr || '';
-    if (linkResult.exitCode !== 0) {
-        return failure(linkResult.stderr || 'go link failed', logs.records, plan, stdout, parseCompilerDiagnostics(collectCompilerDiagnosticText(linkResult.stderr, linkResult.stdout)));
-    }
-    progress('link', 1, 1, 'link finished');
-    const linkedArtifact = linkOutputs[plan.link.outputPath];
-    if (!linkedArtifact) {
-        return failure(`link completed without producing ${plan.link.outputPath}`, logs.records, plan, stdout);
-    }
-    progress('done', 1, 1, 'artifact ready');
-    return success({
-        bytes: linkedArtifact,
-        wasm: linkedArtifact,
-        target: plan.target,
-        format: plan.artifactFormat
-    }, logs.records, plan, stdout, stderr);
 }
 export async function createGoCompiler(options = {}) {
     return {

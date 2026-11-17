@@ -84,6 +84,7 @@ export class MemoryFileSystem {
   private revision = 0;
   private mutationSource: unknown;
   private mutationObservers = new Set<{ generation: number; sources: Set<unknown>; overflow: boolean }>();
+  private generationListeners = new Set<(generation: number) => void>();
   private versionSequence = 0n;
   private versions = new WeakMap<FileVersion, Inode>();
   private lease: symbol | undefined;
@@ -133,8 +134,24 @@ export class MemoryFileSystem {
     };
   }
 
+  /**
+   * Report each generation advance synchronously, before the mutating call returns.
+   * Listeners must be cheap and must not mutate this filesystem.
+   */
+  onGenerationChange(listener: (generation: number) => void): () => void {
+    if (typeof listener !== 'function') throw new FsError('EINVAL', 'Generation listener must be a function');
+    if (this.generationListeners.size >= 256) throw new FsError('ENOSPC', 'Filesystem generation listener limit reached');
+    // A wrapper keeps registering the same function twice from sharing one slot.
+    const entry = (generation: number) => listener(generation);
+    this.generationListeners.add(entry);
+    return () => { this.generationListeners.delete(entry); };
+  }
+
   private advanceGeneration(): void {
     this.revision++;
+    for (const listener of this.generationListeners) {
+      try { listener(this.revision); } catch { /* A listener never vetoes a completed mutation. */ }
+    }
     for (const observer of this.mutationObservers) {
       observer.generation = this.revision;
       if (observer.sources.size < 64 || observer.sources.has(this.mutationSource)) observer.sources.add(this.mutationSource);
