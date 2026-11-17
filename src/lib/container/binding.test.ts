@@ -334,6 +334,122 @@ describe('existing playground container binding', () => {
 		expect(await second).toEqual([]);
 		expect(call.mock.calls[1]).toEqual(['readWorkspaceDelta', ['C', 1]]);
 	});
+	it('does not let a later publish overtake an in-flight workspace read', async () => {
+		const { binding, call } = fixture();
+		const original = [{ path: 'main.c', content: 'base' }];
+		await binding.syncWorkspace('C', original);
+		let complete!: (value: unknown) => void;
+		call.mockImplementationOnce(() => new Promise((resolve) => (complete = resolve)));
+		const reading = binding.readWorkspace('C');
+		await vi.waitFor(() => expect(call).toHaveBeenCalledTimes(2));
+		const publishing = binding.syncWorkspace('C', [{ path: 'main.c', content: 'edit' }]);
+		// Drain the promise continuations without resolving the remote read.
+		for (let index = 0; index < 8; index++) await Promise.resolve();
+		const methodsBeforeReadCompleted = call.mock.calls.map(([method]) => method);
+		complete({ revision: 1, reset: true, files: original, deleted: [] });
+		await Promise.all([reading, publishing]);
+		expect(methodsBeforeReadCompleted).toEqual(['syncWorkspace', 'readWorkspaceDelta']);
+		expect(call.mock.calls.at(-1)?.[0]).toBe('syncWorkspaceDelta');
+	});
+	it('pairs reconciliation with the baseline after earlier queued publishes', async () => {
+		const { binding, call } = fixture();
+		const original = [{ path: 'main.c', content: 'base' }];
+		const edited = [{ path: 'main.c', content: 'first edit' }];
+		await binding.syncWorkspace('C', original);
+		let complete!: () => void;
+		call.mockImplementationOnce(() => new Promise<void>((resolve) => (complete = resolve)));
+		const publishing = binding.syncWorkspace('C', edited);
+		await vi.waitFor(() => expect(call).toHaveBeenCalledTimes(2));
+		call.mockResolvedValueOnce({ revision: 1, reset: true, files: edited, deleted: [] });
+		const reconcile = vi.fn(() => true);
+		const refreshing = binding.reconcileWorkspace('C', reconcile);
+		complete();
+		await publishing;
+		expect(await refreshing).toBe(true);
+		expect(reconcile).toHaveBeenCalledExactlyOnceWith(edited, edited);
+	});
+	it('retries before accepting terminal additions when a later editor snapshot is queued', async () => {
+		const { binding, call } = fixture();
+		const original = [{ path: 'main.c', content: 'base' }];
+		const edited = [{ path: 'main.c', content: 'edit' }];
+		const terminalFile = { path: 'terminal.txt', content: 'must survive' };
+		await binding.syncWorkspace('C', original);
+		let complete!: (value: unknown) => void;
+		call.mockImplementationOnce(() => new Promise((resolve) => (complete = resolve)));
+		const reconcile = vi.fn(() => true);
+		const refreshing = binding.reconcileWorkspace('C', reconcile);
+		await vi.waitFor(() => expect(call).toHaveBeenCalledTimes(2));
+		// This snapshot predates the terminal addition. Accepting that addition first
+		// would make the queued snapshot look like an intentional deletion.
+		const publishing = binding.syncWorkspace('C', edited);
+		complete({ revision: 1, reset: true, files: [...original, terminalFile], deleted: [] });
+		expect(await refreshing).toBe(false);
+		await publishing;
+		expect(reconcile).not.toHaveBeenCalled();
+		expect(call.mock.calls[2]).toEqual([
+			'syncWorkspaceDelta',
+			['C', edited, original, [{ path: 'main.c', bytes: 4 }]]
+		]);
+		// The next read retains its acknowledged cursor and accepts the terminal file.
+		call.mockResolvedValueOnce({ revision: 2, reset: false, files: edited, deleted: [] });
+		expect(await binding.reconcileWorkspace('C', reconcile)).toBe(true);
+		expect(reconcile).toHaveBeenCalledExactlyOnceWith(edited, [...edited, terminalFile]);
+		expect(binding.publishedWorkspace('C')).toEqual([...edited, terminalFile]);
+		await binding.syncWorkspace('C', [{ path: 'main.c', content: 'new edit' }, terminalFile]);
+		expect(call.mock.calls[4]?.[1]).toEqual([
+			'C',
+			[{ path: 'main.c', content: 'new edit' }],
+			edited,
+			[
+				{ path: 'main.c', bytes: 8 },
+				{ path: 'terminal.txt', bytes: 12 }
+			]
+		]);
+	});
+	it('keeps a declined reconciliation baseline and recovers after read or callback errors', async () => {
+		const { binding, call } = fixture();
+		const original = [{ path: 'main.c', content: 'base' }];
+		const remote = [{ path: 'main.c', content: 'terminal' }];
+		await binding.syncWorkspace('C', original);
+		call.mockRejectedValueOnce(new Error('read failed'));
+		await expect(binding.reconcileWorkspace('C', () => true)).rejects.toThrow('read failed');
+		call.mockResolvedValueOnce({ revision: 1, reset: true, files: remote, deleted: [] });
+		await expect(
+			binding.reconcileWorkspace('C', () => {
+				throw new Error('reconciliation failed');
+			})
+		).rejects.toThrow('reconciliation failed');
+		expect(binding.publishedWorkspace('C')).toEqual(original);
+		call.mockResolvedValueOnce({ revision: 2, reset: false, files: [], deleted: [] });
+		expect(await binding.reconcileWorkspace('C', () => false)).toBe(true);
+		expect(binding.publishedWorkspace('C')).toEqual(original);
+		const edited = [{ path: 'main.c', content: 'edit' }];
+		await binding.syncWorkspace('C', edited);
+		expect(binding.publishedWorkspace('C')).toEqual(edited);
+	});
+	it('retains a real terminal edit when a queued conflicting publish fails', async () => {
+		const { binding, call } = fixture();
+		const original = [{ path: 'main.c', content: 'base' }];
+		const remote = [{ path: 'main.c', content: 'terminal' }];
+		await binding.syncWorkspace('C', original);
+		let complete!: (value: unknown) => void;
+		call.mockImplementationOnce(() => new Promise((resolve) => (complete = resolve)));
+		const reconcile = vi.fn(() => false);
+		const refreshing = binding.reconcileWorkspace('C', reconcile);
+		await vi.waitFor(() => expect(call).toHaveBeenCalledTimes(2));
+		call.mockRejectedValueOnce(new Error('Workspace changed while editing main.c'));
+		const failure = expect(
+			binding.syncWorkspace('C', [{ path: 'main.c', content: 'editor' }])
+		).rejects.toThrow('Workspace changed while editing main.c');
+		complete({ revision: 1, reset: true, files: remote, deleted: [] });
+		expect(await refreshing).toBe(false);
+		await failure;
+		expect(reconcile).not.toHaveBeenCalled();
+		call.mockResolvedValueOnce({ revision: 2, reset: false, files: [], deleted: [] });
+		expect(await binding.reconcileWorkspace('C', reconcile)).toBe(true);
+		expect(reconcile).toHaveBeenCalledExactlyOnceWith(original, remote);
+		expect(binding.publishedWorkspace('C')).toEqual(original);
+	});
 	it('routes program bytes/debug events separately from shell and watcher events', async () => {
 		const { binding, event } = fixture();
 		const sandbox = await binding.load('C');

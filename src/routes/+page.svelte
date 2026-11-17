@@ -1416,54 +1416,64 @@
 				containerEditorRefreshDeferred = true;
 				return;
 			}
-			const before = editorFiles(binding.publishedWorkspace(selectedLanguage));
-			const remote = await binding.readWorkspace(selectedLanguage);
-			if (playground !== binding) return;
-			if (runningMode || language !== selectedLanguage) {
-				containerEditorRefreshDeferred = true;
-				return;
+			const reconciled = await binding.reconcileWorkspace(
+				selectedLanguage,
+				(baseline, remote) => {
+					if (playground !== binding) return false;
+					if (runningMode || language !== selectedLanguage) {
+						containerEditorRefreshDeferred = true;
+						return false;
+					}
+					containerEditorRefreshDeferred = false;
+					const before = editorFiles(baseline);
+					const remoteFiles = editorFiles(remote);
+					const result = mergeContainerWorkspace(files, before, remoteFiles);
+					if (
+						result.conflicts.length &&
+						(!force ||
+							!confirm(
+								`Replace editor buffers changed in both the editor and terminal? ${result.conflicts.join(', ')}`
+							))
+					) {
+						containerWorkspaceConflict = selectedLanguage;
+						saveStatus = `Editor buffer preserved: terminal also changed ${result.conflicts.join(', ')}. Refresh files to resolve.`;
+						return false;
+					}
+					containerWorkspaceConflict = '';
+					const nextFiles = result.conflicts.length
+						? mergeContainerWorkspace(files, before, remoteFiles, {
+								acceptRemoteConflicts: true
+							}).files
+						: result.files;
+					if (
+						files.length === nextFiles.length &&
+						files.every((file, index) => {
+							const next = nextFiles[index];
+							return (
+								file.path === next.path &&
+								file.content === next.content &&
+								(file.encoding ?? 'utf-8') === (next.encoding ?? 'utf-8')
+							);
+						})
+					)
+						return true;
+					const activeBefore = activeFile?.content;
+					files = nextFiles;
+					openTabs = openTabs.filter((path) => files.some((file) => file.path === path));
+					if (!files.some((file) => file.path === activePath))
+						activePath = files[0]?.path ?? '';
+					if (activePath && !openTabs.includes(activePath))
+						openTabs = [...openTabs, activePath];
+					if (debug.active && activeBefore !== activeFile?.content)
+						debug.markSourceRevisionStale(`/workspace/${activePath}`);
+					saveStatus = 'Workspace updated from terminal';
+					return true;
+				}
+			);
+			if (!reconciled && playground === binding) {
+				containerRefreshPending = true;
+				containerRefreshForcePending ||= force;
 			}
-			containerEditorRefreshDeferred = false;
-			const remoteFiles = editorFiles(remote);
-			const result = mergeContainerWorkspace(files, before, remoteFiles);
-			if (
-				result.conflicts.length &&
-				(!force ||
-					!confirm(
-						`Replace editor buffers changed in both the editor and terminal? ${result.conflicts.join(', ')}`
-					))
-			) {
-				containerWorkspaceConflict = selectedLanguage;
-				saveStatus = `Editor buffer preserved: terminal also changed ${result.conflicts.join(', ')}. Refresh files to resolve.`;
-				return;
-			}
-			containerWorkspaceConflict = '';
-			const nextFiles = result.conflicts.length
-				? mergeContainerWorkspace(files, before, remoteFiles, {
-						acceptRemoteConflicts: true
-					}).files
-				: result.files;
-			binding.acceptWorkspace(selectedLanguage, remote);
-			if (
-				files.length === nextFiles.length &&
-				files.every((file, index) => {
-					const next = nextFiles[index];
-					return (
-						file.path === next.path &&
-						file.content === next.content &&
-						(file.encoding ?? 'utf-8') === (next.encoding ?? 'utf-8')
-					);
-				})
-			)
-				return;
-			const activeBefore = activeFile?.content;
-			files = nextFiles;
-			openTabs = openTabs.filter((path) => files.some((file) => file.path === path));
-			if (!files.some((file) => file.path === activePath)) activePath = files[0]?.path ?? '';
-			if (activePath && !openTabs.includes(activePath)) openTabs = [...openTabs, activePath];
-			if (debug.active && activeBefore !== activeFile?.content)
-				debug.markSourceRevisionStale(`/workspace/${activePath}`);
-			saveStatus = 'Workspace updated from terminal';
 		})();
 		try {
 			await containerRefresh;
@@ -1495,39 +1505,67 @@
 		try {
 			// Read before switching: the language-change publisher must not overwrite a
 			// terminal-created file with the target project's older editor snapshot.
-			const remote = await binding.readWorkspace(target.language);
-			if (playground !== binding || language !== previousLanguage || runningMode) return;
-			const remoteFiles = editorFiles(remote);
-			if (!remoteFiles.some((file) => file.path === target.path)) {
-				saveStatus = `/workspace/${entry.path} is no longer available`;
-				await refreshContainerWorkspace();
-				return;
-			}
-			const previousWorkspace =
-				target.language === language
-					? currentWorkspace()
-					: (languageWorkspaces[target.language] ??
-						createDefaultWorkspace(target.language));
-			const baseline = editorFiles(binding.publishedWorkspace(target.language));
-			const merged = mergeContainerWorkspace(previousWorkspace.files, baseline, remoteFiles);
-			if (
-				merged.conflicts.length &&
-				!confirm(
-					`Replace editor buffers changed in both the editor and terminal? ${merged.conflicts.join(', ')}`
-				)
-			)
-				return;
-			const nextFiles = merged.conflicts.length
-				? mergeContainerWorkspace(previousWorkspace.files, baseline, remoteFiles, {
-						acceptRemoteConflicts: true
-					}).files
-				: merged.files;
-			binding.acceptWorkspace(target.language, remote);
-			if (language !== target.language) switchLanguage(target.language);
-			activateWorkspace({ ...previousWorkspace, files: nextFiles, activePath: target.path });
-			selectFile(target.path);
-			containerWorkspaceConflict = '';
-			saveStatus = `Opened /workspace/${entry.path}`;
+			let missingFile = false;
+			let reconciled;
+			do {
+				reconciled = await binding.reconcileWorkspace(
+					target.language,
+					(published, remote) => {
+						if (playground !== binding || language !== previousLanguage || runningMode)
+							return false;
+						const remoteFiles = editorFiles(remote);
+						if (!remoteFiles.some((file) => file.path === target.path)) {
+							saveStatus = `/workspace/${entry.path} is no longer available`;
+							missingFile = true;
+							return false;
+						}
+						const previousWorkspace =
+							target.language === language
+								? currentWorkspace()
+								: (languageWorkspaces[target.language] ??
+									createDefaultWorkspace(target.language));
+						const baseline = editorFiles(published);
+						const merged = mergeContainerWorkspace(
+							previousWorkspace.files,
+							baseline,
+							remoteFiles
+						);
+						if (
+							merged.conflicts.length &&
+							!confirm(
+								`Replace editor buffers changed in both the editor and terminal? ${merged.conflicts.join(', ')}`
+							)
+						)
+							return false;
+						const nextFiles = merged.conflicts.length
+							? mergeContainerWorkspace(
+									previousWorkspace.files,
+									baseline,
+									remoteFiles,
+									{
+										acceptRemoteConflicts: true
+									}
+								).files
+							: merged.files;
+						if (language !== target.language) switchLanguage(target.language);
+						activateWorkspace({
+							...previousWorkspace,
+							files: nextFiles,
+							activePath: target.path
+						});
+						selectFile(target.path);
+						containerWorkspaceConflict = '';
+						saveStatus = `Opened /workspace/${entry.path}`;
+						return true;
+					}
+				);
+			} while (
+				!reconciled &&
+				playground === binding &&
+				language === previousLanguage &&
+				!runningMode
+			);
+			if (missingFile) await refreshContainerWorkspace();
 		} catch (error) {
 			saveStatus = `Could not open shared file: ${error instanceof Error ? error.message : String(error)}`;
 		} finally {
