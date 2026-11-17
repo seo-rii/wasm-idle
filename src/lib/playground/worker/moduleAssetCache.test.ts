@@ -3,14 +3,15 @@ import { describe, expect, it, vi } from 'vitest';
 
 const verified = vi.hoisted(() => ({ create: vi.fn(() => vi.fn()) }));
 vi.mock('./lockVerifiedFetch', () => ({ createLockVerifiedFetch: verified.create }));
-import { createGoAssetFetch } from './goAssetCache';
+import { createModuleAssetFetch } from './moduleAssetCache';
 
-describe('Go worker asset cache', () => {
-	it('verifies files under the wasm-go module directory against the release lock', () => {
+describe('runtime module asset cache', () => {
+	it('verifies files under the module directory against its release lock prefix', () => {
 		const network = vi.fn() as unknown as typeof fetch;
 		const cache = { enabled: true };
-		const fetch = createGoAssetFetch(
+		const fetch = createModuleAssetFetch(
 			'https://app.test/wasm-idle/wasm-go/index.js?v=e63d378d588d2b64',
+			'wasm-go',
 			cache,
 			network
 		);
@@ -28,7 +29,9 @@ describe('Go worker asset cache', () => {
 		verified.create.mockClear();
 		const network = vi.fn() as unknown as typeof fetch;
 		for (const url of ['data:text/javascript;base64,AA==', 'file:///opt/wasm-go/index.js', ''])
-			expect(createGoAssetFetch(url, { enabled: true }, network)).toBe(network);
+			expect(createModuleAssetFetch(url, 'wasm-go', { enabled: true }, network)).toBe(
+				network
+			);
 		expect(verified.create).not.toHaveBeenCalled();
 	});
 });

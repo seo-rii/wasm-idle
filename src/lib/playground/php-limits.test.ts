@@ -146,6 +146,7 @@ describe('PHP execution message limits', () => {
 		expect(replacementWorker.postMessage).toHaveBeenCalledWith({
 			load: true,
 			moduleUrl: 'http://localhost:3000/replacement/php.mjs',
+			persistentCache: expect.objectContaining({ enabled: true }),
 			log: true
 		});
 

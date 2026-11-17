@@ -14,18 +14,28 @@ function harness(prepare?: (request?: { language?: string }) => Promise<void>) {
 	const execute = vi.fn();
 	const messages: any[] = [];
 	const create = vi.fn(() => ({ prepare, compile }));
+	const assetFetch = vi.fn((..._args: unknown[]) => vi.fn());
 	const context: any = {
 		exports: {},
 		postMessage: (message: unknown) => messages.push(message),
 		console,
-		require: () => ({ createDotnetCompiler: create, executeBrowserDotnetArtifact: execute })
+		fetch: vi.fn(),
+		require: (id: string) =>
+			id === './moduleAssetCache'
+				? { createModuleAssetFetch: assetFetch }
+				: { createDotnetCompiler: create, executeBrowserDotnetArtifact: execute }
 	};
 	vm.runInNewContext(code, context);
-	const load = (language = 'csharp') =>
+	const load = (language = 'csharp', persistentCache?: unknown) =>
 		context.onmessage({
-			data: { load: true, moduleUrl: 'https://test.invalid/index.js', language }
+			data: {
+				load: true,
+				moduleUrl: 'https://test.invalid/index.js',
+				language,
+				persistentCache
+			}
 		});
-	return { load, messages, compile, execute, create };
+	return { load, messages, compile, execute, create, assetFetch, context };
 }
 describe('.NET worker load readiness', () => {
 	it.each(['csharp', 'fsharp', 'vbnet'])(
@@ -67,5 +77,25 @@ describe('.NET worker load readiness', () => {
 		await h.load();
 		expect(h.messages.at(-1)).toEqual({ load: true });
 		expect(prepare).toHaveBeenCalledTimes(2);
+	});
+
+	it('serves pinned wasm-dotnet files through the persistent cache before importing the runtime', async () => {
+		const h = harness(async () => {});
+		const nativeFetch = h.context.fetch;
+		const policy = { enabled: true, maxEntryBytes: 1024 };
+		await h.load('csharp', policy);
+		expect(h.assetFetch).toHaveBeenCalledWith(
+			'https://test.invalid/index.js',
+			'wasm-dotnet',
+			policy,
+			expect.any(Function)
+		);
+		expect(h.create).toHaveBeenCalled();
+		await h.load('csharp', policy);
+		// A later load wraps the fetch the Worker started with, never its own wrapper.
+		expect(h.context.fetch).toBe(h.assetFetch.mock.results[1]!.value);
+		expect(h.assetFetch.mock.calls[1]![3]).toBe(h.assetFetch.mock.calls[0]![3]);
+		expect(h.assetFetch.mock.calls[1]![3]).not.toBe(h.assetFetch.mock.results[0]!.value);
+		expect(typeof nativeFetch).toBe('function');
 	});
 });
