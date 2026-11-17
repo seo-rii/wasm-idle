@@ -1,0 +1,1 @@
+import{r as e}from"./B0Z9INg1.js";import{t}from"./BaNbYf_w.js";import{t as n}from"./BWHR97Q8.js";var r=e({});n({id:`dart`,extensions:[`.dart`],aliases:[`Dart`,`dart`],mimetypes:[`text/x-dart-source`,`text/x-dart`],loader:()=>t(()=>import(`./onAF5SnQ.js`),[],import.meta.url)});export{r as t};

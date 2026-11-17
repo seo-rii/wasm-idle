@@ -1,0 +1,10 @@
+{
+  "workerProtocolMajor": 1,
+  "workerProtocolMinor": 0,
+  "modes": [
+    "console"
+  ],
+  "dartVersion": "3.14.0",
+  "dartRevision": "fa8c1270c374c1346931583a17c3b7f278d3822d",
+  "properties": {}
+}

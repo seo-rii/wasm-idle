@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "language": "BC",
+  "implementation": {
+    "name": "bc",
+    "version": "7.0.3",
+    "url": "https://github.com/gavinhoward/bc/releases/download/7.0.3/bc-7.0.3.tar.xz",
+    "bytes": 474800,
+    "sha256": "91eb74caed0ee6655b669711a4f350c25579778694df248e28363318e03c7fc4",
+    "license": "BSD-2-Clause"
+  },
+  "producer": {
+    "name": "wasi-sdk",
+    "version": "33.0",
+    "compiler": "clang version 22.1.0-wasi-sdk (https://github.com/llvm/llvm-project 4434dabb69916856b824f68a64b029c67175e532)",
+    "target": "wasm32-wasi",
+    "configure": [
+      "--bc-only",
+      "--disable-history",
+      "--disable-nls",
+      "--disable-man-pages",
+      "--disable-generated-tests",
+      "--disable-strip"
+    ],
+    "cflags": [
+      "-Os",
+      "-mllvm",
+      "-wasm-enable-sjlj",
+      "-mexception-handling",
+      "-D_WASI_EMULATED_SIGNAL"
+    ],
+    "ldflags": [
+      "-mexception-handling",
+      "-lsetjmp",
+      "-lwasi-emulated-signal",
+      "-Wl,--strip-all"
+    ],
+    "sourcePaths": "/bc-source",
+    "inputs": {
+      "build.py": {
+        "bytes": 5826,
+        "sha256": "c67a4d7588931cfe4541b9427794e053cfa589ffbbda1c89f007b997c8a546cb"
+      },
+      "patches/wasi-signals.patch": {
+        "bytes": 684,
+        "sha256": "33edced2ed9f52874a4905b9e1038eca30115e14bc1a7bd7295b0582a9db1760"
+      },
+      "LICENSE.txt": {
+        "bytes": 5738,
+        "sha256": "375aa5547dd474d9068587d5feadcccd18467bf371e8f504c8c1d399073a1162"
+      },
+      "vendor/bc-7.0.3.tar.xz": {
+        "bytes": 474800,
+        "sha256": "91eb74caed0ee6655b669711a4f350c25579778694df248e28363318e03c7fc4"
+      },
+      "licenses/llvm-compiler-rt.txt": {
+        "bytes": 16708,
+        "sha256": "1a8f1058753f1ba890de984e48f0242a3a5c29a6a8f2ed9fd813f36985387e8d"
+      },
+      "licenses/wasi-libc-LICENSE-APACHE-LLVM.txt": {
+        "bytes": 12243,
+        "sha256": "268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5"
+      },
+      "licenses/wasi-libc-LICENSE-APACHE.txt": {
+        "bytes": 10847,
+        "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+      },
+      "licenses/wasi-libc-LICENSE-MIT.txt": {
+        "bytes": 1023,
+        "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+      },
+      "licenses/wasi-libc-dlmalloc-src-malloc.c.txt": {
+        "bytes": 28001,
+        "sha256": "4872c477338a576d7944d308b1d491afeb78408b9eca788468d5a1adae735553"
+      },
+      "licenses/wasi-libc-libc-bottom-half-cloudlibc-LICENSE.txt": {
+        "bytes": 1292,
+        "sha256": "c8b789cf5a746611e6300a0cc7750dbf92b61912a709d04e639245f7290656d0"
+      },
+      "licenses/wasi-libc-libc-top-half-musl-COPYRIGHT.txt": {
+        "bytes": 6204,
+        "sha256": "f9bc4423732350eb0b3f7ed7e91d530298476f8fec0c6c427a1c04ade22655af"
+      },
+      "licenses/wasi-libc.txt": {
+        "bytes": 910,
+        "sha256": "2711a8b5a5cdfef0e639f96c1aca12ae23d7d64a02d0507f1bdf14d2b27bbc3a"
+      }
+    }
+  },
+  "artifacts": {
+    "bc.wasm": {
+      "bytes": 131701,
+      "sha256": "4350a6591c5e1ae94646db4704d20e4197fb8ed355c955e326d688a7705bc7b3"
+    },
+    "LICENSE.txt": {
+      "bytes": 5738,
+      "sha256": "375aa5547dd474d9068587d5feadcccd18467bf371e8f504c8c1d399073a1162"
+    },
+    "THIRD_PARTY_NOTICES.txt": {
+      "bytes": 77595,
+      "sha256": "c20b93064e3e18aa7178329abda2bbb98fb371f94682b886b7d9f207cf0a04af"
+    }
+  },
+  "execution": {
+    "argv": [
+      "bc",
+      "-q",
+      "-R",
+      "-f",
+      "<activePath>",
+      "...programArgs"
+    ],
+    "stdin": "original read() and original EOF errors",
+    "exceptionHandling": "Wasm EH for native setjmp/longjmp"
+  }
+}

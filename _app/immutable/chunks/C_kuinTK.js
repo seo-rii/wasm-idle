@@ -1,0 +1,1 @@
+var e={id:`WREN`,folder:`wasm-wren`,fileName:`wren.wasm`,sourcePath:`main.wren`,command:`wren`,args:[],sha256:`4e4f8a1df214ecc6191adec575f23ca7bddc937800839b7dc5c13fcd5cd38607`,bytes:143309};export{e as WREN_INTERPRETER};

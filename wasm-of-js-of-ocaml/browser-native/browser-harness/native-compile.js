@@ -26,10 +26,8 @@ function inferCompileStage(request, diagnostics) {
 function isBinaryArtifact(artifact) {
     return artifact.data instanceof Uint8Array;
 }
-function normalizeAssetLoader(programSource, runtimePromiseKey) {
-    let normalizedSource = programSource.includes('($=>async a=>{')
-        ? programSource.replace('($=>async a=>{', `globalThis.${runtimePromiseKey}=($=>async a=>{`)
-        : programSource;
+function normalizeAssetLoader(programSource) {
+    const normalizedSource = programSource;
     const assetLoaderPattern = /function ([A-Za-z$_][\w$]*)\(([A-Za-z$_][\w$]*)\)\{const ([A-Za-z$_][\w$]*)=([A-Za-z$_][\w$]*)\?new URL\(\2,\4\):\2;return fetch\(\3\)\}/;
     const matchedLoader = normalizedSource.match(assetLoaderPattern);
     if (!matchedLoader) {
@@ -49,7 +47,6 @@ async function runGeneratedProgram(programSource, options) {
     const originalInstantiateStreaming = WebAssembly.instantiateStreaming
         ? WebAssembly.instantiateStreaming.bind(WebAssembly)
         : undefined;
-    const runtimePromiseKey = '__wasm_of_js_of_ocaml_runtime_promise';
     const assetResolverKey = '__wasm_of_js_of_ocaml_resolve_asset';
     const assetFiles = options.assetFiles || [];
     const sourceDir = options.sourcePath.replace(/\/[^/]+$/, '');
@@ -135,9 +132,10 @@ async function runGeneratedProgram(programSource, options) {
         });
     }
     try {
-        const normalizedSource = normalizeAssetLoader(programSource, runtimePromiseKey);
-        new Function(`${normalizedSource}\n//# sourceURL=${options.sourcePath}`)();
-        const runtimePromise = globalThis[runtimePromiseKey];
+        const normalizedSource = normalizeAssetLoader(programSource);
+        // The generated script's completion value is its async Wasm initializer.
+        // Evaluate in a fresh function scope without depending on minified names.
+        const runtimePromise = new Function('return eval(arguments[0])')(`${normalizedSource}\n//# sourceURL=${options.sourcePath}`);
         if (runtimePromise instanceof Promise) {
             await runtimePromise;
             runtimeOutput.push('runtime promise resolved');
@@ -161,7 +159,6 @@ async function runGeneratedProgram(programSource, options) {
         if (originalInstantiateStreaming) {
             WebAssembly.instantiateStreaming = originalInstantiateStreaming;
         }
-        delete globalThis[runtimePromiseKey];
         delete globalThis[assetResolverKey];
         for (const objectUrl of createdObjectUrls) {
             URL.revokeObjectURL(objectUrl);

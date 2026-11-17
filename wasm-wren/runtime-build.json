@@ -1,0 +1,36 @@
+{
+	"schemaVersion": 1,
+	"upstream": {
+		"repository": "https://github.com/wren-lang/wren",
+		"revision": "4a18fc489f9ea3d253b20dd40f4cdad0d6bb40eb",
+		"version": "0.4.0"
+	},
+	"toolchain": {
+		"name": "wasi-sdk",
+		"version": "33.0",
+		"compiler": "clang version 22.1.0-wasi-sdk (https://github.com/llvm/llvm-project 4434dabb69916856b824f68a64b029c67175e532)"
+	},
+	"flags": [
+		"--target=wasm32-wasip1",
+		"-std=c99",
+		"-Oz",
+		"-DWREN_COMPUTED_GOTO=0",
+		"-fno-strict-aliasing",
+		"-D_WASI_EMULATED_PROCESS_CLOCKS",
+		"-Wl,-z,stack-size=1048576",
+		"-Wl,--max-memory=268435456",
+		"-Wl,--strip-all",
+		"-lwasi-emulated-process-clocks",
+		"-lm"
+	],
+	"host": {
+		"path": "runtimes/wasm-wren/runner.c",
+		"sha256": "6fe93ff744879a72cc302d3f03a9b254fc7e7acf8d65def8f5ef9a4e76536f12"
+	},
+	"assets": {
+		"wren.wasm": {
+			"sha256": "4e4f8a1df214ecc6191adec575f23ca7bddc937800839b7dc5c13fcd5cd38607",
+			"bytes": 143309
+		}
+	}
+}

@@ -2,23 +2,18 @@
 
 This notice accompanies the browser TeaVM compiler and class-library assets generated from
 `konsoletyper/teavm-javac` revision
-`7e4a44cf521694a4e326e33850dd8aec165eb5c9` with TeaVM 0.13.1.
+`76b5b53850f74e510ec8588a56a211cf60e9d496` with TeaVM 0.17.0-dev-3
+(source revision `6df39ceae1897750419abfa2ff8905be8a6145f7`).
 
 Corresponding source references and byte receipts are recorded in
-`scripts/wasm-teavm-assets.lock.json`. The wasm-idle compatibility overlays are shipped as
-`scripts/teavm/TByteBuffer.java`, `TCharBuffer.java`, `TShortBuffer.java`, `TIntBuffer.java`,
-`TLongBuffer.java`, `TFloatBuffer.java`, `TDoubleBuffer.java`, `JsConsolePrintStream.java`, and
-`TFormatter.java`, which are modified TeaVM sources, and `TIllegalFormatWidthException.java`, which
-is a wasm-idle addition. The teavm-javac compiler is built with the source patches
-`scripts/teavm/patches/teavm-javac-pluggable-dependencies.patch`,
-`scripts/teavm/patches/teavm-javac-stdlib-rename.patch` (upstream teavm-javac commit `199bed0`),
-`scripts/teavm/patches/teavm-javac-enum-constants.patch`,
-`scripts/teavm/patches/teavm-javac-annotation-classlib.patch`,
-`scripts/teavm/patches/teavm-javac-array-clone.patch`,
-`scripts/teavm/patches/teavm-javac-reproducible-wasm.patch`, which also carries modified copies of
-the TeaVM 0.13.1 classes `org.teavm.dependency.TypeSet` and `org.teavm.model.classes.TagRegistry`
-used only by the build, `scripts/teavm/patches/teavm-javac-bootstrap-services.patch`, and
-`scripts/teavm/patches/teavm-javac-classlib-supplements.patch`. No warranty is provided.
+`scripts/wasm-teavm-assets.lock.json`. The source patch
+`scripts/teavm/patches/teavm-javac-0.17.0-dev-3-compat.patch` carries the remaining
+modified TeaVM console byte I/O and Formatter sources, primitive-array clone dependency
+listener, class-library supplements and archive integration. The runtime overlays are
+compiled in a Gradle source set and applied to the original bootstrap compiler class-library
+archive. `TIllegalFormatWidthException` is a wasm-idle addition. TeaVM's upstream bootstrap
+compiler, NIO buffers, dependency registration, deterministic traversal and debug emitter
+are used without local source replacements. No warranty is provided.
 
 ## TeaVM and teavm-javac
 

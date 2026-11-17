@@ -1,1 +1,0 @@
-function e(e){return new Worker(new URL(`../elixir-BNv0RN_A.js`,import.meta.url).href,{type:`module`,name:e?.name})}export{e as default};

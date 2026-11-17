@@ -119,8 +119,22 @@ async function limitC3WasmMemory(bytes, maximumBytes, { verifyModules = true } =
 }
 
 // The local sync step includes c3-memory.mjs and binds this worker to one producer receipt.
-const c3Profile = {"profileId":"c3-0.8.3-wasm32-byte-v1","producerManifestSha256":"6cd939ede70a166ae56c92c8978ee7d29a972eb3404262cb926bb370d567a8bb","compilerJavaScriptReceipt":{"bytes":101743,"sha256":"2174a9b00c8b412c1162683a232d20af3640336b9abfad5a61af872f7d792e45"},"compilerWasmReceipt":{"bytes":39058650,"sha256":"f84c768a8dcd679bf092b7cd7bb9ec5786bc70bedc9d8929cfbb2d79291d8c0e"},"producerReceipt":{"bytes":13996,"sha256":"3fec378b171e717bf08f5096291740fa313649e14280d156d0cf7cdcf50082f8"}};
+const c3Profile = {"profileId":"c3-0.8.5_1-wasm32-byte-v1","producerManifestSha256":"e138fc873d706e9d7042cc3419c32206bcb58c647e7e7b2c769ac369eb9fe2c1","compilerJavaScriptReceipt":{"bytes":101743,"sha256":"2174a9b00c8b412c1162683a232d20af3640336b9abfad5a61af872f7d792e45"},"compilerWasmReceipt":{"bytes":39987618,"sha256":"b3b874078d9f5f06c91aac7556052da74ed45efbe66f756509fd85e1bb7e415b"},"producerReceipt":{"bytes":14199,"sha256":"df8c29d31d8522a1f5ce19e2a6b228d02a392181e4971cc04206be7f49cecc34"}};
 let c3Consumed = false;
+
+function c3CompilerDiagnostic(line) {
+	const match =
+		/^(.*):(\d+):(\d+): (error|warning): (.*)$/u.exec(line) ||
+		/^\((.*):(\d+):(\d+)\) (Error|Warning): (.*)$/u.exec(line);
+	if (!match) return null;
+	return {
+		fileName: match[1].replace(/^\/work\//u, ''),
+		lineNumber: Number(match[2]),
+		columnNumber: Number(match[3]),
+		severity: match[4].toLowerCase(),
+		message: match[5]
+	};
+}
 
 function c3Stdin(source, channel) {
 	const input = new TextEncoder().encode(source || '');
@@ -250,23 +264,15 @@ self.onmessage = async ({ data }) => {
 		const { default: createCompiler } = await import(loaderUrl);
 		let diagnosticCount = 0;
 		const diagnostic = (line) => {
-			const match = /^\((.*):(\d+):(\d+)\) (Error|Warning): (.*)$/u.exec(line);
-			if (!match) return;
+			const parsed = c3CompilerDiagnostic(line);
+			if (!parsed) return;
 			if (++diagnosticCount > limits.maxDiagnostics)
 				throw Object.assign(new Error('C3 diagnostic limit exceeded'), {
 					code: 'diagnostic-limit',
 					actual: diagnosticCount,
 					limit: limits.maxDiagnostics
 				});
-			self.postMessage({
-				diagnostic: {
-					fileName: match[1].replace(/^\/work\//u, ''),
-					lineNumber: Number(match[2]),
-					columnNumber: Number(match[3]),
-					severity: match[4] === 'Error' ? 'error' : 'warning',
-					message: match[5]
-				}
-			});
+			self.postMessage({ diagnostic: parsed });
 		};
 		const log = (line) => {
 			line = String(line);

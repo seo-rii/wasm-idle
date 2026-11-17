@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "implementation": "Official DartPad DDC compiler and web runtime",
+  "version": "3.14.0",
+  "revision": "fa8c1270c374c1346931583a17c3b7f278d3822d",
+  "archive": {
+    "url": "https://storage.googleapis.com/dart-archive/channels/stable/release/3.14.0/dartpad/dartpad.zip",
+    "bytes": 40359128,
+    "sha256": "a47fad5844f91cfce800a20e2b3442847bf56b3332892cf8000b2abd0dd8a5f9"
+  },
+  "license": {
+    "expression": "BSD-3-Clause",
+    "url": "https://raw.githubusercontent.com/dart-lang/sdk/fa8c1270c374c1346931583a17c3b7f278d3822d/LICENSE",
+    "bytes": 1502,
+    "sha256": "2cfa3ee8e7512e6d44c854b986510810fadc815f93f890373b3a81c1b6ccd256"
+  },
+  "assets": {
+    "worker.js": {
+      "bytes": 21747,
+      "sha256": "84d633a69e12f96cb61a46aac4f95e664cd9d779875665795ab701e80892dd21"
+    },
+    "worker.wasm": {
+      "bytes": 9758441,
+      "sha256": "a7cab6f3036ad024adb6f5b77443735a527b2d736eb05f0877ac501577e9675e"
+    },
+    "sdk.tar": {
+      "bytes": 8898048,
+      "sha256": "4a4ee87add3d2436ff79d4960ac7d702d5a829c864ffae9d944ce58bee8b5038"
+    },
+    "dart_sdk.js": {
+      "bytes": 10255930,
+      "sha256": "1fe31df35edc19e06ff959742b356afa47dbf6f741a17040e01551914deb1afa"
+    },
+    "sandbox_runtime.js": {
+      "bytes": 255573,
+      "sha256": "805095f4c6ef2ffaab2b04ecaf25a3ed4f206d7bb40b6d3608aa7c4db6f8e26c"
+    },
+    "sandbox.js": {
+      "bytes": 20297,
+      "sha256": "4597a7d53d45235e36982fb385998d5a71d6abd09f0b24040a76919c8a624451"
+    },
+    "version.json": {
+      "bytes": 200,
+      "sha256": "794a62e3dc4c5da09eef15b794a2d4d1dc86fb20c3cb3505625a1e58483df06d"
+    }
+  }
+}

@@ -1,6 +1,6 @@
 # Container workspace sources and licenses
 
-Host SDK: @wasm-idle/container@0.1.0-alpha.0 (workspace, virtual-metadata-v1); [MIT license](sources/LICENSE.container.txt).
+Host SDK: @wasm-idle/container@0.2.2 (workspace, virtual-metadata-v1); [MIT license](sources/LICENSE.container.txt).
 
 GNU Bash: GPL-3.0-or-later. BusyBox: GPL-2.0-only. SDK, LLVM and linked-runtime notices are retained below.
 

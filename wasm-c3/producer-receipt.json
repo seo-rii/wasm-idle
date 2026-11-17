@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
   "producerId": "wasm-llvm/c3-browser",
-  "manifestSha256": "6cd939ede70a166ae56c92c8978ee7d29a972eb3404262cb926bb370d567a8bb",
+  "manifestSha256": "e138fc873d706e9d7042cc3419c32206bcb58c647e7e7b2c769ac369eb9fe2c1",
   "compilerHost": "wasm32-emscripten",
   "programTarget": "wasm32-unknown-unknown",
   "sources": {
     "c3": {
       "repository": "https://github.com/c3lang/c3c.git",
-      "version": "0.8.3",
-      "commit": "1d155ee04d3b607261b99aa15ed5eefd6d7db284"
+      "version": "0.8.5_1",
+      "commit": "d1b1e4451716a34e9c5eb46b78999ff92e71c3a1"
     },
     "emsdk": {
       "repository": "https://github.com/emscripten-core/emsdk.git",
@@ -29,78 +29,58 @@
     {
       "path": "patches/0001-reject-browser-subprocess.patch",
       "sha256": "f3c8600ef23d46d54c61431e33c2ea59b928004b6fa6749a8b04d1e7b33d1e88"
+    },
+    {
+      "path": "patches/0002-skip-browser-memory-advice.patch",
+      "sha256": "158bd120d87ad98a3e9e57f81d69740b2fac94565d6033d3939a1633fdae5b13"
     }
   ],
   "build": {
-    "manifestSha256": "6cd939ede70a166ae56c92c8978ee7d29a972eb3404262cb926bb370d567a8bb",
+    "manifestSha256": "e138fc873d706e9d7042cc3419c32206bcb58c647e7e7b2c769ac369eb9fe2c1",
     "builderSha256": "d7071c4c9960dc46db7cf0065bc8af4167af9cc78edf85e7a5bc46c1309f3ad9",
     "prepared": {
-      "manifestSha256": "6cd939ede70a166ae56c92c8978ee7d29a972eb3404262cb926bb370d567a8bb",
-      "sourceTreeSha256": "d032cbc3e6a42e46fb3f4b610fbfd60ad2f16c5cbfe0317717c1de30f0af3d0f",
+      "manifestSha256": "e138fc873d706e9d7042cc3419c32206bcb58c647e7e7b2c769ac369eb9fe2c1",
+      "sourceTreeSha256": "04c1fd180d4dd5db899c3fd58c05c88a8025d8218c08b574562cb8da6b50a62b",
       "llvmTreeSha256": "63a646a806b45c8ffb824b57ac97f6e823ab09b59fc239d3d94242b0f04b9372",
       "sdkTreeSha256": "0d131675799aee91ba65472fe435fafb4e51b29e692b4ff773e1ed5ce691fede"
     },
     "sdkVersion": "shared:INFO: (Emscripten: Running sanity checks)\nemcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.0 (afa15e0c56d1292e073c2c91bafc1d5e0cdf0dd3)\nCopyright (C) 2026 the Emscripten authors (see AUTHORS.txt)\nThis is free and open source software under the MIT license.\nThere is NO warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.",
-    "linkerFlags": "-sMODULARIZE=1 -sEXPORT_ES6=1 -sENVIRONMENT=web,worker,node -sEXPORTED_RUNTIME_METHODS=FS,callMain -sINVOKE_RUN=0 -sEXIT_RUNTIME=1 -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=134217728 -sMAXIMUM_MEMORY=2147483648 -sSTACK_SIZE=8388608 -sASSERTIONS=1 --embed-file=/home/seorii/dev/hancomac/.worktrees/llvm-languages-20260905/c3/out/c3-browser-work/source/lib@/lib",
+    "linkerFlags": "-sMODULARIZE=1 -sEXPORT_ES6=1 -sENVIRONMENT=web,worker,node -sEXPORTED_RUNTIME_METHODS=FS,callMain -sINVOKE_RUN=0 -sEXIT_RUNTIME=1 -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=134217728 -sMAXIMUM_MEMORY=2147483648 -sSTACK_SIZE=8388608 -sASSERTIONS=1 --embed-file=/dev/shm/c3q-20261027-fuoc3avo/work/source/lib@/lib",
     "assets": {
       "c3c.mjs": {
         "bytes": 101743,
         "sha256": "2174a9b00c8b412c1162683a232d20af3640336b9abfad5a61af872f7d792e45"
       },
       "c3c.wasm": {
-        "bytes": 39058650,
-        "sha256": "f84c768a8dcd679bf092b7cd7bb9ec5786bc70bedc9d8929cfbb2d79291d8c0e"
+        "bytes": 39987618,
+        "sha256": "b3b874078d9f5f06c91aac7556052da74ed45efbe66f756509fd85e1bb7e415b"
       }
     }
   },
   "smoke": {
-    "engine": "Node 24.1.0 WebAssembly in worker_threads",
+    "engine": "Node 24.22.1 WebAssembly in worker_threads",
     "inputs": {
       "fixtures/program.c3": "8cf98c1f072da4b4bc52bcc225939aab6a8cce639c318b6480922af56d388f09",
       "fixtures/invalid.c3": "955559f1b1916270991e75fab98e06748f535fdf2bf7fc6b99b22644d37d3ac3",
       "scripts/smoke-worker.mjs": "f9e44b729d28fa56bc07f5021d6abe2d4aea9a7a920cdd19ae4c6f5f12bc190a",
-      "scripts/smoke.mjs": "798566c6f6a1454894d8db3c5bf9fcdbae65ea7d99c67ce9391fa8482a8b2c31",
+      "scripts/smoke.mjs": "865d12ed3aeeed0954f46c3dfa04744d99c259f4dbfc6ee803bcac34839ac6f0",
       "scripts/browser-smoke.mjs": "a5f753c95b930533830c9fb381519ac29f3093fee07f53688ffaf93a3bf2ddc9",
       "scripts/evidence.mjs": "7d92f9bb6c98c2526eff70e19d67fecf5cc42c3085f297d0b770af2c58ad71f1",
-      "scripts/package.mjs": "e8c69cf134c5df5ce97b80e2915b09c6434cc323b2f332351660a47a3bd199c1"
+      "scripts/package.mjs": "473bd80b560c15c30ce7f098498e403cf515c7a1fe956a0cf341a2dd8d43bba8"
     },
-    "version": "C3 Compiler Version:       0.8.3\nInstalled directory:       /usr/bin\nGit Hash:                  1d155ee04d3b607261b99aa15ed5eefd6d7db284\nBackends:                  LLVM\nLLVM version:              22.1.8\nLLVM default target:       wasm32-unknown-wasi",
+    "version": "C3 Compiler Version:       0.8.5_1\nInstalled directory:       /usr/bin\nGit Hash:                  d1b1e4451716a34e9c5eb46b78999ff92e71c3a1\nBackends:                  LLVM\nLLVM version:              22.1.8\nLLVM default target:       wasm32-unknown-wasi",
     "checks": {
       "compileOnly": true,
       "invalidSourceDiagnostic": true,
       "builtinLink": true,
       "arithmetic": true,
       "hostByteInputOutput": true,
+      "hostSyscallWarningsAbsent": true,
       "objects": [
         {
-          "path": "/work/obj/wasm32/std.math.wasm",
-          "bytes": 3705,
-          "sha256": "d372ec8fb76a7efe6930ae8f53fe933b83454563531ba08555b179effe219a42"
-        },
-        {
-          "path": "/work/obj/wasm32/smoke.wasm",
-          "bytes": 603,
-          "sha256": "76c4375513f535ba601d0c0df83591de7a10949057c3d2416d281ecfa2bc5642"
-        },
-        {
-          "path": "/work/obj/wasm32/compiler_rt.wasm",
-          "bytes": 79844,
-          "sha256": "183c57752538b5ec9ede23cf593f788273b19aca436d9564f93b0e5f325ccf3e"
-        },
-        {
-          "path": "/work/obj/wasm32/std.math.nolibc.wasm",
-          "bytes": 196772,
-          "sha256": "1fd6fd3aa737db297259faeedee3363d2c8d2d62fd6faf9c95ba6fe0aa31b595"
-        },
-        {
-          "path": "/work/obj/wasm32/std.nolibc.wasm",
-          "bytes": 918,
-          "sha256": "f4f7204bc23f38b918efa1c0d68a80baee053c99387ddc3a5eb572d2e706ba42"
-        },
-        {
-          "path": "/work/obj/wasm32/std.core.mem.allocators.wasm",
-          "bytes": 72034,
-          "sha256": "e75281036ad147d6d6cea333ee4634a0d940672ff095ca3e5afe47a41e0cc695"
+          "path": "/work/obj/wasm32/libc.os.wasm",
+          "bytes": 333,
+          "sha256": "cdfeac6db735d053dc5d4040d8c188bf06a8a2ae4fe9dbdf7b7e0264b0c3c76e"
         },
         {
           "path": "/work/obj/wasm32/std.core.ascii.wasm",
@@ -108,34 +88,9 @@
           "sha256": "7b932f24a0a78324e1b26238a607f51d03004585818a68080a38ded2c16112f0"
         },
         {
-          "path": "/work/obj/wasm32/std.core.builtin.wasm",
-          "bytes": 6887,
-          "sha256": "cac533ff743b819b2b5d7baaab7c7a9e09bc25e1b5d12732be3c59372c3b3183"
-        },
-        {
-          "path": "/work/obj/wasm32/std.core.string.conv.wasm",
-          "bytes": 1447,
-          "sha256": "17bc580dc111f44eada2a85887cf07d67c890d992da2f9161ee469befb90dc48"
-        },
-        {
-          "path": "/work/obj/wasm32/std.core.dstring.wasm",
-          "bytes": 46896,
-          "sha256": "7fd8386ff146bff26f0ec42224359b5a9741a11652434a9fc0c0aa6d8056b698"
-        },
-        {
-          "path": "/work/obj/wasm32/std.core.mem.wasm",
-          "bytes": 5602,
-          "sha256": "76769384add727787262214c3b73a5cd56abf3f8557ceb93f4978b711267a7b1"
-        },
-        {
           "path": "/work/obj/wasm32/std.core.runtime.wasm",
           "bytes": 375,
           "sha256": "5aa70066cbb2b553bcab498d3b0bb932a5dc893473c10bd89038ce147dac2b1a"
-        },
-        {
-          "path": "/work/obj/wasm32/std.core.string.wasm",
-          "bytes": 1871,
-          "sha256": "029dc62eab92b23f3eb895cddf4ca49efd58eec5fee650fe8c9ceecc0ecac960"
         },
         {
           "path": "/work/obj/wasm32/std.core.types.wasm",
@@ -143,14 +98,24 @@
           "sha256": "e9e41d22c2b931757f714eb96f1d70522b4c6837719850f0c067cc84d30ef1fa"
         },
         {
-          "path": "/work/obj/wasm32/std.io.wasm",
-          "bytes": 222376,
-          "sha256": "a7e816ffce2db2f1ba8c5418d5d95dc6722e5cf71bb43f1af968f80664eba48f"
+          "path": "/work/obj/wasm32/std.nolibc.wasm",
+          "bytes": 921,
+          "sha256": "7fbbf0e1cd7eebe679b4078d373018bfdacf88140136c94652741bbeccd4243a"
         },
         {
-          "path": "/work/obj/wasm32/std.io.file.wasm",
-          "bytes": 11185,
-          "sha256": "f6e426ad836458414f8b3559731f387fdc945b8c1ad8a5210f548b6c0542f594"
+          "path": "/work/obj/wasm32/smoke.wasm",
+          "bytes": 603,
+          "sha256": "76c4375513f535ba601d0c0df83591de7a10949057c3d2416d281ecfa2bc5642"
+        },
+        {
+          "path": "/work/obj/wasm32/std.core.string.conv.wasm",
+          "bytes": 1447,
+          "sha256": "17bc580dc111f44eada2a85887cf07d67c890d992da2f9161ee469befb90dc48"
+        },
+        {
+          "path": "/work/obj/wasm32/std.core.string.wasm",
+          "bytes": 2327,
+          "sha256": "899f5fc92c4e534554fee1cec51c375b6ad53c4a57145b2326c140702bda581e"
         },
         {
           "path": "/work/obj/wasm32/std.io.os.wasm",
@@ -159,20 +124,60 @@
         },
         {
           "path": "/work/obj/wasm32/libc.wasm",
-          "bytes": 8577,
-          "sha256": "16563dac494d092d98ab1d872b37f8d0b4a0406330bbb54d90fdebad424325f4"
+          "bytes": 8636,
+          "sha256": "366a08f720c45b766784486fae9307f85bc7c4c652bb799d7f4df2bb0b55162e"
         },
         {
-          "path": "/work/obj/wasm32/libc.os.wasm",
-          "bytes": 333,
-          "sha256": "cdfeac6db735d053dc5d4040d8c188bf06a8a2ae4fe9dbdf7b7e0264b0c3c76e"
+          "path": "/work/obj/wasm32/std.math.wasm",
+          "bytes": 3705,
+          "sha256": "c6ead4a1f8c76b3e6b9845b41ccaf354c3ce00161aa13cceacefc12feb726e4a"
+        },
+        {
+          "path": "/work/obj/wasm32/std.core.mem.wasm",
+          "bytes": 5903,
+          "sha256": "1a0be96231dcdb38834606ab408e035cb635f2306dd65ddec1f60f70136adfcf"
+        },
+        {
+          "path": "/work/obj/wasm32/std.core.builtin.wasm",
+          "bytes": 6895,
+          "sha256": "57f64fd36b42721186eb70b49ea79b0a085cb3c39e19cd6015321abaaef9a245"
+        },
+        {
+          "path": "/work/obj/wasm32/std.io.file.wasm",
+          "bytes": 11185,
+          "sha256": "f6e426ad836458414f8b3559731f387fdc945b8c1ad8a5210f548b6c0542f594"
+        },
+        {
+          "path": "/work/obj/wasm32/std.core.dstring.wasm",
+          "bytes": 53136,
+          "sha256": "3500b9f5543bddf868223a7266e3707e9de002056bd194c988d0c10a4af56b0f"
+        },
+        {
+          "path": "/work/obj/wasm32/std.core.mem.allocators.wasm",
+          "bytes": 74618,
+          "sha256": "25e2a73c514c3d6e69f8cfba4ee33e0b14f07188b28cdad92a61fddc0ea43716"
+        },
+        {
+          "path": "/work/obj/wasm32/compiler_rt.wasm",
+          "bytes": 79870,
+          "sha256": "9e005551166b641a3410b62d4a0bdbb1de8d6a6510185f4b92f3327288acd8cd"
+        },
+        {
+          "path": "/work/obj/wasm32/std.io.wasm",
+          "bytes": 215698,
+          "sha256": "636947f42b90ebd58bc143ac51f716237e13d2a350c7c39408eca3e00876b8fb"
+        },
+        {
+          "path": "/work/obj/wasm32/std.math.nolibc.wasm",
+          "bytes": 196819,
+          "sha256": "1a196418f1e711113fa521a91b5984a853af0a795a0696ef64515bda3c3d17dc"
         }
       ],
       "program": {
-        "bytes": 280763,
-        "sha256": "439c21a29d967d03fcadafa8359f1a6d8165f8c3f94d196b3fa0a6f60c180ba6"
+        "bytes": 492903,
+        "sha256": "e9d4f81d5c8d4c82de199afa5e2dd50d96aa2d7b14f216b33315a02906c1e63f"
       },
-      "diagnostic": "2: \n 3: fn int broken() @wasm(\"broken\")\n 4: {\n 5: \treturn missing_value;\n    \t       ^^^^^^^^^^^^^\n(/work/main.c3:5:9) Error: 'missing_value' could not be found, did you spell it right?"
+      "diagnostic": "2: \n 3: fn int broken() @wasm(\"broken\")\n 4: {\n 5:     return missing_value;\n               ^^^^^^^^^^^^^\n/work/main.c3:5:9: error: 'missing_value' could not be found, did you spell it right?"
     },
     "assets": {
       "c3c.mjs": {
@@ -180,21 +185,21 @@
         "sha256": "2174a9b00c8b412c1162683a232d20af3640336b9abfad5a61af872f7d792e45"
       },
       "c3c.wasm": {
-        "bytes": 39058650,
-        "sha256": "f84c768a8dcd679bf092b7cd7bb9ec5786bc70bedc9d8929cfbb2d79291d8c0e"
+        "bytes": 39987618,
+        "sha256": "b3b874078d9f5f06c91aac7556052da74ed45efbe66f756509fd85e1bb7e415b"
       }
     }
   },
   "browserSmoke": {
-    "engine": "Chromium 149.0.7827.55; compiler runs in module Workers",
+    "engine": "Chromium 156.0.8078.4; compiler runs in module Workers",
     "inputs": {
       "fixtures/program.c3": "8cf98c1f072da4b4bc52bcc225939aab6a8cce639c318b6480922af56d388f09",
       "fixtures/invalid.c3": "955559f1b1916270991e75fab98e06748f535fdf2bf7fc6b99b22644d37d3ac3",
       "scripts/smoke-worker.mjs": "f9e44b729d28fa56bc07f5021d6abe2d4aea9a7a920cdd19ae4c6f5f12bc190a",
-      "scripts/smoke.mjs": "798566c6f6a1454894d8db3c5bf9fcdbae65ea7d99c67ce9391fa8482a8b2c31",
+      "scripts/smoke.mjs": "865d12ed3aeeed0954f46c3dfa04744d99c259f4dbfc6ee803bcac34839ac6f0",
       "scripts/browser-smoke.mjs": "a5f753c95b930533830c9fb381519ac29f3093fee07f53688ffaf93a3bf2ddc9",
       "scripts/evidence.mjs": "7d92f9bb6c98c2526eff70e19d67fecf5cc42c3085f297d0b770af2c58ad71f1",
-      "scripts/package.mjs": "e8c69cf134c5df5ce97b80e2915b09c6434cc323b2f332351660a47a3bd199c1"
+      "scripts/package.mjs": "473bd80b560c15c30ce7f098498e403cf515c7a1fe956a0cf341a2dd8d43bba8"
     },
     "checks": {
       "compileOnly": true,
@@ -202,36 +207,12 @@
       "builtinLink": true,
       "arithmetic": true,
       "hostByteInputOutput": true,
+      "hostSyscallWarningsAbsent": true,
       "objects": [
         {
-          "path": "/work/obj/wasm32/std.math.wasm",
-          "bytes": 3705,
-          "sha256": "d372ec8fb76a7efe6930ae8f53fe933b83454563531ba08555b179effe219a42"
-        },
-        {
-          "path": "/work/obj/wasm32/smoke.wasm",
-          "bytes": 603,
-          "sha256": "76c4375513f535ba601d0c0df83591de7a10949057c3d2416d281ecfa2bc5642"
-        },
-        {
-          "path": "/work/obj/wasm32/compiler_rt.wasm",
-          "bytes": 79844,
-          "sha256": "183c57752538b5ec9ede23cf593f788273b19aca436d9564f93b0e5f325ccf3e"
-        },
-        {
-          "path": "/work/obj/wasm32/std.math.nolibc.wasm",
-          "bytes": 196772,
-          "sha256": "1fd6fd3aa737db297259faeedee3363d2c8d2d62fd6faf9c95ba6fe0aa31b595"
-        },
-        {
-          "path": "/work/obj/wasm32/std.nolibc.wasm",
-          "bytes": 918,
-          "sha256": "f4f7204bc23f38b918efa1c0d68a80baee053c99387ddc3a5eb572d2e706ba42"
-        },
-        {
-          "path": "/work/obj/wasm32/std.core.mem.allocators.wasm",
-          "bytes": 72034,
-          "sha256": "e75281036ad147d6d6cea333ee4634a0d940672ff095ca3e5afe47a41e0cc695"
+          "path": "/work/obj/wasm32/libc.os.wasm",
+          "bytes": 333,
+          "sha256": "cdfeac6db735d053dc5d4040d8c188bf06a8a2ae4fe9dbdf7b7e0264b0c3c76e"
         },
         {
           "path": "/work/obj/wasm32/std.core.ascii.wasm",
@@ -239,34 +220,9 @@
           "sha256": "7b932f24a0a78324e1b26238a607f51d03004585818a68080a38ded2c16112f0"
         },
         {
-          "path": "/work/obj/wasm32/std.core.builtin.wasm",
-          "bytes": 6887,
-          "sha256": "cac533ff743b819b2b5d7baaab7c7a9e09bc25e1b5d12732be3c59372c3b3183"
-        },
-        {
-          "path": "/work/obj/wasm32/std.core.string.conv.wasm",
-          "bytes": 1447,
-          "sha256": "17bc580dc111f44eada2a85887cf07d67c890d992da2f9161ee469befb90dc48"
-        },
-        {
-          "path": "/work/obj/wasm32/std.core.dstring.wasm",
-          "bytes": 46896,
-          "sha256": "7fd8386ff146bff26f0ec42224359b5a9741a11652434a9fc0c0aa6d8056b698"
-        },
-        {
-          "path": "/work/obj/wasm32/std.core.mem.wasm",
-          "bytes": 5602,
-          "sha256": "76769384add727787262214c3b73a5cd56abf3f8557ceb93f4978b711267a7b1"
-        },
-        {
           "path": "/work/obj/wasm32/std.core.runtime.wasm",
           "bytes": 375,
           "sha256": "5aa70066cbb2b553bcab498d3b0bb932a5dc893473c10bd89038ce147dac2b1a"
-        },
-        {
-          "path": "/work/obj/wasm32/std.core.string.wasm",
-          "bytes": 1871,
-          "sha256": "029dc62eab92b23f3eb895cddf4ca49efd58eec5fee650fe8c9ceecc0ecac960"
         },
         {
           "path": "/work/obj/wasm32/std.core.types.wasm",
@@ -274,14 +230,24 @@
           "sha256": "e9e41d22c2b931757f714eb96f1d70522b4c6837719850f0c067cc84d30ef1fa"
         },
         {
-          "path": "/work/obj/wasm32/std.io.wasm",
-          "bytes": 222376,
-          "sha256": "a7e816ffce2db2f1ba8c5418d5d95dc6722e5cf71bb43f1af968f80664eba48f"
+          "path": "/work/obj/wasm32/std.nolibc.wasm",
+          "bytes": 921,
+          "sha256": "7fbbf0e1cd7eebe679b4078d373018bfdacf88140136c94652741bbeccd4243a"
         },
         {
-          "path": "/work/obj/wasm32/std.io.file.wasm",
-          "bytes": 11185,
-          "sha256": "f6e426ad836458414f8b3559731f387fdc945b8c1ad8a5210f548b6c0542f594"
+          "path": "/work/obj/wasm32/smoke.wasm",
+          "bytes": 603,
+          "sha256": "76c4375513f535ba601d0c0df83591de7a10949057c3d2416d281ecfa2bc5642"
+        },
+        {
+          "path": "/work/obj/wasm32/std.core.string.conv.wasm",
+          "bytes": 1447,
+          "sha256": "17bc580dc111f44eada2a85887cf07d67c890d992da2f9161ee469befb90dc48"
+        },
+        {
+          "path": "/work/obj/wasm32/std.core.string.wasm",
+          "bytes": 2327,
+          "sha256": "899f5fc92c4e534554fee1cec51c375b6ad53c4a57145b2326c140702bda581e"
         },
         {
           "path": "/work/obj/wasm32/std.io.os.wasm",
@@ -290,20 +256,60 @@
         },
         {
           "path": "/work/obj/wasm32/libc.wasm",
-          "bytes": 8577,
-          "sha256": "16563dac494d092d98ab1d872b37f8d0b4a0406330bbb54d90fdebad424325f4"
+          "bytes": 8636,
+          "sha256": "366a08f720c45b766784486fae9307f85bc7c4c652bb799d7f4df2bb0b55162e"
         },
         {
-          "path": "/work/obj/wasm32/libc.os.wasm",
-          "bytes": 333,
-          "sha256": "cdfeac6db735d053dc5d4040d8c188bf06a8a2ae4fe9dbdf7b7e0264b0c3c76e"
+          "path": "/work/obj/wasm32/std.math.wasm",
+          "bytes": 3705,
+          "sha256": "c6ead4a1f8c76b3e6b9845b41ccaf354c3ce00161aa13cceacefc12feb726e4a"
+        },
+        {
+          "path": "/work/obj/wasm32/std.core.mem.wasm",
+          "bytes": 5903,
+          "sha256": "1a0be96231dcdb38834606ab408e035cb635f2306dd65ddec1f60f70136adfcf"
+        },
+        {
+          "path": "/work/obj/wasm32/std.core.builtin.wasm",
+          "bytes": 6895,
+          "sha256": "57f64fd36b42721186eb70b49ea79b0a085cb3c39e19cd6015321abaaef9a245"
+        },
+        {
+          "path": "/work/obj/wasm32/std.io.file.wasm",
+          "bytes": 11185,
+          "sha256": "f6e426ad836458414f8b3559731f387fdc945b8c1ad8a5210f548b6c0542f594"
+        },
+        {
+          "path": "/work/obj/wasm32/std.core.dstring.wasm",
+          "bytes": 53136,
+          "sha256": "3500b9f5543bddf868223a7266e3707e9de002056bd194c988d0c10a4af56b0f"
+        },
+        {
+          "path": "/work/obj/wasm32/std.core.mem.allocators.wasm",
+          "bytes": 74618,
+          "sha256": "25e2a73c514c3d6e69f8cfba4ee33e0b14f07188b28cdad92a61fddc0ea43716"
+        },
+        {
+          "path": "/work/obj/wasm32/compiler_rt.wasm",
+          "bytes": 79870,
+          "sha256": "9e005551166b641a3410b62d4a0bdbb1de8d6a6510185f4b92f3327288acd8cd"
+        },
+        {
+          "path": "/work/obj/wasm32/std.io.wasm",
+          "bytes": 215698,
+          "sha256": "636947f42b90ebd58bc143ac51f716237e13d2a350c7c39408eca3e00876b8fb"
+        },
+        {
+          "path": "/work/obj/wasm32/std.math.nolibc.wasm",
+          "bytes": 196819,
+          "sha256": "1a196418f1e711113fa521a91b5984a853af0a795a0696ef64515bda3c3d17dc"
         }
       ],
       "program": {
-        "bytes": 280763,
-        "sha256": "439c21a29d967d03fcadafa8359f1a6d8165f8c3f94d196b3fa0a6f60c180ba6"
+        "bytes": 492903,
+        "sha256": "e9d4f81d5c8d4c82de199afa5e2dd50d96aa2d7b14f216b33315a02906c1e63f"
       },
-      "diagnostic": "2: \n 3: fn int broken() @wasm(\"broken\")\n 4: {\n 5: \treturn missing_value;\n    \t       ^^^^^^^^^^^^^\n(/work/main.c3:5:9) Error: 'missing_value' could not be found, did you spell it right?",
+      "diagnostic": "2: \n 3: fn int broken() @wasm(\"broken\")\n 4: {\n 5:     return missing_value;\n               ^^^^^^^^^^^^^\n/work/main.c3:5:9: error: 'missing_value' could not be found, did you spell it right?",
       "browserGuest": true
     },
     "assets": {
@@ -312,8 +318,8 @@
         "sha256": "2174a9b00c8b412c1162683a232d20af3640336b9abfad5a61af872f7d792e45"
       },
       "c3c.wasm": {
-        "bytes": 39058650,
-        "sha256": "f84c768a8dcd679bf092b7cd7bb9ec5786bc70bedc9d8929cfbb2d79291d8c0e"
+        "bytes": 39987618,
+        "sha256": "b3b874078d9f5f06c91aac7556052da74ed45efbe66f756509fd85e1bb7e415b"
       }
     }
   },
@@ -323,8 +329,8 @@
       "sha256": "2174a9b00c8b412c1162683a232d20af3640336b9abfad5a61af872f7d792e45"
     },
     "c3c.wasm": {
-      "bytes": 39058650,
-      "sha256": "f84c768a8dcd679bf092b7cd7bb9ec5786bc70bedc9d8929cfbb2d79291d8c0e"
+      "bytes": 39987618,
+      "sha256": "b3b874078d9f5f06c91aac7556052da74ed45efbe66f756509fd85e1bb7e415b"
     }
   }
 }

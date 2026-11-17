@@ -1,0 +1,1 @@
+function e(e){return new Worker(new URL(`../bash-Cyak8sS4.js`,import.meta.url).href,{type:`module`,name:e?.name})}export{e as default};

@@ -2467,6 +2467,50 @@
       }
     }
   },
+  "sysrootLayers": {
+    "schemaVersion": 1,
+    "kind": "container-c-cxx-sysroot-layers",
+    "compression": {
+      "format": "gzip",
+      "level": 9,
+      "zlib": "1.3.2.1-motley-285e94b"
+    },
+    "resourceDirectory": "lib/clang/22",
+    "source": {
+      "bytes": 35328000,
+      "sha256": "b5c51389ce2f2b404f8b354788aa4a19a65d7e4af746cf52d24e7276d2eabf7f"
+    },
+    "full": {
+      "bytes": 35325440,
+      "sha256": "764b95281a33c2492594648a05a5697efa68943f3be158c699193a1767ace756"
+    },
+    "c": {
+      "logical": {
+        "bytes": 11945472,
+        "sha256": "097889de402c394b65561a269e4106b26d8df3ae154cc20bfe3d951d9a1242c7"
+      },
+      "delivery": {
+        "bytes": 1965206,
+        "sha256": "670cf09dcb37d920f958ae68d0bc6655aba56e63153204239fc517708525f611"
+      },
+      "records": 506
+    },
+    "cxx": {
+      "logical": {
+        "bytes": 23380992,
+        "sha256": "6ed2cc0f8e685949758343bf79df7e158a7dd64d59dbd1c9d91355ae64598120"
+      },
+      "delivery": {
+        "bytes": 4776132,
+        "sha256": "ee8f1395e7e5281d9e706b67e5b51910cf070730b5e2271aa559336d63968510"
+      },
+      "records": 1779
+    }
+  },
+  "sysrootLayerSources": {
+    "scripts/lib/container-sysroot-layers.mjs": "592de4559682efdc1c45495ffa9a3958c148a3bf3ea83f6295ffb5875ce0780a",
+    "examples/container/sysroot-layers.mjs": "6b00e98f0e731b678bb42db1c45d7b865f7cd71e0aec4a0fbfd5464e330e3c8d"
+  },
   "busybox": {
     "schemaVersion": 1,
     "probe": "G0-BUSYBOX",
@@ -13441,59 +13485,64 @@
     "source": "workspace",
     "profile": "virtual-metadata-v1",
     "package": "@wasm-idle/container",
-    "version": "0.1.0-alpha.0",
-    "packageJsonSha256": "6f466afc2393dd72dfbcfefd4a99ac29ce9b775b984f6af6b2dd9b5e9b625044",
+    "version": "0.2.2",
+    "packageJsonSha256": "f3b93b818fbe231e4e2aafc3ddb1614e99a3e87b54f34d9e4509a8e593b2c220",
     "files": {
       "dist/index.js": "6a3f1db162cb02ff34783c1d8b338935fa2876ab66774fe6fc7e376b877299f3",
       "dist/adapters/wasix/index.js": "43813aa511ff0b78f5342982f27abe69a7e7c8f4a5fa3bf5dfeb08683113f8db",
       "dist/adapters/clang/index.js": "e6a9662175670cdf1dcc58afc27620e5848b2e2f899c8667b610027cc47dbb5a",
-      "dist/adapters/clang-live/index.js": "630cce26bc0ba89a8644043633c21d0cadb8a010546ed3f8f8c760dc40e0051e",
+      "dist/adapters/clang-live/index.js": "ab9d38c88f21f7fe4ab013b9828b2e1382b3f8c345cfe177ab0d22149bcc8b15",
       "dist/adapters/wasi-live/index.js": "a59b80163c9ce907d2602bc92e708581f147ab5b5da3abce47301b7235cfa088",
       "dist/fs/persistence/index.js": "ecfb92ffb4a79dab9f17fe44182a0d9f6523f0dcbbecefd44fd9b64aedcf7cf5",
       "dist/workspace/index.js": "ca74765bbdac2827bdcd4992364fe8c5ba316d84c00d280fd4974156375738d9",
       "dist/terminal/index.js": "f6afa89b2554b7212ba40630260f6a3c96b41cfda9957ef48239a0a1467a0269",
       "dist/adapters/wasi-live/worker.js": "847e8cbed2699ef0bc9f0f2dbc6f4af21a0e01360cb53a8a97c83cdbe4148419",
-      "dist/adapters/clang-live/worker.js": "69bc3d7a44ee0897d674ed06dc2baf51bf98f3b4402a34c9bec88df4118538a9"
+      "dist/adapters/clang-live/worker.js": "71aac77e344fab90c309b4678d63f3733bf57e68f73e5a9666c5baecdead7185"
     }
   },
   "hostSources": {
     "packages/container/dist/fs/errors.js": "f09cbbb34f0453c6c61b901a24bd34ec33fec6ab4d8ec12829ab25fcc5d61ad8",
     "packages/container/dist/fs/watch.js": "182578b450ca974d720f26aa4ba1a85c111245473587f98aa8b03b5cd06c57c8",
-    "packages/container/dist/fs/memory.js": "f711a415634b3bc7890a96f2b88714123a6f130d87a9a07a53348fee34d0e479",
+    "packages/container/dist/fs/memory.js": "8fd87fbf478902fa26a7f40e10ddafefba905ba09b44acd7265fb384fc20f76c",
     "packages/container/dist/fs/index.js": "f93ac8d3402a85b9aa8388d7aeed20ca47bf65676d767845cc1a5ee568ef9232",
-    "packages/container/dist/transport/rpc.js": "a2bd8c4b81abc641ac5d0305fd27ebf976f63c727c515b584410f81979ca1cb3",
+    "packages/container/dist/transport/rpc.js": "b5a04bd277e949ac8e3f1e1832340a209a25bb1b233c014e2e0cbdb04f036f1a",
     "packages/container/dist/adapters/wasi/stdio.js": "062255cd17f1e025d1b509f23bd78a5423f0be17d7228380efb53e09f9e33467",
     "packages/container/dist/adapters/wasi/host.js": "00edc6dc7d8e98f6b1d56388f22323baec5e29011040f8495de5e47d4e4818df",
     "packages/container/dist/errors.js": "aad46fa54af86eba2e6d9b0bf1a6e0d79c921f93ff8a53f6f9a793df0110ce9a",
     "packages/container/dist/adapters/wasi/profile.js": "7a9511ecfa86de65d6e2c40448cca8f5d21a6c65742992f2fbfcf2ef1413f275",
     "packages/container/dist/fd/pipe.js": "562e0477bac186ba1c357efa18bf90bbaf07a07ca7b8eba17d63561609c90880",
-    "packages/container/dist/adapters/wasi-live/io.js": "b36bf85d1fb61438bff2822fa97d278b78640230dad16d6cf2cec715fee899ea",
+    "packages/container/dist/adapters/wasi-live/io.js": "18167beae2485aa59d43c46b147060d29da15a9c471b87c1e67212f4e5cb8053",
     "packages/container/dist/adapters/wasi-live/worker.js": "847e8cbed2699ef0bc9f0f2dbc6f4af21a0e01360cb53a8a97c83cdbe4148419",
     "packages/core/dist/worker-session.js": "43db889e0dc35974fab74118ecaeb93a474cd7024675282a039f5f4cc21a1809",
     "packages/core/dist/session-asset-cache.js": "c00f26cdd7ff007329ff1a63324ea41922171b980c0a9da09527261703e55e41",
-    "packages/core/dist/runtime-wasm-module-service.js": "426dbe07981a04b5efac1c3fa39c3790475145b6f5417345237b2a922a227872",
+    "packages/core/dist/python-runtime-module.js": "106ad9a5621264ff8e0464ce4f551132bab44947fbfca21eebe1b0ea474d671b",
+    "packages/core/dist/runtime-wasm-module-service.js": "ad2cab0996f4e85fc998d2b5f73cf0244881ed4e443e52469bf349d7e496cc72",
+    "packages/core/dist/runtime-wasm-module-lookup.js": "97ca562b2f69e7e30ebe8e69959096ff60b1e0eb9a8cdbb3e7cf1901d1b92f77",
     "packages/core/dist/errors.js": "993bf37007430a1180b59efc169f2d4d262239516c160862304b6143dffa2070",
     "packages/core/dist/asset-integrity.js": "75b89cdda3cd1fc2175504c9fdec4e451f3ed81f4790ef99372cc5c3a449089e",
-    "packages/core/dist/runtime-asset-lock.generated.js": "2c94188e6d06bb4a88e3e3540cd1d2d565257ea1f2cf596523de50f9ce95e8ec",
-    "packages/core/dist/persistent-asset-cache.js": "078f2e183f34507c95bcf875c66e9826ad7883cae0d949fa973d6b070a4cef90",
+    "packages/core/dist/runtime-asset-version.generated.js": "6e88e56b5ea7b0eee9d1a6cf2ce09ac924da71e23a9e6166718afa19229d5ce8",
+    "packages/core/dist/persistent-asset-cache.js": "50e06cd5e8fb02d7a57938725f7964d6e3a136ef25cfb3f98babdb224e0d0451",
     "packages/core/dist/pinned-asset-fetch.js": "0805ffaeae3810c65e853d54aeeb206b26ee8e2ceb81ad96aff63cfc023f2dba",
-    "packages/core/dist/runtime-asset-lock.js": "51e720b5241f06a4ffa739bc7de7f29bee22acdd126979ed02d43eb5da028092",
+    "packages/core/dist/runtime-asset-lock.generated.js": "a241263bdbf7b76b710fdc97d168b75ef8d2725ec08d830b345b5bc962c64920",
+    "packages/core/dist/runtime-asset-lock-manifest.js": "99500b9f0770940e72fdab7fa2c214c2a6cb8ddc0896db663bcc92451cad0f0d",
+    "packages/core/dist/runtime-asset-lock.js": "e3529c2db46e2f9ce83e58639440aed2929e9a2ca437b8d951ad2015cb6352b4",
+    "packages/core/dist/runtime-asset-lock-loader.js": "c2582f581a9abf0650e6c7b2751f78bd37ba9aa5d82961061dbf48c593de1952",
     "packages/core/dist/capabilities.js": "8e6af9254c850918dd3fe56d4b8c412ad7cf5bdc903b1388d8f08459bf8ba00f",
     "packages/core/dist/asset-delivery-budget.js": "02fb09f4ae0f8fc691fb541df167762645a60d4ff2e56535454d0aeaf06f2643",
-    "packages/core/dist/languages.js": "a8d28f4e1d7799acf272b820add4bf34b3febe24343ce7257c4d4a3c3afc65b3",
+    "packages/core/dist/languages.js": "2c9fa79cd3960057d90ccbed0b242b8e2c8618928da464cef96c66b6e3f456d8",
     "packages/core/dist/workspace.js": "52d4d5b08d2bf8fd34bdde64c4635080dd441f99b7fcdbdaff8357d7d6507bf3",
-    "packages/core/dist/execution.js": "14e8c834abf9e44af918e2e4110e4b8b042a430cfa4719dc5ba97940ad079fd8",
+    "packages/core/dist/execution.js": "50276d43c7f3b99436e521856ee7c2acb956fdb5bdb4939ee077628e14db3e20",
     "packages/core/dist/protocol.js": "68d83880c8fff0aadfbdd2436160c8e2c41f1dfb9ad4316f2d174aaf5d239fef",
     "packages/core/dist/progress.js": "61e262024e511e9c9d93ce0e135b0b50923a1052bb12e326600755f2f74c28a0",
-    "packages/core/dist/runtime-assets.js": "f0d423e5b122787ede2534b35eb0d4ca3f75f373082722622c7fed8e032b03ae",
+    "packages/core/dist/runtime-assets.js": "808d4439ee6929720b0a1bac71b43892475d269bfc87e8a937c8deb9f5862bf9",
     "packages/core/dist/runtime-manifest.js": "9199c1a47ddf5081d66fb730e7be56941bb1d1fb224fa78a3ba2cbf182c23fd5",
-    "packages/core/dist/runtime-preflight.js": "7cf3b56799a60a5281e877607f6d7cc37ea70abaa1791c1281d3ac88e247ea5b",
+    "packages/core/dist/runtime-preflight.js": "6143daeef164fd9e3d36ba62eb543df69d19b006d8336824fb8fb5267f6f3ab6",
     "packages/core/dist/awk-runtime.js": "2b4edefdd29b0f732f4bca5d5dbad308f278bb49a68aa2a91fa5606d64cb6dae",
     "packages/core/dist/ruby-runtime.generated.js": "6fc79fe74d587807f5c5f1770141cd57013754bf80408b0a8cda91c3d393c339",
     "packages/core/dist/ruby-runtime.js": "82f7397796c7300320491af6d5d0e7a483e553a5d73114462e15a936deff14ca",
     "packages/core/dist/haskell-runtime.generated.js": "25809ffb2f92dd2310a11aeeb49bb47a55ca753bda293e7d14cc2976a9097aaf",
     "packages/core/dist/haskell-runtime.js": "b1aa86f212e6a799add7e8c263a96eb787e270cadd835107f39ca6a66d7f6c65",
-    "packages/core/dist/teavm-runtime.generated.js": "7da0cfc76ae9b08a6b837a3d845a3909db0a64026180d11804dcaae751ae7fe9",
+    "packages/core/dist/teavm-runtime.generated.js": "6724e3ffa5b967bd64745b55e9b5d2dfe6665b76853f8f1022854f4d717a40f9",
     "packages/core/dist/teavm-runtime.js": "1716247af3e693c7a2cc02aa8b1ee68da91e2bb3462df096c0f4184ab20bf7c7",
     "packages/core/dist/runtime-activation.js": "03d006a4fcd2df3bf08245c1da5553d97242df3b4d41d025bfc99578fc0dd8f0",
     "packages/core/dist/prolog-runtime.js": "ae89fcb239c5ba9a63b25dcb44e50c916b66c4f884f5e5d45163661be567a13f",
@@ -13510,13 +13559,14 @@
     "packages/core/dist/resource-budget.js": "ffea2e31029003587fba806dbbda79f6b0b60e0521795732545599bfe4905da7",
     "packages/core/dist/worker-lifetime.js": "f7eca1d7226129b36a7568bbdea1b341b903d70bdf5d6c127de7379b247efcf9",
     "packages/core/dist/prewarm.js": "a0548ddfd2ac8d22ac899ded907ad85032bfcc57b66cb54bae91da3eef9bf515",
-    "packages/core/dist/sandbox.js": "fcc759aaf478d5b5a1e6dac34c1eadd0595649bbb1bd38d2157b8d31f10e8dd4",
+    "packages/core/dist/sandbox.js": "5250344ad6f7d4d325106fd3b56c464cc4cc74fb710381127236ad20915180a0",
     "packages/core/dist/ruby-split.generated.js": "cb2e2c4c822ceedf35dee46d46eca8d4195b302bc5accda71cb53352525e6d5d",
     "packages/core/dist/ruby-split.js": "0e5536c34d4a4751462223d0507019a31887c45c225a27ab640aceb89395f75e",
-    "packages/core/dist/index.js": "950637c89f7e1ae25658d817c6fa35b6d232c50cae531015a207cfea719ceb89",
-    "packages/llvm-core/dist/clang/src/tool-host.js": "a0e206a262b3d8c22eb268933a02b15abe679de3c53c41b6337dc232477c9b5f",
+    "packages/core/dist/debug-configuration.js": "fcce5d16db75528b9da3a76fc0f48b76cc47f6c44bdc78af8dfeae85c78ad8ea",
+    "packages/core/dist/index.js": "86089347afcff8ef98ae1ebe310c432cd70b8dd8d81b7b6d0297126a8d5fd39e",
+    "packages/llvm-core/dist/clang/src/tool-host.js": "9fa06e7be9362ea2171f9f5ec8570a52de3e406ed8dc6be0c86678b30ff62c8e",
     "packages/container/dist/adapters/clang-live/stdio.js": "c207b14ca35bd06bdd0945a94bbba31b8c0590fb5110b1b4c0ec13ef10b24a37",
-    "packages/container/dist/adapters/clang-live/worker.js": "69bc3d7a44ee0897d674ed06dc2baf51bf98f3b4402a34c9bec88df4118538a9"
+    "packages/container/dist/adapters/clang-live/worker.js": "71aac77e344fab90c309b4678d63f3733bf57e68f73e5a9666c5baecdead7185"
   },
   "sources": "https://github.com/seo-rii/wasm-idle/tree/65c335b48fe2fade4f24d4c8ff00c03f5c9b16b3/runtimes",
   "sourceFiles": [
@@ -13569,5 +13619,5 @@
       "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
     }
   ],
-  "containerVersion": "0.1.0-alpha.0"
+  "containerVersion": "0.2.2"
 }

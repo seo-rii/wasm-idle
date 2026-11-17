@@ -1,0 +1,1 @@
+import{r as e}from"./B0Z9INg1.js";import{t}from"./BaNbYf_w.js";import{t as n}from"./BWHR97Q8.js";var r=e({});n({id:`scala`,extensions:[`.scala`,`.sc`,`.sbt`],aliases:[`Scala`,`scala`,`SBT`,`Sbt`,`sbt`,`Dotty`,`dotty`],mimetypes:[`text/x-scala-source`,`text/x-scala`,`text/x-sbt`,`text/x-dotty`],loader:()=>t(()=>import(`./DHpiXF5c.js`),[],import.meta.url)});export{r as t};

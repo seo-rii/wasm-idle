@@ -1,0 +1,1 @@
+function e(e){return new Worker(new URL(`../dotnet-B9dsMD4g.js`,import.meta.url).href,{type:`module`,name:e?.name})}export{e as default};

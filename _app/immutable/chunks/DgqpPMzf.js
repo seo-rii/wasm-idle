@@ -1,0 +1,1 @@
+import{r as e}from"./B0Z9INg1.js";import{t}from"./BaNbYf_w.js";import{t as n}from"./BWHR97Q8.js";var r=e({});n({id:`coffeescript`,extensions:[`.coffee`],aliases:[`CoffeeScript`,`coffeescript`,`coffee`],mimetypes:[`text/x-coffeescript`,`text/coffeescript`],loader:()=>t(()=>import(`./Ba7i2nA0.js`),[],import.meta.url)});export{r as t};

@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
-  "version": "go1.26.1-runtime-v1",
-  "goVersion": "go1.26.1",
+  "version": "go1.26.10-runtime-v1",
+  "goVersion": "go1.26.10",
   "defaultTarget": "wasip1/wasm",
   "compiler": {
     "compile": {
@@ -59,9 +59,9 @@
           "asset": "sysroot/chunks/wasip1-00.pack.gz",
           "index": "sysroot/chunks/wasip1-00.index.json.gz",
           "fileCount": 28,
-          "totalBytes": 11755796,
-          "sha256": "5efeec916412a90b74279dab1e8d8321bc48e4e85d582ae6ad606746a4d226d4",
-          "indexSha256": "2d24465d5a508603c3494c93105162149d8d4b47b43a30261dc987beb34d2dfd",
+          "totalBytes": 11761770,
+          "sha256": "ae8dbecb87f5e844986473f403f11ac5a592f7f1b6af835daa47b3dc02775736",
+          "indexSha256": "fca9a6d632cb521ee34cb322ab5e789a627becbd110b1bb8824de631116db859",
           "runtimePaths": [
             "/sysroot/internal/abi.a",
             "/sysroot/internal/asan.a",
@@ -97,9 +97,9 @@
           "asset": "sysroot/chunks/wasip1-01.pack.gz",
           "index": "sysroot/chunks/wasip1-01.index.json.gz",
           "fileCount": 34,
-          "totalBytes": 12153088,
-          "sha256": "9a9a974ac5f96c12a0a214df10c525abd82ce38e5bfe44df873b6a8a0cd05108",
-          "indexSha256": "8aaac4c5b4e481f8f26134d05b8f030d8fe530570b339498f03edc24a1abcf04",
+          "totalBytes": 12172508,
+          "sha256": "9d6a6ec1642be4a7daa7fad99143331ad51c42522970770f217fc56e6bb09b8c",
+          "indexSha256": "58ce7c3d69fbc6e593bee6c008fe2f74469785a175b54952200c07636edc8fb7",
           "runtimePaths": [
             "/sysroot/bufio.a",
             "/sysroot/bytes.a",
@@ -141,9 +141,9 @@
           "asset": "sysroot/chunks/wasip1-02.pack.gz",
           "index": "sysroot/chunks/wasip1-02.index.json.gz",
           "fileCount": 34,
-          "totalBytes": 8382162,
-          "sha256": "de185584c26d0f39a81806b917643c5ed9db8fb655e0f3c09915508f5c7d95d6",
-          "indexSha256": "172b9554308d5fab86da95e9a4aa4b3e303ac1cda13ceaf9ac856ccf5e44a63a",
+          "totalBytes": 8384480,
+          "sha256": "089bcc27becf6b8f78c17027701624a32f478439309118c274ce317425b843d5",
+          "indexSha256": "325de16f19896a9d8747317ba7f39125bc218c18f2e40fb89baaef56b07229a7",
           "runtimePaths": [
             "/sysroot/archive/tar.a",
             "/sysroot/archive/zip.a",
@@ -185,9 +185,9 @@
           "asset": "sysroot/chunks/wasip1-03.pack.gz",
           "index": "sysroot/chunks/wasip1-03.index.json.gz",
           "fileCount": 51,
-          "totalBytes": 5719484,
-          "sha256": "da9bb920398f269b34ebf2752d64323ec405c9bd66dc579f770de359f6dd9861",
-          "indexSha256": "f92f88f9377fd3913389b3e78fe7e71af2e561e2dad75a691474f9af20108639",
+          "totalBytes": 5720202,
+          "sha256": "aff3d3e7f7e091709d48d9a02dc558f079bbd53c34f22c211645741bfff38e79",
+          "indexSha256": "281c2cc1cd8cb64c3377b6f540be40d3de9516f43d94dc1d203032fe29b5e9a1",
           "runtimePaths": [
             "/sysroot/crypto/internal/fips140/aes/gcm.a",
             "/sysroot/crypto/internal/fips140/alias.a",
@@ -246,9 +246,9 @@
           "asset": "sysroot/chunks/wasip1-04.pack.gz",
           "index": "sysroot/chunks/wasip1-04.index.json.gz",
           "fileCount": 7,
-          "totalBytes": 7910952,
-          "sha256": "0612f1eca4d0e593561c60cf81b25fe2b284a3fe72550a176f533af3f36a8201",
-          "indexSha256": "162ebd0ccc8314c4788083636337908a0b3391d6d0b63c1cef96ff518779577d",
+          "totalBytes": 7938162,
+          "sha256": "80db12f6e303fd4f0b796b105e4b95c648c09ba4f6fd95773c634b92b273e26f",
+          "indexSha256": "dbaae98a822e2ebd2a9411fd1977d870532ba474d26ec9f6a3daac271358013f",
           "runtimePaths": [
             "/sysroot/crypto/tls.a",
             "/sysroot/crypto/tls/internal/fips140tls.a",
@@ -263,9 +263,9 @@
           "asset": "sysroot/chunks/wasip1-05.pack.gz",
           "index": "sysroot/chunks/wasip1-05.index.json.gz",
           "fileCount": 16,
-          "totalBytes": 7529064,
-          "sha256": "1265354740b3cf8dc3faf278c8516f230a3ab925ecab4d725c376c6a25aa0e60",
-          "indexSha256": "eaac24b47d8eed9e0917ddb2f15a839f64d63d3279442e4e3b4777d647e4ae25",
+          "totalBytes": 7531336,
+          "sha256": "e47835f3bdfe87de218918c63413c12d0b8a93603aeed73e1c063c61b43a2f2d",
+          "indexSha256": "6518346e964e6be7b92edc346b342943621fa6d4dd5b5eee4347bd1e5010f30e",
           "runtimePaths": [
             "/sysroot/debug/dwarf.a",
             "/sysroot/debug/elf.a",
@@ -289,9 +289,9 @@
           "asset": "sysroot/chunks/wasip1-06.pack.gz",
           "index": "sysroot/chunks/wasip1-06.index.json.gz",
           "fileCount": 10,
-          "totalBytes": 7938254,
-          "sha256": "ce8bdc80c8f79ca62f666f74138d1a2699cf39c5d2cd2f6ff68e68bdac336002",
-          "indexSha256": "be2de4f1d8ca39a297c6bb02f09dc904fd577573db7898fe3224379802bb0bb0",
+          "totalBytes": 7944452,
+          "sha256": "99053e4b052e3803da2b02dabd8b56cc5e378ea5ac1d71470795f1a3a3bfef54",
+          "indexSha256": "afd3354ce7e8a7408c91b72e5c09b1ab91c944cbd79b0817755701c56af20992",
           "runtimePaths": [
             "/sysroot/encoding/json.a",
             "/sysroot/encoding/pem.a",
@@ -309,9 +309,9 @@
           "asset": "sysroot/chunks/wasip1-07.pack.gz",
           "index": "sysroot/chunks/wasip1-07.index.json.gz",
           "fileCount": 11,
-          "totalBytes": 4256866,
-          "sha256": "cbe123fed1d6d406442ffacec819b6ba8f2ffb7d17e5a43961d33f5d211270cf",
-          "indexSha256": "b9b8536d81863e5eeeae83312c74b16bae93dd4d92777d682b502b8b344f6cb0",
+          "totalBytes": 4259314,
+          "sha256": "a166e72a43e502bfa644e77f34366512d8aed00968cd17931cbbd8b9e028fee1",
+          "indexSha256": "7266de23327bd294bfce21653f044d3468d96f1490087874d0c82f5309a3557b",
           "runtimePaths": [
             "/sysroot/go/doc/comment.a",
             "/sysroot/go/format.a",
@@ -330,9 +330,9 @@
           "asset": "sysroot/chunks/wasip1-08.pack.gz",
           "index": "sysroot/chunks/wasip1-08.index.json.gz",
           "fileCount": 14,
-          "totalBytes": 8306028,
-          "sha256": "452ab98c430109043cb866209f71cf080eaab4cc245797587fc7933a7d72ec48",
-          "indexSha256": "a53642494a3c7d8a5a7e748e3998d558f96daecfe73f886c30c1be5939f3c2c9",
+          "totalBytes": 8330674,
+          "sha256": "642aae260d71f537993198ef663c522c708c28313349ae175c0ed65465925358",
+          "indexSha256": "ed4c94558074edc1868625f19448ae1f894595fc314b89c23e12c88db55c54ae",
           "runtimePaths": [
             "/sysroot/go/types.a",
             "/sysroot/go/version.a",
@@ -354,9 +354,9 @@
           "asset": "sysroot/chunks/wasip1-09.pack.gz",
           "index": "sysroot/chunks/wasip1-09.index.json.gz",
           "fileCount": 41,
-          "totalBytes": 7799820,
-          "sha256": "2291fcee51360171943fcfa4269ffeb29003e11941ed0ec8fef13c637c93376f",
-          "indexSha256": "320eed355173b189d42a70415d0a12f6f0bd91976dc0375750c63101275fa8d4",
+          "totalBytes": 7813744,
+          "sha256": "f9035abf8d35d3d0362c9e9c50d91f6ea0b72b7a8fec21b88dbbdd3360ca71bc",
+          "indexSha256": "14e75ae66a16df8ac0c233d856974746b623b8e8d5d0da64d9c791ffce70bc1d",
           "runtimePaths": [
             "/sysroot/image/gif.a",
             "/sysroot/image/internal/imageutil.a",
@@ -405,9 +405,9 @@
           "asset": "sysroot/chunks/wasip1-10.pack.gz",
           "index": "sysroot/chunks/wasip1-10.index.json.gz",
           "fileCount": 14,
-          "totalBytes": 8120128,
-          "sha256": "72604798e121407e3da16f0855582c94cd7e8fc0e7e7eda09323cd5b9dbea888",
-          "indexSha256": "22a94819e515a1f087d26978592d54f7c7b023aa685ac4edad9b7a28b6ffdf45",
+          "totalBytes": 8121864,
+          "sha256": "b2062c0f6cbff5bdd24b9196648d9dca66d11cf35469235f1d6f3ace4abb464e",
+          "indexSha256": "24654f3edf697c20c74dc5bacc633cab514b58dc2da92abd84fefffdda4e34f0",
           "runtimePaths": [
             "/sysroot/internal/testenv.a",
             "/sysroot/internal/testhash.a",
@@ -429,9 +429,9 @@
           "asset": "sysroot/chunks/wasip1-11.pack.gz",
           "index": "sysroot/chunks/wasip1-11.index.json.gz",
           "fileCount": 18,
-          "totalBytes": 6037442,
-          "sha256": "294b424eef144ab6a6704e1a52277e6cb2a0dd09e294674039c6039dd785c988",
-          "indexSha256": "d675d962b2acac56495d85f092deaefe72c00f36d1c54d0faf4112e7f6f38f41",
+          "totalBytes": 6038674,
+          "sha256": "7094aad65e77c487858f69badc04f4d1a6b8f31bdab269055f5476d9bb618d34",
+          "indexSha256": "666eeec5b54b2471e1dee7b98669020c26cf0ac743a0904aa1baa28d50d404fb",
           "runtimePaths": [
             "/sysroot/internal/zstd.a",
             "/sysroot/io/ioutil.a",
@@ -457,9 +457,9 @@
           "asset": "sysroot/chunks/wasip1-12.pack.gz",
           "index": "sysroot/chunks/wasip1-12.index.json.gz",
           "fileCount": 1,
-          "totalBytes": 3669172,
-          "sha256": "a0cd6e35743ef5c4dffcb62b0c3151dabe3b7d9ed06db7bb41b4057cda8ff4f5",
-          "indexSha256": "41dbf9f2d729dd2d8bae0dd7a5f05e96c3450b9be74d30bdd76a6f092b5141a5",
+          "totalBytes": 3669678,
+          "sha256": "2b0f203959ec7584962497ddd41c4947a9ab4286f463d550a38cbe8b6c04fa3a",
+          "indexSha256": "79757bce0813496c18f811b469d1862af43e639d2fad1b9e4c1cde2dc37316ac",
           "runtimePaths": [
             "/sysroot/net.a"
           ]
@@ -468,9 +468,9 @@
           "asset": "sysroot/chunks/wasip1-13.pack.gz",
           "index": "sysroot/chunks/wasip1-13.index.json.gz",
           "fileCount": 3,
-          "totalBytes": 8074708,
-          "sha256": "cbe5d5842cc108c8392f6555687d3c43e66d1ff3c407917a3bc28d878d14be3b",
-          "indexSha256": "77cb55843e94d13476ca64c312559b188a4236ce4927f0e16f2ca95322a0154f",
+          "totalBytes": 8116324,
+          "sha256": "bb80aad0c617a5b4822e851276ff4568d20acacdb1293a8ab5195480735c0dc5",
+          "indexSha256": "b9b0e7dd2e28c3862ebfd1fd7fe667230edca59e8e753c1d3bb638fe5e35ebff",
           "runtimePaths": [
             "/sysroot/net/http.a",
             "/sysroot/net/http/cgi.a",
@@ -481,9 +481,9 @@
           "asset": "sysroot/chunks/wasip1-14.pack.gz",
           "index": "sysroot/chunks/wasip1-14.index.json.gz",
           "fileCount": 26,
-          "totalBytes": 7985870,
-          "sha256": "574d1b1837dc117638bb071cf8390bffa81c4f921e4b64625e201ab12de7ceab",
-          "indexSha256": "e6656325c93dab978bae2b5312bebf71c06ccaf800ebda0275bca95317038487",
+          "totalBytes": 8041500,
+          "sha256": "bf8a15fc01d64f11c91a8773e80458cd2348254268502a8d38dc5f9317d5191e",
+          "indexSha256": "fe1c0901f74ef68c959600521c0d8d02437eb26c35375380ac5facc3aed9d42f",
           "runtimePaths": [
             "/sysroot/net/http/fcgi.a",
             "/sysroot/net/http/httptest.a",
@@ -517,9 +517,9 @@
           "asset": "sysroot/chunks/wasip1-15.pack.gz",
           "index": "sysroot/chunks/wasip1-15.index.json.gz",
           "fileCount": 19,
-          "totalBytes": 7715390,
-          "sha256": "0bdb60e08e9a3b63024d1bba96bf2a37bd6957496d8a0fc8eeb2cc4a50a9f738",
-          "indexSha256": "14f6ddff0ff52658cb5ff62fa91a36e2a1231f049e3960eb2ca6e505a749f90d",
+          "totalBytes": 7717192,
+          "sha256": "aadd52b5907b02d0580345a967a7dc58c5985b873ae2b60e4a17cd5690195be2",
+          "indexSha256": "78b58f5350d99a936c1d911fb26264714e2de1852752bcc64e905f2a6ac96325",
           "runtimePaths": [
             "/sysroot/regexp/syntax.a",
             "/sysroot/runtime/coverage.a",
@@ -546,9 +546,9 @@
           "asset": "sysroot/chunks/wasip1-16.pack.gz",
           "index": "sysroot/chunks/wasip1-16.index.json.gz",
           "fileCount": 22,
-          "totalBytes": 6139636,
-          "sha256": "88626b6eebff6c6be41f7c80c4e42f98596ce5942ac807fa9432eaef22ecae4b",
-          "indexSha256": "a62c4ee56f2ae2aaaa45b3016313e384172050934ad6691a0c645d6a20aeb979",
+          "totalBytes": 6142990,
+          "sha256": "25d56cb686c13def7ba74aa3b443e1c579b171a60a2936ee69ffb4a90e016e98",
+          "indexSha256": "c4ce15614f0314c2ff7cf58e59e5832229aa424800944799ea348dcd24c2032a",
           "runtimePaths": [
             "/sysroot/text/template/parse.a",
             "/sysroot/time/tzdata.a",
@@ -601,9 +601,9 @@
           "asset": "sysroot/chunks/wasip1-00.pack.gz",
           "index": "sysroot/chunks/wasip1-00.index.json.gz",
           "fileCount": 28,
-          "totalBytes": 11755796,
-          "sha256": "5efeec916412a90b74279dab1e8d8321bc48e4e85d582ae6ad606746a4d226d4",
-          "indexSha256": "2d24465d5a508603c3494c93105162149d8d4b47b43a30261dc987beb34d2dfd",
+          "totalBytes": 11761770,
+          "sha256": "ae8dbecb87f5e844986473f403f11ac5a592f7f1b6af835daa47b3dc02775736",
+          "indexSha256": "fca9a6d632cb521ee34cb322ab5e789a627becbd110b1bb8824de631116db859",
           "runtimePaths": [
             "/sysroot/internal/abi.a",
             "/sysroot/internal/asan.a",
@@ -639,9 +639,9 @@
           "asset": "sysroot/chunks/wasip1-01.pack.gz",
           "index": "sysroot/chunks/wasip1-01.index.json.gz",
           "fileCount": 34,
-          "totalBytes": 12153088,
-          "sha256": "9a9a974ac5f96c12a0a214df10c525abd82ce38e5bfe44df873b6a8a0cd05108",
-          "indexSha256": "8aaac4c5b4e481f8f26134d05b8f030d8fe530570b339498f03edc24a1abcf04",
+          "totalBytes": 12172508,
+          "sha256": "9d6a6ec1642be4a7daa7fad99143331ad51c42522970770f217fc56e6bb09b8c",
+          "indexSha256": "58ce7c3d69fbc6e593bee6c008fe2f74469785a175b54952200c07636edc8fb7",
           "runtimePaths": [
             "/sysroot/bufio.a",
             "/sysroot/bytes.a",
@@ -683,9 +683,9 @@
           "asset": "sysroot/chunks/wasip1-02.pack.gz",
           "index": "sysroot/chunks/wasip1-02.index.json.gz",
           "fileCount": 34,
-          "totalBytes": 8382162,
-          "sha256": "de185584c26d0f39a81806b917643c5ed9db8fb655e0f3c09915508f5c7d95d6",
-          "indexSha256": "172b9554308d5fab86da95e9a4aa4b3e303ac1cda13ceaf9ac856ccf5e44a63a",
+          "totalBytes": 8384480,
+          "sha256": "089bcc27becf6b8f78c17027701624a32f478439309118c274ce317425b843d5",
+          "indexSha256": "325de16f19896a9d8747317ba7f39125bc218c18f2e40fb89baaef56b07229a7",
           "runtimePaths": [
             "/sysroot/archive/tar.a",
             "/sysroot/archive/zip.a",
@@ -727,9 +727,9 @@
           "asset": "sysroot/chunks/wasip1-03.pack.gz",
           "index": "sysroot/chunks/wasip1-03.index.json.gz",
           "fileCount": 51,
-          "totalBytes": 5719484,
-          "sha256": "da9bb920398f269b34ebf2752d64323ec405c9bd66dc579f770de359f6dd9861",
-          "indexSha256": "f92f88f9377fd3913389b3e78fe7e71af2e561e2dad75a691474f9af20108639",
+          "totalBytes": 5720202,
+          "sha256": "aff3d3e7f7e091709d48d9a02dc558f079bbd53c34f22c211645741bfff38e79",
+          "indexSha256": "281c2cc1cd8cb64c3377b6f540be40d3de9516f43d94dc1d203032fe29b5e9a1",
           "runtimePaths": [
             "/sysroot/crypto/internal/fips140/aes/gcm.a",
             "/sysroot/crypto/internal/fips140/alias.a",
@@ -788,9 +788,9 @@
           "asset": "sysroot/chunks/wasip1-04.pack.gz",
           "index": "sysroot/chunks/wasip1-04.index.json.gz",
           "fileCount": 7,
-          "totalBytes": 7910952,
-          "sha256": "0612f1eca4d0e593561c60cf81b25fe2b284a3fe72550a176f533af3f36a8201",
-          "indexSha256": "162ebd0ccc8314c4788083636337908a0b3391d6d0b63c1cef96ff518779577d",
+          "totalBytes": 7938162,
+          "sha256": "80db12f6e303fd4f0b796b105e4b95c648c09ba4f6fd95773c634b92b273e26f",
+          "indexSha256": "dbaae98a822e2ebd2a9411fd1977d870532ba474d26ec9f6a3daac271358013f",
           "runtimePaths": [
             "/sysroot/crypto/tls.a",
             "/sysroot/crypto/tls/internal/fips140tls.a",
@@ -805,9 +805,9 @@
           "asset": "sysroot/chunks/wasip1-05.pack.gz",
           "index": "sysroot/chunks/wasip1-05.index.json.gz",
           "fileCount": 16,
-          "totalBytes": 7529064,
-          "sha256": "1265354740b3cf8dc3faf278c8516f230a3ab925ecab4d725c376c6a25aa0e60",
-          "indexSha256": "eaac24b47d8eed9e0917ddb2f15a839f64d63d3279442e4e3b4777d647e4ae25",
+          "totalBytes": 7531336,
+          "sha256": "e47835f3bdfe87de218918c63413c12d0b8a93603aeed73e1c063c61b43a2f2d",
+          "indexSha256": "6518346e964e6be7b92edc346b342943621fa6d4dd5b5eee4347bd1e5010f30e",
           "runtimePaths": [
             "/sysroot/debug/dwarf.a",
             "/sysroot/debug/elf.a",
@@ -831,9 +831,9 @@
           "asset": "sysroot/chunks/wasip1-06.pack.gz",
           "index": "sysroot/chunks/wasip1-06.index.json.gz",
           "fileCount": 10,
-          "totalBytes": 7938254,
-          "sha256": "ce8bdc80c8f79ca62f666f74138d1a2699cf39c5d2cd2f6ff68e68bdac336002",
-          "indexSha256": "be2de4f1d8ca39a297c6bb02f09dc904fd577573db7898fe3224379802bb0bb0",
+          "totalBytes": 7944452,
+          "sha256": "99053e4b052e3803da2b02dabd8b56cc5e378ea5ac1d71470795f1a3a3bfef54",
+          "indexSha256": "afd3354ce7e8a7408c91b72e5c09b1ab91c944cbd79b0817755701c56af20992",
           "runtimePaths": [
             "/sysroot/encoding/json.a",
             "/sysroot/encoding/pem.a",
@@ -851,9 +851,9 @@
           "asset": "sysroot/chunks/wasip1-07.pack.gz",
           "index": "sysroot/chunks/wasip1-07.index.json.gz",
           "fileCount": 11,
-          "totalBytes": 4256866,
-          "sha256": "cbe123fed1d6d406442ffacec819b6ba8f2ffb7d17e5a43961d33f5d211270cf",
-          "indexSha256": "b9b8536d81863e5eeeae83312c74b16bae93dd4d92777d682b502b8b344f6cb0",
+          "totalBytes": 4259314,
+          "sha256": "a166e72a43e502bfa644e77f34366512d8aed00968cd17931cbbd8b9e028fee1",
+          "indexSha256": "7266de23327bd294bfce21653f044d3468d96f1490087874d0c82f5309a3557b",
           "runtimePaths": [
             "/sysroot/go/doc/comment.a",
             "/sysroot/go/format.a",
@@ -872,9 +872,9 @@
           "asset": "sysroot/chunks/wasip1-08.pack.gz",
           "index": "sysroot/chunks/wasip1-08.index.json.gz",
           "fileCount": 14,
-          "totalBytes": 8306028,
-          "sha256": "452ab98c430109043cb866209f71cf080eaab4cc245797587fc7933a7d72ec48",
-          "indexSha256": "a53642494a3c7d8a5a7e748e3998d558f96daecfe73f886c30c1be5939f3c2c9",
+          "totalBytes": 8330674,
+          "sha256": "642aae260d71f537993198ef663c522c708c28313349ae175c0ed65465925358",
+          "indexSha256": "ed4c94558074edc1868625f19448ae1f894595fc314b89c23e12c88db55c54ae",
           "runtimePaths": [
             "/sysroot/go/types.a",
             "/sysroot/go/version.a",
@@ -896,9 +896,9 @@
           "asset": "sysroot/chunks/wasip1-09.pack.gz",
           "index": "sysroot/chunks/wasip1-09.index.json.gz",
           "fileCount": 41,
-          "totalBytes": 7799820,
-          "sha256": "2291fcee51360171943fcfa4269ffeb29003e11941ed0ec8fef13c637c93376f",
-          "indexSha256": "320eed355173b189d42a70415d0a12f6f0bd91976dc0375750c63101275fa8d4",
+          "totalBytes": 7813744,
+          "sha256": "f9035abf8d35d3d0362c9e9c50d91f6ea0b72b7a8fec21b88dbbdd3360ca71bc",
+          "indexSha256": "14e75ae66a16df8ac0c233d856974746b623b8e8d5d0da64d9c791ffce70bc1d",
           "runtimePaths": [
             "/sysroot/image/gif.a",
             "/sysroot/image/internal/imageutil.a",
@@ -947,9 +947,9 @@
           "asset": "sysroot/chunks/wasip1-10.pack.gz",
           "index": "sysroot/chunks/wasip1-10.index.json.gz",
           "fileCount": 14,
-          "totalBytes": 8120128,
-          "sha256": "72604798e121407e3da16f0855582c94cd7e8fc0e7e7eda09323cd5b9dbea888",
-          "indexSha256": "22a94819e515a1f087d26978592d54f7c7b023aa685ac4edad9b7a28b6ffdf45",
+          "totalBytes": 8121864,
+          "sha256": "b2062c0f6cbff5bdd24b9196648d9dca66d11cf35469235f1d6f3ace4abb464e",
+          "indexSha256": "24654f3edf697c20c74dc5bacc633cab514b58dc2da92abd84fefffdda4e34f0",
           "runtimePaths": [
             "/sysroot/internal/testenv.a",
             "/sysroot/internal/testhash.a",
@@ -971,9 +971,9 @@
           "asset": "sysroot/chunks/wasip1-11.pack.gz",
           "index": "sysroot/chunks/wasip1-11.index.json.gz",
           "fileCount": 18,
-          "totalBytes": 6037442,
-          "sha256": "294b424eef144ab6a6704e1a52277e6cb2a0dd09e294674039c6039dd785c988",
-          "indexSha256": "d675d962b2acac56495d85f092deaefe72c00f36d1c54d0faf4112e7f6f38f41",
+          "totalBytes": 6038674,
+          "sha256": "7094aad65e77c487858f69badc04f4d1a6b8f31bdab269055f5476d9bb618d34",
+          "indexSha256": "666eeec5b54b2471e1dee7b98669020c26cf0ac743a0904aa1baa28d50d404fb",
           "runtimePaths": [
             "/sysroot/internal/zstd.a",
             "/sysroot/io/ioutil.a",
@@ -999,9 +999,9 @@
           "asset": "sysroot/chunks/wasip1-12.pack.gz",
           "index": "sysroot/chunks/wasip1-12.index.json.gz",
           "fileCount": 1,
-          "totalBytes": 3669172,
-          "sha256": "a0cd6e35743ef5c4dffcb62b0c3151dabe3b7d9ed06db7bb41b4057cda8ff4f5",
-          "indexSha256": "41dbf9f2d729dd2d8bae0dd7a5f05e96c3450b9be74d30bdd76a6f092b5141a5",
+          "totalBytes": 3669678,
+          "sha256": "2b0f203959ec7584962497ddd41c4947a9ab4286f463d550a38cbe8b6c04fa3a",
+          "indexSha256": "79757bce0813496c18f811b469d1862af43e639d2fad1b9e4c1cde2dc37316ac",
           "runtimePaths": [
             "/sysroot/net.a"
           ]
@@ -1010,9 +1010,9 @@
           "asset": "sysroot/chunks/wasip1-13.pack.gz",
           "index": "sysroot/chunks/wasip1-13.index.json.gz",
           "fileCount": 3,
-          "totalBytes": 8074708,
-          "sha256": "cbe5d5842cc108c8392f6555687d3c43e66d1ff3c407917a3bc28d878d14be3b",
-          "indexSha256": "77cb55843e94d13476ca64c312559b188a4236ce4927f0e16f2ca95322a0154f",
+          "totalBytes": 8116324,
+          "sha256": "bb80aad0c617a5b4822e851276ff4568d20acacdb1293a8ab5195480735c0dc5",
+          "indexSha256": "b9b0e7dd2e28c3862ebfd1fd7fe667230edca59e8e753c1d3bb638fe5e35ebff",
           "runtimePaths": [
             "/sysroot/net/http.a",
             "/sysroot/net/http/cgi.a",
@@ -1023,9 +1023,9 @@
           "asset": "sysroot/chunks/wasip1-14.pack.gz",
           "index": "sysroot/chunks/wasip1-14.index.json.gz",
           "fileCount": 26,
-          "totalBytes": 7985870,
-          "sha256": "574d1b1837dc117638bb071cf8390bffa81c4f921e4b64625e201ab12de7ceab",
-          "indexSha256": "e6656325c93dab978bae2b5312bebf71c06ccaf800ebda0275bca95317038487",
+          "totalBytes": 8041500,
+          "sha256": "bf8a15fc01d64f11c91a8773e80458cd2348254268502a8d38dc5f9317d5191e",
+          "indexSha256": "fe1c0901f74ef68c959600521c0d8d02437eb26c35375380ac5facc3aed9d42f",
           "runtimePaths": [
             "/sysroot/net/http/fcgi.a",
             "/sysroot/net/http/httptest.a",
@@ -1059,9 +1059,9 @@
           "asset": "sysroot/chunks/wasip1-15.pack.gz",
           "index": "sysroot/chunks/wasip1-15.index.json.gz",
           "fileCount": 19,
-          "totalBytes": 7715390,
-          "sha256": "0bdb60e08e9a3b63024d1bba96bf2a37bd6957496d8a0fc8eeb2cc4a50a9f738",
-          "indexSha256": "14f6ddff0ff52658cb5ff62fa91a36e2a1231f049e3960eb2ca6e505a749f90d",
+          "totalBytes": 7717192,
+          "sha256": "aadd52b5907b02d0580345a967a7dc58c5985b873ae2b60e4a17cd5690195be2",
+          "indexSha256": "78b58f5350d99a936c1d911fb26264714e2de1852752bcc64e905f2a6ac96325",
           "runtimePaths": [
             "/sysroot/regexp/syntax.a",
             "/sysroot/runtime/coverage.a",
@@ -1088,9 +1088,9 @@
           "asset": "sysroot/chunks/wasip1-16.pack.gz",
           "index": "sysroot/chunks/wasip1-16.index.json.gz",
           "fileCount": 22,
-          "totalBytes": 6139636,
-          "sha256": "88626b6eebff6c6be41f7c80c4e42f98596ce5942ac807fa9432eaef22ecae4b",
-          "indexSha256": "a62c4ee56f2ae2aaaa45b3016313e384172050934ad6691a0c645d6a20aeb979",
+          "totalBytes": 6142990,
+          "sha256": "25d56cb686c13def7ba74aa3b443e1c579b171a60a2936ee69ffb4a90e016e98",
+          "indexSha256": "c4ce15614f0314c2ff7cf58e59e5832229aa424800944799ea348dcd24c2032a",
           "runtimePaths": [
             "/sysroot/text/template/parse.a",
             "/sysroot/time/tzdata.a",
@@ -1143,9 +1143,9 @@
           "asset": "sysroot/chunks/wasip1-00.pack.gz",
           "index": "sysroot/chunks/wasip1-00.index.json.gz",
           "fileCount": 28,
-          "totalBytes": 11755796,
-          "sha256": "5efeec916412a90b74279dab1e8d8321bc48e4e85d582ae6ad606746a4d226d4",
-          "indexSha256": "2d24465d5a508603c3494c93105162149d8d4b47b43a30261dc987beb34d2dfd",
+          "totalBytes": 11761770,
+          "sha256": "ae8dbecb87f5e844986473f403f11ac5a592f7f1b6af835daa47b3dc02775736",
+          "indexSha256": "fca9a6d632cb521ee34cb322ab5e789a627becbd110b1bb8824de631116db859",
           "runtimePaths": [
             "/sysroot/internal/abi.a",
             "/sysroot/internal/asan.a",
@@ -1181,9 +1181,9 @@
           "asset": "sysroot/chunks/wasip1-01.pack.gz",
           "index": "sysroot/chunks/wasip1-01.index.json.gz",
           "fileCount": 34,
-          "totalBytes": 12153088,
-          "sha256": "9a9a974ac5f96c12a0a214df10c525abd82ce38e5bfe44df873b6a8a0cd05108",
-          "indexSha256": "8aaac4c5b4e481f8f26134d05b8f030d8fe530570b339498f03edc24a1abcf04",
+          "totalBytes": 12172508,
+          "sha256": "9d6a6ec1642be4a7daa7fad99143331ad51c42522970770f217fc56e6bb09b8c",
+          "indexSha256": "58ce7c3d69fbc6e593bee6c008fe2f74469785a175b54952200c07636edc8fb7",
           "runtimePaths": [
             "/sysroot/bufio.a",
             "/sysroot/bytes.a",
@@ -1225,9 +1225,9 @@
           "asset": "sysroot/chunks/wasip1-02.pack.gz",
           "index": "sysroot/chunks/wasip1-02.index.json.gz",
           "fileCount": 34,
-          "totalBytes": 8382162,
-          "sha256": "de185584c26d0f39a81806b917643c5ed9db8fb655e0f3c09915508f5c7d95d6",
-          "indexSha256": "172b9554308d5fab86da95e9a4aa4b3e303ac1cda13ceaf9ac856ccf5e44a63a",
+          "totalBytes": 8384480,
+          "sha256": "089bcc27becf6b8f78c17027701624a32f478439309118c274ce317425b843d5",
+          "indexSha256": "325de16f19896a9d8747317ba7f39125bc218c18f2e40fb89baaef56b07229a7",
           "runtimePaths": [
             "/sysroot/archive/tar.a",
             "/sysroot/archive/zip.a",
@@ -1269,9 +1269,9 @@
           "asset": "sysroot/chunks/wasip1-03.pack.gz",
           "index": "sysroot/chunks/wasip1-03.index.json.gz",
           "fileCount": 51,
-          "totalBytes": 5719484,
-          "sha256": "da9bb920398f269b34ebf2752d64323ec405c9bd66dc579f770de359f6dd9861",
-          "indexSha256": "f92f88f9377fd3913389b3e78fe7e71af2e561e2dad75a691474f9af20108639",
+          "totalBytes": 5720202,
+          "sha256": "aff3d3e7f7e091709d48d9a02dc558f079bbd53c34f22c211645741bfff38e79",
+          "indexSha256": "281c2cc1cd8cb64c3377b6f540be40d3de9516f43d94dc1d203032fe29b5e9a1",
           "runtimePaths": [
             "/sysroot/crypto/internal/fips140/aes/gcm.a",
             "/sysroot/crypto/internal/fips140/alias.a",
@@ -1330,9 +1330,9 @@
           "asset": "sysroot/chunks/wasip1-04.pack.gz",
           "index": "sysroot/chunks/wasip1-04.index.json.gz",
           "fileCount": 7,
-          "totalBytes": 7910952,
-          "sha256": "0612f1eca4d0e593561c60cf81b25fe2b284a3fe72550a176f533af3f36a8201",
-          "indexSha256": "162ebd0ccc8314c4788083636337908a0b3391d6d0b63c1cef96ff518779577d",
+          "totalBytes": 7938162,
+          "sha256": "80db12f6e303fd4f0b796b105e4b95c648c09ba4f6fd95773c634b92b273e26f",
+          "indexSha256": "dbaae98a822e2ebd2a9411fd1977d870532ba474d26ec9f6a3daac271358013f",
           "runtimePaths": [
             "/sysroot/crypto/tls.a",
             "/sysroot/crypto/tls/internal/fips140tls.a",
@@ -1347,9 +1347,9 @@
           "asset": "sysroot/chunks/wasip1-05.pack.gz",
           "index": "sysroot/chunks/wasip1-05.index.json.gz",
           "fileCount": 16,
-          "totalBytes": 7529064,
-          "sha256": "1265354740b3cf8dc3faf278c8516f230a3ab925ecab4d725c376c6a25aa0e60",
-          "indexSha256": "eaac24b47d8eed9e0917ddb2f15a839f64d63d3279442e4e3b4777d647e4ae25",
+          "totalBytes": 7531336,
+          "sha256": "e47835f3bdfe87de218918c63413c12d0b8a93603aeed73e1c063c61b43a2f2d",
+          "indexSha256": "6518346e964e6be7b92edc346b342943621fa6d4dd5b5eee4347bd1e5010f30e",
           "runtimePaths": [
             "/sysroot/debug/dwarf.a",
             "/sysroot/debug/elf.a",
@@ -1373,9 +1373,9 @@
           "asset": "sysroot/chunks/wasip1-06.pack.gz",
           "index": "sysroot/chunks/wasip1-06.index.json.gz",
           "fileCount": 10,
-          "totalBytes": 7938254,
-          "sha256": "ce8bdc80c8f79ca62f666f74138d1a2699cf39c5d2cd2f6ff68e68bdac336002",
-          "indexSha256": "be2de4f1d8ca39a297c6bb02f09dc904fd577573db7898fe3224379802bb0bb0",
+          "totalBytes": 7944452,
+          "sha256": "99053e4b052e3803da2b02dabd8b56cc5e378ea5ac1d71470795f1a3a3bfef54",
+          "indexSha256": "afd3354ce7e8a7408c91b72e5c09b1ab91c944cbd79b0817755701c56af20992",
           "runtimePaths": [
             "/sysroot/encoding/json.a",
             "/sysroot/encoding/pem.a",
@@ -1393,9 +1393,9 @@
           "asset": "sysroot/chunks/wasip1-07.pack.gz",
           "index": "sysroot/chunks/wasip1-07.index.json.gz",
           "fileCount": 11,
-          "totalBytes": 4256866,
-          "sha256": "cbe123fed1d6d406442ffacec819b6ba8f2ffb7d17e5a43961d33f5d211270cf",
-          "indexSha256": "b9b8536d81863e5eeeae83312c74b16bae93dd4d92777d682b502b8b344f6cb0",
+          "totalBytes": 4259314,
+          "sha256": "a166e72a43e502bfa644e77f34366512d8aed00968cd17931cbbd8b9e028fee1",
+          "indexSha256": "7266de23327bd294bfce21653f044d3468d96f1490087874d0c82f5309a3557b",
           "runtimePaths": [
             "/sysroot/go/doc/comment.a",
             "/sysroot/go/format.a",
@@ -1414,9 +1414,9 @@
           "asset": "sysroot/chunks/wasip1-08.pack.gz",
           "index": "sysroot/chunks/wasip1-08.index.json.gz",
           "fileCount": 14,
-          "totalBytes": 8306028,
-          "sha256": "452ab98c430109043cb866209f71cf080eaab4cc245797587fc7933a7d72ec48",
-          "indexSha256": "a53642494a3c7d8a5a7e748e3998d558f96daecfe73f886c30c1be5939f3c2c9",
+          "totalBytes": 8330674,
+          "sha256": "642aae260d71f537993198ef663c522c708c28313349ae175c0ed65465925358",
+          "indexSha256": "ed4c94558074edc1868625f19448ae1f894595fc314b89c23e12c88db55c54ae",
           "runtimePaths": [
             "/sysroot/go/types.a",
             "/sysroot/go/version.a",
@@ -1438,9 +1438,9 @@
           "asset": "sysroot/chunks/wasip1-09.pack.gz",
           "index": "sysroot/chunks/wasip1-09.index.json.gz",
           "fileCount": 41,
-          "totalBytes": 7799820,
-          "sha256": "2291fcee51360171943fcfa4269ffeb29003e11941ed0ec8fef13c637c93376f",
-          "indexSha256": "320eed355173b189d42a70415d0a12f6f0bd91976dc0375750c63101275fa8d4",
+          "totalBytes": 7813744,
+          "sha256": "f9035abf8d35d3d0362c9e9c50d91f6ea0b72b7a8fec21b88dbbdd3360ca71bc",
+          "indexSha256": "14e75ae66a16df8ac0c233d856974746b623b8e8d5d0da64d9c791ffce70bc1d",
           "runtimePaths": [
             "/sysroot/image/gif.a",
             "/sysroot/image/internal/imageutil.a",
@@ -1489,9 +1489,9 @@
           "asset": "sysroot/chunks/wasip1-10.pack.gz",
           "index": "sysroot/chunks/wasip1-10.index.json.gz",
           "fileCount": 14,
-          "totalBytes": 8120128,
-          "sha256": "72604798e121407e3da16f0855582c94cd7e8fc0e7e7eda09323cd5b9dbea888",
-          "indexSha256": "22a94819e515a1f087d26978592d54f7c7b023aa685ac4edad9b7a28b6ffdf45",
+          "totalBytes": 8121864,
+          "sha256": "b2062c0f6cbff5bdd24b9196648d9dca66d11cf35469235f1d6f3ace4abb464e",
+          "indexSha256": "24654f3edf697c20c74dc5bacc633cab514b58dc2da92abd84fefffdda4e34f0",
           "runtimePaths": [
             "/sysroot/internal/testenv.a",
             "/sysroot/internal/testhash.a",
@@ -1513,9 +1513,9 @@
           "asset": "sysroot/chunks/wasip1-11.pack.gz",
           "index": "sysroot/chunks/wasip1-11.index.json.gz",
           "fileCount": 18,
-          "totalBytes": 6037442,
-          "sha256": "294b424eef144ab6a6704e1a52277e6cb2a0dd09e294674039c6039dd785c988",
-          "indexSha256": "d675d962b2acac56495d85f092deaefe72c00f36d1c54d0faf4112e7f6f38f41",
+          "totalBytes": 6038674,
+          "sha256": "7094aad65e77c487858f69badc04f4d1a6b8f31bdab269055f5476d9bb618d34",
+          "indexSha256": "666eeec5b54b2471e1dee7b98669020c26cf0ac743a0904aa1baa28d50d404fb",
           "runtimePaths": [
             "/sysroot/internal/zstd.a",
             "/sysroot/io/ioutil.a",
@@ -1541,9 +1541,9 @@
           "asset": "sysroot/chunks/wasip1-12.pack.gz",
           "index": "sysroot/chunks/wasip1-12.index.json.gz",
           "fileCount": 1,
-          "totalBytes": 3669172,
-          "sha256": "a0cd6e35743ef5c4dffcb62b0c3151dabe3b7d9ed06db7bb41b4057cda8ff4f5",
-          "indexSha256": "41dbf9f2d729dd2d8bae0dd7a5f05e96c3450b9be74d30bdd76a6f092b5141a5",
+          "totalBytes": 3669678,
+          "sha256": "2b0f203959ec7584962497ddd41c4947a9ab4286f463d550a38cbe8b6c04fa3a",
+          "indexSha256": "79757bce0813496c18f811b469d1862af43e639d2fad1b9e4c1cde2dc37316ac",
           "runtimePaths": [
             "/sysroot/net.a"
           ]
@@ -1552,9 +1552,9 @@
           "asset": "sysroot/chunks/wasip1-13.pack.gz",
           "index": "sysroot/chunks/wasip1-13.index.json.gz",
           "fileCount": 3,
-          "totalBytes": 8074708,
-          "sha256": "cbe5d5842cc108c8392f6555687d3c43e66d1ff3c407917a3bc28d878d14be3b",
-          "indexSha256": "77cb55843e94d13476ca64c312559b188a4236ce4927f0e16f2ca95322a0154f",
+          "totalBytes": 8116324,
+          "sha256": "bb80aad0c617a5b4822e851276ff4568d20acacdb1293a8ab5195480735c0dc5",
+          "indexSha256": "b9b0e7dd2e28c3862ebfd1fd7fe667230edca59e8e753c1d3bb638fe5e35ebff",
           "runtimePaths": [
             "/sysroot/net/http.a",
             "/sysroot/net/http/cgi.a",
@@ -1565,9 +1565,9 @@
           "asset": "sysroot/chunks/wasip1-14.pack.gz",
           "index": "sysroot/chunks/wasip1-14.index.json.gz",
           "fileCount": 26,
-          "totalBytes": 7985870,
-          "sha256": "574d1b1837dc117638bb071cf8390bffa81c4f921e4b64625e201ab12de7ceab",
-          "indexSha256": "e6656325c93dab978bae2b5312bebf71c06ccaf800ebda0275bca95317038487",
+          "totalBytes": 8041500,
+          "sha256": "bf8a15fc01d64f11c91a8773e80458cd2348254268502a8d38dc5f9317d5191e",
+          "indexSha256": "fe1c0901f74ef68c959600521c0d8d02437eb26c35375380ac5facc3aed9d42f",
           "runtimePaths": [
             "/sysroot/net/http/fcgi.a",
             "/sysroot/net/http/httptest.a",
@@ -1601,9 +1601,9 @@
           "asset": "sysroot/chunks/wasip1-15.pack.gz",
           "index": "sysroot/chunks/wasip1-15.index.json.gz",
           "fileCount": 19,
-          "totalBytes": 7715390,
-          "sha256": "0bdb60e08e9a3b63024d1bba96bf2a37bd6957496d8a0fc8eeb2cc4a50a9f738",
-          "indexSha256": "14f6ddff0ff52658cb5ff62fa91a36e2a1231f049e3960eb2ca6e505a749f90d",
+          "totalBytes": 7717192,
+          "sha256": "aadd52b5907b02d0580345a967a7dc58c5985b873ae2b60e4a17cd5690195be2",
+          "indexSha256": "78b58f5350d99a936c1d911fb26264714e2de1852752bcc64e905f2a6ac96325",
           "runtimePaths": [
             "/sysroot/regexp/syntax.a",
             "/sysroot/runtime/coverage.a",
@@ -1630,9 +1630,9 @@
           "asset": "sysroot/chunks/wasip1-16.pack.gz",
           "index": "sysroot/chunks/wasip1-16.index.json.gz",
           "fileCount": 22,
-          "totalBytes": 6139636,
-          "sha256": "88626b6eebff6c6be41f7c80c4e42f98596ce5942ac807fa9432eaef22ecae4b",
-          "indexSha256": "a62c4ee56f2ae2aaaa45b3016313e384172050934ad6691a0c645d6a20aeb979",
+          "totalBytes": 6142990,
+          "sha256": "25d56cb686c13def7ba74aa3b443e1c579b171a60a2936ee69ffb4a90e016e98",
+          "indexSha256": "c4ce15614f0314c2ff7cf58e59e5832229aa424800944799ea348dcd24c2032a",
           "runtimePaths": [
             "/sysroot/text/template/parse.a",
             "/sysroot/time/tzdata.a",
@@ -1686,19 +1686,19 @@
           "asset": "sysroot/chunks/js-00.pack.gz",
           "index": "sysroot/chunks/js-00.index.json.gz",
           "fileCount": 28,
-          "totalBytes": 3199537,
-          "sha256": "53b88c646fdc5716bafba536f1814b8e07046487b27a8d40caad220415ebd46a",
-          "indexSha256": "327e24e3370fc1a0debec666940aa0c6357f5c64a2d6202bafc49aa0ab325d54",
-          "decodedTotalBytes": 11709434,
+          "totalBytes": 3205217,
+          "sha256": "ec1b50635a8377f12613c665cef6ed3683ef4ba1f0e110baf8c9bc7769687a22",
+          "indexSha256": "52e73ffe804f02caf0f69752077e628913f1c05ce313c0b14f20980f0d2a0eb2",
+          "decodedTotalBytes": 11715410,
           "delta": {
             "format": "copy-literal-v1",
             "base": {
               "asset": "sysroot/chunks/wasip1-00.pack.gz",
               "index": "sysroot/chunks/wasip1-00.index.json.gz",
               "fileCount": 28,
-              "totalBytes": 11755796,
-              "sha256": "5efeec916412a90b74279dab1e8d8321bc48e4e85d582ae6ad606746a4d226d4",
-              "indexSha256": "2d24465d5a508603c3494c93105162149d8d4b47b43a30261dc987beb34d2dfd"
+              "totalBytes": 11761770,
+              "sha256": "ae8dbecb87f5e844986473f403f11ac5a592f7f1b6af835daa47b3dc02775736",
+              "indexSha256": "fca9a6d632cb521ee34cb322ab5e789a627becbd110b1bb8824de631116db859"
             }
           },
           "runtimePaths": [
@@ -1736,19 +1736,19 @@
           "asset": "sysroot/chunks/js-01.pack.gz",
           "index": "sysroot/chunks/js-01.index.json.gz",
           "fileCount": 34,
-          "totalBytes": 1441234,
-          "sha256": "8a4536f19d4d2ecb0a6d77f4c5ec3a8ca567c383c352bbab7a2273e3e12f2406",
-          "indexSha256": "38996ea889290fc83349215d371ff4140d774b2c84857d3320d77b0c0c25c4e4",
-          "decodedTotalBytes": 12011538,
+          "totalBytes": 1442707,
+          "sha256": "edee11097d480cb518c035b44ea27f23bbab5810f1b3e7e228708503dc9a5ee0",
+          "indexSha256": "76ff7b42a7653f26ecaed734e52484ea6c33025e081169d9810149c2e7e8261c",
+          "decodedTotalBytes": 12014852,
           "delta": {
             "format": "copy-literal-v1",
             "base": {
               "asset": "sysroot/chunks/wasip1-01.pack.gz",
               "index": "sysroot/chunks/wasip1-01.index.json.gz",
               "fileCount": 34,
-              "totalBytes": 12153088,
-              "sha256": "9a9a974ac5f96c12a0a214df10c525abd82ce38e5bfe44df873b6a8a0cd05108",
-              "indexSha256": "8aaac4c5b4e481f8f26134d05b8f030d8fe530570b339498f03edc24a1abcf04"
+              "totalBytes": 12172508,
+              "sha256": "9d6a6ec1642be4a7daa7fad99143331ad51c42522970770f217fc56e6bb09b8c",
+              "indexSha256": "58ce7c3d69fbc6e593bee6c008fe2f74469785a175b54952200c07636edc8fb7"
             }
           },
           "runtimePaths": [
@@ -1792,19 +1792,19 @@
           "asset": "sysroot/chunks/js-02.pack.gz",
           "index": "sysroot/chunks/js-02.index.json.gz",
           "fileCount": 34,
-          "totalBytes": 288768,
-          "sha256": "491960e9ca0d4fc315058b7c539f6af239b644c499f357f664ad322455031bb3",
-          "indexSha256": "7b7a3eef861a6eaaa861c33d1f6b1e579a980ed1b897dab06b09c02ba6cf3134",
-          "decodedTotalBytes": 8381218,
+          "totalBytes": 288313,
+          "sha256": "878bb23740cfe5a3920a22a1c1f19514c284f6458f500e4e64b4aedf982b4d22",
+          "indexSha256": "5710cad1f3ca201c8aefad3bc1267b4880691a5f6d822ea9fab8935fc7ecc1c1",
+          "decodedTotalBytes": 8383538,
           "delta": {
             "format": "copy-literal-v1",
             "base": {
               "asset": "sysroot/chunks/wasip1-02.pack.gz",
               "index": "sysroot/chunks/wasip1-02.index.json.gz",
               "fileCount": 34,
-              "totalBytes": 8382162,
-              "sha256": "de185584c26d0f39a81806b917643c5ed9db8fb655e0f3c09915508f5c7d95d6",
-              "indexSha256": "172b9554308d5fab86da95e9a4aa4b3e303ac1cda13ceaf9ac856ccf5e44a63a"
+              "totalBytes": 8384480,
+              "sha256": "089bcc27becf6b8f78c17027701624a32f478439309118c274ce317425b843d5",
+              "indexSha256": "325de16f19896a9d8747317ba7f39125bc218c18f2e40fb89baaef56b07229a7"
             }
           },
           "runtimePaths": [
@@ -1848,19 +1848,19 @@
           "asset": "sysroot/chunks/js-03.pack.gz",
           "index": "sysroot/chunks/js-03.index.json.gz",
           "fileCount": 51,
-          "totalBytes": 290524,
-          "sha256": "f16d2facef80823c07a3479d7b286251468e6a866b21c9c6961fbae1320a1e9f",
-          "indexSha256": "952ea8f77851e80d13a079fb710b990baa218704cde8b6368758da20e7b06d85",
-          "decodedTotalBytes": 5703664,
+          "totalBytes": 289397,
+          "sha256": "ac73bf82e385ec3eaa9824d9484afc76019388eaeb2ee401d46c2996bc7b6b66",
+          "indexSha256": "d86b1d73e580ff4e7085f459346b9802bc5c6e27159eff17db7c77e86442797a",
+          "decodedTotalBytes": 5704364,
           "delta": {
             "format": "copy-literal-v1",
             "base": {
               "asset": "sysroot/chunks/wasip1-03.pack.gz",
               "index": "sysroot/chunks/wasip1-03.index.json.gz",
               "fileCount": 51,
-              "totalBytes": 5719484,
-              "sha256": "da9bb920398f269b34ebf2752d64323ec405c9bd66dc579f770de359f6dd9861",
-              "indexSha256": "f92f88f9377fd3913389b3e78fe7e71af2e561e2dad75a691474f9af20108639"
+              "totalBytes": 5720202,
+              "sha256": "aff3d3e7f7e091709d48d9a02dc558f079bbd53c34f22c211645741bfff38e79",
+              "indexSha256": "281c2cc1cd8cb64c3377b6f540be40d3de9516f43d94dc1d203032fe29b5e9a1"
             }
           },
           "runtimePaths": [
@@ -1921,19 +1921,19 @@
           "asset": "sysroot/chunks/js-04.pack.gz",
           "index": "sysroot/chunks/js-04.index.json.gz",
           "fileCount": 7,
-          "totalBytes": 222547,
-          "sha256": "1f43ea1bf8ad33b5a82a99679b197f7da6f468cab741bddb79c709e0134c6738",
-          "indexSha256": "1735a192963616c9f3598ee560fd1786b61ca642eddde22f142dee2c12f32173",
-          "decodedTotalBytes": 7910222,
+          "totalBytes": 222874,
+          "sha256": "fe2a12bbd09678a64677efbbd832099af8127c722c5eab7b6207d40603c98931",
+          "indexSha256": "c5ef42ea6b38540ed229d1c80caf6bcb43c7c19ac9b122290ad76d44fbacab42",
+          "decodedTotalBytes": 7937432,
           "delta": {
             "format": "copy-literal-v1",
             "base": {
               "asset": "sysroot/chunks/wasip1-04.pack.gz",
               "index": "sysroot/chunks/wasip1-04.index.json.gz",
               "fileCount": 7,
-              "totalBytes": 7910952,
-              "sha256": "0612f1eca4d0e593561c60cf81b25fe2b284a3fe72550a176f533af3f36a8201",
-              "indexSha256": "162ebd0ccc8314c4788083636337908a0b3391d6d0b63c1cef96ff518779577d"
+              "totalBytes": 7938162,
+              "sha256": "80db12f6e303fd4f0b796b105e4b95c648c09ba4f6fd95773c634b92b273e26f",
+              "indexSha256": "dbaae98a822e2ebd2a9411fd1977d870532ba474d26ec9f6a3daac271358013f"
             }
           },
           "runtimePaths": [
@@ -1950,19 +1950,19 @@
           "asset": "sysroot/chunks/js-05.pack.gz",
           "index": "sysroot/chunks/js-05.index.json.gz",
           "fileCount": 16,
-          "totalBytes": 208172,
-          "sha256": "3a320fd442e84e8503887aaf14afa63657d71b888a6df1f4b07579e42e1e014e",
-          "indexSha256": "71c56a882f7d56d170a29b266f3eda5dd99c678386c04b300f7b36e00f2124b0",
-          "decodedTotalBytes": 7528514,
+          "totalBytes": 208109,
+          "sha256": "f3a03a3187fc54f7df388d9ba5a620faa71b600253e207dc76f72be95263ef63",
+          "indexSha256": "d0502ac89054b98c78bd5da4ab946efe3a11477b1918797c7e07303088d2b11c",
+          "decodedTotalBytes": 7530786,
           "delta": {
             "format": "copy-literal-v1",
             "base": {
               "asset": "sysroot/chunks/wasip1-05.pack.gz",
               "index": "sysroot/chunks/wasip1-05.index.json.gz",
               "fileCount": 16,
-              "totalBytes": 7529064,
-              "sha256": "1265354740b3cf8dc3faf278c8516f230a3ab925ecab4d725c376c6a25aa0e60",
-              "indexSha256": "eaac24b47d8eed9e0917ddb2f15a839f64d63d3279442e4e3b4777d647e4ae25"
+              "totalBytes": 7531336,
+              "sha256": "e47835f3bdfe87de218918c63413c12d0b8a93603aeed73e1c063c61b43a2f2d",
+              "indexSha256": "6518346e964e6be7b92edc346b342943621fa6d4dd5b5eee4347bd1e5010f30e"
             }
           },
           "runtimePaths": [
@@ -1988,19 +1988,19 @@
           "asset": "sysroot/chunks/js-06.pack.gz",
           "index": "sysroot/chunks/js-06.index.json.gz",
           "fileCount": 10,
-          "totalBytes": 293600,
-          "sha256": "86c686f071da43147ba81b973d5ba59bcf38958ad9b3c7a333fad1eeaeae8af6",
-          "indexSha256": "d333598be2c2a17acb5cc2ee0eb815f9532ab5fa025bc8fdb2049211bd38305b",
-          "decodedTotalBytes": 7936736,
+          "totalBytes": 291966,
+          "sha256": "0d755fabe2dbe08af227129e0e850306c2d291918352386d09b854d80cd8e083",
+          "indexSha256": "a2c301b57aa0b6e031185af5383597d57f982619280589dbe13e9e813ca68288",
+          "decodedTotalBytes": 7942940,
           "delta": {
             "format": "copy-literal-v1",
             "base": {
               "asset": "sysroot/chunks/wasip1-06.pack.gz",
               "index": "sysroot/chunks/wasip1-06.index.json.gz",
               "fileCount": 10,
-              "totalBytes": 7938254,
-              "sha256": "ce8bdc80c8f79ca62f666f74138d1a2699cf39c5d2cd2f6ff68e68bdac336002",
-              "indexSha256": "be2de4f1d8ca39a297c6bb02f09dc904fd577573db7898fe3224379802bb0bb0"
+              "totalBytes": 7944452,
+              "sha256": "99053e4b052e3803da2b02dabd8b56cc5e378ea5ac1d71470795f1a3a3bfef54",
+              "indexSha256": "afd3354ce7e8a7408c91b72e5c09b1ab91c944cbd79b0817755701c56af20992"
             }
           },
           "runtimePaths": [
@@ -2020,19 +2020,19 @@
           "asset": "sysroot/chunks/js-07.pack.gz",
           "index": "sysroot/chunks/js-07.index.json.gz",
           "fileCount": 11,
-          "totalBytes": 154572,
-          "sha256": "1a9044df903c66054a0ae28366b9c6485ee891e0159637e122830dc8405eaa87",
-          "indexSha256": "42736b955636fb89db81a9c129e56bd8839846d06573d17b3a7e55fc124e2ea2",
-          "decodedTotalBytes": 4256440,
+          "totalBytes": 154305,
+          "sha256": "02f3a8acef65c8eff28312db130805b2298c7683bb157d3f44398fdcff3fd6b2",
+          "indexSha256": "7755cb2932bc098fe1e9cc503a465361f79250ceeb4fd4a5015b3a04aa62ab40",
+          "decodedTotalBytes": 4258886,
           "delta": {
             "format": "copy-literal-v1",
             "base": {
               "asset": "sysroot/chunks/wasip1-07.pack.gz",
               "index": "sysroot/chunks/wasip1-07.index.json.gz",
               "fileCount": 11,
-              "totalBytes": 4256866,
-              "sha256": "cbe123fed1d6d406442ffacec819b6ba8f2ffb7d17e5a43961d33f5d211270cf",
-              "indexSha256": "b9b8536d81863e5eeeae83312c74b16bae93dd4d92777d682b502b8b344f6cb0"
+              "totalBytes": 4259314,
+              "sha256": "a166e72a43e502bfa644e77f34366512d8aed00968cd17931cbbd8b9e028fee1",
+              "indexSha256": "7266de23327bd294bfce21653f044d3468d96f1490087874d0c82f5309a3557b"
             }
           },
           "runtimePaths": [
@@ -2053,19 +2053,19 @@
           "asset": "sysroot/chunks/js-08.pack.gz",
           "index": "sysroot/chunks/js-08.index.json.gz",
           "fileCount": 14,
-          "totalBytes": 185633,
-          "sha256": "67805ab69e294e7db6dacb5e9140af4be549881df53e91c36741b59509ec935f",
-          "indexSha256": "2d4b86b7d22e892d132bbd2d96d547120b25f5b1b12f80d83063e1857a851b59",
-          "decodedTotalBytes": 8305578,
+          "totalBytes": 186026,
+          "sha256": "b1ded6e327390fdff0469c83b3ff18b9f147fa0e284fea16cf2a4ff71453c5f6",
+          "indexSha256": "9ae0713b476932f54dccc5a1869f9ed7a8fd6b2ad4c4a4b9aba180fe57ed7d47",
+          "decodedTotalBytes": 8330230,
           "delta": {
             "format": "copy-literal-v1",
             "base": {
               "asset": "sysroot/chunks/wasip1-08.pack.gz",
               "index": "sysroot/chunks/wasip1-08.index.json.gz",
               "fileCount": 14,
-              "totalBytes": 8306028,
-              "sha256": "452ab98c430109043cb866209f71cf080eaab4cc245797587fc7933a7d72ec48",
-              "indexSha256": "a53642494a3c7d8a5a7e748e3998d558f96daecfe73f886c30c1be5939f3c2c9"
+              "totalBytes": 8330674,
+              "sha256": "642aae260d71f537993198ef663c522c708c28313349ae175c0ed65465925358",
+              "indexSha256": "ed4c94558074edc1868625f19448ae1f894595fc314b89c23e12c88db55c54ae"
             }
           },
           "runtimePaths": [
@@ -2089,19 +2089,19 @@
           "asset": "sysroot/chunks/js-09.pack.gz",
           "index": "sysroot/chunks/js-09.index.json.gz",
           "fileCount": 41,
-          "totalBytes": 355339,
-          "sha256": "a5c2d5defd3eb6f643ff32d9dcf5ee57eae4ee65733e0b86c58237a24472d5b7",
-          "indexSha256": "34f46edb3503157e4a8c31b3702043727e4c2b1749f5933a5cd2dbdb2c5f0d71",
-          "decodedTotalBytes": 7798004,
+          "totalBytes": 358591,
+          "sha256": "d0d5d2e9e6676d56a3382ed9b5ab939fcb1943c712671c4ccfe11b9306213891",
+          "indexSha256": "579feec9a520d8ffdb8484bc28db79edd3887f176e8d1aa8608df96f667d8d67",
+          "decodedTotalBytes": 7811910,
           "delta": {
             "format": "copy-literal-v1",
             "base": {
               "asset": "sysroot/chunks/wasip1-09.pack.gz",
               "index": "sysroot/chunks/wasip1-09.index.json.gz",
               "fileCount": 41,
-              "totalBytes": 7799820,
-              "sha256": "2291fcee51360171943fcfa4269ffeb29003e11941ed0ec8fef13c637c93376f",
-              "indexSha256": "320eed355173b189d42a70415d0a12f6f0bd91976dc0375750c63101275fa8d4"
+              "totalBytes": 7813744,
+              "sha256": "f9035abf8d35d3d0362c9e9c50d91f6ea0b72b7a8fec21b88dbbdd3360ca71bc",
+              "indexSha256": "14e75ae66a16df8ac0c233d856974746b623b8e8d5d0da64d9c791ffce70bc1d"
             }
           },
           "runtimePaths": [
@@ -2152,19 +2152,19 @@
           "asset": "sysroot/chunks/js-10.pack.gz",
           "index": "sysroot/chunks/js-10.index.json.gz",
           "fileCount": 14,
-          "totalBytes": 441853,
-          "sha256": "b58fa4fc6237f809ec9e2b5d038c53e01a44a7f81c9b8a6d02e3efc1bdf0aee4",
-          "indexSha256": "7e60a34fd23886168879b6a30eb2f7069bafdaee6bd0cb1fce1eaaf10f0330a7",
-          "decodedTotalBytes": 8108336,
+          "totalBytes": 441858,
+          "sha256": "7ae7bd4ef8d2b171b2ce674fc7845e4b3ff3fad7913f138e538ba53a2e4d7b84",
+          "indexSha256": "07b05cc067065b99fcccd7f199aa2d2dc2b756f23ca34f42850a491256fcd6b0",
+          "decodedTotalBytes": 8110070,
           "delta": {
             "format": "copy-literal-v1",
             "base": {
               "asset": "sysroot/chunks/wasip1-10.pack.gz",
               "index": "sysroot/chunks/wasip1-10.index.json.gz",
               "fileCount": 14,
-              "totalBytes": 8120128,
-              "sha256": "72604798e121407e3da16f0855582c94cd7e8fc0e7e7eda09323cd5b9dbea888",
-              "indexSha256": "22a94819e515a1f087d26978592d54f7c7b023aa685ac4edad9b7a28b6ffdf45"
+              "totalBytes": 8121864,
+              "sha256": "b2062c0f6cbff5bdd24b9196648d9dca66d11cf35469235f1d6f3ace4abb464e",
+              "indexSha256": "24654f3edf697c20c74dc5bacc633cab514b58dc2da92abd84fefffdda4e34f0"
             }
           },
           "runtimePaths": [
@@ -2188,19 +2188,19 @@
           "asset": "sysroot/chunks/js-11.pack.gz",
           "index": "sysroot/chunks/js-11.index.json.gz",
           "fileCount": 18,
-          "totalBytes": 160604,
-          "sha256": "ae89aad8c3a3970e820aecf4cfa8e492c76fb063bf993454135a3a7ca9247c7a",
-          "indexSha256": "f62a75d7241fb141f69dc0c340251d658671137fba209dbcce4f571df2ed29ae",
-          "decodedTotalBytes": 6036806,
+          "totalBytes": 160344,
+          "sha256": "905b3769d0ec12545f96d95f6c325e9fd2daf96566eda94597fc7f06cdc4b59a",
+          "indexSha256": "e2e0b5145b73f9d32e69715ed5de62db7a10c789400eb00445accb2a1f3a60e2",
+          "decodedTotalBytes": 6038044,
           "delta": {
             "format": "copy-literal-v1",
             "base": {
               "asset": "sysroot/chunks/wasip1-11.pack.gz",
               "index": "sysroot/chunks/wasip1-11.index.json.gz",
               "fileCount": 18,
-              "totalBytes": 6037442,
-              "sha256": "294b424eef144ab6a6704e1a52277e6cb2a0dd09e294674039c6039dd785c988",
-              "indexSha256": "d675d962b2acac56495d85f092deaefe72c00f36d1c54d0faf4112e7f6f38f41"
+              "totalBytes": 6038674,
+              "sha256": "7094aad65e77c487858f69badc04f4d1a6b8f31bdab269055f5476d9bb618d34",
+              "indexSha256": "666eeec5b54b2471e1dee7b98669020c26cf0ac743a0904aa1baa28d50d404fb"
             }
           },
           "runtimePaths": [
@@ -2228,19 +2228,19 @@
           "asset": "sysroot/chunks/js-12.pack.gz",
           "index": "sysroot/chunks/js-12.index.json.gz",
           "fileCount": 1,
-          "totalBytes": 1106552,
-          "sha256": "5ba21133aca1afb3eab9b79aeb8026efff5f2b526139c1c1ea3f4efa41c5b37a",
-          "indexSha256": "2c0b70ed1cd881b94c14894deca8c7730ae35df0b2b15e721b6893f2e8bfc777",
-          "decodedTotalBytes": 3651560,
+          "totalBytes": 1104337,
+          "sha256": "89a4f86a53c0af8780d79eb865fa78b953471fc886d2934c95aaf686003b38b2",
+          "indexSha256": "19806afb3d10e6ce869c363840d6c6cd1fa7a64e52f75e6541a6da52e380b5e3",
+          "decodedTotalBytes": 3652066,
           "delta": {
             "format": "copy-literal-v1",
             "base": {
               "asset": "sysroot/chunks/wasip1-12.pack.gz",
               "index": "sysroot/chunks/wasip1-12.index.json.gz",
               "fileCount": 1,
-              "totalBytes": 3669172,
-              "sha256": "a0cd6e35743ef5c4dffcb62b0c3151dabe3b7d9ed06db7bb41b4057cda8ff4f5",
-              "indexSha256": "41dbf9f2d729dd2d8bae0dd7a5f05e96c3450b9be74d30bdd76a6f092b5141a5"
+              "totalBytes": 3669678,
+              "sha256": "2b0f203959ec7584962497ddd41c4947a9ab4286f463d550a38cbe8b6c04fa3a",
+              "indexSha256": "79757bce0813496c18f811b469d1862af43e639d2fad1b9e4c1cde2dc37316ac"
             }
           },
           "runtimePaths": [
@@ -2251,19 +2251,19 @@
           "asset": "sysroot/chunks/js-13.pack.gz",
           "index": "sysroot/chunks/js-13.index.json.gz",
           "fileCount": 3,
-          "totalBytes": 2141226,
-          "sha256": "c9a60aeab32155c204b5d23a06b58456dd952b53da5ca5c73fe015cc73ed14b5",
-          "indexSha256": "575a7b0cb641415fecdbaf2dc3a90cd8fcf0dc6cbfff3f8c500ce71b3cb5e401",
-          "decodedTotalBytes": 8159238,
+          "totalBytes": 2150428,
+          "sha256": "5439973cad29e29f7452bb2149bb3e250d22935f5c61060444d4ca1cb66a5ed8",
+          "indexSha256": "4fce5480d98de2fe0281ee429a3ce16b5f8caed7628a8c0a4ec5eeb240b02b67",
+          "decodedTotalBytes": 8200878,
           "delta": {
             "format": "copy-literal-v1",
             "base": {
               "asset": "sysroot/chunks/wasip1-13.pack.gz",
               "index": "sysroot/chunks/wasip1-13.index.json.gz",
               "fileCount": 3,
-              "totalBytes": 8074708,
-              "sha256": "cbe5d5842cc108c8392f6555687d3c43e66d1ff3c407917a3bc28d878d14be3b",
-              "indexSha256": "77cb55843e94d13476ca64c312559b188a4236ce4927f0e16f2ca95322a0154f"
+              "totalBytes": 8116324,
+              "sha256": "bb80aad0c617a5b4822e851276ff4568d20acacdb1293a8ab5195480735c0dc5",
+              "indexSha256": "b9b0e7dd2e28c3862ebfd1fd7fe667230edca59e8e753c1d3bb638fe5e35ebff"
             }
           },
           "runtimePaths": [
@@ -2276,19 +2276,19 @@
           "asset": "sysroot/chunks/js-14.pack.gz",
           "index": "sysroot/chunks/js-14.index.json.gz",
           "fileCount": 26,
-          "totalBytes": 606327,
-          "sha256": "a944562a6a54fc6159cb96d8f49ee49431dd4d37df3ae8babc5ce7cfae852401",
-          "indexSha256": "b2c64481100c4c22486971ab12ec168a0b23eaa7908afdfe4874dfad9d507684",
-          "decodedTotalBytes": 7986748,
+          "totalBytes": 612849,
+          "sha256": "c391f6553285669fc99a86782e2fed520d94e8d51fddda0a5b03e980ed7e8201",
+          "indexSha256": "5a2b0bbc16fcf741067706e9f3aa1d82a773b7bb807c6f0c45e6b941fbd9dd29",
+          "decodedTotalBytes": 8042372,
           "delta": {
             "format": "copy-literal-v1",
             "base": {
               "asset": "sysroot/chunks/wasip1-14.pack.gz",
               "index": "sysroot/chunks/wasip1-14.index.json.gz",
               "fileCount": 26,
-              "totalBytes": 7985870,
-              "sha256": "574d1b1837dc117638bb071cf8390bffa81c4f921e4b64625e201ab12de7ceab",
-              "indexSha256": "e6656325c93dab978bae2b5312bebf71c06ccaf800ebda0275bca95317038487"
+              "totalBytes": 8041500,
+              "sha256": "bf8a15fc01d64f11c91a8773e80458cd2348254268502a8d38dc5f9317d5191e",
+              "indexSha256": "fe1c0901f74ef68c959600521c0d8d02437eb26c35375380ac5facc3aed9d42f"
             }
           },
           "runtimePaths": [
@@ -2324,19 +2324,19 @@
           "asset": "sysroot/chunks/js-15.pack.gz",
           "index": "sysroot/chunks/js-15.index.json.gz",
           "fileCount": 19,
-          "totalBytes": 306499,
-          "sha256": "5f5a813a652c94fba884f7eece06ae03f3d84ebb3257a14aef9766822a994448",
-          "indexSha256": "67f3c7999628798d025abf7f79f1692f8c10e53d20b149b95da3722cc2f2adf7",
-          "decodedTotalBytes": 7714332,
+          "totalBytes": 305901,
+          "sha256": "ac1a373811cf74b6757b0ae6fdeb511cc509ff59f2e51a920a9cb82c6d10f623",
+          "indexSha256": "8b5614518298601fb2435d55df7127b5f9f069bf10c72eeb828e65105298272e",
+          "decodedTotalBytes": 7716130,
           "delta": {
             "format": "copy-literal-v1",
             "base": {
               "asset": "sysroot/chunks/wasip1-15.pack.gz",
               "index": "sysroot/chunks/wasip1-15.index.json.gz",
               "fileCount": 19,
-              "totalBytes": 7715390,
-              "sha256": "0bdb60e08e9a3b63024d1bba96bf2a37bd6957496d8a0fc8eeb2cc4a50a9f738",
-              "indexSha256": "14f6ddff0ff52658cb5ff62fa91a36e2a1231f049e3960eb2ca6e505a749f90d"
+              "totalBytes": 7717192,
+              "sha256": "aadd52b5907b02d0580345a967a7dc58c5985b873ae2b60e4a17cd5690195be2",
+              "indexSha256": "78b58f5350d99a936c1d911fb26264714e2de1852752bcc64e905f2a6ac96325"
             }
           },
           "runtimePaths": [
@@ -2365,19 +2365,19 @@
           "asset": "sysroot/chunks/js-16.pack.gz",
           "index": "sysroot/chunks/js-16.index.json.gz",
           "fileCount": 22,
-          "totalBytes": 179014,
-          "sha256": "1ccd8b9b0d9a236357351c128db38419c55916c20088e336670b500bc9308d7a",
-          "indexSha256": "d56658571c46d4ec5671d962dcd28adc6ca4a17c35b6ce2b118ec0e946a14095",
-          "decodedTotalBytes": 6139530,
+          "totalBytes": 178897,
+          "sha256": "bd6577af86cf51cae1669ef5a83c4a224bb7510ed38f5c61b5c89a476cfd6d0e",
+          "indexSha256": "fed22348fe69f687e0c5de859232cb1de613600b8e50ec9781f3df961660fa9e",
+          "decodedTotalBytes": 6142894,
           "delta": {
             "format": "copy-literal-v1",
             "base": {
               "asset": "sysroot/chunks/wasip1-16.pack.gz",
               "index": "sysroot/chunks/wasip1-16.index.json.gz",
               "fileCount": 22,
-              "totalBytes": 6139636,
-              "sha256": "88626b6eebff6c6be41f7c80c4e42f98596ce5942ac807fa9432eaef22ecae4b",
-              "indexSha256": "a62c4ee56f2ae2aaaa45b3016313e384172050934ad6691a0c645d6a20aeb979"
+              "totalBytes": 6142990,
+              "sha256": "25d56cb686c13def7ba74aa3b443e1c579b171a60a2936ee69ffb4a90e016e98",
+              "indexSha256": "c4ce15614f0314c2ff7cf58e59e5832229aa424800944799ea348dcd24c2032a"
             }
           },
           "runtimePaths": [
@@ -2409,10 +2409,10 @@
           "asset": "sysroot/chunks/js-17.pack.gz",
           "index": "sysroot/chunks/js-17.index.json.gz",
           "fileCount": 1,
-          "totalBytes": 375159,
-          "sha256": "87025be8e39d00dbbf609241a8023b62626f489df2508b242aa5ff564c22a0e0",
-          "indexSha256": "dbb0a46ab8280978e619c3c6f2d169811f31afa540179c468c0aa2149f0a4144",
-          "decodedTotalBytes": 375154,
+          "totalBytes": 375165,
+          "sha256": "46e5b106fc86743da18a3ee99993c081724cdabcfb06884e2f24514ad0e8626d",
+          "indexSha256": "867843f49ef5b987adffff593f94fb276813f3f760763713b8b7d753f55cd4ca",
+          "decodedTotalBytes": 375160,
           "delta": {
             "format": "copy-literal-v1",
             "base": {

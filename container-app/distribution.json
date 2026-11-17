@@ -99,13 +99,13 @@
     },
     {
       "id": "llvm",
-      "identity": "sha256:1f7f638019dbb70a74fc9d4c5579b5d8697bc243a893bc3f9dbdc65a4b80465b",
+      "identity": "sha256:3345df4ab866088df3deabcd2afcb0802c3697603bc05e7ecc0f5ee386ea4375",
       "dependencies": [],
       "mount": "/opt/toolchains/llvm",
       "producer": {
         "repository": "https://github.com/llvm/llvm-project",
         "revision": "ca7933e47d3a3451d81e72ac174dcb5aa28b59d1",
-        "receiptSha256": "7db6ac0eff2256c79e0a5435908810d15daa18d2220c57ab64fea2116b7ba9fd"
+        "receiptSha256": "7a099d99a33b562ffb4c7126b57e5abb0e8e454089ecda2efd0ce0c15e031fd9"
       },
       "capabilities": [
         "wasi-preview1",
@@ -141,21 +141,6 @@
             "mediaType": "application/wasm"
           },
           "url": "https://seo-rii.github.io/wasm-idle/container-app/objects/dd9279345172fae1aef049ffcaf7531f945d85df08d97ea2ffce90581e9eee2d/lld.wasm.gz.bin"
-        },
-        {
-          "id": "sysroot",
-          "encoding": "identity",
-          "delivery": {
-            "bytes": 35328000,
-            "sha256": "b5c51389ce2f2b404f8b354788aa4a19a65d7e4af746cf52d24e7276d2eabf7f",
-            "mediaType": "application/octet-stream"
-          },
-          "logical": {
-            "bytes": 35328000,
-            "sha256": "b5c51389ce2f2b404f8b354788aa4a19a65d7e4af746cf52d24e7276d2eabf7f",
-            "mediaType": "application/octet-stream"
-          },
-          "url": "https://seo-rii.github.io/wasm-idle/container-app/objects/b5c51389ce2f2b404f8b354788aa4a19a65d7e4af746cf52d24e7276d2eabf7f/sysroot.tar.bin"
         }
       ],
       "files": [
@@ -168,10 +153,77 @@
           "path": "bin/wasm-ld",
           "asset": "lld",
           "executable": true
-        },
+        }
+      ]
+    },
+    {
+      "id": "llvm-sysroot-c",
+      "identity": "sha256:097889de402c394b65561a269e4106b26d8df3ae154cc20bfe3d951d9a1242c7",
+      "producer": {
+        "repository": "https://github.com/llvm/llvm-project",
+        "revision": "ca7933e47d3a3451d81e72ac174dcb5aa28b59d1",
+        "receiptSha256": "7a099d99a33b562ffb4c7126b57e5abb0e8e454089ecda2efd0ce0c15e031fd9"
+      },
+      "dependencies": [],
+      "mount": "/opt/toolchains/llvm-sysroot-c",
+      "capabilities": [],
+      "assets": [
+        {
+          "id": "sysroot-c",
+          "url": "https://seo-rii.github.io/wasm-idle/container-app/objects/670cf09dcb37d920f958ae68d0bc6655aba56e63153204239fc517708525f611/sysroot-c.tar.gz.bin",
+          "encoding": "gzip",
+          "delivery": {
+            "bytes": 1965206,
+            "sha256": "670cf09dcb37d920f958ae68d0bc6655aba56e63153204239fc517708525f611",
+            "mediaType": "application/octet-stream"
+          },
+          "logical": {
+            "bytes": 11945472,
+            "sha256": "097889de402c394b65561a269e4106b26d8df3ae154cc20bfe3d951d9a1242c7",
+            "mediaType": "application/octet-stream"
+          }
+        }
+      ],
+      "files": [
         {
           "path": "sysroot.tar",
-          "asset": "sysroot",
+          "asset": "sysroot-c",
+          "executable": false
+        }
+      ]
+    },
+    {
+      "id": "llvm-sysroot-cxx",
+      "identity": "sha256:6ed2cc0f8e685949758343bf79df7e158a7dd64d59dbd1c9d91355ae64598120",
+      "producer": {
+        "repository": "https://github.com/llvm/llvm-project",
+        "revision": "ca7933e47d3a3451d81e72ac174dcb5aa28b59d1",
+        "receiptSha256": "7a099d99a33b562ffb4c7126b57e5abb0e8e454089ecda2efd0ce0c15e031fd9"
+      },
+      "dependencies": [],
+      "mount": "/opt/toolchains/llvm-sysroot-cxx",
+      "capabilities": [],
+      "assets": [
+        {
+          "id": "sysroot-cxx",
+          "url": "https://seo-rii.github.io/wasm-idle/container-app/objects/ee8f1395e7e5281d9e706b67e5b51910cf070730b5e2271aa559336d63968510/sysroot-cxx.tar.gz.bin",
+          "encoding": "gzip",
+          "delivery": {
+            "bytes": 4776132,
+            "sha256": "ee8f1395e7e5281d9e706b67e5b51910cf070730b5e2271aa559336d63968510",
+            "mediaType": "application/octet-stream"
+          },
+          "logical": {
+            "bytes": 23380992,
+            "sha256": "6ed2cc0f8e685949758343bf79df7e158a7dd64d59dbd1c9d91355ae64598120",
+            "mediaType": "application/octet-stream"
+          }
+        }
+      ],
+      "files": [
+        {
+          "path": "sysroot.tar",
+          "asset": "sysroot-cxx",
           "executable": false
         }
       ]
@@ -522,5 +574,5 @@
       ]
     }
   ],
-  "distributionId": "website-aadc62719404966fb4c4d019db5651417854efe47f57582e26612ecc6a36d389"
+  "distributionId": "website-bc7a0d3bfe795fb289381d6e2bc7dafd195c2554de11388c99b48d9838b7f7cc"
 }

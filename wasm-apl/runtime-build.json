@@ -1,0 +1,133 @@
+{
+	"format": "wasm-apl-build-v1",
+	"version": "2.0",
+	"source": {
+		"name": "GNU APL",
+		"version": "2.0",
+		"license": "GPL-3.0-or-later",
+		"licenseFile": {
+			"path": "licenses/gnu-apl-GPL-3.0.txt",
+			"bytes": 35147,
+			"sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+		},
+		"url": "https://ftp.gnu.org/gnu/apl/apl-2.0.tar.gz",
+		"bytes": 5128916,
+		"sha256": "24bbb744fce47e62837234a053bdeecee51b9ea61c82c79f7cc191bc6a54c0a1"
+	},
+	"toolchain": {
+		"name": "wasi-sdk",
+		"version": "33.0",
+		"llvmRevision": "4434dabb69916856b824f68a64b029c67175e532",
+		"compiler": "clang version 22.1.0-wasi-sdk (https://github.com/llvm/llvm-project 4434dabb69916856b824f68a64b029c67175e532)"
+	},
+	"inputs": {
+		"build.py": {
+			"bytes": 9073,
+			"sha256": "5db60b3c3dae1dd0e0bae96a2eeb232c4bacd42cab1f8e6a4bbbdce72585cf1b"
+		},
+		"source-pins.json": {
+			"bytes": 2274,
+			"sha256": "458ce56c4e3bf61880c9c4980ba5953b786b313e47d5f979d2aca83ca4656081"
+		},
+		"wasi-platform.patch": {
+			"bytes": 6319,
+			"sha256": "c925992977d9862f81e01073f0d3de21c169007405579b0aa020a46884d43ffc"
+		},
+		"port/netdb.h": {
+			"bytes": 431,
+			"sha256": "e25a615ab8e5b483efd263514ba2f45a9198ba15c90f8d2bf8855419f34a80b0"
+		},
+		"port/termios.h": {
+			"bytes": 857,
+			"sha256": "fc60b2be2651c3ef54a2d303d0d6982d7c3ba689d55f0d6ec7a4cb42e9fa137d"
+		},
+		"port/wasi-host.cc": {
+			"bytes": 2981,
+			"sha256": "bcce5e80d0fca496da48cc120d20a0c91440004905fce8104a9522d126b84975"
+		},
+		"port/wasi-host.h": {
+			"bytes": 2244,
+			"sha256": "46cc44a30bde94ad41dcfce5492a9b0ba0cd66ad5b3eaaeef2d1f0f71114306a"
+		},
+		"licenses/compiler-rt-LICENSE.txt": {
+			"bytes": 16708,
+			"sha256": "1a8f1058753f1ba890de984e48f0242a3a5c29a6a8f2ed9fd813f36985387e8d"
+		},
+		"licenses/gnu-apl-GPL-3.0.txt": {
+			"bytes": 35147,
+			"sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+		},
+		"licenses/libcxx-LICENSE.txt": {
+			"bytes": 16703,
+			"sha256": "539dd7aed86e8a4f12cbdd0e6c50c189c7d74847e4fecc64ce2c6ee3a01da38b"
+		},
+		"licenses/libcxxabi-LICENSE.txt": {
+			"bytes": 16706,
+			"sha256": "e2b35be49f7284a45b7baca8fc7b3ab7440e7902392b2528a457816b5bb2a15c"
+		},
+		"licenses/libunwind-LICENSE.txt": {
+			"bytes": 16706,
+			"sha256": "b5efebcaca80879234098e52d1725e6d9eb8fb96a19fce625d39184b705f7b6d"
+		},
+		"licenses/musl-COPYRIGHT.txt": {
+			"bytes": 6204,
+			"sha256": "f9bc4423732350eb0b3f7ed7e91d530298476f8fec0c6c427a1c04ade22655af"
+		},
+		"licenses/wasi-libc-LICENSE.txt": {
+			"bytes": 910,
+			"sha256": "2711a8b5a5cdfef0e639f96c1aca12ae23d7d64a02d0507f1bdf14d2b27bbc3a"
+		}
+	},
+	"configuration": {
+		"configureArgs": [
+			"--host=wasm32-wasi",
+			"--without-optional_libs",
+			"--without-sqlite3",
+			"--without-postgresql",
+			"--without-pcre",
+			"--without-gtk3",
+			"--without-x",
+			"--prefix=/usr/local",
+			"CORE_COUNT_WANTED=0"
+		],
+		"compilerFlags": [
+			"-Os",
+			"--no-wasm-opt",
+			"-D_GNU_SOURCE",
+			"-fno-ident",
+			"-fwasm-exceptions",
+			"-mllvm",
+			"-wasm-use-legacy-eh=false",
+			"-D_WASI_EMULATED_SIGNAL",
+			"-D_WASI_EMULATED_MMAN",
+			"-D_WASI_EMULATED_PROCESS_CLOCKS",
+			"-DWASM_IDLE_APL_MEMORY_LIMIT=268435456"
+		],
+		"linkerFlags": [
+			"--no-wasm-opt",
+			"-fwasm-exceptions",
+			"-lunwind",
+			"-lwasi-emulated-signal",
+			"-lwasi-emulated-mman",
+			"-lwasi-emulated-process-clocks",
+			"-Wl,--strip-all",
+			"-Wl,-z,stack-size=2097152",
+			"-Wl,--max-memory=268435456"
+		],
+		"memoryLimitBytes": 268435456
+	},
+	"files": {
+		"apl.wasm": {
+			"bytes": 2693445,
+			"sha256": "0bdc51689b8c7f2dcb82639208cecf3471bf5d494ba06d66fd725c87f2329150"
+		},
+		"LICENSE": {
+			"bytes": 35147,
+			"sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+		},
+		"THIRD_PARTY_NOTICES.txt": {
+			"bytes": 109608,
+			"sha256": "ad32769aa7e3157a199a29cc77dbd37f7f9183b8db0dc3e12694c32fe90f9033"
+		}
+	}
+}

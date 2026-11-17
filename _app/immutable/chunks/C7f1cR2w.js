@@ -1,0 +1,1 @@
+var e={id:`SQUIRREL`,folder:`wasm-squirrel`,fileName:`squirrel.wasm`,sourcePath:`main.nut`,command:`squirrel`,args:[],sha256:`ca43b31506cc294c31b7b4b0e2d714ca3ab4fed88c4a3a7dcd9d0ac482b04f14`,bytes:305988};export{e as SQUIRREL_PROFILE};
