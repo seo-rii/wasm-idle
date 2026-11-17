@@ -57,6 +57,41 @@ const { moduleLoads, sandboxInstances, createMockSandboxClass, MockSandbox } = v
 	return { moduleLoads, sandboxInstances, createMockSandboxClass, MockSandbox };
 });
 
+vi.mock('$lib/playground/apl', () => {
+	moduleLoads.add('APL');
+	return { default: createMockSandboxClass('APL') };
+});
+
+vi.mock('$lib/playground/moonbit', () => {
+	moduleLoads.add('MOONBIT');
+	return { default: createMockSandboxClass('MOONBIT') };
+});
+
+vi.mock('$lib/playground/coq', () => {
+	moduleLoads.add('COQ');
+	return { default: createMockSandboxClass('COQ') };
+});
+
+vi.mock('$lib/playground/smalltalk', () => {
+	moduleLoads.add('SMALLTALK');
+	return { default: createMockSandboxClass('SMALLTALK') };
+});
+
+vi.mock('$lib/playground/sml', () => {
+	moduleLoads.add('SML');
+	return { default: createMockSandboxClass('SML') };
+});
+
+vi.mock('$lib/playground/bc', () => {
+	moduleLoads.add('BC');
+	return { default: createMockSandboxClass('BC') };
+});
+
+vi.mock('$lib/playground/uiua', () => {
+	moduleLoads.add('UIUA');
+	return { default: createMockSandboxClass('UIUA') };
+});
+
 vi.mock('$lib/playground/picat', () => {
 	moduleLoads.add('PICAT');
 	return { default: createMockSandboxClass('PICAT') };
@@ -79,6 +114,11 @@ vi.mock('$lib/playground/objectivec', () => {
 	return {
 		default: createMockSandboxClass('OBJC')
 	};
+});
+
+vi.mock('$lib/playground/dart', () => {
+	moduleLoads.add('DART');
+	return { default: createMockSandboxClass('DART') };
 });
 
 vi.mock('$lib/playground/scala', () => {
@@ -156,6 +196,11 @@ vi.mock('$lib/playground/gleam', () => {
 	};
 });
 
+vi.mock('$lib/playground/verilog', () => {
+	moduleLoads.add('VERILOG');
+	return { default: createMockSandboxClass('VERILOG') };
+});
+
 vi.mock('$lib/playground/grain', () => {
 	moduleLoads.add('GRAIN');
 	return { default: createMockSandboxClass('GRAIN') };
@@ -229,6 +274,11 @@ vi.mock('$lib/playground/nim', () => {
 	return {
 		default: createMockSandboxClass('NIM')
 	};
+});
+
+vi.mock('$lib/playground/sed', () => {
+	moduleLoads.add('SED');
+	return { default: createMockSandboxClass('SED') };
 });
 
 vi.mock('$lib/playground/bash', () => {
@@ -310,6 +360,11 @@ vi.mock('$lib/playground/sqlite', () => {
 	return {
 		default: createMockSandboxClass('SQLITE')
 	};
+});
+
+vi.mock('$lib/playground/graphql', () => {
+	moduleLoads.add('GRAPHQL');
+	return { default: createMockSandboxClass('GRAPHQL') };
 });
 
 vi.mock('$lib/playground/postgresql', () => {

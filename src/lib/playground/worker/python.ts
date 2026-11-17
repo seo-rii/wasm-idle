@@ -7,7 +7,18 @@ import {
 import { isSharedBufferBackedView } from '$lib/playground/sharedBuffer';
 import { parsePythonPackageLock } from '$lib/playground/pythonPackageLock';
 import { WASM_APECODE_VERSION, WASM_APECODE_WHEELS } from '$lib/playground/wasmApecodeVersion';
-import { withCachedPyodideModule } from './runtimeModule';
+import { compileWorkerRuntimeAsset, withCachedPyodideModule } from './runtimeModule';
+import {
+	PYTHON_SNAPSHOT_RESTORE_SOURCE,
+	pythonSnapshotKey,
+	readPythonSnapshot,
+	writePythonSnapshot
+} from './pythonSnapshot';
+import {
+	createRuntimeGeneratedAssetCacheBackend,
+	type RuntimeAssetCacheOptions,
+	type RuntimeGeneratedAssetCacheBackend
+} from '@wasm-idle/core';
 import { createPythonExecutionHelpers } from './pythonExecution';
 import { compilePythonBytecode } from './pythonCompile';
 import { createPythonWorkspaceImports } from './pythonWorkspaceImports';
@@ -51,6 +62,10 @@ let stdinBufferPyodide: Int32Array,
 
 // Only the next matching run may reuse a successful package preparation.
 let preparedPackagesKey: string | undefined;
+// Generated memory snapshots follow the host's persistent cache policy; absent means disabled.
+let snapshotCache: RuntimeGeneratedAssetCacheBackend | undefined;
+// The snapshot this worker's runtime corresponds to, and whether it was restored from it.
+let loadedSnapshot: { key: string; restored: boolean } | undefined;
 let maxRuntimeAssetBytes: number | undefined;
 let installedHyVersion: string | undefined;
 let installedAheuiVersion: string | undefined;
@@ -367,16 +382,21 @@ async function importRuntimeAssetModule(
 	}
 }
 
-async function loadPyodide(path: string) {
+async function loadPyodide(path: string, mode: 'run' | 'snapshot' = 'run') {
 	if (pyodide) return;
 	const runtimeBaseUrl = path.endsWith('/') ? path : `${path}/`;
-	// Download independent bootstrap files together, but preserve module evaluation order.
+	// Start the Wasm compilation and standard library with the bootstrap scripts. Waiting for the
+	// module before entering Pyodide would otherwise delay every later bootstrap download.
 	// The existing bounded loader (and host bridge, when configured) still owns every byte.
-	const [asmAsset, runtimeAsset, loadedLock] = await Promise.all([
+	const compiling = compileWorkerRuntimeAsset('pyodide.asm.wasm');
+	void compiling.catch(() => undefined);
+	const [asmAsset, runtimeAsset, loadedLock, standardLibrary] = await Promise.all([
 		loadWorkerRuntimeAsset('pyodide.asm.mjs'),
 		loadWorkerRuntimeAsset('pyodide.mjs'),
-		useAssetBridge ? undefined : loadWorkerRuntimeAsset('pyodide-lock.json')
+		useAssetBridge ? undefined : loadWorkerRuntimeAsset('pyodide-lock.json'),
+		loadWorkerRuntimeAsset('python_stdlib.zip')
 	]);
+	// Preserve module evaluation order.
 	const { default: createPyodideModule } = (await importRuntimeAssetModule(asmAsset)) as {
 		default: PyodideConfig['createPyodideModule'];
 	};
@@ -402,15 +422,60 @@ async function loadPyodide(path: string) {
 		lockFileContents = parsedLock.lock as unknown as Lockfile;
 	}
 	const { loadPyodide } = runtimeModule;
-	pyodide = await withCachedPyodideModule(runtimeBaseUrl, () =>
-		loadPyodide({
-			indexURL: path,
-			createPyodideModule,
-			packageBaseUrl,
-			...(lockFileContents ? { lockFileContents } : {})
-		})
-	);
+	const boot = (snapshotOptions: Partial<PyodideConfig> = {}) =>
+		withCachedPyodideModule(
+			runtimeBaseUrl,
+			() =>
+				loadPyodide({
+					indexURL: path,
+					createPyodideModule,
+					packageBaseUrl,
+					...(lockFileContents ? { lockFileContents } : {}),
+					...snapshotOptions
+				}),
+			{ module: compiling, standardLibrary: standardLibrary.bytes }
+		);
+	const key = snapshotCache
+		? await pythonSnapshotKey(runtimeModule.version, {
+				entry: runtimeAsset.bytes,
+				emscripten: asmAsset.bytes,
+				standardLibrary: standardLibrary.bytes
+			}).catch(() => undefined)
+		: undefined;
+	if (mode === 'snapshot') {
+		if (!key) throw new Error('Python snapshots require the persistent runtime cache');
+		pyodide = await boot({ _makeSnapshot: true } as Partial<PyodideConfig>);
+		loadedSnapshot = { key, restored: false };
+		return;
+	}
+	const snapshot =
+		key && snapshotCache ? await readPythonSnapshot(snapshotCache, key) : undefined;
+	let restored = false;
+	if (key && snapshot) {
+		try {
+			const runtime = await boot({ _loadSnapshot: snapshot } as Partial<PyodideConfig>);
+			if (runtime.runPython(PYTHON_SNAPSHOT_RESTORE_SOURCE) !== 2)
+				throw new Error('Restored Python snapshot failed its self-check');
+			pyodide = runtime;
+			restored = true;
+		} catch {
+			// An unusable snapshot must not prevent a normal start; the host rebuilds it.
+			await snapshotCache?.remove(key).catch(() => undefined);
+		}
+	}
+	if (!pyodide) pyodide = await boot();
+	loadedSnapshot = key ? { key, restored } : undefined;
 	installPythonFlushHooks = pyodide.runPython(PYTHON_FLUSH_HOOK_FACTORY);
+}
+
+function configureSnapshotCache(policy: RuntimeAssetCacheOptions | undefined) {
+	snapshotCache =
+		policy &&
+		typeof policy === 'object' &&
+		policy.enabled === true &&
+		typeof crypto?.subtle?.digest === 'function'
+			? createRuntimeGeneratedAssetCacheBackend(policy)
+			: undefined;
 }
 
 function getExecutionHelpers() {
@@ -620,8 +685,12 @@ self.onmessage = async (event: any) => {
 			useAssetBridge = runtimeAssets?.useAssetBridge === true;
 			maxRuntimeAssetBytes = runtimeAssets?.maxAssetBytes;
 			configureWorkerRuntimeAssets(runtimeAssets || null);
+			configureSnapshotCache(event.data.persistentCache);
 			postProgress(2, 'Loading Pyodide module');
 			await loadPyodide(baseUrl);
+			// Snapshot the base interpreter before any extension is installed.
+			const snapshotKey =
+				loadedSnapshot && !loadedSnapshot.restored ? loadedSnapshot.key : undefined;
 			if (extension !== undefined) {
 				await installPythonExtension(
 					extension,
@@ -633,9 +702,35 @@ self.onmessage = async (event: any) => {
 				);
 			}
 			postProgress(100, 'Pyodide runtime ready');
-			postMessage({ load: true });
+			// A helper worker builds the snapshot so this runtime keeps its ordinary globals.
+			postMessage(
+				snapshotKey ? { load: true, pythonSnapshotKey: snapshotKey } : { load: true }
+			);
 		} catch (e: any) {
 			self.postMessage({ error: e.message || 'Unknown error' });
+		}
+	} else if (event.data.buildSnapshot) {
+		try {
+			const runtimeAssets = assets as WorkerRuntimeAssetConfig | undefined;
+			baseUrl = runtimeAssets?.baseUrl || baseUrl;
+			useAssetBridge = runtimeAssets?.useAssetBridge === true;
+			maxRuntimeAssetBytes = runtimeAssets?.maxAssetBytes;
+			configureWorkerRuntimeAssets(runtimeAssets || null);
+			configureSnapshotCache(event.data.persistentCache);
+			await loadPyodide(baseUrl, 'snapshot');
+			const key = loadedSnapshot?.key;
+			// Only the requested runtime may be stored under the host's key.
+			if (!key || key !== event.data.buildSnapshot || !snapshotCache)
+				throw new Error('Python snapshot runtime does not match the request');
+			const snapshot = (
+				pyodide as unknown as { makeMemorySnapshot(): Uint8Array }
+			).makeMemorySnapshot();
+			const stored = await writePythonSnapshot(snapshotCache, key, snapshot);
+			self.postMessage({ pythonSnapshot: { stored } });
+		} catch (e: any) {
+			self.postMessage({
+				pythonSnapshot: { stored: false, error: e?.message || 'Unknown error' }
+			});
 		}
 	} else if (compile) {
 		try {

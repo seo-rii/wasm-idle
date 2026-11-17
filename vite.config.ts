@@ -5,6 +5,7 @@ import { defineConfig } from 'vite';
 import { createReleasePreviewSecurityHeaders } from './scripts/content-security-policy.mjs';
 import { createBuildIdentity } from './scripts/build-identity.mjs';
 import { createCoreSourceAliases } from './scripts/core-source-aliases.mjs';
+import { verifyMoonbitServicePolicy } from './scripts/verify-moonbit-service-policy.mjs';
 import sveltekitConfig from './sveltekit.config.mjs';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
@@ -14,6 +15,15 @@ export const releasePreviewSecurityHeaders = createReleasePreviewSecurityHeaders
 export default defineConfig({
 	define: { __WASM_IDLE_BUILD__: JSON.stringify(createBuildIdentity()) },
 	plugins: [
+		{
+			name: 'wasm-idle-moonbit-service-policy',
+			apply: 'build',
+			async buildStart() {
+				await verifyMoonbitServicePolicy({
+					rootDir: fileURLToPath(new URL('./static', import.meta.url))
+				});
+			}
+		},
 		{
 			name: 'wasm-idle-release-preview-security-headers',
 			configurePreviewServer(server) {

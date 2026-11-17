@@ -1,4 +1,8 @@
 const canonicalLanguageIds = [
+	'APL',
+	'MOONBIT',
+	'COQ',
+	'SMALLTALK',
 	'PICAT',
 	'WREN',
 	'SQUIRREL',
@@ -13,6 +17,7 @@ const canonicalLanguageIds = [
 	'RUST',
 	'GO',
 	'D',
+	'DART',
 	'CSHARP',
 	'FSHARP',
 	'VBNET',
@@ -21,6 +26,7 @@ const canonicalLanguageIds = [
 	'PROLOG',
 	'GLEAM',
 	'GRAIN',
+	'VERILOG',
 	'PERL',
 	'TCL',
 	'AWK',
@@ -28,10 +34,14 @@ const canonicalLanguageIds = [
 	'FORTH',
 	'J',
 	'BQN',
+	'SML',
+	'BC',
+	'UIUA',
 	'JANET',
 	'JULIA',
 	'NIM',
 	'BASH',
+	'SED',
 	'CLOJURESCRIPT',
 	'RESCRIPT',
 	'HY',
@@ -43,6 +53,7 @@ const canonicalLanguageIds = [
 	'TINYGO',
 	'OCAML',
 	'JAVASCRIPT',
+	'COFFEESCRIPT',
 	'TYPESCRIPT',
 	'ASSEMBLYSCRIPT',
 	'WAT',
@@ -66,6 +77,7 @@ const canonicalLanguageIds = [
 	'HASKELL',
 	'R',
 	'OCTAVE',
+	'GRAPHQL',
 	'DUCKDB',
 	'SQLITE',
 	'POSTGRESQL',
@@ -99,6 +111,8 @@ export const DEFAULT_DEFERRED_PROGRESS_LANGUAGES: ReadonlySet<string> = new Set(
 );
 
 const languageAliasDefinitions = {
+	GNUAPL: { canonicalId: 'APL', kind: 'implementation' },
+	'GNU-APL': { canonicalId: 'APL', kind: 'implementation' },
 	'PARI/GP': { canonicalId: 'PARIGP', kind: 'spelling' },
 	GP: { canonicalId: 'PARIGP', kind: 'implementation' },
 	BEFUNGE: { canonicalId: 'BEFUNGE93', kind: 'dialect' },
@@ -138,6 +152,7 @@ const languageAliasDefinitions = {
 	VLANG: { canonicalId: 'V', kind: 'spelling' },
 	DLANG: { canonicalId: 'D', kind: 'spelling' },
 	JS: { canonicalId: 'JAVASCRIPT', kind: 'spelling' },
+	COFFEE: { canonicalId: 'COFFEESCRIPT', kind: 'spelling' },
 	AS: { canonicalId: 'ASSEMBLYSCRIPT', kind: 'spelling' },
 	PYTHON: { canonicalId: 'PYTHON3', kind: 'spelling' },
 	PYPY3: {
@@ -174,6 +189,7 @@ const languageAliasDefinitions = {
 		kind: 'dialect',
 		message: 'SQL selects the SQLite dialect and engine.'
 	},
+	GQL: { canonicalId: 'GRAPHQL', kind: 'spelling' },
 	POSTGRES: { canonicalId: 'POSTGRESQL', kind: 'spelling' },
 	PGSQL: { canonicalId: 'POSTGRESQL', kind: 'spelling' },
 	PGLITE: {

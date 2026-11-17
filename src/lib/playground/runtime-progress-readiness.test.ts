@@ -37,6 +37,44 @@ type RuntimeReadinessAudit = EntryReadiness | StaticWorkerReadiness | TerminalRe
  * is the first safe user-visible readiness signal.
  */
 const runtimeReadinessAudit = {
+	APL: {
+		strategy: 'entry-signal',
+		hostModule: 'apl',
+		producerPath: 'src/lib/playground/worker/wasm.ts'
+	},
+	MOONBIT: {
+		strategy: 'entry-signal',
+		hostModule: 'moonbit',
+		producerPath: 'scripts/runtime-workers/wasm-moonbit-runner-worker.js'
+	},
+	COQ: { strategy: 'static-worker-fallback', hostModule: 'coq' },
+	SMALLTALK: { strategy: 'static-worker-fallback', hostModule: 'smalltalk' },
+	DART: {
+		strategy: 'entry-signal',
+		hostModule: 'dart',
+		producerPath: 'scripts/runtime-workers/wasm-dart-runner-worker.js'
+	},
+	SML: {
+		strategy: 'entry-signal',
+		hostModule: 'sml',
+		producerPath: 'src/lib/playground/worker/wasm.ts'
+	},
+	BC: {
+		strategy: 'entry-signal',
+		hostModule: 'bc',
+		producerPath: 'src/lib/playground/worker/wasm.ts'
+	},
+	UIUA: {
+		strategy: 'entry-signal',
+		hostModule: 'uiua',
+		producerPath: 'src/lib/playground/worker/wasm.ts'
+	},
+	SED: {
+		strategy: 'entry-signal',
+		hostModule: 'sed',
+		producerPath: 'src/lib/playground/worker/wasm.ts'
+	},
+	GRAPHQL: { strategy: 'static-worker-fallback', hostModule: 'graphql' },
 	PICAT: { strategy: 'static-worker-fallback', hostModule: 'picat' },
 	PARIGP: { strategy: 'static-worker-fallback', hostModule: 'parigp' },
 	WREN: {
@@ -101,6 +139,7 @@ const runtimeReadinessAudit = {
 	},
 	C3: { strategy: 'static-worker-fallback', hostModule: 'c3' },
 	GRAIN: { strategy: 'static-worker-fallback', hostModule: 'grain' },
+	VERILOG: { strategy: 'static-worker-fallback', hostModule: 'verilog' },
 	C: { strategy: 'terminal-fallback', hostModule: 'clang' },
 	CPP: { strategy: 'terminal-fallback', hostModule: 'clang' },
 	OBJC: { strategy: 'terminal-fallback', hostModule: 'objectivec' },
@@ -171,6 +210,11 @@ const runtimeReadinessAudit = {
 	},
 	OCAML: { strategy: 'terminal-fallback', hostModule: 'ocaml' },
 	JAVASCRIPT: {
+		strategy: 'entry-signal',
+		hostModule: 'typescript',
+		producerPath: 'src/lib/playground/worker/typescript.ts'
+	},
+	COFFEESCRIPT: {
 		strategy: 'entry-signal',
 		hostModule: 'typescript',
 		producerPath: 'src/lib/playground/worker/typescript.ts'
@@ -304,7 +348,11 @@ describe('runtime progress readiness audit', () => {
 				? readProjectSource('src/lib/playground/python.ts')
 				: ownHostSource.includes('extends Ruby')
 					? readProjectSource('src/lib/playground/ruby.ts')
-					: ownHostSource;
+					: ownHostSource.includes('extends StaticWorkerRuntimeSandbox')
+						? readProjectSource('src/lib/playground/staticWorkerRuntime.ts')
+						: ownHostSource.includes('extends Wasm')
+							? readProjectSource('src/lib/playground/wasm.ts')
+							: ownHostSource;
 
 			expect(producerSource, `${languageId} producer must emit ready`).toMatch(
 				/kind:\s*['"]ready['"]/u

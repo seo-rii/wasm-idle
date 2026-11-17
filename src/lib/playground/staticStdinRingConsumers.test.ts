@@ -31,6 +31,7 @@ const readers = {
 	prolog: 'createSharedStdinReader',
 	picat: 'createSharedStdinReader',
 	rescript: 'createSharedByteReader',
+	smalltalk: 'smalltalkInput',
 	tcl: 'createSharedStdinReader'
 };
 
@@ -78,7 +79,9 @@ function createReader(
 			wait
 		}
 	});
-	const takesSource = ['awk', 'awk-v1', 'c3', 'grain', 'julia', 'nim'].includes(runtime);
+	const takesSource = ['awk', 'awk-v1', 'c3', 'grain', 'julia', 'nim', 'smalltalk'].includes(
+		runtime
+	);
 	const reader = takesSource ? construct('', channel) : construct(channel);
 	return (length = 1): Uint8Array => {
 		const value = typeof reader === 'function' ? reader(length) : reader.read(length);
@@ -180,7 +183,7 @@ describe('static stdin consumer rollover contract', () => {
 				const control = new Int32Array(host.descriptor.buffer, 0, 4);
 				Atomics.store(control, 0, 2 ** 32 - 1);
 				Atomics.store(control, 1, 2 ** 32 - 1);
-				expect(() => createReader(runtime, host.descriptor)()).toThrow(/counter|corrupt/);
+				expect(() => createReader(runtime, host.descriptor)()).toThrow(/counter|corrupt/i);
 			});
 		});
 	}

@@ -10,6 +10,9 @@ export type WasiInterpreterProfile = {
 	readonly minSourceCharacters?: number;
 	readonly command: string;
 	readonly args: readonly string[];
+	readonly forwardProgramArgs?: boolean;
+	readonly programArgsPrefix?: readonly string[];
+	readonly hostProfile?: 'busybox-text-v1';
 	readonly sha256: string;
 	readonly bytes: number;
 };

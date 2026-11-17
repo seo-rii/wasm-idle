@@ -79,7 +79,9 @@ const BROWSER_TEST_ASSET_ENVIRONMENTS = {
 	lean4: ['WASM_IDLE_RUN_REAL_BROWSER_LEAN4'],
 	commonlisp: ['WASM_IDLE_RUN_REAL_BROWSER_COMMONLISP'],
 	picat: ['WASM_IDLE_RUN_REAL_BROWSER_PICAT'],
+	// MoonBit's required suite verifies policy denial and must not fetch its compiler.
 	parigp: ['WASM_IDLE_RUN_REAL_BROWSER_PARIGP'],
+	dart: ['WASM_IDLE_RUN_REAL_BROWSER_DART'],
 	scala: ['WASM_IDLE_RUN_REAL_BROWSER_SCALA']
 };
 

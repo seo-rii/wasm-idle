@@ -1,0 +1,22 @@
+{
+	"mlton-native": {
+		"url": "https://github.com/MLton/mlton/releases/download/on-20241230-release/mlton-20241230-1.amd64-linux.ubuntu-22.04_glibc2.35.tgz",
+		"bytes": 19397128,
+		"sha256": "13ac154710b57936c550a7670b0e96da0faf5365d033d09c19a5c3c907f12a25"
+	},
+	"mlton-source": {
+		"url": "https://github.com/MLton/mlton/releases/download/on-20241230-release/mlton-20241230.src.tgz",
+		"bytes": 22724980,
+		"sha256": "cd170218f67b76c3fcb4d487ba8841518babcebb41e4702074668e61156ca6f6"
+	},
+	"hamlet": {
+		"url": "https://people.mpi-sws.org/~rossberg/hamlet/hamlet-2.0.1.tar.gz",
+		"bytes": 655727,
+		"sha256": "819f3c90bf253df54a23ec074caf6859162004331a713f754393e25f87917b67"
+	},
+	"gmp": {
+		"url": "https://gmplib.org/download/gmp/gmp-6.3.0.tar.xz",
+		"bytes": 2094196,
+		"sha256": "a3c2b80201b89e68616f4ad30bc66aee4927c3ce50e33929ca819d5c43538898"
+	}
+}

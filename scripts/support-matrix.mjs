@@ -160,6 +160,136 @@ function codeList(values) {
 /** @type {SupportMatrixRow[]} */
 export const supportMatrixRows = [
 	{
+		language: 'GNU APL',
+		ids: ['APL'],
+		runtime: 'Original GNU APL 2.0 CLI on WASI',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/apl.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_APL',
+			marker: 'runAplConsumer'
+		}
+	},
+	{
+		language: 'MoonBit',
+		ids: ['MOONBIT'],
+		runtime: 'Unavailable: MPSL §14 review; compiler retained',
+		stdin: 'Unavailable (local research only)',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/moonbit.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_MOONBIT',
+			marker: 'MoonBit service-policy containment in Chromium'
+		}
+	},
+	{
+		language: 'Coq',
+		ids: ['COQ'],
+		runtime: 'Original jsCoq 0.17.1 / Coq 8.17.1 kernel',
+		stdin: 'Coq commands at EOF',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/coq.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_COQ',
+			marker: 'real Coq browser kernel'
+		}
+	},
+	{
+		language: 'Smalltalk (Amber)',
+		ids: ['SMALLTALK'],
+		runtime: 'Amber 0.32.0 compiler and JavaScript VM',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/smalltalk.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_SMALLTALK',
+			marker: 'runSmalltalkConsumer'
+		}
+	},
+	{
+		language: 'Dart',
+		ids: ['DART'],
+		runtime: 'Official Dart 3.14 DDC / WebAssembly compiler',
+		stdin: 'Yes',
+		editorSupport: 'Monaco Dart syntax',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/dart.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_DART',
+			marker: 'official Dart 3.14 compiler'
+		}
+	},
+	{
+		language: 'Standard ML',
+		ids: ['SML'],
+		runtime: 'Original HaMLet 2.0.1 / MLton WASI',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/sml.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_SML',
+			marker: 'runSmlConsumer'
+		}
+	},
+	{
+		language: 'Verilog',
+		ids: ['VERILOG'],
+		runtime: 'Icarus Verilog 14.0-devel / WebAssembly',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/verilog.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_VERILOG',
+			marker: 'runVerilogConsumer'
+		}
+	},
+	{
+		language: 'bc',
+		ids: ['BC'],
+		runtime: 'Gavin Howard bc 7.0.3 / WASI',
+		stdin: 'Yes (read())',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/bc.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_BC',
+			marker: 'runBcConsumer'
+		}
+	},
+	{
+		language: 'Uiua',
+		ids: ['UIUA'],
+		runtime: 'Uiua 0.19.1 / WASI',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/uiua.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_UIUA',
+			marker: 'runUiuaConsumer'
+		}
+	},
+	{
+		language: 'sed',
+		ids: ['SED'],
+		runtime: 'BusyBox 1.37.0 sed applet on WASI',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/esolangs.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_SED',
+			language: 'SED'
+		}
+	},
+	{
 		language: 'Picat',
 		ids: ['PICAT'],
 		runtime: 'Official Picat WebAssembly playground VM',
@@ -791,6 +921,19 @@ export const supportMatrixRows = [
 		}
 	},
 	{
+		language: 'CoffeeScript',
+		ids: ['COFFEESCRIPT'],
+		runtime: 'CoffeeScript 2.7.0 + JavaScript',
+		stdin: 'Yes',
+		editorSupport: 'syntax + compiler diagnostics',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/coffeescript.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_COFFEESCRIPT',
+			marker: 'runCoffeeScriptBrowserProbe'
+		}
+	},
+	{
 		language: 'JavaScript',
 		ids: ['JAVASCRIPT'],
 		runtime: 'wasm-typescript / TypeScript service',
@@ -1064,6 +1207,19 @@ export const supportMatrixRows = [
 		}
 	},
 	{
+		language: 'GraphQL',
+		ids: ['GRAPHQL'],
+		runtime: 'graphql-js 17.0.2 / browser Worker',
+		stdin: 'Buffered JSON; EOF before execution',
+		editorSupport: 'GraphQL LSP + execution diagnostics',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/graphql.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_GRAPHQL',
+			language: 'GRAPHQL'
+		}
+	},
+	{
 		language: 'PostgreSQL',
 		ids: ['POSTGRESQL'],
 		runtime: 'PostgreSQL 18 / PGlite',
@@ -1159,6 +1315,104 @@ function staticWorkerCustomizationFor(runtimeKey, envKey = runtimeKey.toUpperCas
 
 /** @type {Map<string, RuntimeDetail>} */
 const runtimeDetailsByLanguage = new Map([
+	[
+		'GNU APL',
+		{
+			packageBase: 'GNU APL 2.0 (GPL-3.0-or-later), wasi-sdk 33.0',
+			execution:
+				'Runs the original GNU APL parser, array evaluator, traditional functions and workspace engine; each execution has a fresh WASI filesystem',
+			customization: `${code('runtimeAssets.rootUrl')}, ${code('stdin')}, ${code('programArgs')}, ${code('activePath')}, ${code('workspaceFiles')}; no native processes, sockets, terminal attributes or optional GUI/database libraries`
+		}
+	],
+	[
+		'MoonBit',
+		{
+			packageBase:
+				'Official v0.10.19+97801ee1b compiler (MoonBit Public Source License), pinned source d4ada10d; matching core 0.1.20261030 (Apache-2.0, original notices retained)',
+			execution:
+				'Unavailable by default pending MPSL §14 service-license review; original compiler and 96 core packages retained for explicit loopback-only local research; compiler payload publication is blocked',
+			customization:
+				'Source editing and saving remain available; localResearchOnly is a technical research option, not license permission; see docs/moonbit.md for the retained FFI, workspace and limit contract'
+		}
+	],
+	[
+		'Coq',
+		{
+			packageBase:
+				'Byte-pinned jsCoq 0.17.1 with matching Coq 8.17.1 init/coq-base libraries; complete original source and license records',
+			execution:
+				'Genuine Coq proofs, tactics, evaluation and diagnostics; whole source and EOF-delimited stdin files processed by original Put/Load in a fresh Worker',
+			customization:
+				'rootUrl, stdin, activePath and workspace Load files; .coq page alias preserves V .v association; input commands execute at EOF; JavaScript heap is outside the Wasm linear-memory cap; no unbundled plugins, remote libraries or program/compiler arguments'
+		}
+	],
+	[
+		'Smalltalk (Amber)',
+		{
+			packageBase:
+				'Original @ambers/lang 0.32.0 and RequireJS 2.3.8 (MIT), pinned offline source archives',
+			execution:
+				'Original Amber compiler, chunk importer and kernel in a fresh Worker; classes, methods and collections; explicit or streaming UTF-8 stdin and EOF via host objects',
+			customization:
+				'rootUrl, stdin, programArgs, activePath, text workspace read/file-in; output, workspace and time limits, cancellation; JavaScript heap has no Wasm linear-memory cap; Amber dialect, no native GNU Smalltalk image or OS APIs'
+		}
+	],
+	[
+		'Dart',
+		{
+			packageBase: 'Official Dart SDK 3.14.0 DartPad release (BSD-3-Clause)',
+			execution:
+				'Compiles unchanged source with the original DDC in a Wasm Worker, executes with the original Dart web SDK in a fresh Worker; IOOverrides supplies UTF-8 standard streams and exit; supports async, program arguments and workspace Dart imports',
+			customization: `${code('runtimeAssets.rootUrl')}, ${code('stdin')}, ${code('programArgs')}, ${code('activePath')}, ${code('workspaceFiles')}; web language/library semantics, no native filesystem/process/network/FFI, Flutter, DOM or pub dependency downloads`
+		}
+	],
+	[
+		'Standard ML',
+		{
+			packageBase: 'Original HaMLet 2.0.1, MLton 20241230 / WASI build',
+			execution:
+				'Runs the original Standard ML parser, type checker, evaluator and embedded Basis library in a private WASI filesystem; each run starts fresh',
+			customization: `${code('runtimeAssets.rootUrl')}, ${code('stdin')}, ${code('programArgs')}, ${code('activePath')}, ${code('workspaceFiles')}; text execution without native processes or networking`
+		}
+	],
+	[
+		'Verilog',
+		{
+			packageBase:
+				'Original Icarus Verilog 14.0-devel c7530db / VeriSim ab0ff386 (GPL-2.0-or-later)',
+			execution:
+				'Original ivlpp, ivl and vvp compile fresh Verilog source then simulate it inside a private Worker; Verilog 2012 profile with the statically linked standard system tasks; UTF-8 and delayed stdin/stdout, original diagnostics and exit codes',
+			customization:
+				'`runtimeAssets.rootUrl`, `stdin`, `programArgs`, `activePath`, `workspaceFiles`; .v/.sv sources and include/data files, limits and cancellation; plain-text editor, no native VPI plugins or exported VCD artifacts'
+		}
+	],
+	[
+		'bc',
+		{
+			packageBase: 'Original Gavin Howard bc 7.0.3 (BSD-2-Clause), wasi-sdk 33.0 build',
+			execution:
+				'Runs the original arbitrary-precision POSIX bc with GNU extensions; -q -f loads source separately from read() stdin and exits after the script; original math library via -l',
+			customization: `${code('runtimeAssets.rootUrl')}, ${code('stdin')}, ${code('programArgs')}, ${code('activePath')}, ${code('workspaceFiles')}; interpreter options/files, execution limits, cancellation and fresh private state`
+		}
+	],
+	[
+		'Uiua',
+		{
+			packageBase: 'Original Uiua 0.19.1 (MIT), Rust wasm32-wasip1 build',
+			execution:
+				'Runs the upstream compiler/interpreter with source-file input, UTF-8 stdin/stdout and original diagnostics; remaining stack values are printed as in the CLI; each execution starts fresh',
+			customization: `${code('runtimeAssets.rootUrl')}, ${code('stdin')}, ${code('programArgs')}, ${code('activePath')}, ${code('workspaceFiles')}; text execution without native FFI, networking, subprocesses or media`
+		}
+	],
+	[
+		'sed',
+		{
+			packageBase: 'BusyBox 1.37.0 (GPL-2.0-only), the pinned reviewed container WASI build',
+			execution:
+				'Runs the original sed applet with -f and the active source file; supports patterns, substitutions, hold space, branching, extended regular expressions and input files; stdin streams to EOF; the upstream WASI profile rejects -i',
+			customization: `${code('runtimeAssets.rootUrl')}, ${code('stdin')}, ${code('programArgs')}, ${code('activePath')}, ${code('workspaceFiles')}; readonly source snapshots, private per-run filesystem, execution limits and cancellation; prepare compiles the interpreter without executing user source`
+		}
+	],
 	[
 		'Picat',
 		{
@@ -1767,6 +2021,14 @@ const runtimeDetailsByLanguage = new Map([
 		}
 	],
 	[
+		'CoffeeScript',
+		{
+			packageBase: `${workspacePackage('runtimes/wasm-typescript')} / ${workspaceDependency('runtimes/wasm-typescript', 'coffeescript')}`,
+			execution: `Official CoffeeScript compiler emits JavaScript executed by the existing browser runner; supports ${code('stdin')} and ${code('programArgs')}`,
+			customization: `${code('runtimeAssets.typescript.coffeeScriptModuleUrl')} or ${code('rootUrl')}; Node builtin modules share the JavaScript runner's documented browser contract`
+		}
+	],
+	[
 		'JavaScript',
 		{
 			packageBase: `${workspacePackage('runtimes/wasm-typescript')} / ${workspaceDependency(
@@ -2048,6 +2310,14 @@ const runtimeDetailsByLanguage = new Map([
 				`${code('runtimeAssets.postgresql.moduleUrl')} or ` +
 				`${code('PUBLIC_WASM_POSTGRESQL_MODULE_URL')} or ${code('rootUrl')}; ` +
 				`${code('stdin')}, ${code('activePath')}, ${code('workspaceFiles')}`
+		}
+	],
+	[
+		'GraphQL',
+		{
+			packageBase: `self-contained static Worker built from ${npmPackage('graphql')}`,
+			execution: `the reference parser, schema validator and executor run in a fresh browser Worker; SDL is inline or in ${code('schema.graphql')}; JSON stdin supplies ${code('rootValue')}, ${code('variables')} and ${code('operationName')}; prints one GraphQL JSON result; no remote API or JavaScript resolvers`,
+			customization: `${code('runtimeAssets.graphql.workerUrl')}/${code('workerReceipt')} or ${code('rootUrl')}; ${code('stdin')}, ${code('activePath')}, ${code('workspaceFiles')}`
 		}
 	],
 	[

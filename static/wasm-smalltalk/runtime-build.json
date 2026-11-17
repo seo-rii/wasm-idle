@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "language": "SMALLTALK",
+  "implementation": {
+    "name": "Amber Smalltalk",
+    "version": "0.32.0",
+    "source": "https://lolg.it/amber/amber/src/tag/0.32.0",
+    "license": "MIT",
+    "url": "https://registry.npmjs.org/@ambers/lang/-/lang-0.32.0.tgz",
+    "archive": "amber-lang-0.32.0.tgz",
+    "bytes": 438828,
+    "sha256": "4e158915bd814e002e34863587d842926dd886d8b6d6dc41ce5edf03735cf4e4"
+  },
+  "loader": {
+    "name": "RequireJS",
+    "version": "2.3.8",
+    "source": "https://github.com/requirejs/requirejs/tree/2.3.8",
+    "license": "MIT",
+    "url": "https://registry.npmjs.org/requirejs/-/requirejs-2.3.8.tgz",
+    "archive": "requirejs-2.3.8.tgz",
+    "bytes": 251788,
+    "sha256": "777158e89275e16bd51aec3ef714fbcb5dc45789e7078659933bc814916d7dec",
+    "licenseUrl": "https://raw.githubusercontent.com/requirejs/requirejs/2.3.8/LICENSE",
+    "licenseBytes": 1904,
+    "licenseSha256": "4e51314366fce8914fde48ccd4d52255d37f5fcb72e00fe0dccbc6cbb6682bc9"
+  },
+  "profileId": "amber-0.32.0-requirejs-2.3.8-v1",
+  "assets": {
+    "amber-modules.json.gz.bin": {
+      "bytes": 234686,
+      "sha256": "a26c8a85703177ac13252806c8b0c69a522b016d05b23395ce3aaa360532c563",
+      "uncompressedBytes": 2677796,
+      "uncompressedSha256": "3731480dcce0f98f0dc62e3795d4c18a0fe835eb4624b432c0c6ec99d46a1b3a"
+    },
+    "require.js": {
+      "bytes": 86533,
+      "sha256": "c1fc6b1d53af7522f78d664922abb32acac64ed0ecccb8f907f1e6fc7262563a"
+    }
+  },
+  "worker": {
+    "bytes": 8632,
+    "sha256": "0cb3d4a68ad8f28ae8bcf736649198c777090a1b8e6065fbb911a5d098b345a7"
+  },
+  "inputs": {
+    "upstream.json": {
+      "bytes": 978,
+      "sha256": "8882fbb97188cd10cf7aec5bc8b6ae58317eb7dc1344f4f1a626111515d312b3"
+    },
+    "build.py": {
+      "bytes": 4069,
+      "sha256": "e44af56b05ea6ad3001eb0458b0b64e208beb5192d48eab3ebc085fb252c9e54"
+    },
+    "runner-worker.source.js": {
+      "bytes": 8263,
+      "sha256": "534fdd22aee9a545577b237045a636d5b0b77292ae11ac1a23db0c5704a3be78"
+    }
+  }
+}

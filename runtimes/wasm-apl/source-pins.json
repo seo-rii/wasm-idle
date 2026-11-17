@@ -1,0 +1,59 @@
+{
+	"format": "wasm-apl-source-pins-v1",
+	"runtime": {
+		"name": "GNU APL",
+		"version": "2.0",
+		"license": "GPL-3.0-or-later",
+		"licenseFile": {
+			"path": "licenses/gnu-apl-GPL-3.0.txt",
+			"bytes": 35147,
+			"sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+		},
+		"url": "https://ftp.gnu.org/gnu/apl/apl-2.0.tar.gz",
+		"bytes": 5128916,
+		"sha256": "24bbb744fce47e62837234a053bdeecee51b9ea61c82c79f7cc191bc6a54c0a1"
+	},
+	"toolchain": {
+		"name": "wasi-sdk",
+		"version": "33.0",
+		"llvmRevision": "4434dabb69916856b824f68a64b029c67175e532"
+	},
+	"licenses": [
+		{
+			"path": "licenses/wasi-libc-LICENSE.txt",
+			"url": "https://raw.githubusercontent.com/WebAssembly/wasi-libc/161b3195fc2558d2b1ba3eb9ffae3b2b47407623/LICENSE",
+			"bytes": 910,
+			"sha256": "2711a8b5a5cdfef0e639f96c1aca12ae23d7d64a02d0507f1bdf14d2b27bbc3a"
+		},
+		{
+			"path": "licenses/musl-COPYRIGHT.txt",
+			"url": "https://raw.githubusercontent.com/WebAssembly/wasi-libc/161b3195fc2558d2b1ba3eb9ffae3b2b47407623/libc-top-half/musl/COPYRIGHT",
+			"bytes": 6204,
+			"sha256": "f9bc4423732350eb0b3f7ed7e91d530298476f8fec0c6c427a1c04ade22655af"
+		},
+		{
+			"path": "licenses/compiler-rt-LICENSE.txt",
+			"url": "https://raw.githubusercontent.com/llvm/llvm-project/4434dabb69916856b824f68a64b029c67175e532/compiler-rt/LICENSE.TXT",
+			"bytes": 16708,
+			"sha256": "1a8f1058753f1ba890de984e48f0242a3a5c29a6a8f2ed9fd813f36985387e8d"
+		},
+		{
+			"path": "licenses/libcxx-LICENSE.txt",
+			"url": "https://raw.githubusercontent.com/llvm/llvm-project/4434dabb69916856b824f68a64b029c67175e532/libcxx/LICENSE.TXT",
+			"bytes": 16703,
+			"sha256": "539dd7aed86e8a4f12cbdd0e6c50c189c7d74847e4fecc64ce2c6ee3a01da38b"
+		},
+		{
+			"path": "licenses/libcxxabi-LICENSE.txt",
+			"url": "https://raw.githubusercontent.com/llvm/llvm-project/4434dabb69916856b824f68a64b029c67175e532/libcxxabi/LICENSE.TXT",
+			"bytes": 16706,
+			"sha256": "e2b35be49f7284a45b7baca8fc7b3ab7440e7902392b2528a457816b5bb2a15c"
+		},
+		{
+			"path": "licenses/libunwind-LICENSE.txt",
+			"url": "https://raw.githubusercontent.com/llvm/llvm-project/4434dabb69916856b824f68a64b029c67175e532/libunwind/LICENSE.TXT",
+			"bytes": 16706,
+			"sha256": "b5efebcaca80879234098e52d1725e6d9eb8fb96a19fce625d39184b705f7b6d"
+		}
+	]
+}

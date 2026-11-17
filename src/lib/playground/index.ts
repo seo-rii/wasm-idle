@@ -22,6 +22,69 @@ interface SandboxRoute {
 
 const sandboxRoutes = [
 	{
+		languageId: 'APL',
+		load: async () => {
+			const { default: Apl } = await import('$lib/playground/apl');
+			return new Apl();
+		}
+	},
+	{
+		languageId: 'MOONBIT',
+		load: async () => {
+			const { default: Moonbit } = await import('$lib/playground/moonbit');
+			return new Moonbit();
+		}
+	},
+	{
+		languageId: 'COQ',
+		load: async () => {
+			const { default: Coq } = await import('$lib/playground/coq');
+			return new Coq();
+		}
+	},
+	{
+		languageId: 'SMALLTALK',
+		load: async () => {
+			const { default: Smalltalk } = await import('$lib/playground/smalltalk');
+			return new Smalltalk();
+		}
+	},
+	{
+		languageId: 'DART',
+		load: async () => {
+			const { default: Dart } = await import('$lib/playground/dart');
+			return new Dart();
+		}
+	},
+	{
+		languageId: 'BC',
+		load: async () => {
+			const { default: Bc } = await import('$lib/playground/bc');
+			return new Bc();
+		}
+	},
+	{
+		languageId: 'UIUA',
+		load: async () => {
+			const { default: Uiua } = await import('$lib/playground/uiua');
+			return new Uiua();
+		}
+	},
+	{
+		languageId: 'SED',
+		load: async () => {
+			const { default: Sed } = await import('$lib/playground/sed');
+			return new Sed();
+		}
+	},
+	{
+		languageId: 'GRAPHQL',
+		load: async () => {
+			const { default: Graphql } = await import('$lib/playground/graphql');
+			return new Graphql();
+		}
+	},
+	{
 		languageId: 'PICAT',
 		load: async () => {
 			const { default: Picat } = await import('$lib/playground/picat');
@@ -270,6 +333,13 @@ const sandboxRoutes = [
 		}
 	},
 	{
+		languageId: 'VERILOG',
+		load: async () => {
+			const { default: Verilog } = await import('$lib/playground/verilog');
+			return new Verilog();
+		}
+	},
+	{
 		languageId: 'GRAIN',
 		load: async () => {
 			const { default: Grain } = await import('$lib/playground/grain');
@@ -330,6 +400,13 @@ const sandboxRoutes = [
 		load: async () => {
 			const { default: J } = await import('$lib/playground/j');
 			return new J();
+		}
+	},
+	{
+		languageId: 'SML',
+		load: async () => {
+			const { default: Sml } = await import('$lib/playground/sml');
+			return new Sml();
 		}
 	},
 	{
@@ -421,6 +498,13 @@ const sandboxRoutes = [
 		load: async () => {
 			const { default: TypeScriptSandbox } = await import('$lib/playground/typescript');
 			return new TypeScriptSandbox('JAVASCRIPT');
+		}
+	},
+	{
+		languageId: 'COFFEESCRIPT',
+		load: async () => {
+			const { default: TypeScriptSandbox } = await import('$lib/playground/typescript');
+			return new TypeScriptSandbox('COFFEESCRIPT');
 		}
 	},
 	{

@@ -1,6 +1,9 @@
 import type { RustTargetTriple } from '$lib/playground/options';
 
 export type EditorDefaultLanguage =
+	| 'apl'
+	| 'coq'
+	| 'smalltalk'
 	| 'picat'
 	| 'wren'
 	| 'squirrel'
@@ -20,7 +23,9 @@ export type EditorDefaultLanguage =
 	| 'objectivecxx'
 	| 'python'
 	| 'java'
+	| 'dart'
 	| 'scala'
+	| 'moonbit'
 	| 'go'
 	| 'd'
 	| 'csharp'
@@ -31,21 +36,27 @@ export type EditorDefaultLanguage =
 	| 'prolog'
 	| 'gleam'
 	| 'grain'
+	| 'verilog'
 	| 'perl'
 	| 'tcl'
 	| 'awk'
 	| 'pascal'
 	| 'forth'
 	| 'j'
+	| 'sml'
 	| 'bqn'
+	| 'bc'
+	| 'uiua'
 	| 'janet'
 	| 'julia'
 	| 'nim'
+	| 'sed'
 	| 'bash'
 	| 'clojurescript'
 	| 'rescript'
 	| 'hy'
 	| 'ocaml'
+	| 'coffeescript'
 	| 'javascript'
 	| 'typescript'
 	| 'assemblyscript'
@@ -80,7 +91,11 @@ export type EditorDefaultLanguage =
 	| 'rust';
 
 export const editorDefaults: Record<
+	| 'moonbit'
 	| 'befunge93'
+	| 'apl'
+	| 'coq'
+	| 'smalltalk'
 	| 'picat'
 	| 'wren'
 	| 'squirrel'
@@ -99,6 +114,7 @@ export const editorDefaults: Record<
 	| 'objectivecxx'
 	| 'python'
 	| 'java'
+	| 'dart'
 	| 'scala'
 	| 'go'
 	| 'd'
@@ -110,21 +126,27 @@ export const editorDefaults: Record<
 	| 'prolog'
 	| 'gleam'
 	| 'grain'
+	| 'verilog'
 	| 'perl'
 	| 'tcl'
 	| 'awk'
 	| 'pascal'
 	| 'forth'
 	| 'j'
+	| 'sml'
 	| 'bqn'
+	| 'bc'
+	| 'uiua'
 	| 'janet'
 	| 'julia'
 	| 'nim'
+	| 'sed'
 	| 'bash'
 	| 'clojurescript'
 	| 'rescript'
 	| 'hy'
 	| 'ocaml'
+	| 'coffeescript'
 	| 'javascript'
 	| 'typescript'
 	| 'assemblyscript'
@@ -158,9 +180,14 @@ export const editorDefaults: Record<
 	| 'markdown',
 	string
 > = {
+	apl: '⍝ Type a line in standard input.\n⎕←⍞\n',
+	moonbit:
+		'// UTF-8 input; use EOF to finish. The host implements this Wasm FFI.\nextern "wasm" fn read_char() -> Int = "wasm_idle" "read_char"\n\nfn main {\n  let text = StringBuilder()\n  while true {\n    let code = read_char()\n    if code < 0 { break }\n    text.write_char(code.unsafe_to_char())\n  }\n  println(text.to_string())\n}\n',
 	squirrel:
 		"// Echo UTF-8 input; send EOF to finish.\nwhile (true) {\n    try { stdout.writen(stdin.readn('b'), 'b'); }\n    catch (error) {\n        if (stdin.eos()) break;\n        throw error;\n    }\n}\n",
 	uhmlang: '어떻게\n엄식?\n식어!\n이 사람이름이냐ㅋㅋ\n',
+	coq: '(* Enter additional Coq commands in the terminal, then press Ctrl+D. *)\nDefinition twice (n : nat) := n + n.\nEval cbv in twice 21.\n\nTheorem two_plus_two : 2 + 2 = 4.\nProof. reflexivity. Qed.\nCheck two_plus_two.\n',
+	smalltalk: '| line |\nline := Stdin nextLine.\nline ifNotNil: [Stdout nextPutAll: line; cr]!\n',
 	picat: 'main =>\n    print("Name? "),\n    flush(),\n    Name = read_line(),\n    println("Hello, " ++ Name).\n',
 	parigp: 'n = input();\nprint(sum(i = 1, n, i));\n',
 	wren: 'import "io" for Stdin\nSystem.print(Stdin.readLine())\n',
@@ -324,6 +351,12 @@ def fibonacci(n):
 tokens = input().split()
 n = int(tokens[0]) if tokens else 4
 print(f"fibonacci={fibonacci(n) + BONUS}")`,
+	dart: `import 'dart:io';
+
+void main() {
+  print(stdin.readLineSync() ?? '');
+}
+`,
 	scala: `// Enter a name in Preloaded stdin before Run. Extra reads receive EOF.
 // Scala.js supports Scala libraries; JVM-only dependencies are unavailable.
 object Main:
@@ -629,6 +662,14 @@ pub fn main() {
   }
   io.println("fibonacci=" <> int.to_string(fibonacci(n) + bonus))
 }`,
+	verilog: `module main;
+  integer value;
+  initial begin
+    if ($fscanf(32'h80000000, "%d", value) == 1)
+      $display("value=%0d", value);
+  end
+endmodule
+`,
 	grain: `module Main
 
 from "buffer" include Buffer
@@ -804,6 +845,14 @@ fib =: 3 : 0
   end.
 )
 smoutput 'fibonacci=', ": 3 + fib n`,
+	sml: `val _ = print (case TextIO.inputLine TextIO.stdIn of SOME line => line | NONE => "");
+`,
+	bc: `value = read()
+print "value=", value + 1, "\\n"
+`,
+	uiua: `# Read one complete line, then print it.
+&p &sc
+`,
 	bqn: `bonus ← 3
 fibonacci ← {𝕩 ≤ 1 ? 1 ; (fibonacci (𝕩 - 1)) + (fibonacci (𝕩 - 2))}
 n ← •ParseFloat •GetLine @
@@ -868,6 +917,9 @@ let n =
     4
 
 echo "fibonacci=", fibonacci(n) + bonus`,
+	sed: `# Replace world in each input line. Type input, then send EOF.
+s/world/sed/g
+`,
 	bash: `bonus=3
 declare -A memo=( [0]=1 [1]=1 )
 
@@ -963,6 +1015,13 @@ let read_int_or_default default =
 let () =
   let n = read_int_or_default 4 in
   Printf.printf "fibonacci=%d\\n%!" (fibonacci n + bonus)`,
+	coffeescript: `fs = require 'fs'
+n = Number fs.readFileSync(0, 'utf8').trim()
+[a, b] = [0, 1]
+for i in [0...n]
+  [a, b] = [b, a + b]
+console.log "fibonacci=#{a}"
+`,
 	javascript: `const fs = require('fs');
 
 const bonus = 3;
@@ -1322,9 +1381,18 @@ fn main() {
 	mut memo := map[int]i64{}
 	println('fibonacci=\${fibonacci(n, mut memo)}')
 }`,
-	graphql: `# memo cache: 0 => 1, 1 => 1
-query Fibonacci($n: Int = 4) {
-  fibonacci(n: $n)
+	graphql: `# Optional JSON goes in Preloaded stdin before Run.
+# Example: {"rootValue":{"greeting":"Hello GraphQL!","numbers":[1,2,3]},"variables":{"showNumbers":true}}
+# Leave input empty to query the schema and a null greeting.
+type Query {
+  greeting: String
+  numbers: [Int!]!
+}
+
+query Example($showNumbers: Boolean! = false) {
+  __typename
+  greeting
+  numbers @include(if: $showNumbers)
 }`,
 	duckdb: `WITH RECURSIVE memo(n, prev, curr) AS (
     SELECT 0, 1, 1
@@ -1603,6 +1671,9 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.malbolge ||
 		source === editorDefaults.aheui ||
 		source === editorDefaults.uhmlang ||
+		source === editorDefaults.apl ||
+		source === editorDefaults.coq ||
+		source === editorDefaults.smalltalk ||
 		source === editorDefaults.picat ||
 		source === editorDefaults.parigp ||
 		source === editorDefaults.wren ||
@@ -1618,6 +1689,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.cpp ||
 		source === editorDefaults.python ||
 		source === editorDefaults.java ||
+		source === editorDefaults.dart ||
 		source === editorDefaults.scala ||
 		source === editorDefaults.go ||
 		source === editorDefaults.d ||
@@ -1629,21 +1701,27 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.prolog ||
 		source === editorDefaults.gleam ||
 		source === editorDefaults.grain ||
+		source === editorDefaults.verilog ||
 		source === editorDefaults.perl ||
 		source === editorDefaults.tcl ||
 		source === editorDefaults.awk ||
 		source === editorDefaults.pascal ||
 		source === editorDefaults.forth ||
 		source === editorDefaults.j ||
+		source === editorDefaults.sml ||
 		source === editorDefaults.bqn ||
+		source === editorDefaults.bc ||
+		source === editorDefaults.uiua ||
 		source === editorDefaults.janet ||
 		source === editorDefaults.julia ||
 		source === editorDefaults.nim ||
+		source === editorDefaults.sed ||
 		source === editorDefaults.bash ||
 		source === editorDefaults.clojurescript ||
 		source === editorDefaults.rescript ||
 		source === editorDefaults.hy ||
 		source === editorDefaults.ocaml ||
+		source === editorDefaults.coffeescript ||
 		source === editorDefaults.javascript ||
 		source === editorDefaults.typescript ||
 		source === editorDefaults.assemblyscript ||

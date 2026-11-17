@@ -109,4 +109,25 @@ describe('getGoLanguageServer', () => {
 		expect(worker?.terminated).toBe(true);
 		expect(status).toHaveBeenCalledWith({ state: 'disabled' });
 	});
+
+	it('shares the runtime manifest and hands the lock root to the worker', async () => {
+		const handle = await getGoLanguageServer({
+			rootUrl: 'https://app.example.com/wasm-idle/',
+			currentUrl: 'https://app.example.com/wasm-idle/editor',
+			go: {
+				compilerUrl: '/wasm-idle/wasm-go/index.js?v=7',
+				runtimeManifestUrl: '/wasm-idle/wasm-go/runtime/runtime-manifest.v1.json?v=7'
+			},
+			createWorker: () => new mockState.FakeWorker() as unknown as Worker
+		});
+		expect(mockState.workers[0]?.messages[0]).toMatchObject({
+			persistentAssets: { assetRoot: 'https://app.example.com/wasm-idle/' },
+			options: {
+				compilerUrl: 'https://app.example.com/wasm-idle/wasm-go/index.js?v=7',
+				runtimeManifestUrl:
+					'https://app.example.com/wasm-idle/wasm-go/runtime/runtime-manifest.v1.json?v=7'
+			}
+		});
+		handle.dispose();
+	});
 });

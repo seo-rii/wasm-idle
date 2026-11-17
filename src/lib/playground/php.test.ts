@@ -65,6 +65,7 @@ describe('PHP sandbox', () => {
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(1, {
 			load: true,
 			moduleUrl: 'http://localhost:3000/absproxy/5173/wasm-php/runtime.mjs',
+			persistentCache: expect.objectContaining({ enabled: true }),
 			log: true
 		});
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(

@@ -6,9 +6,13 @@ import { verifyPageWasmDebugRelease } from './scripts/verify-page-wasm-debug.mjs
 import { verifyPageC3Compiler } from './scripts/verify-page-c3-compiler.mjs';
 import { verifyPageLfortranCompiler } from './scripts/verify-page-lfortran-compiler.mjs';
 import { shouldSkipAssetVerification } from './scripts/run-page.mjs';
+import { verifyMoonbitServicePolicy } from './scripts/verify-moonbit-service-policy.mjs';
 
 const repoRoot = path.dirname(fileURLToPath(import.meta.url));
 const buildDir = path.join(repoRoot, 'build');
+
+// Publication policy is unconditional, including direct invocation and skip/reuse modes.
+await verifyMoonbitServicePolicy({ rootDir: buildDir });
 
 if (!shouldSkipAssetVerification()) {
 	await verifyPageC3Compiler({ rootDir: buildDir });

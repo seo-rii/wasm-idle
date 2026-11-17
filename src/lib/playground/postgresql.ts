@@ -15,6 +15,7 @@ import {
 	RuntimeConfigurationError,
 	TimeoutError,
 	resolveExecutionLimits,
+	resolveRuntimeAssetCacheOptions,
 	validateExecutionWorkspace
 } from '@wasm-idle/core';
 
@@ -47,6 +48,7 @@ class Postgresql implements Sandbox {
 	uid = 0;
 	exit = true;
 	moduleUrl = '';
+	private persistentCacheKey = '';
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	private activeOperation: PostgresqlOperation | null = null;
 	private disposed = false;
@@ -280,8 +282,19 @@ class Postgresql implements Sandbox {
 				const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
 				const nextModuleUrl = resolvePostgresqlRuntimeModuleUrl(runtimeAssets, currentUrl);
 				if (!this.isOperationActive(activeOperation)) return;
-				if (this.worker && this.moduleUrl !== nextModuleUrl) this.workerSession.reset();
+				const persistentCache = resolveRuntimeAssetCacheOptions(
+					typeof runtimeAssets === 'object' ? runtimeAssets.persistentCache : undefined,
+					options.persistentCache
+				);
+				const nextPersistentCacheKey = JSON.stringify(persistentCache);
+				if (
+					this.worker &&
+					(this.moduleUrl !== nextModuleUrl ||
+						this.persistentCacheKey !== nextPersistentCacheKey)
+				)
+					this.workerSession.reset();
 				this.moduleUrl = nextModuleUrl;
+				this.persistentCacheKey = nextPersistentCacheKey;
 				if (!this.isOperationActive(activeOperation)) return;
 				if (!this.worker) {
 					const WorkerConstructor = (
@@ -332,6 +345,7 @@ class Postgresql implements Sandbox {
 					worker.postMessage({
 						load: true,
 						moduleUrl: this.moduleUrl,
+						persistentCache,
 						log: _log
 					});
 				} else {
