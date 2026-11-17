@@ -400,12 +400,15 @@ describe('runtime browser CI selection', () => {
 		'src/routes/workspace-share-paths.playwright.test.ts',
 		'src/routes/workspace-banners.playwright.test.ts',
 		'src/routes/workspace-whitespace-paths.playwright.test.ts',
+		'src/routes/workspace-cpp.playwright.test.ts',
 		'src/routes/debugger-toolbar-layout.playwright.test.ts',
 		'src/routes/workspaceStorage.ts',
 		'src/routes/workspaceArchive.worker.ts'
 	])('selects one required workspace family for %s', (file) => {
 		expect(changedBrowserFamilies([file])).toEqual(['workspace']);
-		expect(createAllLanguageBrowserTestPlan({ family: 'workspace' }).testFiles).toHaveLength(9);
+		const files = createAllLanguageBrowserTestPlan({ family: 'workspace' }).testFiles;
+		expect(files).toHaveLength(10);
+		expect(files).toContain('src/routes/workspace-cpp.playwright.test.ts');
 	});
 	it('selects recovery tests alongside normal .NET and Nim execution', () => {
 		const dotnet = createAllLanguageBrowserTestPlan({ family: 'dotnet' });
