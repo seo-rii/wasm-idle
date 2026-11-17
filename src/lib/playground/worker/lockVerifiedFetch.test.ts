@@ -162,4 +162,47 @@ describe('lock-verified runtime fetch', () => {
 		await flush();
 		expect(storage.write).not.toHaveBeenCalled();
 	});
+
+	it('makes a request for a file that is still being stored wait for that write', async () => {
+		const stored: Uint8Array[] = [];
+		let finishWrite = () => {};
+		storage.write.mockImplementationOnce(async ({ bytes: written }) => {
+			await new Promise<void>((resolve) => (finishWrite = resolve));
+			stored.push(written);
+			return true;
+		});
+		storage.read.mockImplementation(async () => stored[0]?.slice());
+		const f = fixture();
+		const url = `${root}runtime/tools/compile.wasm.gz`;
+		// A preload reads the whole body; the compile asks for the same file before the
+		// background write has finished.
+		expect(new Uint8Array(await (await f.fetch(url)).arrayBuffer())).toEqual(bytes);
+		await flush();
+		const again = f.fetch(url);
+		await flush();
+		expect(f.network).toHaveBeenCalledOnce();
+		finishWrite();
+		expect(new Uint8Array(await (await again).arrayBuffer())).toEqual(bytes);
+		expect(f.network).toHaveBeenCalledOnce();
+		// A request made before the first response arrives waits as well, and an abort
+		// releases the waiting request without a download.
+		storage.read.mockReset();
+		storage.read.mockResolvedValue(undefined);
+		let respond = (_response: Response) => {};
+		f.network.mockImplementationOnce(
+			() => new Promise<Response>((resolve) => (respond = resolve))
+		);
+		const other = `${root}runtime/tools/compile.wasm.gz?v=2`;
+		const first = f.fetch(other);
+		await flush();
+		const aborted = new AbortController();
+		const second = f.fetch(other, { signal: aborted.signal });
+		await flush();
+		aborted.abort(new DOMException('stop', 'AbortError'));
+		await expect(second).rejects.toMatchObject({ name: 'AbortError' });
+		respond(new Response('missing', { status: 404 }));
+		expect((await first).status).toBe(404);
+		expect(f.network).toHaveBeenCalledTimes(2);
+		storage.read.mockReset();
+	});
 });
