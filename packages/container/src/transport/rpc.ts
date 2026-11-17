@@ -4,7 +4,9 @@ export const RPC_VERSION = 1;
 export const RPC_BYTES = 65536;
 const HEADER_BYTES = 64;
 export const RPC_SIZE = HEADER_BYTES + 2 * RPC_BYTES;
-const enum Field { State, Version, GenerationLow, GenerationHigh, Request, Operation, MetadataLength, DataLength, Error }
+// Revision fields use spare header slots, so peers built before them stay compatible:
+// an older owner never sets RevisionTracked, and an older worker never reads them.
+const enum Field { State, Version, GenerationLow, GenerationHigh, Request, Operation, MetadataLength, DataLength, Error, Revision, RevisionTracked }
 const enum State { Idle, Request, Response, Stopped }
 export enum Operation {
   Open = 1, Close, Stat, Lstat, Fstat, DirectoryPath, Read, Pread, Write, Pwrite,
@@ -41,12 +43,26 @@ export function createRpcBuffer(generation: number): SharedArrayBuffer {
   return buffer;
 }
 
+/**
+ * Bind an owner-side revision publisher. Call it synchronously on every filesystem
+ * advance so a worker never observes the previous value after a mutation completed.
+ * Workers compare values for equality only, so the low 32 bits suffice.
+ */
+export function createRpcRevisionPublisher(buffer: SharedArrayBuffer, generation: number): (revision: number) => void {
+  const { header } = channel(buffer, generation);
+  return revision => {
+    if (!Number.isSafeInteger(revision) || revision < 0) throw new Error('Invalid filesystem revision');
+    Atomics.store(header, Field.Revision, revision | 0);
+    Atomics.store(header, Field.RevisionTracked, 1);
+  };
+}
+
 /** Only call in a dedicated Worker. The Supervisor must never synchronously wait. */
 export function createRpcClient(buffer: SharedArrayBuffer, generation: number, post: (notice: RpcNotice) => void, maxBlockedIoMs: number) {
   if (!Number.isSafeInteger(maxBlockedIoMs) || maxBlockedIoMs < 1 || maxBlockedIoMs > 3600000) throw new Error('Invalid RPC wait deadline');
   const c = channel(buffer, generation); c.identity();
   let sequence = 0;
-  return (operation: Operation, args: readonly unknown[], bytes: Uint8Array = new Uint8Array()): RpcReply => {
+  const call = (operation: Operation, args: readonly unknown[], bytes: Uint8Array = new Uint8Array()): RpcReply => {
     c.identity();
     if (Atomics.load(c.header, Field.State) !== State.Idle || sequence === 0x7fffffff) throw new Error('RPC channel unavailable');
     const encoded = encoder.encode(JSON.stringify(args));
@@ -74,8 +90,15 @@ export function createRpcClient(buffer: SharedArrayBuffer, generation: number, p
     if (error !== 0) throw new Error('Invalid RPC error response');
     return { value, bytes: resultBytes };
   };
+  /** The owner's current filesystem revision, or undefined when the owner does not publish one. */
+  const revision = (): number | undefined =>
+    Atomics.load(c.header, Field.RevisionTracked) === 1 ? Atomics.load(c.header, Field.Revision) : undefined;
+  return Object.assign(call, { revision });
 }
-export type RpcCall = ReturnType<typeof createRpcClient>;
+export type RpcCall = ((operation: Operation, args: readonly unknown[], bytes?: Uint8Array) => RpcReply) & {
+  /** Present on channel clients; plain test doubles omit it and are never cached. */
+  readonly revision?: () => number | undefined;
+};
 
 /** A channel is bound to one process by closure, never by guest-supplied pid lookup. */
 export function createRpcServer(buffer: SharedArrayBuffer, generation: number, dispatch: (operation: Operation, args: unknown[], bytes: Uint8Array) => Promise<RpcReply>) {

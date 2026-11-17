@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import {
 	createPhpEngineBootstrap,
@@ -91,10 +91,27 @@ describe('PHP selected-engine startup', () => {
 		expect(compile).toHaveBeenCalledTimes(1);
 		expect(f.fetch).toHaveBeenCalledTimes(1);
 		expect(f.detect).toHaveBeenCalledTimes(1);
+		expectTypeOf(a.module).toEqualTypeOf<WebAssembly.Module>();
 		const first = await WebAssembly.instantiate(a.module),
 			second = await WebAssembly.instantiate(b.module);
+		expectTypeOf(first).toEqualTypeOf<WebAssembly.Instance>();
+		expectTypeOf(second).toEqualTypeOf<WebAssembly.Instance>();
 		new Uint8Array((first.exports.memory as WebAssembly.Memory).buffer)[0] = 99;
 		expect(new Uint8Array((second.exports.memory as WebAssembly.Memory).buffer)[0]).toBe(0);
+	});
+	it('preserves the concrete loader type without initializing a PHP instance', async () => {
+		const f = fixture();
+		const loader = {
+			dependencyFilename: f.assets.jspi.url,
+			dependenciesTotalSize: f.assets.jspi.bytes,
+			init: vi.fn((runtime: string, options: { noInitialRun: boolean }) => ({ runtime, options }))
+		};
+		const asset = { ...f.assets.jspi, load: async () => loader };
+		const prepare = createPhpEngineBootstrap({ jspi: asset, asyncify: asset }, f.detect);
+		const result = await prepare();
+		expectTypeOf(result.loader).toEqualTypeOf<typeof loader>();
+		expect(result.loader).toBe(loader);
+		expect(loader.init).not.toHaveBeenCalled();
 	});
 	it('retains separate code for the two explicit engine profiles', async () => {
 		const f = fixture();

@@ -30,6 +30,7 @@ const ASSET_GROUPS = [
 	'commonlisp',
 	'picat',
 	'parigp',
+	'dart',
 	'scala'
 ];
 const SUPPORTED_GROUPS = new Set(['all', ...ASSET_GROUPS]);
@@ -201,7 +202,8 @@ export function normalizeBrowserTestAssetGroups(groups) {
  *   staticDir?: string;
  *   cacheDir?: string;
  *   versionModulePath?: string;
- *   prepareOcamlWrapper?: (options: { sourceRoot: string; staticDir: string; versionModulePath?: string }) => Promise<unknown>;
+ *   temporaryParentDir?: string;
+ *   prepareOcamlWrapper?: (options: { sourceRoot: string; staticDir: string; versionModulePath?: string; temporaryParentDir?: string }) => Promise<unknown>;
  *   baseUrl?: string;
  *   clangdSourceDir?: string;
  *   clangdReceiptPath?: string;
@@ -210,6 +212,7 @@ export function normalizeBrowserTestAssetGroups(groups) {
  *   timeoutMs?: number;
  *   prepareLean4?: typeof import('./sync-wasm-lean4.mjs').syncWasmLean4Assets;
  *   prepareCommonLisp?: typeof import('./sync-wasm-commonlisp.mjs').syncWasmCommonLispAssets;
+ *   prepareDart?: typeof import('./sync-wasm-dart.mjs').syncWasmDartAssets;
  * }} [options]
  */
 export async function prepareBrowserTestAssets({
@@ -220,6 +223,7 @@ export async function prepareBrowserTestAssets({
 	scalaLockPath = DEFAULT_SCALA_LOCK_PATH,
 	cacheDir = DEFAULT_CACHE_DIR,
 	versionModulePath,
+	temporaryParentDir,
 	prepareOcamlWrapper = prepareOcamlBrowserWrapper,
 	baseUrl,
 	clangdSourceDir = manifestPath === DEFAULT_MANIFEST_PATH &&
@@ -234,7 +238,9 @@ export async function prepareBrowserTestAssets({
 	prepareLean4 = async (options) =>
 		(await import('./sync-wasm-lean4.mjs')).syncWasmLean4Assets(options),
 	prepareCommonLisp = async (options) =>
-		(await import('./sync-wasm-commonlisp.mjs')).syncWasmCommonLispAssets(options)
+		(await import('./sync-wasm-commonlisp.mjs')).syncWasmCommonLispAssets(options),
+	prepareDart = async (options) =>
+		(await import('./sync-wasm-dart.mjs')).syncWasmDartAssets(options)
 } = {}) {
 	const manifest = parseManifest(JSON.parse(await readFile(manifestPath, 'utf8')));
 	const selectedGroups = normalizeBrowserTestAssetGroups(groups);
@@ -257,6 +263,10 @@ export async function prepareBrowserTestAssets({
 			!process.env.WASM_IDLE_TEST_ASSET_BASE_URL);
 
 	for (const group of selectedGroups) {
+		if (group === 'dart') {
+			await prepareDart({ targetDir: path.join(staticDir, 'wasm-dart') });
+			continue;
+		}
 		if (group === 'scala') {
 			/** @type {{repository: string; revision: string; files: {path: string; bytes: number; sha256: string}[]}} */
 			const lock = JSON.parse(await readFile(scalaLockPath, 'utf8'));
@@ -380,7 +390,8 @@ export async function prepareBrowserTestAssets({
 			await prepareOcamlWrapper({
 				sourceRoot: inputRoot,
 				staticDir,
-				...(versionModulePath ? { versionModulePath } : {})
+				...(versionModulePath ? { versionModulePath } : {}),
+				...(temporaryParentDir ? { temporaryParentDir } : {})
 			});
 		}
 		if (manifest.generatedWorkers?.some((generatedGroup) => generatedGroup === group)) {
@@ -466,6 +477,24 @@ export async function verifyBrowserTestAssets({
 		);
 		if (fingerprint !== profile.fingerprint)
 			throw new Error('Required OCaml browser bundle fingerprint mismatch');
+	}
+	if (selectedGroups.includes('dart')) {
+		const manifest = JSON.parse(
+			await readFile(path.join(REPO_ROOT, 'static/wasm-dart/upstream.json'), 'utf8')
+		);
+		const { WASM_DART_RUNTIME: profile } = await loadBundledProfile(
+			new URL('../src/lib/playground/wasmDartVersion.ts', import.meta.url)
+		);
+		for (const [name, receipt] of Object.entries({
+			...manifest.assets,
+			'LICENSE.txt': manifest.license,
+			'runner-worker.js': profile.worker
+		}))
+			receipts.push({
+				target: `wasm-dart/${name}`,
+				size: receipt.bytes,
+				sha256: receipt.sha256
+			});
 	}
 	if (selectedGroups.includes('picat')) {
 		const { WASM_PICAT_PROFILE: profile } = await loadBundledProfile(

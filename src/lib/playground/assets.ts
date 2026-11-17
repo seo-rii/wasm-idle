@@ -63,6 +63,7 @@ import {
 import { WASM_PERL_RUNTIME_BUNDLE } from '$lib/playground/wasmPerlVersion';
 import { WASM_TCL_RUNTIME_BUNDLE } from '$lib/playground/wasmTclVersion';
 import { WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE } from '$lib/playground/wasmTinyGoVersion';
+import { WASM_GRAPHQL_RUNNER_RECEIPT } from '$lib/playground/wasmGraphqlVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from '$lib/playground/wasmObjectiveCVersion';
 import { WASM_DEBUG_RUNTIME_PROFILE } from '$lib/playground/wasmDebugVersion';
 import {
@@ -222,6 +223,7 @@ export interface TypeScriptRuntimeAssetConfig {
 	moduleUrl?: string;
 	/** Optional official JavaScript-only bundle; must match its generated receipt. */
 	javascriptModuleUrl?: string;
+	coffeeScriptModuleUrl?: string;
 	libUrl?: string;
 }
 
@@ -699,6 +701,7 @@ export interface PlaygroundRuntimeAssets extends RuntimeAssetKeySource {
 	tcl?: TclRuntimeAssetConfig;
 	awk?: AwkRuntimeAssetConfig;
 	pascal?: PascalRuntimeAssetConfig;
+	graphql?: { workerUrl?: string; workerReceipt?: Readonly<{ bytes: number; sha256: string }> };
 	forth?: ForthRuntimeAssetConfig;
 	j?: JRuntimeAssetConfig;
 	bqn?: BqnRuntimeAssetConfig;
@@ -1415,7 +1418,8 @@ export function resolveErlangBundleUrl(
 
 export function resolveTypeScriptModuleUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
-	currentUrl = ''
+	currentUrl = '',
+	entryModule = 'index.js'
 ) {
 	const configuredModuleUrl =
 		typeof options === 'object' ? options?.typescript?.moduleUrl : undefined;
@@ -1426,14 +1430,14 @@ export function resolveTypeScriptModuleUrl(
 
 	if (typeof options === 'string') {
 		return resolveConfiguredUrl(
-			`${normalizeRootUrl(options) || ''}/wasm-typescript/index.js`,
+			`${normalizeRootUrl(options) || ''}/wasm-typescript/${entryModule}`,
 			currentUrl
 		);
 	}
 
 	if (options?.rootUrl) {
 		return resolveConfiguredUrl(
-			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-typescript/index.js`,
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-typescript/${entryModule}`,
 			currentUrl
 		);
 	}
@@ -3362,6 +3366,23 @@ export function resolveReScriptRuntimeAssetConfig(
 		preflightKey: JSON.stringify(preflightProfile),
 		preflightProfile,
 		workerReceipt: configured?.workerReceipt || WASM_RESCRIPT_RUNNER_RECEIPT
+	};
+}
+
+export function resolveGraphqlRuntimeAssetConfig(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const rootUrl = typeof options === 'string' ? options : options?.rootUrl || '';
+	const baseUrl = normalizeBaseUrl(`${normalizeRootUrl(rootUrl)}/wasm-graphql/`, currentUrl);
+	const configured = typeof options === 'object' ? options?.graphql : undefined;
+	const workerUrl = configured?.workerUrl?.trim();
+	return {
+		baseUrl,
+		workerUrl: workerUrl
+			? resolveConfiguredUrl(workerUrl, currentUrl)
+			: `${baseUrl}runner-worker.js`,
+		workerReceipt: configured?.workerReceipt || WASM_GRAPHQL_RUNNER_RECEIPT
 	};
 }
 

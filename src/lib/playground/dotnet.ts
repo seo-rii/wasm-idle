@@ -13,6 +13,7 @@ import {
 	TimeoutError,
 	WorkspaceValidationError,
 	resolveExecutionLimits,
+	resolveRuntimeAssetCacheOptions,
 	validateExecutionWorkspace
 } from '@wasm-idle/core';
 
@@ -118,6 +119,7 @@ class Dotnet implements Sandbox {
 	uid = 0;
 	exit = true;
 	moduleUrl = '';
+	private persistentCacheKey = '';
 	pendingInput: string[] = [];
 	pendingEof = false;
 	stdinWaiters: Array<() => void> = [];
@@ -507,7 +509,15 @@ class Dotnet implements Sandbox {
 		const loading = this.workerSession.load(async (resolve, reject) => {
 			try {
 				if (!this.isOperationActive(operation)) return;
-				const needsWorkerReset = !this.worker || this.moduleUrl !== nextModuleUrl;
+				const persistentCache = resolveRuntimeAssetCacheOptions(
+					typeof runtimeAssets === 'object' ? runtimeAssets.persistentCache : undefined,
+					options.persistentCache
+				);
+				const nextPersistentCacheKey = JSON.stringify(persistentCache);
+				const needsWorkerReset =
+					!this.worker ||
+					this.moduleUrl !== nextModuleUrl ||
+					this.persistentCacheKey !== nextPersistentCacheKey;
 				const needsRuntimeReset =
 					!this.runtimeModule || !this.compiler || this.moduleUrl !== nextModuleUrl;
 				if (runOnMainThread) {
@@ -567,6 +577,7 @@ class Dotnet implements Sandbox {
 								if (!this.isOperationActive(operation) || this.worker !== worker)
 									return;
 								this.moduleUrl = nextModuleUrl;
+								this.persistentCacheKey = nextPersistentCacheKey;
 								this.runtimeModule = null;
 								this.compiler = null;
 								this.clearCompiledArtifact();
@@ -582,7 +593,8 @@ class Dotnet implements Sandbox {
 					worker.postMessage({
 						load: true,
 						moduleUrl: nextModuleUrl,
-						language: this.compileLanguage
+						language: this.compileLanguage,
+						persistentCache
 					});
 				} else {
 					if (!this.isOperationActive(operation)) return;

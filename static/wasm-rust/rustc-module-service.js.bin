@@ -17,6 +17,7 @@ export function createRustcModuleService(receipt) {
     const channel = new MessageChannel();
     let closed = false;
     let received = false;
+    let lookedUp = false;
     const finish = () => {
         closed = true;
         channel.port1.onmessage = null;
@@ -28,6 +29,26 @@ export function createRustcModuleService(receipt) {
     channel.port1.onmessage = (event) => {
         if (received || closed)
             return;
+        const request = event.data;
+        if (!lookedUp && request?.type === 'lookup' && Object.keys(request).length === 1) {
+            // One lookup may precede the bytes: a retained module was compiled from bytes that
+            // matched this receipt, so the worker can skip downloading and hashing rustc again.
+            lookedUp = true;
+            void (async () => {
+                const retained = modules.get(`rustc-native-default-v1:${expectedHash}`);
+                const module = retained ? await retained.catch(() => undefined) : undefined;
+                if (closed)
+                    return;
+                if (module) {
+                    received = true;
+                    channel.port1.postMessage({ type: 'module', module });
+                    finish();
+                }
+                else
+                    channel.port1.postMessage({ type: 'miss' });
+            })();
+            return;
+        }
         received = true;
         void (async () => {
             const message = event.data;
@@ -69,6 +90,88 @@ export function createRustcModuleService(receipt) {
         }).finally(finish);
     };
     return { port: channel.port2, close };
+}
+/**
+ * Ask the module service for a retained rustc module before downloading the compiler. On a miss,
+ * load the verified bytes and send them on the same port. A service that does not understand the
+ * lookup (an older host) answers with an error; compile locally from the bytes in that case.
+ */
+export function obtainRustcThroughPort(port, loadBytes, timeoutMs = 120_000) {
+    return new Promise((resolve, reject) => {
+        let settled = false;
+        let phase = 'lookup';
+        let timer;
+        const arm = () => {
+            clearTimeout(timer);
+            timer = setTimeout(() => finish(new Error('rustc module service timed out')), timeoutMs);
+        };
+        const release = () => {
+            clearTimeout(timer);
+            port.onmessage = null;
+            port.onmessageerror = null;
+            port.close();
+        };
+        const finish = (error, module) => {
+            if (settled)
+                return;
+            settled = true;
+            release();
+            if (error)
+                reject(error instanceof Error ? error : new Error(String(error)));
+            else
+                resolve({ module: module, reused: phase === 'lookup' });
+        };
+        port.onmessageerror = () => finish(new Error('rustc module response could not be cloned'));
+        port.onmessage = (event) => {
+            const data = event.data;
+            if (data?.type === 'module' && data.module instanceof WebAssembly.Module) {
+                finish(undefined, data.module);
+                return;
+            }
+            if (phase === 'lookup' && (data?.type === 'miss' || data?.type === 'error')) {
+                const local = data.type === 'error';
+                phase = local ? 'local' : 'compile';
+                // The download has its own deadline; this one covers only service round trips.
+                clearTimeout(timer);
+                if (local)
+                    release();
+                void loadBytes()
+                    .then(async (bytes) => {
+                    if (settled)
+                        return;
+                    if (local) {
+                        const module = await compileOwnedRustcModule(bytes);
+                        if (settled)
+                            return;
+                        settled = true;
+                        resolve({ module, reused: false });
+                        return;
+                    }
+                    arm();
+                    const buffer = bytes.buffer instanceof ArrayBuffer && bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength
+                        ? bytes.buffer : Uint8Array.from(bytes).buffer;
+                    port.postMessage({ type: 'compile', bytes: buffer }, [buffer]);
+                })
+                    .catch((error) => {
+                    if (!local)
+                        return finish(error);
+                    if (settled)
+                        return;
+                    settled = true;
+                    reject(error instanceof Error ? error : new Error(String(error)));
+                });
+                return;
+            }
+            finish(new Error(typeof data?.message === 'string' ? data.message : 'Invalid rustc module response'));
+        };
+        arm();
+        try {
+            port.postMessage({ type: 'lookup' });
+        }
+        catch (error) {
+            finish(error);
+        }
+    });
 }
 /** Called only after the one-shot compiler worker's verified, bounded asset fetch. */
 export function compileRustcThroughPort(bytes, port, timeoutMs = 120_000) {

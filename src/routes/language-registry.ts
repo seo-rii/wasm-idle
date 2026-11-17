@@ -2,15 +2,7 @@ import { supportedLanguageIds, type CanonicalLanguageId } from '@wasm-idle/core'
 
 type PlaygroundRuntimeLanguage = Exclude<CanonicalLanguageId, 'PYTHON3'> | 'PYTHON';
 
-const editorOnlyLanguageIds = [
-	'GRAPHQL',
-	'JSON',
-	'YAML',
-	'TOML',
-	'HTML',
-	'CSS',
-	'MARKDOWN'
-] as const;
+const editorOnlyLanguageIds = ['JSON', 'YAML', 'TOML', 'HTML', 'CSS', 'MARKDOWN'] as const;
 
 export type PlaygroundLanguage = PlaygroundRuntimeLanguage | (typeof editorOnlyLanguageIds)[number];
 
@@ -83,6 +75,20 @@ export const playgroundLanguageDescriptors: Readonly<
 		editorLanguage: 'plaintext',
 		compilerDiagnostics: true,
 		diagnosticMarkers: true
+	},
+	SMALLTALK: {
+		label: 'Smalltalk (Amber)',
+		editorLanguage: 'plaintext',
+		supportsArgs: true,
+		argsLabel: 'Program arguments'
+	},
+	BC: { label: 'bc 7.0.3', editorLanguage: 'plaintext', supportsArgs: true },
+	UIUA: { label: 'Uiua', editorLanguage: 'plaintext', supportsArgs: true },
+	SED: {
+		label: 'sed — BusyBox',
+		editorLanguage: 'plaintext',
+		supportsArgs: true,
+		argsLabel: 'sed options / input files'
 	},
 	PICAT: { label: 'Picat', editorLanguage: 'plaintext' },
 	PARIGP: { label: 'PARI/GP', editorLanguage: 'plaintext' },
@@ -217,6 +223,12 @@ export const playgroundLanguageDescriptors: Readonly<
 		compilerDiagnostics: true,
 		diagnosticMarkers: true
 	},
+	DART: {
+		label: 'Dart 3.14',
+		editorLanguage: 'dart',
+		supportsArgs: true,
+		argsLabel: 'Program arguments'
+	},
 	SCALA: {
 		label: 'Scala 3 — Scala.js (experimental)',
 		editorLanguage: 'scala',
@@ -230,6 +242,14 @@ export const playgroundLanguageDescriptors: Readonly<
 		editorLanguage: 'gleam',
 		runtimeLspCapability: 'gleam',
 		supportsArgs: true,
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
+	VERILOG: {
+		label: 'Verilog — Icarus',
+		editorLanguage: 'plaintext',
+		supportsArgs: true,
+		argsLabel: 'Simulation plusargs',
 		compilerDiagnostics: true,
 		diagnosticMarkers: true
 	},
@@ -276,6 +296,7 @@ export const playgroundLanguageDescriptors: Readonly<
 		diagnosticMarkers: true
 	},
 	J: { label: 'J', editorLanguage: 'j' },
+	SML: { label: 'Standard ML', editorLanguage: 'plaintext', supportsArgs: true },
 	BQN: { label: 'BQN', editorLanguage: 'bqn' },
 	JANET: {
 		label: 'Janet',
@@ -324,6 +345,13 @@ export const playgroundLanguageDescriptors: Readonly<
 		label: 'JavaScript — Browser',
 		editorLanguage: 'javascript',
 		lspProvider: 'typescript',
+		supportsArgs: true,
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
+	COFFEESCRIPT: {
+		label: 'CoffeeScript',
+		editorLanguage: 'coffeescript',
 		supportsArgs: true,
 		compilerDiagnostics: true,
 		diagnosticMarkers: true
@@ -461,7 +489,7 @@ export const playgroundLanguageDescriptors: Readonly<
 		compilerDiagnostics: true,
 		diagnosticMarkers: true
 	},
-	GRAPHQL: { label: 'GraphQL', editorLanguage: 'graphql' },
+	GRAPHQL: { label: 'GraphQL', editorLanguage: 'graphql', diagnosticMarkers: true },
 	DUCKDB: { label: 'SQL — DuckDB', editorLanguage: 'sql', lspLanguageOverride: 'duckdb' },
 	SQLITE: {
 		label: 'SQL — SQLite dialect',
@@ -569,11 +597,14 @@ export const diagnosticMarkerLanguages = new Set(
 );
 export const monacoLanguageContributionLoaders: Record<string, MonacoLanguageContributionLoader> = {
 	c: () => import('monaco-editor/esm/vs/basic-languages/cpp/cpp.contribution.js'),
+	coffeescript: () =>
+		import('monaco-editor/esm/vs/basic-languages/coffee/coffee.contribution.js'),
 	cpp: () => import('monaco-editor/esm/vs/basic-languages/cpp/cpp.contribution.js'),
 	'objective-c': () =>
 		import('monaco-editor/esm/vs/basic-languages/objective-c/objective-c.contribution.js'),
 	csharp: () => import('monaco-editor/esm/vs/basic-languages/csharp/csharp.contribution.js'),
 	clojure: () => import('monaco-editor/esm/vs/basic-languages/clojure/clojure.contribution.js'),
+	dart: () => import('monaco-editor/esm/vs/basic-languages/dart/dart.contribution.js'),
 	css: () => import('monaco-editor/esm/vs/basic-languages/css/css.contribution.js'),
 	elixir: () => import('monaco-editor/esm/vs/basic-languages/elixir/elixir.contribution.js'),
 	go: () => import('monaco-editor/esm/vs/basic-languages/go/go.contribution.js'),

@@ -1,32 +1,46 @@
 {
   "format": "wasm-typescript-runtime-build-v2",
-  "fingerprint": "ddfaeea8f8b111b0",
+  "fingerprint": "cae22efea8ccb731",
   "producer": {
     "format": "wasm-typescript-producer-build-v1",
     "additionalArtifacts": {
       "javascript.js": {
-        "bytes": 158899,
-        "sha256": "9e2df469ef3934424fba004bb66b5a3b042ecaf1ad3496789ac8fe8e67389d65"
+        "bytes": 159211,
+        "sha256": "35ea4e56e67133a475bb224f6fdcc424303dfcba2fd3f8514cc4d9da9cb19fb5"
+      },
+      "coffeescript.js": {
+        "bytes": 549851,
+        "sha256": "5a3ba3b82c7aeda1c5cde55bc5edfe75a830df26c44a1834de305e6e34e90033"
       }
     },
     "source": {
       "format": "wasm-typescript-source-inputs-v1",
-      "sha256": "2bdd270bcbae18c8aa957500b1b743240aa7c0d1421841b45472cd6ce9cd2401",
+      "sha256": "a46e7a34445bc737e37493791468bca117956c3334e14c3a95724cae5c079c75",
       "files": [
         {
           "path": "package.json",
-          "bytes": 746,
-          "sha256": "312a644446a171608b48aeedcdbcfa94d48cad679145e6222aa8f92b2436b883"
+          "bytes": 773,
+          "sha256": "60352b4f1e211203c4ec04ab15d71933b2911dfa60f6392890ecfd893f941dbe"
         },
         {
           "path": "scripts/build.mjs",
-          "bytes": 4084,
-          "sha256": "364fdd874ef6e60e47b910b91a06a600f214829b87d5152ea3bcc80231fe196e"
+          "bytes": 5077,
+          "sha256": "eced8938c04f2b26d0080ba184b1b8de2f3adb7bfb19e22cdbb5e0bfb74cb755"
         },
         {
           "path": "scripts/provenance.mjs",
-          "bytes": 6562,
-          "sha256": "00da656d4864c4f13ee950fc59fb5665b9ffb2aae28f6bdd329cf54f42b2569e"
+          "bytes": 7031,
+          "sha256": "3741c48b7bad5e4c29a26f254de8bde71fd4926cdaecf57e98e44571d5d7fe4c"
+        },
+        {
+          "path": "src/coffeescript-compiler.ts",
+          "bytes": 449,
+          "sha256": "54cf06f07ae36d894c8d77ffa8fca56582eed5eba1a209d2f9cc5e974c8753e0"
+        },
+        {
+          "path": "src/coffeescript.d.ts",
+          "bytes": 213,
+          "sha256": "0851d8886f927f98435dfaa751fffa52526d986dcc536bc3f3964589548cd72b"
         },
         {
           "path": "src/execution-parameters.ts",
@@ -40,8 +54,8 @@
         },
         {
           "path": "src/index.ts",
-          "bytes": 18115,
-          "sha256": "c6e11c192200c430d3ba52e699a47eb072e39e47f3f45dcedba8f098dd2da9aa"
+          "bytes": 18701,
+          "sha256": "1b0d45bc8ec521560a673293afee3839abf2e1a1e6ccfa14172dc9b1b20a9cad"
         },
         {
           "path": "tsconfig.json",
@@ -54,23 +68,28 @@
       "@swc/wasm-typescript": "1.16.20",
       "acorn": "8.19.0",
       "buffer": "6.0.3",
+      "coffeescript": "2.7.0",
       "esbuild": "0.28.2",
       "typescript": "6.0.3"
     },
     "artifact": {
       "path": "index.js",
-      "bytes": 3892294,
-      "sha256": "2af0cb095c0b02689e6676a576202b71ea87dd6d3e14e4c1e54c21a848eb33b7"
+      "bytes": 3892606,
+      "sha256": "c0e1a7c3e4dac986ecfd43fe456a5d426aaa86b8ddf49082a87374cb96da2bc2"
     }
   },
   "assets": {
     "index.js": {
-      "bytes": 3892294,
-      "sha256": "2af0cb095c0b02689e6676a576202b71ea87dd6d3e14e4c1e54c21a848eb33b7"
+      "bytes": 3892606,
+      "sha256": "c0e1a7c3e4dac986ecfd43fe456a5d426aaa86b8ddf49082a87374cb96da2bc2"
     },
     "javascript.js": {
-      "bytes": 158899,
-      "sha256": "9e2df469ef3934424fba004bb66b5a3b042ecaf1ad3496789ac8fe8e67389d65"
+      "bytes": 159211,
+      "sha256": "35ea4e56e67133a475bb224f6fdcc424303dfcba2fd3f8514cc4d9da9cb19fb5"
+    },
+    "coffeescript.js": {
+      "bytes": 549851,
+      "sha256": "5a3ba3b82c7aeda1c5cde55bc5edfe75a830df26c44a1834de305e6e34e90033"
     }
   }
 }

@@ -99,10 +99,16 @@ describe('worker runtime modules', () => {
 		expect(WebAssembly.instantiateStreaming).toBe(streaming);
 	});
 
-	it('propagates a compilation failure before entering the runtime bootstrap', async () => {
-		const initialize = vi.fn();
+	it('propagates a compilation failure while the bootstrap waits for its module', async () => {
+		const fetch = globalThis.fetch;
+		const streaming = WebAssembly.instantiateStreaming;
+		// The bootstrap overlaps compilation so its other downloads start early; it would wait for
+		// the module forever, so only the compilation failure can settle this call.
+		const initialize = vi.fn(() => new Promise<never>(() => {}));
 		assets.loadWorkerRuntimeModule.mockRejectedValueOnce(new Error('bad wasm'));
 		await expect(withCachedPyodideModule(baseUrl, initialize)).rejects.toThrow('bad wasm');
-		expect(initialize).not.toHaveBeenCalled();
+		expect(initialize).toHaveBeenCalledOnce();
+		expect(globalThis.fetch).toBe(fetch);
+		expect(WebAssembly.instantiateStreaming).toBe(streaming);
 	});
 });

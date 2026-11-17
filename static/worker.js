@@ -2,9 +2,57 @@ self.addEventListener('install', function () {
 	self.skipWaiting();
 });
 
+// Content-addressed application code never changes at its URL. Keep it per Service Worker build
+// so a revisit does not revalidate every module and worker chunk in import-depth round trips.
+const immutableCachePrefix = 'wasm-idle-immutable-';
+const immutableCacheName = `${immutableCachePrefix}${
+	(self.location && new URL(self.location.href).searchParams.get('build')) || 'default'
+}`;
+
 self.addEventListener('activate', (event) => {
-	event.waitUntil(self.clients.claim());
+	event.waitUntil(
+		Promise.all([self.clients.claim(), deleteStaleImmutableCaches()]).then(() => undefined)
+	);
 });
+
+async function deleteStaleImmutableCaches() {
+	try {
+		if (typeof caches?.keys !== 'function') return;
+		for (const name of await caches.keys()) {
+			if (name.startsWith(immutableCachePrefix) && name !== immutableCacheName)
+				await caches.delete(name);
+		}
+	} catch (e) {
+		console.error(e);
+	}
+}
+
+function isImmutableAppAsset(request, url) {
+	if (request.method !== 'GET' || request.headers.has('range') || url.search) return false;
+	const assetPath = relativePathInScope(url);
+	return (
+		assetPath !== null &&
+		(assetPath.startsWith('_app/immutable/') ||
+			/^container-app\/host\/[a-f0-9]{64}\//u.test(assetPath))
+	);
+}
+
+async function matchImmutableAppAsset(request) {
+	try {
+		return (await (await caches.open(immutableCacheName)).match(request)) || null;
+	} catch {
+		// Unavailable storage only disables this shortcut.
+		return null;
+	}
+}
+
+async function storeImmutableAppAsset(request, response) {
+	try {
+		await (await caches.open(immutableCacheName)).put(request, response);
+	} catch {
+		// Quota or storage failures keep the ordinary network path.
+	}
+}
 
 const precompressedExtension = /\.(br|brotli|gz|tgz|zip|zst)$/i;
 const exactResponseUrlAssetPaths = new Set([
@@ -28,7 +76,7 @@ const exactResponseUrlAssetReceipts = new Map([
 	['wasm-rust/compiler-preload.js.bin', '644aa8d25bd4adbb190d07a0bc23923149a912dee7b511e25809fb67312c89a9'],
 	['wasm-rust/compiler-runtime.js.bin', '86f2b34128ce97c050f8c9245781b211e229073cef6a3ed4c6cfef92652902c7'],
 	['wasm-rust/compiler-support.js.bin', '8933c8f043fb3dbee28d4f61d8a3ea16a372b2c833b1071a6531071388fed730'],
-	['wasm-rust/compiler-worker.js.bin', 'fc799b595d8d4022cbf02328673b5bb08ad0f86be0da9ac0b3ac12e9f5d343fa'],
+	['wasm-rust/compiler-worker.js.bin', 'cabea85ff4812666f405306609370e49a8665537726be4110fdf607a8f643549'],
 	['wasm-rust/compiler.js.bin', 'd948487286c5920a5bbdaab94188ebeeadd8e405be74f4839c1cf8ddaf083c52'],
 	['wasm-rust/index.js.bin', 'c3ee4682af8d8b9f338f1258fdff5701754f72753aa1b5385b7848bff1ff3e8d'],
 	['wasm-rust/module-worker.js.bin', '317eee43c55be3923ffc9630342deeac9ff1030abb2cb2d222e1036ca796b3fc'],
@@ -39,7 +87,7 @@ const exactResponseUrlAssetReceipts = new Map([
 	['wasm-rust/runtime-asset.js.bin', '5f09c428431e3f3226673b537fc1277ba71dc42bdaf2937e18275a8844e044f8'],
 	['wasm-rust/runtime-delivery-budget.js.bin', '9340496c81f33b0780ac760d89939dfe22442df0318989b8edf1dc97d57f36e5'],
 	['wasm-rust/runtime-manifest.js.bin', '52939e1bb35c208ab7ad26000ea52e4a5ad9b724a35533f0b004f65212e22314'],
-	['wasm-rust/rustc-module-service.js.bin', '643e87810870eadb9489f4161f2132a158e37c1e343426c58e04e3482e1d7045'],
+	['wasm-rust/rustc-module-service.js.bin', '61c6806aedef576cc38bbb2492122d036faf13996b21f69f60c7cd2960c06740'],
 	['wasm-rust/rustc-module.js.bin', '81dee74032dd10187e9b576f2d2fe9291cee1ea6a829d0db37429dabd06c0d1e'],
 	['wasm-rust/rustc-runtime.js.bin', 'f72739e496d8b9e012f323f30f5869f8fee2d444986494cfe08c378fc05e6913'],
 	['wasm-rust/rustc-thread-worker.js.bin', '0b41ccb2c0053b860ac4297545e5f3ffcbb4a11525dfca6f495bd43b7e2a7bb6'],
@@ -79,6 +127,10 @@ const dynamicModulePathPrefix = '__wasm_idle_dynamic_modules__/';
 let compressedRuntimeAssetManifestPromise = null;
 let compressedRuntimeAssetManifestMissRefreshAt = 0;
 let layeredRuntimeAssetManifestPromise = null;
+// A failed refresh keeps the last manifest that loaded, instead of replacing it with an empty one
+// that would send compressed or layered assets to undeployed logical paths.
+let lastCompressedRuntimeAssetManifest = null;
+let lastLayeredRuntimeAssetManifest = null;
 let layeredRuntimeAssetManifestLoadedAt = 0;
 let layeredRuntimeAssetManifestMissRefreshAt = 0;
 // Only retained, completed layers count against the LRU byte budget.
@@ -140,12 +192,19 @@ async function compressedRuntimeAssetManifest(forceRefresh = false) {
 				cache: 'no-cache'
 			}
 		)
-			.then((response) => (response.ok ? response.json() : { assets: [] }))
-			.then((manifest) => ({
-				assets: new Set(Array.isArray(manifest.assets) ? manifest.assets : []),
-				sizes: manifest.sizes && typeof manifest.sizes === 'object' ? manifest.sizes : {}
-			}))
-			.catch(() => ({ assets: new Set(), sizes: {} }));
+			.then((response) => {
+				if (!response.ok) throw new Error(`Compressed asset manifest ${response.status}`);
+				return response.json();
+			})
+			.then(
+				(manifest) =>
+					(lastCompressedRuntimeAssetManifest = {
+						assets: new Set(Array.isArray(manifest.assets) ? manifest.assets : []),
+						sizes:
+							manifest.sizes && typeof manifest.sizes === 'object' ? manifest.sizes : {}
+					})
+			)
+			.catch(() => lastCompressedRuntimeAssetManifest ?? { assets: new Set(), sizes: {} });
 	}
 	return compressedRuntimeAssetManifestPromise;
 }
@@ -164,7 +223,10 @@ async function layeredRuntimeAssetManifest(forceRefresh = false) {
 				cache: 'no-cache'
 			}
 		)
-			.then((response) => (response.ok ? response.json() : null))
+			.then((response) => {
+				if (!response.ok) throw new Error(`Layered asset manifest ${response.status}`);
+				return response.json();
+			})
 			.then((manifest) => {
 				if (
 					manifest?.schemaVersion !== 1 ||
@@ -175,7 +237,7 @@ async function layeredRuntimeAssetManifest(forceRefresh = false) {
 					typeof manifest.layers !== 'object' ||
 					Array.isArray(manifest.layers)
 				) {
-					return { assets: new Map() };
+					throw new Error('Layered asset manifest is invalid');
 				}
 
 				const assets = new Map();
@@ -229,9 +291,9 @@ async function layeredRuntimeAssetManifest(forceRefresh = false) {
 				for (const [key, entry] of decompressedLayerPromises) {
 					if (!currentLayerKeys.has(key)) removeCachedLayer(key, entry);
 				}
-				return { assets };
+				return (lastLayeredRuntimeAssetManifest = { assets });
 			})
-			.catch(() => ({ assets: new Map() }));
+			.catch(() => lastLayeredRuntimeAssetManifest ?? { assets: new Map() });
 	}
 	return layeredRuntimeAssetManifestPromise;
 }
@@ -642,6 +704,11 @@ self.addEventListener('fetch', function (event) {
 				if (shouldPreserveExactResponseUrl(event.request, url)) return fetch(event.request);
 				// Local runtime assets only answer for this origin and registration scope.
 				if (relativePathInScope(url) === null) return fetch(event.request);
+				const immutable = isImmutableAppAsset(event.request, url);
+				if (immutable) {
+					const cached = await matchImmutableAppAsset(event.request);
+					if (cached) return cached;
+				}
 				let localResponse = null;
 				try {
 					localResponse =
@@ -654,7 +721,14 @@ self.addEventListener('fetch', function (event) {
 					// network error; the fallback still receives the isolation headers below.
 					console.error(e);
 				}
-				return localResponse || fetch(event.request);
+				if (localResponse) return localResponse;
+				const response = await fetch(event.request);
+				// Store only complete same-origin network bodies, never locally synthesized ones.
+				if (immutable && response.status === 200 && response.type === 'basic') {
+					const storing = storeImmutableAppAsset(event.request, response.clone());
+					if (typeof event.waitUntil === 'function') event.waitUntil(storing);
+				}
+				return response;
 			})
 			.then(function (response) {
 				// Receipt-verified runtime consumers require the browser's network Response URL.

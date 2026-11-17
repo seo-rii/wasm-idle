@@ -186,48 +186,49 @@ describe('package install budgets', () => {
 			Object.fromEntries(scenarios.map((scenario) => [scenario.name, scenario.budget]))
 		).toEqual({
 			'wasm-idle root install': {
-				maxBytes: 7 * MiB + 119 * 1024,
-				maxFiles: 813,
+				maxBytes: 7583744,
+				maxFiles: 855,
 				maxPackages: 6
 			},
 			'@wasm-idle/gcc install': {
-				maxBytes: 2.5 * MiB + 233 * 1024,
-				maxFiles: 196,
+				maxBytes: 2873344,
+				maxFiles: 198,
 				maxPackages: 4
 			},
 			'wasm-idle/container install': {
-				maxBytes: 8 * MiB,
-				maxFiles: 1_100,
+				maxBytes: 8388608,
+				maxFiles: 1100,
 				maxPackages: 7
 			},
 			'@wasm-idle/terminal install': {
-				maxBytes: 16 * MiB + 896 * 1024,
-				maxFiles: 1_370,
+				maxBytes: 17694720,
+				maxFiles: 1370,
 				maxPackages: 32
 			},
 			'@wasm-idle/debug install': {
-				maxBytes: 7 * MiB + 832 * 1024,
-				maxFiles: 1_200,
+				maxBytes: 8192000,
+				maxFiles: 1200,
 				maxPackages: 25
 			},
 			'@wasm-idle/lsp install': {
-				maxBytes: 5.25 * MiB + 384 * 1024,
-				maxFiles: 1_050,
+				maxBytes: 5898240,
+				maxFiles: 1050,
 				maxPackages: 10
 			},
 			'all public packages/adapters aggregate': {
-				maxBytes: 40 * MiB + 1_093 * 1024,
-				maxFiles: 3_434,
+				maxBytes: 43255808,
+				maxFiles: 3478,
 				maxPackages: 70
 			}
 		});
 	});
 
-	it('accepts the measured Picat GCC install while retaining every size/count limit', () => {
+	it('accepts measured language core/GCC installs while retaining every size/count limit', () => {
 		const scenario = scenarios.find((entry) => entry.name === '@wasm-idle/gcc install')!;
-		expect(() =>
-			assertInstallBudget(scenario, { bytes: 2_856_625, files: 196, packages: 4 })
-		).not.toThrow();
+		for (const bytes of [2_860_946, 2_860_229, 2_859_590, 2859601])
+			expect(() =>
+				assertInstallBudget(scenario, { bytes, files: 196, packages: 4 })
+			).not.toThrow();
 		const atLimit = {
 			bytes: scenario.budget.maxBytes,
 			files: scenario.budget.maxFiles,
@@ -242,18 +243,31 @@ describe('package install budgets', () => {
 
 	it('accepts measured language installs and rejects every aggregate limit plus one', () => {
 		const root = scenarios.find((entry) => entry.name === 'wasm-idle root install')!;
-		// Picat adds 17,393 packed root/core bytes and six files to the measured Java 25 baseline.
+		// Compressed Verilog retains external compiler assets and the measured four-file SDK growth.
 		expect(() =>
-			assertInstallBudget(root, { bytes: 7_423_230, files: 797, packages: 5 })
+			assertInstallBudget(root, { bytes: 7_467_371, files: 813, packages: 5 })
+		).not.toThrow();
+		expect(() =>
+			assertInstallBudget(root, { bytes: 7_455_653, files: 813, packages: 5 })
+		).not.toThrow();
+		expect(() =>
+			assertInstallBudget(root, { bytes: 7_462_911, files: 813, packages: 5 })
+		).not.toThrow();
+		expect(() =>
+			assertInstallBudget(root, { bytes: 7461707, files: 813, packages: 5 })
 		).not.toThrow();
 		const scenario = scenarios.find(
 			(entry) => entry.name === 'all public packages/adapters aggregate'
 		)!;
 		// Actual baseline job 131822775029 and Java 25 job 131823558365, including all adapters.
 		for (const measurement of [
+			{ bytes: 43047946, files: 3434, packages: 66 },
 			{ bytes: 42_959_390, files: 3_410, packages: 66 },
 			{ bytes: 42_991_203, files: 3_412, packages: 66 },
-			{ bytes: 43_008_596, files: 3_418, packages: 66 }
+			{ bytes: 43_008_596, files: 3_418, packages: 66 },
+			{ bytes: 43_053_610, files: 3_434, packages: 66 },
+			{ bytes: 43_041_892, files: 3_434, packages: 66 },
+			{ bytes: 43_049_150, files: 3_434, packages: 66 }
 		])
 			expect(() => assertInstallBudget(scenario, measurement)).not.toThrow();
 		const atLimit = {

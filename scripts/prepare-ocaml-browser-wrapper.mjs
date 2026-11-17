@@ -16,10 +16,15 @@ const execFileAsync = promisify(execFile);
 /**
  * Combine receipt-verified native compiler inputs with the tracked, rebuildable
  * browser adapter. Never replace input receipts with hashes of derived output.
- * @param {{ sourceRoot: string; staticDir: string; versionModulePath?: string }} options
+ * @param {{ sourceRoot: string; staticDir: string; versionModulePath?: string; temporaryParentDir?: string }} options
  */
-export async function prepareOcamlBrowserWrapper({ sourceRoot, staticDir, versionModulePath }) {
-	const temporaryDir = await mkdtemp(path.join(os.tmpdir(), 'wasm-idle-ocaml-wrapper-'));
+export async function prepareOcamlBrowserWrapper({
+	sourceRoot,
+	staticDir,
+	versionModulePath,
+	temporaryParentDir = os.tmpdir()
+}) {
+	const temporaryDir = await mkdtemp(path.join(temporaryParentDir, 'wasm-idle-ocaml-wrapper-'));
 	try {
 		const sourceBrowserDistDir = path.join(temporaryDir, 'browser');
 		await execFileAsync(
