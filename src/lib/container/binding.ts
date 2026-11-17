@@ -89,6 +89,14 @@ export interface ContainerPlaygroundBinding extends PlaygroundBinding {
 	endTerminalExecution(): Promise<void>;
 	syncWorkspace(language: string, files: readonly ContainerWorkspaceFile[]): Promise<void>;
 	readWorkspace(language: string): Promise<ContainerWorkspaceFile[]>;
+	/**
+	 * Reconcile synchronously before the next publish. Return true from the callback to
+	 * accept the remote baseline. A false result means a newer publish requires a retry.
+	 */
+	reconcileWorkspace(
+		language: string,
+		reconcile: (baseline: ContainerWorkspaceFile[], remote: ContainerWorkspaceFile[]) => boolean
+	): Promise<boolean>;
 	listWorkspaceFiles(): Promise<ContainerWorkspaceEntry[]>;
 	publishedWorkspace(language: string): ContainerWorkspaceFile[];
 	acceptWorkspace(language: string, files: readonly ContainerWorkspaceFile[]): void;
@@ -107,12 +115,12 @@ export function createContainerPlaygroundBinding(
 	const sandboxes = new Map<string, BoundSandbox>();
 	const published = new Map<string, ContainerWorkspaceFile[]>();
 	const changes = new Set<(event: ContainerWorkerEvent) => void>();
-	const queues = new Map<string, Promise<void>>();
+	const queues = new Map<string, Promise<unknown>>();
+	const publishRequests = new Map<string, number>();
 	const reads = new Map<
 		string,
 		{ revision: number; files: Map<string, ContainerWorkspaceFile> }
 	>();
-	const readQueues = new Map<string, Promise<ContainerWorkspaceFile[]>>();
 	let shellOutput: ((text: string) => void) | undefined;
 	let shellError: ((error: unknown) => void) | undefined;
 	let shellConnection: Promise<void> | undefined;
@@ -198,41 +206,66 @@ export function createContainerPlaygroundBinding(
 			if (!disposed) throw error;
 		}
 	};
-	const syncWorkspace = (language: string, files: readonly ContainerWorkspaceFile[]) => {
-		const snapshot = copyFiles(files);
+	const enqueueWorkspace = <T>(language: string, operation: () => Promise<T>) => {
 		const previous = queues.get(language) ?? Promise.resolve();
-		const next = previous
-			.catch(() => {})
-			.then(async () => {
-				const baseline = published.get(language);
-				if (baseline) {
-					const before = new Map(baseline.map((file) => [file.path, file]));
-					const changed: ContainerWorkspaceFile[] = [];
-					const expected: ContainerWorkspaceFile[] = [];
-					for (const file of snapshot) {
-						const previous = before.get(file.path);
-						before.delete(file.path);
-						if (previous && equal(previous.content, file.content)) continue;
-						changed.push(file);
-						if (previous) expected.push(previous);
-					}
-					expected.push(...before.values());
-					if (!changed.length && !expected.length) return;
-					await connection().call('syncWorkspaceDelta', [
-						language,
-						changed,
-						expected,
-						snapshot.map((file) => ({
-							path: file.path,
-							bytes: bytes(file.content).byteLength
-						}))
-					]);
-				} else await connection().call('syncWorkspace', [language, snapshot, undefined]);
-				// snapshot already owns its bytes, including while queued behind another write.
-				published.set(language, snapshot);
-			});
+		const next = previous.catch(() => {}).then(operation);
 		queues.set(language, next);
 		return next;
+	};
+	const syncWorkspace = (language: string, files: readonly ContainerWorkspaceFile[]) => {
+		const snapshot = copyFiles(files);
+		publishRequests.set(language, (publishRequests.get(language) ?? 0) + 1);
+		return enqueueWorkspace(language, async () => {
+			const baseline = published.get(language);
+			if (baseline) {
+				const before = new Map(baseline.map((file) => [file.path, file]));
+				const changed: ContainerWorkspaceFile[] = [];
+				const expected: ContainerWorkspaceFile[] = [];
+				for (const file of snapshot) {
+					const previous = before.get(file.path);
+					before.delete(file.path);
+					if (previous && equal(previous.content, file.content)) continue;
+					changed.push(file);
+					if (previous) expected.push(previous);
+				}
+				expected.push(...before.values());
+				if (!changed.length && !expected.length) return;
+				await connection().call('syncWorkspaceDelta', [
+					language,
+					changed,
+					expected,
+					snapshot.map((file) => ({
+						path: file.path,
+						bytes: bytes(file.content).byteLength
+					}))
+				]);
+			} else await connection().call('syncWorkspace', [language, snapshot, undefined]);
+			// snapshot already owns its bytes, including while queued behind another write.
+			published.set(language, snapshot);
+		});
+	};
+	const readWorkspace = async (language: string) => {
+		const baseline = reads.get(language);
+		const delta = await connection().call<ContainerWorkspaceDelta>('readWorkspaceDelta', [
+			language,
+			baseline?.revision
+		]);
+		if (disposed) throw new Error('Container playground has been disposed');
+		const files = new Map(delta.reset ? [] : baseline?.files);
+		for (const path of delta.deleted) files.delete(path);
+		for (const file of delta.files) files.set(file.path, file);
+		reads.set(language, { revision: delta.revision, files });
+		// Match the owner's sorted directory traversal after incremental additions.
+		return copyFiles(
+			[...files.values()].sort((left, right) => {
+				const a = left.path.split('/'),
+					b = right.path.split('/');
+				for (let index = 0; index < Math.min(a.length, b.length); index++) {
+					if (a[index] !== b[index]) return a[index] < b[index] ? -1 : 1;
+				}
+				return a.length - b.length;
+			})
+		);
 	};
 	const shell: ContainerShellBinding = {
 		connect(output, error) {
@@ -430,35 +463,20 @@ export function createContainerPlaygroundBinding(
 			releaseWarm();
 		},
 		syncWorkspace,
-		async readWorkspace(language) {
-			const previous = readQueues.get(language);
-			const next = (async () => {
-				await previous?.catch(() => {});
-				await queues.get(language)?.catch(() => {});
-				const baseline = reads.get(language);
-				const delta = await connection().call<ContainerWorkspaceDelta>(
-					'readWorkspaceDelta',
-					[language, baseline?.revision]
-				);
-				if (disposed) throw new Error('Container playground has been disposed');
-				const files = new Map(delta.reset ? [] : baseline?.files);
-				for (const path of delta.deleted) files.delete(path);
-				for (const file of delta.files) files.set(file.path, file);
-				reads.set(language, { revision: delta.revision, files });
-				// Match the owner's sorted directory traversal after incremental additions.
-				return copyFiles(
-					[...files.values()].sort((left, right) => {
-						const a = left.path.split('/'),
-							b = right.path.split('/');
-						for (let index = 0; index < Math.min(a.length, b.length); index++) {
-							if (a[index] !== b[index]) return a[index] < b[index] ? -1 : 1;
-						}
-						return a.length - b.length;
-					})
-				);
-			})();
-			readQueues.set(language, next);
-			return await next;
+		readWorkspace(language) {
+			return enqueueWorkspace(language, () => readWorkspace(language));
+		},
+		reconcileWorkspace(language, reconcile) {
+			const requested = publishRequests.get(language) ?? 0;
+			return enqueueWorkspace(language, async () => {
+				const baseline = copyFiles(published.get(language) ?? []);
+				const remote = await readWorkspace(language);
+				// A snapshot queued during this read may omit new terminal files. Let it
+				// publish against its existing baseline, then reconcile a fresh snapshot.
+				if ((publishRequests.get(language) ?? 0) !== requested) return false;
+				if (reconcile(baseline, remote)) published.set(language, copyFiles(remote));
+				return true;
+			});
 		},
 		async listWorkspaceFiles() {
 			return await connection().call<ContainerWorkspaceEntry[]>('listWorkspaceFiles');
@@ -482,7 +500,8 @@ export function createContainerPlaygroundBinding(
 			abortWarm();
 			changes.clear();
 			reads.clear();
-			readQueues.clear();
+			queues.clear();
+			publishRequests.clear();
 			await client?.dispose();
 		}
 	};

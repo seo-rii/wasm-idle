@@ -41,9 +41,18 @@ describe('shared workspace refresh scheduling', () => {
 			listWorkspaceFiles: vi.fn(async () => [
 				{ path: 'C/during-run.txt', type: 'file', size: 17 }
 			]),
-			publishedWorkspace: () => baseline,
-			readWorkspace: vi.fn(async () => remote),
-			acceptWorkspace: vi.fn()
+			publishedWorkspace: (_language: string) => baseline,
+			readWorkspace: vi.fn(async (_language: string) => remote),
+			acceptWorkspace: vi.fn((_language: string, _files: WorkspaceFile[]) => {}),
+			async reconcileWorkspace(
+				selectedLanguage: string,
+				reconcile: (baseline: WorkspaceFile[], remote: WorkspaceFile[]) => boolean
+			): Promise<boolean> {
+				const remote = await this.readWorkspace(selectedLanguage);
+				if (reconcile(this.publishedWorkspace(selectedLanguage), remote))
+					this.acceptWorkspace(selectedLanguage, remote);
+				return true;
+			}
 		};
 		const context = {
 			browser: true,
@@ -70,6 +79,38 @@ describe('shared workspace refresh scheduling', () => {
 			force?: boolean
 		) => Promise<void>;
 		return { context, binding, refresh };
+	}
+	function selectionFixture() {
+		const values = fixture();
+		const { context, refresh } = values;
+		context.runningMode = null;
+		const currentWorkspace = () => ({
+			files: context.files,
+			activePath: context.activePath,
+			openTabs: context.openTabs
+		});
+		const activateWorkspace = vi.fn((workspace: ReturnType<typeof currentWorkspace>) => {
+			context.files = workspace.files;
+			context.activePath = workspace.activePath;
+		});
+		const selectionContext = Object.assign(context, {
+			sharedWorkspaceOpening: false,
+			sharedFileProject: () => ({ language: 'C', path: 'main.c' }),
+			currentWorkspace,
+			activateWorkspace,
+			selectFile: vi.fn(),
+			confirm: vi.fn(() => false),
+			refreshContainerWorkspace: refresh
+		});
+		const start = source.indexOf('async function selectSharedWorkspaceFile(');
+		const action = source
+			.slice(start, source.indexOf('\n\tfunction activateWorkspace(', start))
+			.replace('entry: ContainerWorkspaceEntry', 'entry');
+		const select = runInNewContext(
+			`${action}\nselectSharedWorkspaceFile`,
+			selectionContext
+		) as (entry: { path: string }) => Promise<void>;
+		return { ...values, context: selectionContext, select };
 	}
 
 	it('keeps restored status and editor metadata when terminal bytes are unchanged', async () => {
@@ -133,6 +174,120 @@ describe('shared workspace refresh scheduling', () => {
 		expect(context.files[0].content).toBe('int main(){}');
 		expect(binding.acceptWorkspace).not.toHaveBeenCalled();
 		expect(context.containerEditorRefreshDeferred).toBe(true);
+	});
+
+	it('does not mistake a queued editor publish for a terminal conflict', async () => {
+		const { context, binding, refresh } = fixture();
+		context.runningMode = null;
+		let published = [{ path: 'main.c', content: 'base' }];
+		binding.publishedWorkspace = () => published;
+		context.files = [{ path: 'main.c', content: 'second edit' }];
+		binding.readWorkspace.mockImplementationOnce(async () => {
+			// The binding drains an earlier publish before reading the remote files.
+			published = [{ path: 'main.c', content: 'first edit' }];
+			return published;
+		});
+		await refresh();
+		expect(context.files).toEqual([{ path: 'main.c', content: 'second edit' }]);
+		expect(context.containerWorkspaceConflict).toBe('');
+		expect(binding.acceptWorkspace).toHaveBeenCalledOnce();
+	});
+
+	it('retries a snapshot superseded by a publish and keeps explicit conflict confirmation', async () => {
+		const { context, binding, refresh } = fixture();
+		context.runningMode = null;
+		context.files = [{ path: 'main.c', content: 'editor' }];
+		binding.readWorkspace.mockResolvedValue([{ path: 'main.c', content: 'terminal' }]);
+		const confirm = vi.fn(() => true);
+		Object.assign(context, { confirm });
+		const reconcile = vi.spyOn(binding, 'reconcileWorkspace').mockResolvedValueOnce(false);
+		await refresh(true);
+		await vi.waitFor(() => expect(reconcile).toHaveBeenCalledTimes(2));
+		await context.containerRefresh;
+		expect(confirm).toHaveBeenCalledOnce();
+		expect(context.files).toEqual([{ path: 'main.c', content: 'terminal' }]);
+		expect(context.containerWorkspaceConflict).toBe('');
+		expect(binding.acceptWorkspace).toHaveBeenCalledOnce();
+		expect(context.containerRefresh).toBeUndefined();
+	});
+
+	it('preserves all editor buffers and does not retry genuine terminal conflicts', async () => {
+		const { context, binding, refresh } = fixture();
+		context.runningMode = null;
+		context.files = [
+			{ path: 'main.c', content: 'editor' },
+			{ path: 'notes.txt', content: 'unsaved notes' }
+		];
+		binding.readWorkspace.mockResolvedValue([{ path: 'main.c', content: 'terminal' }]);
+		const confirm = vi.fn(() => false);
+		Object.assign(context, { confirm });
+		await refresh();
+		expect(context.containerWorkspaceConflict).toBe('C');
+		expect(context.files).toEqual([
+			{ path: 'main.c', content: 'editor' },
+			{ path: 'notes.txt', content: 'unsaved notes' }
+		]);
+		expect(binding.acceptWorkspace).not.toHaveBeenCalled();
+		expect(binding.readWorkspace).toHaveBeenCalledOnce();
+		expect(context.containerRefreshPending).toBe(false);
+		expect(confirm).not.toHaveBeenCalled();
+		await refresh(true);
+		expect(confirm).toHaveBeenCalledOnce();
+		expect(context.files[0].content).toBe('editor');
+		expect(binding.acceptWorkspace).not.toHaveBeenCalled();
+	});
+
+	it('opens a shared file after retrying a superseded snapshot without dropping terminal files', async () => {
+		const { context, binding, select } = selectionFixture();
+		const reconcile = vi.spyOn(binding, 'reconcileWorkspace').mockResolvedValueOnce(false);
+		await select({ path: 'C/main.c' });
+		expect(reconcile).toHaveBeenCalledTimes(2);
+		expect(context.files).toContainEqual({
+			path: 'during-run.txt',
+			content: 'created by guest\n'
+		});
+		expect(context.selectFile).toHaveBeenCalledExactlyOnceWith('main.c');
+		expect(binding.acceptWorkspace).toHaveBeenCalledOnce();
+		expect(context.sharedWorkspaceOpening).toBe(false);
+	});
+
+	it('keeps shared-file conflicts and unrelated editor buffers until replacement is accepted', async () => {
+		const { context, binding, select } = selectionFixture();
+		context.files = [
+			{ path: 'main.c', content: 'editor' },
+			{ path: 'notes.txt', content: 'unsaved notes' }
+		];
+		binding.readWorkspace.mockResolvedValue([{ path: 'main.c', content: 'terminal' }]);
+		await select({ path: 'C/main.c' });
+		expect(context.confirm).toHaveBeenCalledOnce();
+		expect(context.files).toEqual([
+			{ path: 'main.c', content: 'editor' },
+			{ path: 'notes.txt', content: 'unsaved notes' }
+		]);
+		expect(context.activateWorkspace).not.toHaveBeenCalled();
+		expect(binding.acceptWorkspace).not.toHaveBeenCalled();
+		expect(context.sharedWorkspaceOpening).toBe(false);
+		context.confirm.mockReturnValueOnce(true);
+		await select({ path: 'C/main.c' });
+		expect(context.files).toEqual([
+			{ path: 'main.c', content: 'terminal' },
+			{ path: 'notes.txt', content: 'unsaved notes' }
+		]);
+		expect(binding.acceptWorkspace).toHaveBeenCalledOnce();
+	});
+
+	it('leaves shared-file selection untouched when Run starts during its read', async () => {
+		const { context, binding, select } = selectionFixture();
+		binding.readWorkspace.mockImplementationOnce(async () => {
+			context.runningMode = 'run';
+			return [{ path: 'main.c', content: 'terminal' }];
+		});
+		await select({ path: 'C/main.c' });
+		expect(context.files).toEqual([{ path: 'main.c', content: 'int main(){}' }]);
+		expect(context.activateWorkspace).not.toHaveBeenCalled();
+		expect(binding.acceptWorkspace).not.toHaveBeenCalled();
+		expect(binding.readWorkspace).toHaveBeenCalledOnce();
+		expect(context.sharedWorkspaceOpening).toBe(false);
 	});
 });
 
@@ -1583,14 +1738,7 @@ describe('example route debug actions', () => {
 			expect(languageLabels[language]).toBe(label);
 		}
 		expect(editorOnlyLanguages.has('GRAPHQL')).toBe(false);
-		for (const language of [
-			'JSON',
-			'YAML',
-			'TOML',
-			'HTML',
-			'CSS',
-			'MARKDOWN'
-		] as const) {
+		for (const language of ['JSON', 'YAML', 'TOML', 'HTML', 'CSS', 'MARKDOWN'] as const) {
 			expect(editorOnlyLanguages.has(language)).toBe(true);
 		}
 		expect(source).toMatch(

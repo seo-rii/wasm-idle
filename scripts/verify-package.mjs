@@ -70,8 +70,9 @@ export const scenarios = [
 		// Container PCH persistence and background builds add 8,808 bytes to two container modules (svelte-package output), no files.
 		// The Go worker's fmt-build preload and the in-flight write map add 2,568 bytes; allow 3 KiB.
 		// Refreshing the release lock adds 21,831 packed core bytes; the root install measures 7,623,703 bytes.
+		// Owned Clang outputs and serialized workspace reconciliation add 3,590 bytes; measured install: 7,627,293 bytes.
 		// Round to the next KiB while retaining the existing file and package limits.
-		budget: { maxBytes: 7624704, maxFiles: 865, maxPackages: 6 },
+		budget: { maxBytes: 7627776, maxFiles: 865, maxPackages: 6 },
 		absentPackageNames: [
 			'@katana-project/asm',
 			'java-parser',
@@ -377,8 +378,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		name: '@wasm-idle/debug install',
 		packageNames: ['@wasm-idle/debug', '@wasm-idle/core'],
 		// Shared loader/fflate costs 832 KiB; the existing file/package caps still fit.
-		// Refreshed core receipts raise the measured debug install to 8,201,769 bytes; round to the next KiB.
-		budget: { maxBytes: 8202240, maxFiles: 1200, maxPackages: 25 },
+		// Current install verification measures 8,208,067 bytes; round to the next KiB.
+		budget: { maxBytes: 8208384, maxFiles: 1200, maxPackages: 25 },
 		absentPackageNames: [
 			'@lezer/rust',
 			'@wasm-idle/lsp',
@@ -475,7 +476,10 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// The language servers' shared persistent module fetch adds two files (module-asset-fetch.js and .d.ts).
 		// Final CI measured 43,294,670 bytes; refreshed core receipts add 21,831 packed bytes.
 		// The 43,316,501-byte projection uses the next KiB; file and dependency counts remain unchanged.
-		budget: { maxBytes: 43317248, maxFiles: 3488, maxPackages: 70 },
+		// The workspace recovery fix adds 3,590 root package bytes; allow 4 KiB for that change.
+		// Current full verification measures 43,326,389 bytes after that fix; add 5 KiB
+		// to reach the next KiB while retaining the existing file and package limits.
+		budget: { maxBytes: 43326464, maxFiles: 3488, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

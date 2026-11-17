@@ -34,6 +34,7 @@ const WORKSPACE_TEST_FILES = [
 	'src/routes/workspace-share-paths.playwright.test.ts',
 	'src/routes/workspace-banners.playwright.test.ts',
 	'src/routes/workspace-whitespace-paths.playwright.test.ts',
+	'src/routes/workspace-cpp.playwright.test.ts',
 	'src/routes/debugger-toolbar-layout.playwright.test.ts',
 	'src/routes/container-sidebar.playwright.test.ts'
 ];
