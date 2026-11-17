@@ -890,6 +890,16 @@
 					allowProposedApi: true
 				});
 				term.open(ref);
+				term.attachCustomKeyEventHandler((event) => {
+					// Stop xterm before onKey emits Ctrl+C through onData. Leave the browser's
+					// native copy event enabled so xterm can copy without Clipboard API permission.
+					return !(
+						event.type === 'keydown' &&
+						(event.ctrlKey || event.metaKey) &&
+						event.key.toLowerCase() === 'c' &&
+						term?.hasSelection()
+					);
+				});
 				term.onData((data: string) => {
 					if (!term || terminalDisposed) return;
 					if (finish && executionInputOwners === 0) {
@@ -978,14 +988,6 @@
 					const ev = e.domEvent;
 					const isCopyShortcut =
 						(ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'c';
-					if (isCopyShortcut && term.hasSelection()) {
-						const selectedText = term.getSelection();
-						if (selectedText) {
-							ev.preventDefault();
-							navigator.clipboard.writeText(selectedText).catch(() => {});
-							return;
-						}
-					}
 					if (finish && executionInputOwners === 0) return;
 					onkey?.(ev);
 					if (isCopyShortcut) {

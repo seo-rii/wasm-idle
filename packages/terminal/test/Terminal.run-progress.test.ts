@@ -20,6 +20,7 @@ vi.mock('@xterm/xterm', () => ({
 		options: Record<string, unknown> = {};
 		open() {}
 		onData() {}
+		attachCustomKeyEventHandler() {}
 		onKey() {}
 		write(text: string) {
 			terminalWrites.push(text);
