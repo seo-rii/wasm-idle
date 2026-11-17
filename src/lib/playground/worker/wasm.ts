@@ -13,6 +13,7 @@ import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 import type { SandboxWorkspaceFile } from '$lib/playground/options';
 import type { WasiInterpreterProfile } from '$lib/playground/wasiInterpreters';
 import { fetchRuntimeAssetBytes } from './runtimeAssetFetch';
+import { createBusyboxTextImports } from './busyboxTextImports';
 import { limitWasmMemory } from '../wasmMemory.js';
 
 declare var self: any;
@@ -395,7 +396,10 @@ self.onmessage = async (event: { data: any }) => {
 				}
 			},
 			wasi_snapshot_preview1: wasiRuntime.wasiImport,
-			wasi_unstable: wasiRuntime.wasiImport
+			wasi_unstable: wasiRuntime.wasiImport,
+			...(interpreter?.hostProfile === 'busybox-text-v1'
+				? createBusyboxTextImports(() => wasiRuntime.inst?.exports.memory)
+				: {})
 		});
 		const exportsObject = instance.exports as Record<string, unknown>;
 		postMessage({

@@ -1,0 +1,170 @@
+{
+  "schemaVersion": 1,
+  "language": "COQ",
+  "profileId": "coq-8.17.1-jscoq-0.17.1-v1",
+  "implementation": {
+    "name": "Coq",
+    "version": "8.17.1",
+    "repository": "https://github.com/coq/coq",
+    "revision": "18722d285c34aee39f344c080ccfebe02fd974ba",
+    "sourceArchive": "https://github.com/coq/coq/archive/18722d285c34aee39f344c080ccfebe02fd974ba.tar.gz"
+  },
+  "port": {
+    "name": "jsCoq",
+    "version": "0.17.1",
+    "repository": "https://github.com/jscoq/jscoq",
+    "revision": "7ca41fe7432c1dd2951d4aa42f5216e7bdb11990",
+    "sourceArchive": "https://github.com/jscoq/jscoq/archive/7ca41fe7432c1dd2951d4aa42f5216e7bdb11990.tar.gz",
+    "npmIntegrity": "sha512-VtfgbmsIWP008GjoGWP1HECNJZxLCcV6RjIUmjy5Udiaagq+h2MLODDdcnlpFQtG4PXRgbk1ozIWIBML8owV2g=="
+  },
+  "toolchain": {
+    "ocaml": "4.12.0+32bit",
+    "js_of_ocaml": "4.0.0",
+    "stdlib": "matching jscoq@0.17.1 init and coq-base archives",
+    "bytecodeCompiler": false,
+    "nativeCompiler": false
+  },
+  "assets": {
+    "jscoq_worker.bc.js": {
+      "bytes": 6241668,
+      "sha256": "2f7c21f7bc7da5aa3133fa12dd72661a8f3d87e41c377679167641085521c126",
+      "url": "https://unpkg.com/jscoq@0.17.1/backend/jsoo/jscoq_worker.bc.js"
+    },
+    "init.coq-pkg.bin": {
+      "bytes": 5015784,
+      "sha256": "004c0404ab88d3556ed2e83ef65233a3b016d67eb9710fcd2c8650ed9a202bcc",
+      "url": "https://unpkg.com/jscoq@0.17.1/coq-pkgs/init.coq-pkg"
+    },
+    "coq-base.coq-pkg.bin": {
+      "bytes": 4031431,
+      "sha256": "5374b34f22f7002d617f9152702f95b113e396d30fdcbfd4a5b484c9dd511d29",
+      "url": "https://unpkg.com/jscoq@0.17.1/coq-pkgs/coq-base.coq-pkg"
+    }
+  },
+  "archives": {
+    "init.coq-pkg.bin": {
+      "entries": 52,
+      "uncompressedBytes": 11487619
+    },
+    "coq-base.coq-pkg.bin": {
+      "entries": 109,
+      "uncompressedBytes": 8511375
+    }
+  },
+  "notices": {
+    "COPYING.AGPL3": {
+      "bytes": 34523,
+      "sha256": "0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0"
+    },
+    "COPYING.GPL3": {
+      "bytes": 35149,
+      "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"
+    },
+    "LICENSE.coq": {
+      "bytes": 24381,
+      "sha256": "d4594b82f4d50840df6a7e9d14132a8c0a3cc05d0ac46d15310a264a1f75447e"
+    },
+    "LICENSE.fflate": {
+      "bytes": 1069,
+      "sha256": "0a1df3a083d0c010560aa342e87959c8c1070e6fd54545741f083f22d0c8b551"
+    },
+    "LICENSE.jane-street": {
+      "bytes": 1117,
+      "sha256": "d4c5249555e4bb0ea439bee446eae20b954e47d49dd77a03af4bc44b3497f717"
+    },
+    "LICENSE.js_of_ocaml": {
+      "bytes": 46079,
+      "sha256": "3d603900c5025c40ca3973150cdd638cd04b013fa5edefa3c94b5d4a4c2ed7ea"
+    },
+    "LICENSE.jscoq": {
+      "bytes": 3260,
+      "sha256": "b269a2aad150b525b404c39d32c38531f0a71b4965696993a37888c550f0ac48"
+    },
+    "LICENSE.lwt": {
+      "bytes": 1083,
+      "sha256": "f9a48608e85754e42dabcc0fde932c90523a0b7531eac287ca8e3d977e10104e"
+    },
+    "LICENSE.ocaml": {
+      "bytes": 27179,
+      "sha256": "65f47d3bf5a921011ac7fa30f23d54f9dffbe7683921eeb116d5ce8dc26ff0c1"
+    },
+    "LICENSE.ppx_deriving": {
+      "bytes": 1088,
+      "sha256": "30692750dc39d5026a367f95c05f68853c58cf560051076c49e911438386fc48"
+    },
+    "LICENSE.serapi": {
+      "bytes": 778,
+      "sha256": "66b414d7269692131f0416dfa119a37bd5b975f645c1a2679c522feb3484564d"
+    },
+    "LICENSE.yojson": {
+      "bytes": 1504,
+      "sha256": "cc8efe2cc2af7b49bbf61f9ab99e15a7cfec5272367423e478da628cd9450ab7"
+    },
+    "LICENSE.zarith": {
+      "bytes": 26394,
+      "sha256": "704f5718bc1e2a445e3a20b25444023829bbedc88a71ba29df913ba99134cbd8"
+    }
+  },
+  "correspondingSource": {
+    "jsCoq": "https://github.com/jscoq/jscoq/archive/7ca41fe7432c1dd2951d4aa42f5216e7bdb11990.tar.gz",
+    "Coq": "https://github.com/coq/coq/archive/18722d285c34aee39f344c080ccfebe02fd974ba.tar.gz",
+    "SerAPI": "https://github.com/ejgallego/coq-serapi/archive/a224455c7ce3975fb9ebb2ad687d54b71eaabff2.tar.gz",
+    "OCaml": "https://github.com/ocaml/ocaml/archive/refs/tags/4.12.0.tar.gz",
+    "js_of_ocaml": "https://github.com/ocsigen/js_of_ocaml/archive/refs/tags/4.0.0.tar.gz",
+    "dependencySpecification": "https://github.com/jscoq/jscoq/blob/7ca41fe7432c1dd2951d4aa42f5216e7bdb11990/jscoq.opam",
+    "dependencyLock": "The historical upstream release has no complete OPAM lockfile; transitive dependency versions are not reconstructed or asserted."
+  },
+  "additionalLicenseSources": {
+    "LICENSE.jane-street": "https://raw.githubusercontent.com/janestreet/base/v0.15.0/LICENSE.md",
+    "LICENSE.lwt": "https://raw.githubusercontent.com/ocsigen/lwt/5.6.1/LICENSE.md",
+    "LICENSE.yojson": "https://raw.githubusercontent.com/ocaml-community/yojson/2.0.2/LICENSE.md",
+    "LICENSE.ppx_deriving": "https://raw.githubusercontent.com/ocaml-ppx/ppx_deriving/v5.2.1/LICENSE.txt",
+    "COPYING.GPL3": "https://www.gnu.org/licenses/gpl-3.0.txt"
+  },
+  "worker": {
+    "bytes": 26347,
+    "sha256": "4c957a36275e941c00e8bbef59f79be03b35ae2709f9c563c45c138df2d914eb"
+  },
+  "inputs": {
+    "upstream.json": {
+      "bytes": 4654,
+      "sha256": "cde21168faaf238b52b7ee8769e1f6d03288d66f34f8ca2895e15f4144855c46"
+    },
+    "upstream-build.sh": {
+      "bytes": 780,
+      "sha256": "5faac3166205aaef5662c92cf2732f1ede897ef594e1c6a68c6eeb0573378330"
+    },
+    "upstream-build.md": {
+      "bytes": 3906,
+      "sha256": "b329c41b8ceb62187bc54044a663c04edd5c70b2af4d56ce0f5d1e54e23ae543"
+    },
+    "upstream.Makefile": {
+      "bytes": 8369,
+      "sha256": "58f1a7f0b7d1c53c7b9db64c0f4534cfb055ae22a7c1e64c5503504254c8ce9a"
+    },
+    "upstream.jscoq.opam": {
+      "bytes": 1634,
+      "sha256": "b7344c650bbab6647e9ed46e9676273e712fb72b83f01cab2e628b87949ff808"
+    },
+    "upstream.package.json": {
+      "bytes": 2211,
+      "sha256": "d894cba8527bb86cfa6fe7196969847cf2faec81bca8bddbaec62e01a954f85c"
+    },
+    "upstream-toolchain-setup.sh": {
+      "bytes": 1568,
+      "sha256": "99bc943102bb83f8b699e543af154f9027ad38cbba3bd7ad5882bd839c51de5b"
+    },
+    "trampoline.patch": {
+      "bytes": 9612,
+      "sha256": "fa38acf259c72467b42761ca9f756cf345c23c4713f00f1ce5440ec0e6580034"
+    },
+    "fold.patch": {
+      "bytes": 876,
+      "sha256": "f2bd2b5ff8d516b072a2a633d71d7f2b29305de4a4dbc23bf6fd0b6f1468332e"
+    },
+    "timeout.patch": {
+      "bytes": 2548,
+      "sha256": "ba588c48affafe6343a188405c0dfae6aa02709d07e9baa2f2615db3836b785a"
+    }
+  }
+}

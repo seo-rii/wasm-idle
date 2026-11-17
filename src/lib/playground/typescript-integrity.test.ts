@@ -7,7 +7,8 @@ const TEST_RUNTIME_ASSETS = {
 
 import {
 	WASM_TYPESCRIPT_MODULE_RECEIPT,
-	WASM_JAVASCRIPT_MODULE_RECEIPT
+	WASM_JAVASCRIPT_MODULE_RECEIPT,
+	WASM_COFFEESCRIPT_MODULE_RECEIPT
 } from './wasmTypeScriptVersion';
 
 const workerInstances: IntegrityWorker[] = [];
@@ -35,6 +36,25 @@ import TypeScriptSandbox from './typescript';
 describe('TypeScript runtime integrity handoff', () => {
 	beforeEach(() => {
 		workerInstances.length = 0;
+	});
+	it('verifies the independent CoffeeScript entry against its pinned receipt', async () => {
+		const sandbox = new TypeScriptSandbox('COFFEESCRIPT');
+		await sandbox.load(
+			{ typescript: { coffeeScriptModuleUrl: '/custom/coffeescript.js' } },
+			'',
+			false,
+			[],
+			{ limits: { maxAssetBytes: WASM_COFFEESCRIPT_MODULE_RECEIPT.bytes } }
+		);
+		expect(workerInstances[0].postMessage.mock.calls[0][0]).toMatchObject({
+			moduleReceipt: WASM_COFFEESCRIPT_MODULE_RECEIPT,
+			moduleUrl: expect.stringMatching(/\/custom\/coffeescript\.js$/u)
+		});
+		await expect(
+			new TypeScriptSandbox('COFFEESCRIPT').load('/runtime', '', false, [], {
+				limits: { maxAssetBytes: WASM_COFFEESCRIPT_MODULE_RECEIPT.bytes - 1 }
+			})
+		).rejects.toMatchObject({ name: 'AssetTooLargeError' });
 	});
 
 	it('sends a detached pinned receipt and the resolved asset limit to the worker', async () => {

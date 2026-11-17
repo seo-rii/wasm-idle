@@ -1,0 +1,15 @@
+--- a/runtime/basis/cpointer.h
++++ b/runtime/basis/cpointer.h
+@@ -15,7 +15,12 @@
+ 
+ PRIVATE INLINE
+ Pointer CPointer_add (Pointer p, C_Size_t s) {
++#if defined(__wasm32__)
++  /* Generated MLton stack displacements encode negative offsets in size_t. */
++  return (p + (intptr_t)s);
++#else
+   return (p + s);
++#endif
+ }
+ PRIVATE INLINE
+ C_Size_t CPointer_diff (Pointer p1, Pointer p2) {

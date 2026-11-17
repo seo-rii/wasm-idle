@@ -3,7 +3,7 @@ import { resolveVersionedAssetUrl } from './asset-url.js';
 import { fetchRuntimeAssetBytes, loadRuntimePackEntries, loadRuntimeSysrootChunks } from './runtime-asset.js';
 import { CaptureFd, ensureGuestDirectory, normalizeGuestPath, readGuestFile, writeGuestFile } from './wasi-guest.js';
 import { assertGoInstanceMemoryLimit } from './wasm-memory.js';
-import { compileGoToolModule } from './tool-module.js';
+import { compileGoToolModule, prepareVersionedGoToolModule } from './tool-module.js';
 const DEFAULT_MAX_WASM_MEMORY_BYTES = 512 * 1024 * 1024;
 function throwIfAborted(signal) {
     if (signal?.aborted) {
@@ -35,7 +35,17 @@ function collectInputFiles(invocation, plan) {
     }
     return files;
 }
-export async function executeGoToolInvocation(invocation, plan, runtimeBaseUrl, fetchImpl = fetch, reportAssetProgress, options = {}) {
+export async function prepareGoToolModule(invocation, runtimeBaseUrl, fetchImpl = fetch, reportAssetProgress, options = {}) {
+    throwIfAborted(options.signal);
+    const url = resolveVersionedAssetUrl(runtimeBaseUrl, invocation.toolAsset);
+    const maxWasmMemoryBytes = options.maxWasmMemoryBytes ?? DEFAULT_MAX_WASM_MEMORY_BYTES;
+    return prepareVersionedGoToolModule(url, maxWasmMemoryBytes, async () => {
+        const toolBytes = await fetchRuntimeAssetBytes(url, `${invocation.tool}.wasm`, fetchImpl, true, (loaded, total) => reportAssetProgress?.(invocation.toolAsset, loaded, total), options);
+        throwIfAborted(options.signal);
+        return compileGoToolModule(toolBytes, maxWasmMemoryBytes, `${invocation.tool}.wasm`, options.signal);
+    }, options.signal, () => reportAssetProgress?.(invocation.toolAsset, 1, 1));
+}
+export async function executeGoToolInvocation(invocation, plan, runtimeBaseUrl, fetchImpl = fetch, reportAssetProgress, options = {}, preparedModule) {
     throwIfAborted(options.signal);
     const maxWasmMemoryBytes = options.maxWasmMemoryBytes ?? DEFAULT_MAX_WASM_MEMORY_BYTES;
     const inputFiles = collectInputFiles(invocation, plan);
@@ -50,11 +60,8 @@ export async function executeGoToolInvocation(invocation, plan, runtimeBaseUrl, 
     try {
         [sysrootFiles, module] = await Promise.all([
             loadSysrootFiles(plan, runtimeBaseUrl, fetchImpl, reportAssetProgress, startupOptions),
-            (async () => {
-                const toolBytes = await fetchRuntimeAssetBytes(resolveVersionedAssetUrl(runtimeBaseUrl, invocation.toolAsset), `${invocation.tool}.wasm`, fetchImpl, true, (loaded, total) => reportAssetProgress?.(invocation.toolAsset, loaded, total), startupOptions);
-                throwIfAborted(startupController.signal);
-                return await compileGoToolModule(toolBytes, maxWasmMemoryBytes, `${invocation.tool}.wasm`, startupController.signal);
-            })()
+            preparedModule ??
+                prepareGoToolModule(invocation, runtimeBaseUrl, fetchImpl, reportAssetProgress, startupOptions)
         ]);
     }
     catch (error) {

@@ -1,0 +1,20 @@
+--- a/src/sys/mod.rs
++++ b/src/sys/mod.rs
+@@ -1657,7 +1657,7 @@
+ ///
+ /// This function works on both native and web targets.
+ pub fn now() -> f64 {
+-    #[cfg(not(target_arch = "wasm32"))]
++    #[cfg(any(not(target_arch = "wasm32"), target_os = "wasi"))]
+     {
+         std::time::SystemTime::now()
+             .duration_since(std::time::SystemTime::UNIX_EPOCH)
+@@ -1665,7 +1665,7 @@
+             .expect("System clock was before 1970.")
+             .as_secs_f64()
+     }
+-    #[cfg(target_arch = "wasm32")]
++    #[cfg(all(target_arch = "wasm32", not(target_os = "wasi")))]
+     {
+         #[cfg(not(feature = "web"))]
+         {

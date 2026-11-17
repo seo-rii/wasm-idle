@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onDestroy, untrack } from 'svelte';
+	import { MOONBIT_SERVICE_POLICY } from '$lib/playground/moonbitServicePolicy';
 	import { parseDebugInteger } from './debugInteger';
 	import Monaco from './Monaco.svelte';
 	import DebuggerLog from './DebuggerLog.svelte';
@@ -208,6 +209,7 @@
 	const traceFallbackLanguages = new Set<PlaygroundLanguage>(['C', 'CPP', 'RUST', 'OBJC']);
 	// Runtimes that consume stdin once at start, even when terminal streaming is available.
 	const preloadedStdinLanguages = new Set<PlaygroundLanguage>([
+		'GRAPHQL',
 		'BASH',
 		'POSTGRESQL',
 		'SCALA',
@@ -484,7 +486,12 @@
 			: {})
 	}));
 	const editorLanguage = $derived(editorLanguages[language]);
-	const executionAvailable = $derived(!editorOnlyLanguages.has(language));
+	const executionUnavailableReason = $derived(
+		language === 'MOONBIT' ? MOONBIT_SERVICE_POLICY.message : ''
+	);
+	const executionAvailable = $derived(
+		!editorOnlyLanguages.has(language) && !executionUnavailableReason
+	);
 	const argsLabel = $derived(argsLabels[language] ?? 'Args');
 	const monacoLspLanguage = $derived(lspLanguageOverrides[language] ?? editorLanguage);
 	const activeRuntimeLspCapability = $derived(runtimeLspCapabilities[language] ?? null);
@@ -573,6 +580,11 @@
 	const pascalLspRuntime = $derived(pascalLspEnabled ? runtimeAssets.pascal : undefined);
 	const goLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'go');
 	const goLspCompilerUrl = $derived(goLspEnabled ? runtimeAssets.go?.compilerUrl : undefined);
+	const goLspManifestUrl = $derived(goLspEnabled ? runtimeAssets.go?.manifestUrl : undefined);
+	// Language servers verify runtime files against the bundled lock under this root.
+	const lspAssetRootUrl = browser
+		? new URL(`${applicationRootUrl.replace(/\/$/, '')}/`, location.href).href
+		: undefined;
 	const rustLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'rust');
 	const rustLspCompilerUrl = $derived(
 		rustLspEnabled ? runtimeAssets.rust?.compilerUrl : undefined
@@ -992,7 +1004,10 @@
 			'.aheui': 'AHEUI',
 			'.um': 'UHMLANG',
 			'.umm': 'UHMLANG',
+			'.coq': 'COQ',
+			'.st': 'SMALLTALK',
 			'.pi': 'PICAT',
+			'.mbt': 'MOONBIT',
 			'.gp': 'PARIGP',
 			'.wren': 'WREN',
 			'.nut': 'SQUIRREL',
@@ -1028,6 +1043,7 @@
 			'.pro': 'PROLOG',
 			'.gleam': 'GLEAM',
 			'.gr': 'GRAIN',
+			'.sv': 'VERILOG',
 			'.pl': 'PERL',
 			'.pm': 'PERL',
 			'.tcl': 'TCL',
@@ -1042,13 +1058,18 @@
 			'.ijt': 'J',
 			'.ijx': 'J',
 			'.apl': 'APL',
+			'.dart': 'DART',
+			'.sml': 'SML',
 			'.bqn': 'BQN',
+			'.bc': 'BC',
+			'.ua': 'UIUA',
 			'.janet': 'JANET',
 			'.jl': 'JULIA',
 			'.c3': 'C3',
 			'.lean': 'LEAN4',
 			'.nim': 'NIM',
 			'.nims': 'NIM',
+			'.sed': 'SED',
 			'.sh': 'BASH',
 			'.bash': 'BASH',
 			'.cljs': 'CLOJURESCRIPT',
@@ -1057,6 +1078,8 @@
 			'.res': 'RESCRIPT',
 			'.ml': 'OCAML',
 			'.mli': 'OCAML',
+			'.coffee': 'COFFEESCRIPT',
+			'.litcoffee': 'COFFEESCRIPT',
 			'.js': 'JAVASCRIPT',
 			'.mjs': 'JAVASCRIPT',
 			'.cjs': 'JAVASCRIPT',
@@ -1130,6 +1153,7 @@
 			PROLOG: 'main.prolog',
 			GLEAM: 'main.gleam',
 			GRAIN: 'main.gr',
+			VERILOG: 'main.sv',
 			PERL: 'main.pl',
 			TCL: 'main.tcl',
 			AWK: 'main.awk',
@@ -1137,17 +1161,23 @@
 			FORTH: 'main.fth',
 			J: 'main.ijs',
 			APL: 'main.apl',
+			DART: 'main.dart',
+			SML: 'main.sml',
 			BQN: 'main.bqn',
+			BC: 'main.bc',
+			UIUA: 'main.ua',
 			JANET: 'main.janet',
 			JULIA: 'main.jl',
 			C3: 'main.c3',
 			NIM: 'main.nim',
+			SED: 'main.sed',
 			BASH: 'main.sh',
 			CLOJURESCRIPT: 'main.cljs',
 			RESCRIPT: 'Main.res',
 			HY: 'main.hy',
 			TINYGO: 'main.go',
 			OCAML: 'main.ml',
+			COFFEESCRIPT: 'main.coffee',
 			JAVASCRIPT: 'main.js',
 			TYPESCRIPT: 'main.ts',
 			ASSEMBLYSCRIPT: 'main.as.ts',
@@ -1157,7 +1187,10 @@
 			MALBOLGE: 'main.mal',
 			AHEUI: 'main.aheui',
 			UHMLANG: 'main.um',
+			COQ: 'main.coq',
+			SMALLTALK: 'main.st',
 			PICAT: 'main.pi',
+			MOONBIT: 'main.mbt',
 			PARIGP: 'main.gp',
 			WREN: 'main.wren',
 			SQUIRREL: 'main.nut',
@@ -1215,6 +1248,7 @@
 			PROLOG: 'prolog',
 			GLEAM: 'gleam',
 			GRAIN: 'grain',
+			VERILOG: 'verilog',
 			PERL: 'perl',
 			TCL: 'tcl',
 			AWK: 'awk',
@@ -1222,17 +1256,23 @@
 			FORTH: 'forth',
 			J: 'j',
 			APL: 'apl',
+			DART: 'dart',
+			SML: 'sml',
 			BQN: 'bqn',
+			BC: 'bc',
+			UIUA: 'uiua',
 			JANET: 'janet',
 			JULIA: 'julia',
 			C3: 'c3',
 			NIM: 'nim',
+			SED: 'sed',
 			BASH: 'bash',
 			CLOJURESCRIPT: 'clojurescript',
 			RESCRIPT: 'rescript',
 			HY: 'hy',
 			TINYGO: 'go',
 			OCAML: 'ocaml',
+			COFFEESCRIPT: 'coffeescript',
 			JAVASCRIPT: 'javascript',
 			TYPESCRIPT: 'typescript',
 			ASSEMBLYSCRIPT: 'assemblyscript',
@@ -1242,7 +1282,10 @@
 			MALBOLGE: 'malbolge',
 			AHEUI: 'aheui',
 			UHMLANG: 'uhmlang',
+			COQ: 'coq',
+			SMALLTALK: 'smalltalk',
 			PICAT: 'picat',
+			MOONBIT: 'moonbit',
 			PARIGP: 'parigp',
 			WREN: 'wren',
 			SQUIRREL: 'squirrel',
@@ -2245,7 +2288,10 @@
 			uhmlang: 'UHMLANG',
 			umjunsik: 'UHMLANG',
 			엄준식: 'UHMLANG',
+			coq: 'COQ',
+			smalltalk: 'SMALLTALK',
 			picat: 'PICAT',
+			moonbit: 'MOONBIT',
 			parigp: 'PARIGP',
 			'pari/gp': 'PARIGP',
 			gp: 'PARIGP',
@@ -2299,6 +2345,7 @@
 			swi: 'PROLOG',
 			gleam: 'GLEAM',
 			grain: 'GRAIN',
+			verilog: 'VERILOG',
 			perl: 'PERL',
 			tcl: 'TCL',
 			tclsh: 'TCL',
@@ -2313,13 +2360,19 @@
 			apl: 'APL',
 			gnuapl: 'APL',
 			'gnu-apl': 'APL',
+			dart: 'DART',
+			sml: 'SML',
+			standardml: 'SML',
 			bqn: 'BQN',
+			bc: 'BC',
+			uiua: 'UIUA',
 			janet: 'JANET',
 			julia: 'JULIA',
 			jl: 'JULIA',
 			c3: 'C3',
 			nim: 'NIM',
 			nimrod: 'NIM',
+			sed: 'SED',
 			bash: 'BASH',
 			sh: 'BASH',
 			shell: 'BASH',
@@ -2330,6 +2383,8 @@
 			hy: 'HY',
 			hylang: 'HY',
 			ocaml: 'OCAML',
+			coffeescript: 'COFFEESCRIPT',
+			coffee: 'COFFEESCRIPT',
 			javascript: 'JAVASCRIPT',
 			js: 'JAVASCRIPT',
 			typescript: 'TYPESCRIPT',
@@ -3188,7 +3243,7 @@
 	$effect(() => {
 		if (!browser || !workspaceInitialized) return;
 		const binding = playground;
-		const enabled = prewarmEnabled;
+		const enabled = prewarmEnabled && executionAvailable;
 		const selectedLanguage = language;
 		// A run owns its sandbox already. Never replace it with speculative work.
 		// Run must claim the pending warm-up; changing runningMode must not cancel it.
@@ -4720,6 +4775,11 @@
 		</div>
 	</header>
 	<div class="workspace-configuration">
+		{#if executionUnavailableReason}
+			<p role="status" data-testid="runtime-unavailable">
+				{executionUnavailableReason} Editing and saving source remain available.
+			</p>
+		{/if}
 		{#if language === 'PYTHON'}
 			<details class="python-bytecode-options">
 				<summary>Python bytecode options</summary>
@@ -5028,6 +5088,8 @@
 							{pascalLspRuntime}
 							{goLspEnabled}
 							{goLspCompilerUrl}
+							{goLspManifestUrl}
+							{lspAssetRootUrl}
 							{rustLspEnabled}
 							{rustLspCompilerUrl}
 							{zigLspEnabled}
@@ -5270,17 +5332,19 @@
 							<div>
 								<strong>Preloaded stdin</strong>
 								<span>
-									{language === 'SCALA'
-										? 'Scala.js accepts buffered stdin only. Enter it before Run; extra reads receive EOF. Interactive terminal input is unavailable.'
-										: language === 'BASH'
-											? 'The Bash WASIX package accepts stdin when the process starts. Enter it before Run; extra reads receive EOF.'
-											: language === 'POSTGRESQL'
-												? "PostgreSQL reads this input as the server file '/dev/blob' (COPY ... FROM '/dev/blob' or pg_read_file('/dev/blob')). Enter it before Run."
-												: language === 'CSHARP' ||
-													  language === 'FSHARP' ||
-													  language === 'VBNET'
-													? 'C#, F#, and VB.NET read all stdin when the program starts. Enter it before Run; extra reads receive EOF. Output appears when the program finishes.'
-													: 'SharedArrayBuffer is unavailable here, so terminal input cannot be sent while the program is running. Enter stdin before Run; extra reads receive EOF.'}
+									{language === 'GRAPHQL'
+										? 'Optional JSON input: rootValue, variables and operationName. Leave empty to use the schema alone. Input is read when you click Run.'
+										: language === 'SCALA'
+											? 'Scala.js accepts buffered stdin only. Enter it before Run; extra reads receive EOF. Interactive terminal input is unavailable.'
+											: language === 'BASH'
+												? 'The Bash WASIX package accepts stdin when the process starts. Enter it before Run; extra reads receive EOF.'
+												: language === 'POSTGRESQL'
+													? "PostgreSQL reads this input as the server file '/dev/blob' (COPY ... FROM '/dev/blob' or pg_read_file('/dev/blob')). Enter it before Run."
+													: language === 'CSHARP' ||
+														  language === 'FSHARP' ||
+														  language === 'VBNET'
+														? 'C#, F#, and VB.NET read all stdin when the program starts. Enter it before Run; extra reads receive EOF. Output appears when the program finishes.'
+														: 'SharedArrayBuffer is unavailable here, so terminal input cannot be sent while the program is running. Enter stdin before Run; extra reads receive EOF.'}
 								</span>
 							</div>
 							<textarea

@@ -19,6 +19,7 @@ import {
 import {
 	WASM_TYPESCRIPT_ASSET_VERSION,
 	WASM_JAVASCRIPT_MODULE_RECEIPT,
+	WASM_COFFEESCRIPT_MODULE_RECEIPT,
 	WASM_TYPESCRIPT_MODULE_RECEIPT
 } from './playground/wasmTypeScriptVersion';
 
@@ -43,6 +44,7 @@ async function createFixture() {
 	await writeFile(path.join(producerDir, 'scripts/provenance.mjs'), 'export {};\n');
 	for (const [packageName, version] of Object.entries({
 		'@swc/wasm-typescript': '1.15.33',
+		coffeescript: '2.7.0',
 		buffer: '6.0.3',
 		acorn: '8.19.0',
 		esbuild: '0.27.3',
@@ -203,7 +205,10 @@ describe('syncWasmTypeScriptDist', () => {
 				format: 'wasm-typescript-producer-build-v1',
 				source: await computeWasmTypeScriptSourceReceipt(producerDir),
 				toolchain: await readWasmTypeScriptToolchain(producerDir),
-				additionalArtifacts: { 'javascript.js': WASM_JAVASCRIPT_MODULE_RECEIPT },
+				additionalArtifacts: {
+					'javascript.js': WASM_JAVASCRIPT_MODULE_RECEIPT,
+					'coffeescript.js': WASM_COFFEESCRIPT_MODULE_RECEIPT
+				},
 				artifact: {
 					path: 'index.js',
 					...WASM_TYPESCRIPT_MODULE_RECEIPT
@@ -211,10 +216,18 @@ describe('syncWasmTypeScriptDist', () => {
 			},
 			assets: {
 				'index.js': WASM_TYPESCRIPT_MODULE_RECEIPT,
-				'javascript.js': WASM_JAVASCRIPT_MODULE_RECEIPT
+				'javascript.js': WASM_JAVASCRIPT_MODULE_RECEIPT,
+				'coffeescript.js': WASM_COFFEESCRIPT_MODULE_RECEIPT
 			}
 		});
 		expect(actualReceipt).toEqual(WASM_TYPESCRIPT_MODULE_RECEIPT);
+		const coffeeScriptBytes = gunzipSync(
+			await readFile(path.join(repositoryRoot, 'static/wasm-typescript/coffeescript.js.gz'))
+		);
+		expect({
+			bytes: coffeeScriptBytes.byteLength,
+			sha256: createHash('sha256').update(coffeeScriptBytes).digest('hex')
+		}).toEqual(WASM_COFFEESCRIPT_MODULE_RECEIPT);
 	});
 
 	it('signals readiness from the checked-in runtime before executing the program body', async () => {

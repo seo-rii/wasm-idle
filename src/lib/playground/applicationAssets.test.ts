@@ -164,6 +164,7 @@ describe('application runtime asset root', () => {
 			'fortran',
 			'gleam',
 			'go',
+			'graphql',
 			'haskell',
 			'j',
 			'janet',
@@ -1241,6 +1242,22 @@ it('selects an independently pinned JavaScript entry and includes it in runtime 
 			typescript: {
 				...assets.typescript,
 				javascriptModuleUrl: 'https://replacement.test/javascript.js'
+			}
+		})
+	);
+});
+
+it('pins the independent CoffeeScript entry and includes it in runtime cache identity', () => {
+	const assets = createApplicationRuntimeAssets('/foo/bar');
+	expect(assets.typescript?.coffeeScriptModuleUrl).toBe(
+		`/foo/bar/wasm-typescript/coffeescript.js?v=${WASM_TYPESCRIPT_ASSET_VERSION}`
+	);
+	expect(createRuntimeAssetsKey(assets)).not.toBe(
+		createRuntimeAssetsKey({
+			...assets,
+			typescript: {
+				...assets.typescript,
+				coffeeScriptModuleUrl: 'https://replacement.test/coffeescript.js'
 			}
 		})
 	);

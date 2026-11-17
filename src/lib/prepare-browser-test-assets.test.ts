@@ -30,6 +30,45 @@ afterEach(async () => {
 });
 
 describe('browser test asset preparation', () => {
+	it('blocks ordinary MoonBit preparation before invoking the producer or fetching', async () => {
+		const prepareMoonbit = vi.fn(),
+			fetchImpl = vi.fn<typeof fetch>();
+		await expect(
+			prepareBrowserTestAssets({ groups: ['moonbit'], prepareMoonbit, fetchImpl })
+		).rejects.toThrow('service-license review');
+		expect(prepareMoonbit).not.toHaveBeenCalled();
+		expect(fetchImpl).not.toHaveBeenCalled();
+	});
+	it('requires an explicit local-research option for MoonBit producer and payload receipt checks', async () => {
+		const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-idle-moonbit-ci-assets-'));
+		temporaryDirectories.push(root);
+		const prepareMoonbit = vi.fn(async () => undefined);
+		await prepareBrowserTestAssets({
+			groups: ['moonbit'],
+			staticDir: root,
+			prepareMoonbit,
+			moonbitLocalResearchOnly: true
+		});
+		expect(prepareMoonbit).toHaveBeenCalledWith({
+			targetDir: path.join(root, 'wasm-moonbit'),
+			localResearchOnly: true
+		});
+		await expect(
+			verifyBrowserTestAssets({ groups: ['moonbit'], staticDir: root })
+		).rejects.toThrow(
+			'Missing or oversized required browser test asset: wasm-moonbit/moonc.js'
+		);
+	});
+	it('prepares Dart from its original pinned archive and requires its payloads for grouped browser tests', async () => {
+		const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-idle-dart-ci-assets-'));
+		temporaryDirectories.push(root);
+		const prepareDart = vi.fn(async () => undefined);
+		await prepareBrowserTestAssets({ groups: ['dart'], staticDir: root, prepareDart });
+		expect(prepareDart).toHaveBeenCalledWith({ targetDir: path.join(root, 'wasm-dart') });
+		await expect(
+			verifyBrowserTestAssets({ groups: ['dart'], staticDir: root })
+		).rejects.toThrow('Missing or oversized required browser test asset: wasm-dart/worker.js');
+	});
 	it('prepares and verifies Scala compiler fixtures from immutable receipts outside the release static tree', async () => {
 		const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-idle-scala-ci-assets-'));
 		temporaryDirectories.push(root);
@@ -726,6 +765,7 @@ describe('browser test asset preparation', () => {
 			manifestPath,
 			staticDir: path.join(root, 'static'),
 			cacheDir: path.join(root, 'cache'),
+			temporaryParentDir: root,
 			prepareOcamlWrapper,
 			fetchImpl
 		};
@@ -739,6 +779,9 @@ describe('browser test asset preparation', () => {
 		});
 		expect(fetchImpl).toHaveBeenCalledTimes(1);
 		expect(prepareOcamlWrapper).toHaveBeenCalledTimes(2);
+		expect(prepareOcamlWrapper).toHaveBeenCalledWith(
+			expect.objectContaining({ temporaryParentDir: root })
+		);
 		expect(await readFile(derived, 'utf8')).toBe('corrected browser adapter');
 	});
 
@@ -855,6 +898,7 @@ describe('browser test asset preparation', () => {
 			'commonlisp',
 			'picat',
 			'parigp',
+			'dart',
 			'scala'
 		]);
 		expect(normalizeBrowserTestAssetGroups(['--', 'container'])).toEqual(['container']);

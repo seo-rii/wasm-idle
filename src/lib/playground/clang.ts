@@ -216,6 +216,7 @@ class Clang implements Sandbox {
 				};
 				this.worker.postMessage({
 					load: true,
+					language: this.language,
 					persistentCache: assetConfig.persistentCache,
 					verifiedStreaming: bundledAssets,
 					languageSysrootProfiles,
