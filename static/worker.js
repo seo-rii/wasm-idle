@@ -2,9 +2,57 @@ self.addEventListener('install', function () {
 	self.skipWaiting();
 });
 
+// Content-addressed application code never changes at its URL. Keep it per Service Worker build
+// so a revisit does not revalidate every module and worker chunk in import-depth round trips.
+const immutableCachePrefix = 'wasm-idle-immutable-';
+const immutableCacheName = `${immutableCachePrefix}${
+	(self.location && new URL(self.location.href).searchParams.get('build')) || 'default'
+}`;
+
 self.addEventListener('activate', (event) => {
-	event.waitUntil(self.clients.claim());
+	event.waitUntil(
+		Promise.all([self.clients.claim(), deleteStaleImmutableCaches()]).then(() => undefined)
+	);
 });
+
+async function deleteStaleImmutableCaches() {
+	try {
+		if (typeof caches?.keys !== 'function') return;
+		for (const name of await caches.keys()) {
+			if (name.startsWith(immutableCachePrefix) && name !== immutableCacheName)
+				await caches.delete(name);
+		}
+	} catch (e) {
+		console.error(e);
+	}
+}
+
+function isImmutableAppAsset(request, url) {
+	if (request.method !== 'GET' || request.headers.has('range') || url.search) return false;
+	const assetPath = relativePathInScope(url);
+	return (
+		assetPath !== null &&
+		(assetPath.startsWith('_app/immutable/') ||
+			/^container-app\/host\/[a-f0-9]{64}\//u.test(assetPath))
+	);
+}
+
+async function matchImmutableAppAsset(request) {
+	try {
+		return (await (await caches.open(immutableCacheName)).match(request)) || null;
+	} catch {
+		// Unavailable storage only disables this shortcut.
+		return null;
+	}
+}
+
+async function storeImmutableAppAsset(request, response) {
+	try {
+		await (await caches.open(immutableCacheName)).put(request, response);
+	} catch {
+		// Quota or storage failures keep the ordinary network path.
+	}
+}
 
 const precompressedExtension = /\.(br|brotli|gz|tgz|zip|zst)$/i;
 const exactResponseUrlAssetPaths = new Set([
@@ -656,6 +704,11 @@ self.addEventListener('fetch', function (event) {
 				if (shouldPreserveExactResponseUrl(event.request, url)) return fetch(event.request);
 				// Local runtime assets only answer for this origin and registration scope.
 				if (relativePathInScope(url) === null) return fetch(event.request);
+				const immutable = isImmutableAppAsset(event.request, url);
+				if (immutable) {
+					const cached = await matchImmutableAppAsset(event.request);
+					if (cached) return cached;
+				}
 				let localResponse = null;
 				try {
 					localResponse =
@@ -668,7 +721,14 @@ self.addEventListener('fetch', function (event) {
 					// network error; the fallback still receives the isolation headers below.
 					console.error(e);
 				}
-				return localResponse || fetch(event.request);
+				if (localResponse) return localResponse;
+				const response = await fetch(event.request);
+				// Store only complete same-origin network bodies, never locally synthesized ones.
+				if (immutable && response.status === 200 && response.type === 'basic') {
+					const storing = storeImmutableAppAsset(event.request, response.clone());
+					if (typeof event.waitUntil === 'function') event.waitUntil(storing);
+				}
+				return response;
 			})
 			.then(function (response) {
 				// Receipt-verified runtime consumers require the browser's network Response URL.
