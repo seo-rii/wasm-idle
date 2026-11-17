@@ -69,9 +69,9 @@ export const scenarios = [
 		// Persistent runtime caching for Go, .NET, PHP and PostgreSQL adds two worker JavaScript/declaration pairs (9,768 bytes / 4 files measured in CI).
 		// Container PCH persistence and background builds add 8,808 bytes to two container modules (svelte-package output), no files.
 		// The Go worker's fmt-build preload and the in-flight write map add 2,568 bytes; allow 3 KiB.
-		// Full reviewed language stack adds 46,048 measured packed root/core bytes to the 7,555,770-byte baseline.
-		// The 7,601,818-byte projection uses the next KiB; each stacked PR retains its file limit.
-		budget: { maxBytes: 7602176, maxFiles: 865, maxPackages: 6 },
+		// Refreshing the release lock adds 21,831 packed core bytes; the root install measures 7,623,703 bytes.
+		// Round to the next KiB while retaining the existing file and package limits.
+		budget: { maxBytes: 7624704, maxFiles: 865, maxPackages: 6 },
 		absentPackageNames: [
 			'@katana-project/asm',
 			'java-parser',
@@ -149,8 +149,8 @@ export const scenarios = [
 		// GCC totals 2,858,709 bytes; a 3 KiB increase retains 299 bytes of headroom.
 		// The core runtime Wasm module lookup adds one JavaScript/declaration pair (CI measures 2,862,838 bytes / 198 files).
 		// Seven reviewed language metadata additions grow the shared core by 6,040 bytes.
-		// The final measured core delta projects a 2,874,017-byte GCC install; round to the next KiB.
-		budget: { maxBytes: 2874368, maxFiles: 198, maxPackages: 4 },
+		// Refreshed core receipts project a 2,895,848-byte GCC install; round to the next KiB.
+		budget: { maxBytes: 2895872, maxFiles: 198, maxPackages: 4 },
 		absentPackageNames: [
 			'wasm-idle',
 			'@wasm-idle/llvm-core',
@@ -377,7 +377,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		name: '@wasm-idle/debug install',
 		packageNames: ['@wasm-idle/debug', '@wasm-idle/core'],
 		// Shared loader/fflate costs 832 KiB; the existing file/package caps still fit.
-		budget: { maxBytes: 8192000, maxFiles: 1200, maxPackages: 25 },
+		// Refreshed core receipts raise the measured debug install to 8,201,769 bytes; round to the next KiB.
+		budget: { maxBytes: 8202240, maxFiles: 1200, maxPackages: 25 },
 		absentPackageNames: [
 			'@lezer/rust',
 			'@wasm-idle/lsp',
@@ -472,9 +473,9 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// The core runtime Wasm module lookup adds one JavaScript/declaration pair (2 files).
 		// Persistent runtime caching for Go, .NET, PHP and PostgreSQL adds two worker JavaScript/declaration pairs (4 files).
 		// The language servers' shared persistent module fetch adds two files (module-asset-fetch.js and .d.ts).
-		// The reviewed language root/core delta adds 46,048 bytes to the 43,248,568-byte aggregate baseline.
-		// The 43,294,616-byte projection uses the next KiB; dependency counts remain unchanged.
-		budget: { maxBytes: 43294720, maxFiles: 3488, maxPackages: 70 },
+		// Final CI measured 43,294,670 bytes; refreshed core receipts add 21,831 packed bytes.
+		// The 43,316,501-byte projection uses the next KiB; file and dependency counts remain unchanged.
+		budget: { maxBytes: 43317248, maxFiles: 3488, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
