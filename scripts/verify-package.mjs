@@ -63,7 +63,8 @@ export const scenarios = [
 		// Add 17 KiB / six files for its adapter, assets and profile; runtime payloads stay external.
 		// Cumulative Squirrel, Wren, PARI/GP and WASI memory limits add another 27 KiB/12 files.
 		// Persistent runtime caching for Go, .NET, PHP and PostgreSQL adds two worker JavaScript/declaration pairs (9,768 bytes / 4 files measured in CI).
-		budget: { maxBytes: 7 * MiB + 120 * 1024, maxFiles: 813, maxPackages: 6 },
+		// The Go worker's fmt-build preload and the in-flight write map add 2,568 bytes; allow 3 KiB.
+		budget: { maxBytes: 7 * MiB + 123 * 1024, maxFiles: 813, maxPackages: 6 },
 		absentPackageNames: [
 			'@katana-project/asm',
 			'java-parser',
