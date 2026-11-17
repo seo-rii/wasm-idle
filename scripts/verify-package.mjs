@@ -66,9 +66,10 @@ export const scenarios = [
 		// The core runtime Wasm module lookup adds one JavaScript/declaration pair (1,950 bytes / 2 files measured in CI).
 		// C/C++ startup prefetch adds 595 bytes to the existing llvm-core runtime (measured in CI).
 		// Container prewarm adds owner and binding wiring: 6,339 bytes measured in CI, no files.
+		// Persistent runtime caching for Go, .NET, PHP and PostgreSQL adds two worker JavaScript/declaration pairs (9,768 bytes / 4 files measured in CI).
 		// The combined performance changes install 7,508,140 bytes / 819 files.
 		// Another 5 KiB covers their 4,268-byte overflow without new dependencies.
-		budget: { maxBytes: 7 * MiB + 165 * 1024, maxFiles: 815, maxPackages: 6 },
+		budget: { maxBytes: 7 * MiB + 165 * 1024, maxFiles: 819, maxPackages: 6 },
 		absentPackageNames: [
 			'@katana-project/asm',
 			'java-parser',
@@ -465,9 +466,10 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Keep all four language profile allowances when installing the combined SDK.
 		// Python snapshot startup adds two JavaScript/declaration pairs (3,434 files measured in CI).
 		// The core runtime Wasm module lookup adds one JavaScript/declaration pair (2 files).
+		// Persistent runtime caching for Go, .NET, PHP and PostgreSQL adds two worker JavaScript/declaration pairs (4 files).
 		// The combined performance changes install 43,200,938 bytes / 3,442 files.
 		// Another 136 KiB covers the measured 138,666-byte overflow; counts stay fixed.
-		budget: { maxBytes: 40 * MiB + 1_229 * 1024, maxFiles: 3_436, maxPackages: 70 },
+		budget: { maxBytes: 40 * MiB + 1_229 * 1024, maxFiles: 3_440, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
