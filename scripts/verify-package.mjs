@@ -62,7 +62,8 @@ export const scenarios = [
 		// Picat packed root/core deltas are 16,284 + 1,109 bytes and six files.
 		// Add 17 KiB / six files for its adapter, assets and profile; runtime payloads stay external.
 		// Cumulative Squirrel, Wren, PARI/GP and WASI memory limits add another 27 KiB/12 files.
-		budget: { maxBytes: 7 * MiB + 109 * 1024, maxFiles: 809, maxPackages: 6 },
+		// The core runtime Wasm module lookup adds one JavaScript/declaration pair (1,950 bytes / 2 files measured in CI).
+		budget: { maxBytes: 7 * MiB + 112 * 1024, maxFiles: 811, maxPackages: 6 },
 		absentPackageNames: [
 			'@katana-project/asm',
 			'java-parser',
