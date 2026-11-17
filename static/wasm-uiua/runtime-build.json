@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "language": "UIUA",
+  "implementation": {
+    "name": "Uiua",
+    "version": "0.19.1",
+    "revision": "face052446efdf2b0c31c3fb44a838fe793a0f83",
+    "url": "https://static.crates.io/crates/uiua/uiua-0.19.1.crate",
+    "bytes": 1665068,
+    "sha256": "c444c37f4342590ee616bce256d1b7f69dceaa96dea79542f5d4271e827d4a01",
+    "license": "MIT"
+  },
+  "producer": {
+    "rustc": "rustc 1.94.0 (4a4ef493e 2026-03-02)",
+    "target": "wasm32-wasip1",
+    "features": [
+      "native_sys"
+    ],
+    "defaultFeatures": false,
+    "pathRemapping": {
+      "producer": "/uiua-producer",
+      "cargo": "/cargo",
+      "toolchain": "/rust-toolchain"
+    },
+    "inputs": {
+      "Cargo.toml": {
+        "bytes": 357,
+        "sha256": "150992356ad26273107a21da3de0145d1cde34aa3884179abd359d89dda0dc72"
+      },
+      "Cargo.lock": {
+        "bytes": 20791,
+        "sha256": "4803a525676e50466fe504bcc76268d29e38feb7825b2420ca8ea6f02126f0c1"
+      },
+      "src/main.rs": {
+        "bytes": 792,
+        "sha256": "bc629e40af70ff2bcb97c40d795304e2985f6d10fa03d8b6ae6c1682e94e6cca"
+      },
+      "patches/wasi-clock.patch": {
+        "bytes": 634,
+        "sha256": "d9a2b7f50ee760c7bd7e3d28b5b4374fa6baab8fae39d0a1370a8062c26887ff"
+      },
+      "build.py": {
+        "bytes": 7071,
+        "sha256": "fb0280b4dbd8a795572509d254636684e256cfdda2f483d2ac006b9e7947e0af"
+      },
+      "licenses/highway-1.3.0.txt": {
+        "bytes": 1023,
+        "sha256": "91276db973f25602d1aa43491f59cbc84cb88e6f151e1d0cc82a755563ce0195"
+      }
+    }
+  },
+  "artifacts": {
+    "uiua.wasm": {
+      "bytes": 11351799,
+      "sha256": "b0e2103d11dbead25ed885b6f02cc4ac2315ed65495eda1485ccbd220fa6ca3a"
+    },
+    "LICENSE.txt": {
+      "bytes": 1064,
+      "sha256": "e2f4f8f2d9e0250e36759fab3c0301061add74e9d9a94826c4d866c3037d89c5"
+    },
+    "THIRD_PARTY_NOTICES.txt": {
+      "bytes": 1278465,
+      "sha256": "9630e5ff5553bd6884032dc88df66f3e3d34a8d2cc7ce9608f227997d077d46b"
+    }
+  },
+  "profile": "Original console compiler/interpreter with real WASI stdin/stdout and private workspace"
+}

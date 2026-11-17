@@ -468,7 +468,7 @@ class Wasm implements Sandbox {
 				);
 			}
 			limits = resolveExecutionLimits(options.limits);
-			if (this.interpreter && _args.length) {
+			if (this.interpreter && !this.interpreter.forwardProgramArgs && _args.length) {
 				throw new RuntimeConfigurationError(
 					'This interpreter does not accept program arguments',
 					{

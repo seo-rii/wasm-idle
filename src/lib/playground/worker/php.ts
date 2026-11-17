@@ -1,6 +1,12 @@
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 import type { SandboxWorkspaceFile } from '$lib/playground/options';
 import { importRuntimeModule } from '$lib/playground/runtimeModule';
+import type { RuntimeAssetCacheOptions } from '@wasm-idle/core';
+import { createModuleAssetFetch } from './moduleAssetCache';
+
+// The runtime loader reads the global fetch at call time; each load installs the cached
+// variant over the fetch this Worker started with.
+let networkFetch: typeof fetch | undefined;
 
 declare var self: any;
 
@@ -277,12 +283,20 @@ self.onmessage = async (event: { data: any }) => {
 		stdin,
 		activePath = 'main.php',
 		workspaceFiles = [],
-		log
+		log,
+		persistentCache
 	} = event.data;
 	try {
 		if (load) {
 			const moduleUrl = nextModuleUrl || runtimeModuleUrl;
 			if (log) console.log(`[wasm-idle:php-worker] load PHP 8.4 module=${moduleUrl}`);
+			networkFetch ??= globalThis.fetch.bind(globalThis);
+			globalThis.fetch = createModuleAssetFetch(
+				moduleUrl,
+				'wasm-php',
+				persistentCache as RuntimeAssetCacheOptions | undefined,
+				networkFetch
+			);
 			await loadPhp(moduleUrl, log);
 			postMessage({ load: true });
 			return;

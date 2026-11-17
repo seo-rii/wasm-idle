@@ -30,3 +30,11 @@ runtime without modifying the worktree:
 ```sh
 node scripts/sync-wasm-typescript.mjs --verify
 ```
+
+# CoffeeScript
+
+The separate `dist/coffeescript.js` entry bundles the official CoffeeScript 2.7.0
+browser compiler with the same JavaScript executor. It supports fresh `.coffee`
+and `.litcoffee` source, compiler diagnostics, stdin/stdout and program arguments.
+This entry excludes SWC; `index.js` and `javascript.js` exclude CoffeeScript.
+See [the CoffeeScript integration](../../docs/coffeescript.md).

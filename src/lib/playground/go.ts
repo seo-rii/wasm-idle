@@ -15,7 +15,12 @@ import {
 import { createWasmIdleSharedBuffer, requireSharedArrayBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerInputReady, reportWorkerProgress } from '$lib/playground/workerProgress';
-import { BusyError, TimeoutError, resolveExecutionLimits } from '@wasm-idle/core';
+import {
+	BusyError,
+	TimeoutError,
+	resolveExecutionLimits,
+	resolveRuntimeAssetCacheOptions
+} from '@wasm-idle/core';
 
 const debugBreakpointBufferInts = 1028;
 
@@ -60,6 +65,7 @@ class Go implements Sandbox {
 	compilerUrl = '';
 	manifestUrl = '';
 	private compilerLimitsKey = '';
+	private persistentCacheKey = '';
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	waitingForInput = false;
 	pendingEof = false;
@@ -158,14 +164,21 @@ class Go implements Sandbox {
 					nextCompilerUrl
 				);
 				const nextCompilerLimitsKey = compilerRuntimeLimitsKey(limits);
+				const persistentCache = resolveRuntimeAssetCacheOptions(
+					typeof runtimeAssets === 'object' ? runtimeAssets.persistentCache : undefined,
+					options.persistentCache
+				);
+				const nextPersistentCacheKey = JSON.stringify(persistentCache);
 				const needsWorkerReset =
 					!this.worker ||
 					this.compilerUrl !== nextCompilerUrl ||
 					this.manifestUrl !== nextManifestUrl ||
-					this.compilerLimitsKey !== nextCompilerLimitsKey;
+					this.compilerLimitsKey !== nextCompilerLimitsKey ||
+					this.persistentCacheKey !== nextPersistentCacheKey;
 				this.compilerUrl = nextCompilerUrl;
 				this.manifestUrl = nextManifestUrl;
 				this.compilerLimitsKey = nextCompilerLimitsKey;
+				this.persistentCacheKey = nextPersistentCacheKey;
 				if (needsWorkerReset && this.worker) {
 					this.workerSession.reset();
 				}
@@ -198,7 +211,8 @@ class Go implements Sandbox {
 						load: true,
 						compilerUrl: this.compilerUrl,
 						manifestUrl: this.manifestUrl,
-						runtimeLimits: limits
+						runtimeLimits: limits,
+						persistentCache
 					});
 				} else {
 					progress?.set?.(1);

@@ -5,6 +5,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 
 const runtimeRoot = fileURLToPath(new URL('../', import.meta.url));
 const javascriptUrl = new URL('../dist/javascript.js', import.meta.url).href;
+const coffeeScriptUrl = new URL('../dist/coffeescript.js', import.meta.url).href;
 const typescriptUrl = new URL('../dist/index.js', import.meta.url).href;
 beforeAll(() => {
 	execFileSync(process.execPath, ['scripts/build.mjs'], { cwd: runtimeRoot });
@@ -20,6 +21,14 @@ function runBundle(moduleUrl: string, body: string) {
 }
 
 describe('standalone browser bundles', () => {
+	it('compiles CoffeeScript in the browser entry without SWC or WebAssembly', () => {
+		const result = runBundle(
+			coffeeScriptUrl,
+			`globalThis.WebAssembly=undefined; const runtime=await import(MODULE_URL); const compiled=await runtime.compileTypeScript({language:'coffeescript',code:'console.log (x*x for x in [1..4]).join ","'}); process.stdout.write(JSON.stringify(await runtime.executeBrowserTypeScriptArtifact(compiled.artifact)));`
+		);
+		expect(result).toMatchObject({ exitCode: 0, stdout: '1,4,9,16\n' });
+		expect(statSync(new URL(coffeeScriptUrl)).size).toBeLessThan(800_000);
+	});
 	it('runs JavaScript without WebAssembly while retaining stdin, workspace, args and Buffer', () => {
 		const result = runBundle(
 			javascriptUrl,
