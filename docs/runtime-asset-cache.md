@@ -216,3 +216,34 @@ along with the asset changes. `pnpm run check:assets-lock` detects version or co
 preparation (`scripts/release-npm.mjs`) regenerates it after version synchronization.
 The generated source is shipped in `@wasm-idle/core`, not fetched from an
 untrusted remote manifest at runtime.
+
+### Preparing the complete release lock inputs
+
+The release lock describes ignored compiler payloads as well as tracked files.
+A fresh or selectively prepared checkout must restore those inputs before its
+full lock check. `pnpm run check:assets-lock` now audits every required physical
+delivery and lists all missing or corrupt paths, their pinned lengths/hashes and
+preparation groups, rather than stopping at the first missing Clang binary.
+A raw identity file does not replace a required gzip or layer delivery.
+
+Run `pnpm run prepare:assets-lock` to restore missing groups with the existing
+receipt-pinned preparers, then verify the entire existing lock. Preparation
+checks available storage before downloading, refuses to overwrite corrupt
+existing files, isolates producer outputs and generated version modules, and
+publishes only absent files already named in the committed graph. It materializes
+only gzip aliases that the frozen graph already declares, checking both raw and
+encoded receipts. It never regenerates the lock or delivery indexes and does not
+run a general compression pass that could change unrelated direct assets.
+
+For a separate prepared asset tree, invoke
+`node scripts/runtime-asset-lock-inputs.mjs /path/to/static --prepare` and later
+`node scripts/runtime-asset-lock-inputs.mjs /path/to/static --check`. Copy the
+existing committed metadata and present delivery files there first. Checks remain
+offline; downloads occur only with the explicit prepare command. Unknown runtime
+groups need their own pinned sync step and are reported as manual preparation.
+
+Prepare the current graph **before** intentionally updating runtime assets.
+After the update, `pnpm run assets:lock` generates the new lock; review that change
+with the corresponding payload changes, then run the strict full check. The
+preparation command is for reproducing the existing graph, not repinning a
+changed payload or accepting new producer output automatically.

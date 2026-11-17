@@ -4,11 +4,14 @@ import {
 	type LspDocumentContext,
 	type WorkerLanguageService
 } from '../lsp.js';
+import { installPersistentModuleAssetFetch } from '../module-asset-fetch.js';
 
 export type GoLanguageServerTarget = 'wasip1/wasm' | 'wasip2/wasm' | 'wasip3/wasm' | 'js/wasm';
 
 export interface GoWorkerOptions {
 	compilerUrl: string;
+	/** The runtime's manifest, so that both request the same versioned files. */
+	runtimeManifestUrl?: string;
 	target?: GoLanguageServerTarget;
 }
 
@@ -64,7 +67,10 @@ const diagnosticFor = (diagnostic: GoCompilerDiagnostic): LspDiagnostic => {
 	};
 };
 
-async function loadGoCompiler(compilerUrl: string): Promise<GoCompiler> {
+async function loadGoCompiler(
+	compilerUrl: string,
+	runtimeManifestUrl?: string
+): Promise<GoCompiler> {
 	const module = await import(/* @vite-ignore */ compilerUrl);
 	const factory =
 		typeof module.createGoCompiler === 'function'
@@ -75,7 +81,7 @@ async function loadGoCompiler(compilerUrl: string): Promise<GoCompiler> {
 	if (!factory) {
 		throw new Error('wasm-go module must export createGoCompiler or a default factory');
 	}
-	return await factory();
+	return await factory(runtimeManifestUrl ? { runtimeManifestUrl } : undefined);
 }
 
 export function createGoWorkerService(): WorkerLanguageService {
@@ -95,7 +101,8 @@ export function createGoWorkerService(): WorkerLanguageService {
 			}
 			target = config.target || target;
 			context.reportProgress('load-go-compiler');
-			compiler = await loadGoCompiler(config.compilerUrl);
+			installPersistentModuleAssetFetch(config.compilerUrl);
+			compiler = await loadGoCompiler(config.compilerUrl, config.runtimeManifestUrl);
 		},
 		async diagnostics(document, context: LspDocumentContext) {
 			if (!compiler) return [];

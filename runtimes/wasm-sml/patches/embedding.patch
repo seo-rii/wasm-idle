@@ -1,0 +1,78 @@
+--- a/main/SML-sig.sml
++++ b/main/SML-sig.sml
+@@ -6,6 +6,7 @@
+ 
+ signature SML =
+ sig
++  val runFile          : string * string -> bool
+   val basisPath        : string option ref
+ 
+   val parseString      : string -> unit
+--- a/main/Sml.sml
++++ b/main/Sml.sml
+@@ -226,6 +226,18 @@
+       | NONE => (libRef := SOME(loadLib()); lib())
+ 
+ 
++  (* Quiet embedding entry point; preserve the original language rules. *)
++  fun runFile (basisDir, path) =
++      let
++        val _ = Error.count := 0
++        val basis = fromFileQuiet (exec' false, initialArg', false)
++          (OS.Path.joinDirFile{dir = basisDir, file = basisFile})
++      in
++        ignore(fromFileQuiet (exec' false, basis, false) path);
++        !Error.count = 0
++      end handle Abort => false
++
++
+   (* Plumbing *)
+ 
+   fun processString (f, arg) s =
+--- a/infrastructure/ERROR-sig.sml
++++ b/infrastructure/ERROR-sig.sml
+@@ -15,6 +15,8 @@
+ 
+   exception Error
+ 
++  val count : int ref
++
+   val print          : loc * string -> unit
+   val warning        : loc * string -> unit
+   val error          : loc * string -> 'a
+--- a/infrastructure/Error.sml
++++ b/infrastructure/Error.sml
+@@ -14,6 +14,8 @@
+   (* Export *)
+ 
+   exception Error
++
++  val count = ref 0
+ 
+   val dir = OS.FileSys.getDir()
+ 
+@@ -32,7 +34,7 @@
+       )
+ 
+   fun warning(loc, message)     = print(loc, "warning: " ^ message)
+-  fun error(loc, message)       = ( print(loc, message); raise Error )
++  fun error(loc, message)       = ( count := !count + 1; print(loc, message); raise Error )
+ 
+   fun errorLab(loc, s, lab)     = error(loc, s ^ Lab.toString lab)
+   fun errorVId(loc, s, vid)     = error(loc, s ^ VId.toString vid)
+--- a/exec/Program.sml
++++ b/exec/Program.sml
+@@ -24,10 +24,11 @@
+   val width = 79
+ 
+   fun printPack(s, (e, loc)) =
+-        Error.print(loc,
++        (Error.count := !Error.count + 1;
++         Error.print(loc,
+           "uncaught exception " ^
+           PrettyPrint.toString(PPVal.ppExVal(s, e), width)
+-        )
++        ))
+ 
+   fun printStaticBasis B_STAT =
+       ( PrettyPrint.output(TextIO.stdOut, PPStaticBasis.ppBasis B_STAT, width);

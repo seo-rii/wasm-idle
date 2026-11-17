@@ -321,6 +321,7 @@ export async function prepareWasmDebugRelease({
 	profilePath = DEFAULT_WASM_DEBUG_RELEASE_PROFILE_PATH,
 	staticDir = DEFAULT_WASM_DEBUG_STATIC_DIR,
 	versionModulePath = DEFAULT_WASM_DEBUG_VERSION_MODULE_PATH,
+	temporaryParentDir = os.tmpdir(),
 	signal,
 	requestTimeoutMs = DEFAULT_WASM_DEBUG_REQUEST_TIMEOUT_MS,
 	maxAttempts = DEFAULT_WASM_DEBUG_MAX_ATTEMPTS,
@@ -365,7 +366,7 @@ export async function prepareWasmDebugRelease({
 		throw new Error('wasm debug release manifest is not valid UTF-8 JSON', { cause: error });
 	}
 	const assets = extractAssetEntries(manifest);
-	const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), 'wasm-debug-release-'));
+	const temporaryRoot = await mkdtemp(path.join(temporaryParentDir, 'wasm-debug-release-'));
 	const sourceDir = path.join(temporaryRoot, 'runtime-source');
 	let totalAssetBytes = 0;
 	try {

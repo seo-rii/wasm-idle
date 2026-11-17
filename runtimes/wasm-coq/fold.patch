@@ -1,0 +1,23 @@
+diff --git a/vernac/declaremods.ml b/vernac/declaremods.ml
+index f4c98df..88b1cb5 100644
+--- a/vernac/declaremods.ml
++++ b/vernac/declaremods.ml
+@@ -18,6 +18,9 @@ open Libnames
+ open Libobject
+ open Mod_subst
+ 
++let rec list_fold_right_stackless f l init =
++  List.fold_left (fun x y -> f y x) init (List.rev l)
++
+ (** {6 Inlining levels} *)
+ 
+ (** Rigid / flexible module signature *)
+@@ -620,7 +623,7 @@ let check_sub mtb sub_mtb_l =
+     let _, cst = Subtyping.check_subtypes state env mtb sub_mtb in
+     (Univ.Constraints.union ocst cst, Environ.add_constraints cst env)
+   in
+-  let cst, _ = List.fold_right fold sub_mtb_l (Univ.Constraints.empty, Global.env ()) in
++  let cst, _ = list_fold_right_stackless fold sub_mtb_l (Univ.Constraints.empty, Global.env ()) in
+   Global.add_constraints cst
+ 
+ (** This function checks if the type calculated for the module [mp] is

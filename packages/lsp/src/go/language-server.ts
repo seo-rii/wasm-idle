@@ -1,10 +1,12 @@
 import type { EditorLanguageServerOptions, EditorLanguageServerRuntimeOptions } from '../types.js';
-import { resolveGoLanguageServerCompilerUrl } from '../runtime.js';
+import { resolveGoLanguageServerCompilerUrl, resolveLanguageServerAssetUrl } from '../runtime.js';
 import { createWorkerLanguageServerClient, type LanguageServerStatus } from '../worker-client.js';
 import type { GoLanguageServerTarget } from './service.js';
 
 export interface GoLanguageServerConfig {
 	compilerUrl?: string;
+	/** wasm-go runtime manifest; defaults to the one next to the compiler module. */
+	runtimeManifestUrl?: string;
 	target?: GoLanguageServerTarget;
 }
 
@@ -30,6 +32,14 @@ export async function getGoLanguageServer(
 		createWorker: hostOptions?.createWorker || createDefaultWorker,
 		initOptions: {
 			compilerUrl: resolveGoLanguageServerCompilerUrl(options, hostOptions?.currentUrl),
+			...(config.runtimeManifestUrl
+				? {
+						runtimeManifestUrl: resolveLanguageServerAssetUrl(
+							config.runtimeManifestUrl,
+							hostOptions?.currentUrl
+						)
+					}
+				: {}),
 			target: config.target
 		},
 		onStatus: hostOptions?.onStatus,

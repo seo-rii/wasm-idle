@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "implementation": {
+    "name": "Amber Smalltalk",
+    "version": "0.32.0",
+    "source": "https://lolg.it/amber/amber/src/tag/0.32.0",
+    "license": "MIT",
+    "url": "https://registry.npmjs.org/@ambers/lang/-/lang-0.32.0.tgz",
+    "archive": "amber-lang-0.32.0.tgz",
+    "bytes": 438828,
+    "sha256": "4e158915bd814e002e34863587d842926dd886d8b6d6dc41ce5edf03735cf4e4"
+  },
+  "loader": {
+    "name": "RequireJS",
+    "version": "2.3.8",
+    "source": "https://github.com/requirejs/requirejs/tree/2.3.8",
+    "license": "MIT",
+    "url": "https://registry.npmjs.org/requirejs/-/requirejs-2.3.8.tgz",
+    "archive": "requirejs-2.3.8.tgz",
+    "bytes": 251788,
+    "sha256": "777158e89275e16bd51aec3ef714fbcb5dc45789e7078659933bc814916d7dec",
+    "licenseUrl": "https://raw.githubusercontent.com/requirejs/requirejs/2.3.8/LICENSE",
+    "licenseBytes": 1904,
+    "licenseSha256": "4e51314366fce8914fde48ccd4d52255d37f5fcb72e00fe0dccbc6cbb6682bc9"
+  }
+}
