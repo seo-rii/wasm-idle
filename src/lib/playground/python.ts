@@ -6,6 +6,7 @@ import type {
 } from '$lib/playground/options';
 import { WorkerAssetBridge } from '$lib/playground/assetBridge';
 import { RuntimeAssetCache } from './runtimeAssetCache';
+import { buildPythonSnapshot } from './pythonSnapshotBuilder';
 import { resolveRuntimeAssetConfig, type PlaygroundRuntimeAssets } from '$lib/playground/assets';
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
 import {
@@ -355,6 +356,18 @@ class Python implements Sandbox {
 							reportWorkerProgress(progress, event.data?.progress);
 							if (event.data?.load) {
 								progress?.set?.(1);
+								const snapshotKey = event.data.pythonSnapshotKey;
+								if (typeof snapshotKey === 'string' && !this.disposed)
+									void buildPythonSnapshot({
+										key: snapshotKey,
+										assetConfig,
+										maxAssetBytes: limits.maxAssetBytes,
+										cache: this.runtimeAssetCache,
+										createWorker: async () =>
+											new (
+												await import('$lib/playground/worker/python?worker')
+											).default()
+									});
 								resolveOperation();
 								return;
 							}
@@ -369,6 +382,7 @@ class Python implements Sandbox {
 						load: true,
 						log,
 						code,
+						persistentCache: assetConfig.persistentCache,
 						...(extension ? { extension } : {}),
 						assets: {
 							baseUrl: assetConfig.baseUrl,

@@ -14,7 +14,7 @@ import {
 	writeGuestFile
 } from './wasi-guest.js';
 import { assertGoInstanceMemoryLimit } from './wasm-memory.js';
-import { compileGoToolModule } from './tool-module.js';
+import { compileGoToolModule, prepareVersionedGoToolModule } from './tool-module.js';
 import type {
 	BrowserGoBuildPlan,
 	BrowserGoToolInvocation,
@@ -95,20 +95,30 @@ export async function prepareGoToolModule(
 	options: GoRuntimeBoundaryOptions = {}
 ): Promise<WebAssembly.Module> {
 	throwIfAborted(options.signal);
-	const toolBytes = await fetchRuntimeAssetBytes(
-		resolveVersionedAssetUrl(runtimeBaseUrl, invocation.toolAsset),
-		`${invocation.tool}.wasm`,
-		fetchImpl,
-		true,
-		(loaded, total) => reportAssetProgress?.(invocation.toolAsset, loaded, total),
-		options
-	);
-	throwIfAborted(options.signal);
-	return compileGoToolModule(
-		toolBytes,
-		options.maxWasmMemoryBytes ?? DEFAULT_MAX_WASM_MEMORY_BYTES,
-		`${invocation.tool}.wasm`,
-		options.signal
+	const url = resolveVersionedAssetUrl(runtimeBaseUrl, invocation.toolAsset);
+	const maxWasmMemoryBytes = options.maxWasmMemoryBytes ?? DEFAULT_MAX_WASM_MEMORY_BYTES;
+	return prepareVersionedGoToolModule(
+		url,
+		maxWasmMemoryBytes,
+		async () => {
+			const toolBytes = await fetchRuntimeAssetBytes(
+				url,
+				`${invocation.tool}.wasm`,
+				fetchImpl,
+				true,
+				(loaded, total) => reportAssetProgress?.(invocation.toolAsset, loaded, total),
+				options
+			);
+			throwIfAborted(options.signal);
+			return compileGoToolModule(
+				toolBytes,
+				maxWasmMemoryBytes,
+				`${invocation.tool}.wasm`,
+				options.signal
+			);
+		},
+		options.signal,
+		() => reportAssetProgress?.(invocation.toolAsset, 1, 1)
 	);
 }
 

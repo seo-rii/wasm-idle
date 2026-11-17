@@ -208,6 +208,7 @@
 	const traceFallbackLanguages = new Set<PlaygroundLanguage>(['C', 'CPP', 'RUST', 'OBJC']);
 	// Runtimes that consume stdin once at start, even when terminal streaming is available.
 	const preloadedStdinLanguages = new Set<PlaygroundLanguage>([
+		'GRAPHQL',
 		'BASH',
 		'POSTGRESQL',
 		'SCALA',
@@ -573,6 +574,11 @@
 	const pascalLspRuntime = $derived(pascalLspEnabled ? runtimeAssets.pascal : undefined);
 	const goLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'go');
 	const goLspCompilerUrl = $derived(goLspEnabled ? runtimeAssets.go?.compilerUrl : undefined);
+	const goLspManifestUrl = $derived(goLspEnabled ? runtimeAssets.go?.manifestUrl : undefined);
+	// Language servers verify runtime files against the bundled lock under this root.
+	const lspAssetRootUrl = browser
+		? new URL(`${applicationRootUrl.replace(/\/$/, '')}/`, location.href).href
+		: undefined;
 	const rustLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'rust');
 	const rustLspCompilerUrl = $derived(
 		rustLspEnabled ? runtimeAssets.rust?.compilerUrl : undefined
@@ -1028,6 +1034,7 @@
 			'.pro': 'PROLOG',
 			'.gleam': 'GLEAM',
 			'.gr': 'GRAIN',
+			'.sv': 'VERILOG',
 			'.pl': 'PERL',
 			'.pm': 'PERL',
 			'.tcl': 'TCL',
@@ -1042,13 +1049,17 @@
 			'.ijt': 'J',
 			'.ijx': 'J',
 			'.dart': 'DART',
+			'.sml': 'SML',
 			'.bqn': 'BQN',
+			'.bc': 'BC',
+			'.ua': 'UIUA',
 			'.janet': 'JANET',
 			'.jl': 'JULIA',
 			'.c3': 'C3',
 			'.lean': 'LEAN4',
 			'.nim': 'NIM',
 			'.nims': 'NIM',
+			'.sed': 'SED',
 			'.sh': 'BASH',
 			'.bash': 'BASH',
 			'.cljs': 'CLOJURESCRIPT',
@@ -1057,6 +1068,8 @@
 			'.res': 'RESCRIPT',
 			'.ml': 'OCAML',
 			'.mli': 'OCAML',
+			'.coffee': 'COFFEESCRIPT',
+			'.litcoffee': 'COFFEESCRIPT',
 			'.js': 'JAVASCRIPT',
 			'.mjs': 'JAVASCRIPT',
 			'.cjs': 'JAVASCRIPT',
@@ -1130,6 +1143,7 @@
 			PROLOG: 'main.prolog',
 			GLEAM: 'main.gleam',
 			GRAIN: 'main.gr',
+			VERILOG: 'main.sv',
 			PERL: 'main.pl',
 			TCL: 'main.tcl',
 			AWK: 'main.awk',
@@ -1137,17 +1151,22 @@
 			FORTH: 'main.fth',
 			J: 'main.ijs',
 			DART: 'main.dart',
+			SML: 'main.sml',
 			BQN: 'main.bqn',
+			BC: 'main.bc',
+			UIUA: 'main.ua',
 			JANET: 'main.janet',
 			JULIA: 'main.jl',
 			C3: 'main.c3',
 			NIM: 'main.nim',
+			SED: 'main.sed',
 			BASH: 'main.sh',
 			CLOJURESCRIPT: 'main.cljs',
 			RESCRIPT: 'Main.res',
 			HY: 'main.hy',
 			TINYGO: 'main.go',
 			OCAML: 'main.ml',
+			COFFEESCRIPT: 'main.coffee',
 			JAVASCRIPT: 'main.js',
 			TYPESCRIPT: 'main.ts',
 			ASSEMBLYSCRIPT: 'main.as.ts',
@@ -1215,6 +1234,7 @@
 			PROLOG: 'prolog',
 			GLEAM: 'gleam',
 			GRAIN: 'grain',
+			VERILOG: 'verilog',
 			PERL: 'perl',
 			TCL: 'tcl',
 			AWK: 'awk',
@@ -1222,17 +1242,22 @@
 			FORTH: 'forth',
 			J: 'j',
 			DART: 'dart',
+			SML: 'sml',
 			BQN: 'bqn',
+			BC: 'bc',
+			UIUA: 'uiua',
 			JANET: 'janet',
 			JULIA: 'julia',
 			C3: 'c3',
 			NIM: 'nim',
+			SED: 'sed',
 			BASH: 'bash',
 			CLOJURESCRIPT: 'clojurescript',
 			RESCRIPT: 'rescript',
 			HY: 'hy',
 			TINYGO: 'go',
 			OCAML: 'ocaml',
+			COFFEESCRIPT: 'coffeescript',
 			JAVASCRIPT: 'javascript',
 			TYPESCRIPT: 'typescript',
 			ASSEMBLYSCRIPT: 'assemblyscript',
@@ -2299,6 +2324,7 @@
 			swi: 'PROLOG',
 			gleam: 'GLEAM',
 			grain: 'GRAIN',
+			verilog: 'VERILOG',
 			perl: 'PERL',
 			tcl: 'TCL',
 			tclsh: 'TCL',
@@ -2311,13 +2337,18 @@
 			gforth: 'FORTH',
 			j: 'J',
 			dart: 'DART',
+			sml: 'SML',
+			standardml: 'SML',
 			bqn: 'BQN',
+			bc: 'BC',
+			uiua: 'UIUA',
 			janet: 'JANET',
 			julia: 'JULIA',
 			jl: 'JULIA',
 			c3: 'C3',
 			nim: 'NIM',
 			nimrod: 'NIM',
+			sed: 'SED',
 			bash: 'BASH',
 			sh: 'BASH',
 			shell: 'BASH',
@@ -2328,6 +2359,8 @@
 			hy: 'HY',
 			hylang: 'HY',
 			ocaml: 'OCAML',
+			coffeescript: 'COFFEESCRIPT',
+			coffee: 'COFFEESCRIPT',
 			javascript: 'JAVASCRIPT',
 			js: 'JAVASCRIPT',
 			typescript: 'TYPESCRIPT',
@@ -5026,6 +5059,8 @@
 							{pascalLspRuntime}
 							{goLspEnabled}
 							{goLspCompilerUrl}
+							{goLspManifestUrl}
+							{lspAssetRootUrl}
 							{rustLspEnabled}
 							{rustLspCompilerUrl}
 							{zigLspEnabled}
@@ -5268,17 +5303,19 @@
 							<div>
 								<strong>Preloaded stdin</strong>
 								<span>
-									{language === 'SCALA'
-										? 'Scala.js accepts buffered stdin only. Enter it before Run; extra reads receive EOF. Interactive terminal input is unavailable.'
-										: language === 'BASH'
-											? 'The Bash WASIX package accepts stdin when the process starts. Enter it before Run; extra reads receive EOF.'
-											: language === 'POSTGRESQL'
-												? "PostgreSQL reads this input as the server file '/dev/blob' (COPY ... FROM '/dev/blob' or pg_read_file('/dev/blob')). Enter it before Run."
-												: language === 'CSHARP' ||
-													  language === 'FSHARP' ||
-													  language === 'VBNET'
-													? 'C#, F#, and VB.NET read all stdin when the program starts. Enter it before Run; extra reads receive EOF. Output appears when the program finishes.'
-													: 'SharedArrayBuffer is unavailable here, so terminal input cannot be sent while the program is running. Enter stdin before Run; extra reads receive EOF.'}
+									{language === 'GRAPHQL'
+										? 'Optional JSON input: rootValue, variables and operationName. Leave empty to use the schema alone. Input is read when you click Run.'
+										: language === 'SCALA'
+											? 'Scala.js accepts buffered stdin only. Enter it before Run; extra reads receive EOF. Interactive terminal input is unavailable.'
+											: language === 'BASH'
+												? 'The Bash WASIX package accepts stdin when the process starts. Enter it before Run; extra reads receive EOF.'
+												: language === 'POSTGRESQL'
+													? "PostgreSQL reads this input as the server file '/dev/blob' (COPY ... FROM '/dev/blob' or pg_read_file('/dev/blob')). Enter it before Run."
+													: language === 'CSHARP' ||
+														  language === 'FSHARP' ||
+														  language === 'VBNET'
+														? 'C#, F#, and VB.NET read all stdin when the program starts. Enter it before Run; extra reads receive EOF. Output appears when the program finishes.'
+														: 'SharedArrayBuffer is unavailable here, so terminal input cannot be sent while the program is running. Enter stdin before Run; extra reads receive EOF.'}
 								</span>
 							</div>
 							<textarea

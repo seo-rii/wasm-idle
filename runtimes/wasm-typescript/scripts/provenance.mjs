@@ -11,6 +11,7 @@ const TOOLCHAIN_PACKAGES = Object.freeze([
 	'@swc/wasm-typescript',
 	'acorn',
 	'buffer',
+	'coffeescript',
 	'esbuild',
 	'typescript'
 ]);
@@ -123,7 +124,8 @@ export async function createWasmTypeScriptProducerBuildReceipt({
 		if (error.code === 'ENOENT') return undefined;
 		throw error;
 	});
-	const additionalArtifacts = javascriptBytes
+	/** @type {Record<string, { bytes: number; sha256: string }> | undefined} */
+	let additionalArtifacts = javascriptBytes
 		? {
 				'javascript.js': {
 					bytes: javascriptBytes.byteLength,
@@ -131,6 +133,19 @@ export async function createWasmTypeScriptProducerBuildReceipt({
 				}
 			}
 		: undefined;
+	const coffeeScriptBytes = await readFile(
+		path.join(path.resolve(sourceDir), 'coffeescript.js')
+	).catch((error) => {
+		if (error.code === 'ENOENT') return undefined;
+		throw error;
+	});
+	if (coffeeScriptBytes) {
+		additionalArtifacts ??= {};
+		additionalArtifacts['coffeescript.js'] = {
+			bytes: coffeeScriptBytes.byteLength,
+			sha256: sha256(coffeeScriptBytes)
+		};
+	}
 	return {
 		format: WASM_TYPESCRIPT_PRODUCER_BUILD_FORMAT,
 		...(additionalArtifacts ? { additionalArtifacts } : {}),

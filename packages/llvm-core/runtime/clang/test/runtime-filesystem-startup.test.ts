@@ -509,6 +509,92 @@ describe('Clang profiled sysroot consumption', () => {
 		);
 	});
 
+	it('prefetches the C++ add-on during startup and mounts it only after the C base', async () => {
+		const base = deferred<Uint8Array>();
+		const order: string[] = [];
+		startup.readBuffer.mockImplementation((url: string) =>
+			url === cSysrootUrl ? base.promise : Promise.resolve(cppArchive)
+		);
+		startup.untar.mockImplementation((bytes: Uint8Array) => {
+			order.push(bytes === cArchive ? 'base' : 'addon');
+		});
+		const runtime = new Clang({ runtimeBaseUrl, manifest: profileManifest });
+		runtime.prefetch('CPP');
+		// The add-on download starts with the compiler and C base, before ready.
+		assert.deepEqual(
+			startup.readBuffer.mock.calls.map(([url]) => url),
+			[cSysrootUrl, cppAddonUrl]
+		);
+		await nextTurn();
+		assert.deepEqual(order, []);
+		base.resolve(cArchive);
+		await runtime.ready;
+		await vi.waitFor(() => assert.deepEqual(order, ['base', 'addon']));
+
+		runtime.run = vi.fn(async () => null);
+		await runtime.compile({
+			input: 'main.cc',
+			code: 'int main() {}',
+			obj: 'main.o',
+			language: 'CPP'
+		});
+		// compile() reuses the prefetched mount instead of downloading the add-on again.
+		assert.equal(
+			startup.readBuffer.mock.calls.filter(([url]) => url === cppAddonUrl).length,
+			1
+		);
+		assert.deepEqual(order, ['base', 'addon']);
+	});
+
+	it('starts the linker only after the compile-critical assets are ready', async () => {
+		const compiler = deferred<WebAssembly.Module>();
+		startup.compile.mockImplementation((url: string) =>
+			url.endsWith('/clang.wasm.gz') ? compiler.promise : Promise.resolve({})
+		);
+		const runtime = new Clang({ runtimeBaseUrl, manifest: profileManifest });
+		runtime.prefetch('C');
+		await nextTurn();
+		const compiled = () => startup.compile.mock.calls.map(([url]) => String(url));
+		assert(!compiled().some((url) => url.endsWith('/lld.wasm.gz')));
+		compiler.resolve({} as WebAssembly.Module);
+		await runtime.ready;
+		await vi.waitFor(() => assert(compiled().some((url) => url.endsWith('/lld.wasm.gz'))));
+		// A C prefetch never downloads the C++ add-on.
+		assert.deepEqual(
+			startup.readBuffer.mock.calls.map(([url]) => url),
+			[cSysrootUrl]
+		);
+		const lldLoads = compiled().filter((url) => url.endsWith('/lld.wasm.gz')).length;
+		await runtime.getModule(runtime.assetUrls.lld);
+		assert.equal(compiled().filter((url) => url.endsWith('/lld.wasm.gz')).length, lldLoads);
+	});
+
+	it('lets compilation retry an add-on whose prefetch failed', async () => {
+		const reason = new Error('prefetch failure');
+		let addonAttempts = 0;
+		startup.readBuffer.mockImplementation(async (url: string) => {
+			if (url === cSysrootUrl) return cArchive;
+			if (++addonAttempts === 1) throw reason;
+			return cppArchive;
+		});
+		const runtime = new Clang({ runtimeBaseUrl, manifest: profileManifest });
+		runtime.prefetch('CPP');
+		await runtime.ready;
+		await nextTurn();
+		runtime.run = vi.fn(async () => null);
+		await runtime.compile({
+			input: 'main.cc',
+			code: 'int main() {}',
+			obj: 'main.o',
+			language: 'CPP'
+		});
+		assert.equal(addonAttempts, 2);
+		assert.deepEqual(
+			startup.untar.mock.calls.map(([bytes]) => bytes),
+			[cArchive, cppArchive]
+		);
+	});
+
 	it('does not mount an add-on after cancellation', async () => {
 		const addon = deferred<Uint8Array>();
 		startup.readBuffer.mockImplementation((url: string) =>

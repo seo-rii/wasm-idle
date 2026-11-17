@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -162,6 +162,67 @@ test('downloads only the immutable producer revision and atomically installs ver
 		);
 	} finally {
 		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test('stages verified downloads under the chosen parent and cleans up after success or failure', async (t) => {
+	for (const corrupt of [false, true]) {
+		await t.test(corrupt ? 'failed receipt' : 'successful install', async (t) => {
+			const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-debug-chosen-parent-'));
+			t.after(() => rm(root, { recursive: true, force: true }));
+			const temporaryParentDir = path.join(root, 'asset-filesystem');
+			await mkdir(temporaryParentDir);
+			const { assets, manifestBytes } = createFixture();
+			const profilePath = await writeProfile(root, manifestBytes);
+			const { staticDir, versionModulePath } = await createPaths(root);
+			await seedExistingInstall(staticDir, versionModulePath);
+			const overrides = new Map();
+			if (corrupt)
+				overrides.set(
+					`${RELEASE_BASE_URL}debug/wamr-debug.worker.mjs`,
+					response(Buffer.from('corrupt source'))
+				);
+			const fixture = fetchFixture(manifestBytes, assets, overrides);
+			const stagedDirectories = new Set();
+			const fetchImpl = async (input) => {
+				if (String(input) !== `${RELEASE_BASE_URL}runtime-manifest.v2.json`) {
+					const entries = await readdir(temporaryParentDir);
+					assert.equal(entries.length, 1);
+					assert.match(entries[0], /^wasm-debug-release-/u);
+					stagedDirectories.add(entries[0]);
+					assert.deepEqual(
+						await readFile(
+							path.join(
+								temporaryParentDir,
+								entries[0],
+								'runtime-source/runtime-manifest.v2.json'
+							)
+						),
+						manifestBytes
+					);
+				}
+				return fixture.fetchImpl(input);
+			};
+			const operation = prepareWasmDebugRelease({
+				fetchImpl,
+				profilePath,
+				staticDir,
+				versionModulePath,
+				temporaryParentDir
+			});
+			if (corrupt) {
+				await assert.rejects(operation, /wamr-debug\.worker\.mjs.*SHA-256/iu);
+				await assertExistingInstallPreserved(staticDir, versionModulePath);
+			} else {
+				await operation;
+				assert.deepEqual(
+					await readFile(path.join(staticDir, 'wasm-debug/runtime-manifest.v2.json')),
+					manifestBytes
+				);
+			}
+			assert.equal(stagedDirectories.size, 1);
+			assert.deepEqual(await readdir(temporaryParentDir), []);
+		});
 	}
 });
 

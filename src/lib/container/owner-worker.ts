@@ -353,6 +353,12 @@ export function serveContainerWorker(options: ContainerWorkerOptions): {
 			report: (event) =>
 				respond(id, { type: 'progress', progress: { kind: 'report', event } } as never)
 		};
+		if (method === 'prewarm') {
+			// Warm the backend a default Run uses; debugging keeps its engine fallback.
+			if (clang && (language === 'C' || language === 'CPP'))
+				return await clang.prewarm(language, signal);
+			return await engines.prewarm(language, signal);
+		}
 		if (['load', 'prepare', 'run'].includes(method)) {
 			const [, code = '', log = true, argv = [], rawOptions = {}] = args as [
 				string,

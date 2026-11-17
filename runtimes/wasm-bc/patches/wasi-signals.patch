@@ -1,0 +1,29 @@
+--- a/src/vm.c
++++ b/src/vm.c
+@@ -212,7 +212,10 @@
+ static void
+ bc_vm_sigaction(void)
+ {
+-#ifndef _WIN32
++#if defined(__wasi__)
++	// Worker termination handles cancellation; WASI has no asynchronous signals.
++	return;
++#elif !defined(_WIN32)
+ 
+ 	struct sigaction sa;
+ 
+--- a/include/status.h
++++ b/include/status.h
+@@ -46,6 +46,12 @@
+ #include <stdint.h>
+ #include <sys/types.h>
+ 
++#if defined(__wasi__)
++// WASI has no signal masks; use its native Wasm-EH setjmp/longjmp.
++#define sigsetjmp(j, s) setjmp(j)
++#define siglongjmp longjmp
++#endif
++
+ // Windows has deprecated isatty() and the rest of these. Or doesn't have them.
+ // So these are just fixes for Windows.
+ #ifdef _WIN32
