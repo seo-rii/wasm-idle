@@ -34,6 +34,38 @@ export const RUNTIMES = [
 		manual: true
 	},
 	{
+		name: 'wasm-verilog',
+		module: './sync-wasm-verilog.mjs',
+		exportName: 'syncWasmVerilogAssets',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir',
+		manual: true
+	},
+	{
+		name: 'wasm-bc',
+		module: './sync-wasm-bc.mjs',
+		exportName: 'syncWasmBcAssets',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir',
+		manual: true
+	},
+	{
+		name: 'wasm-uiua',
+		module: './sync-wasm-uiua.mjs',
+		exportName: 'syncWasmUiuaAssets',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir',
+		manual: true
+	},
+	{
+		name: 'wasm-graphql',
+		module: './sync-wasm-graphql.mjs',
+		exportName: 'syncWasmGraphqlAssets',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir',
+		manual: true
+	},
+	{
 		name: 'wasm-wren',
 		module: './sync-wasm-wren.mjs',
 		exportName: 'syncWasmWrenDist',

@@ -263,6 +263,86 @@ const wrenEcho =
 
 const profiles: InterpreterBrowserProfile[] = [
 	{
+		language: 'SED',
+		enabled: process.env.WASM_IDLE_RUN_REAL_BROWSER_SED === '1',
+		defaultSource: () => editorDefaults.sed,
+		defaultInput: 'hello world\n',
+		defaultOutput: 'hello sed\n',
+		echoSource: '',
+		infiniteSource: ':loop\nb loop',
+		infiniteInput: 'loop\n',
+		runtimePath: 'wasm-sed/busybox.wasm',
+		cases: [
+			{
+				name: 'substitution',
+				source: 's/apple/orange/g',
+				stdin: 'apple apple\npear\n',
+				output: 'orange orange\npear\n'
+			},
+			{ name: 'unicode', source: 's/한글/세계/g', stdin: '한글 🦀\n', output: '세계 🦀\n' },
+			{ name: 'empty-eof', source: 'p', stdin: '', output: '' },
+			{ name: 'final-unterminated-line', source: '', stdin: 'tail', output: 'tail' },
+			{
+				name: 'hold-space',
+				source: '1h;1!H;$!d;g;s/\\n/,/g',
+				stdin: 'one\ntwo\nthree\n',
+				output: 'one,two,three\n'
+			},
+			{
+				name: 'extended-regex-option',
+				source: 's/([0-9]+)/[\\1]/g',
+				stdin: 'a12 b34\n',
+				output: 'a[12] b[34]\n',
+				options: { programArgs: ['-E'] }
+			},
+			{
+				name: 'quiet-option',
+				source: '/keep/p',
+				stdin: 'drop\nkeep\n',
+				output: 'keep\n',
+				options: { programArgs: ['-n'] }
+			},
+			{
+				name: 'workspace-input',
+				source: 's/old/new/',
+				stdin: '',
+				output: 'new value\n',
+				options: {
+					activePath: 'scripts/한글.sed',
+					programArgs: ['data/값.txt'],
+					workspaceFiles: [{ path: 'data/값.txt', content: 'old value\n' }]
+				}
+			},
+			{
+				name: 'syntax-error',
+				source: 's/unterminated',
+				stdin: '',
+				fails: true,
+				failureOutput: 'sed:'
+			},
+			{
+				name: 'missing-input-file',
+				source: '',
+				stdin: '',
+				fails: true,
+				failureOutput: 'missing.txt',
+				options: { programArgs: ['missing.txt'] }
+			},
+			{
+				name: 'in-place-rejected',
+				source: 's/old/new/',
+				stdin: '',
+				fails: true,
+				failureOutput: 'unsupported',
+				options: {
+					programArgs: ['-i', 'input.txt'],
+					workspaceFiles: [{ path: 'input.txt', content: 'old\n' }]
+				}
+			},
+			{ name: 'after-runtime-failure', source: 's/old/new/', stdin: 'old\n', output: 'new\n' }
+		]
+	},
+	{
 		language: 'WREN',
 		enabled: process.env.WASM_IDLE_RUN_REAL_BROWSER_WREN === '1',
 		defaultSource: () => editorDefaults.wren,
@@ -1849,6 +1929,68 @@ async function withBrowserPreview(
 	});
 }
 
+async function runSedDefaultPage(browserUrl: string) {
+	const browser = await chromium.launch({
+		headless: true,
+		executablePath: await resolveChromiumExecutable(
+			process.env.WASM_IDLE_CHROMIUM_EXECUTABLE || ''
+		)
+	});
+	try {
+		const context = await browser.newContext();
+		await addBrowserTestCookies(context, browserUrl);
+		await disableBrowserPrewarm(context);
+		const page = await context.newPage();
+		page.setDefaultTimeout(60_000);
+		const runtimeRequests: string[] = [];
+		const pageErrors: string[] = [];
+		page.on('request', (request) => {
+			if (new URL(request.url()).pathname.endsWith('/wasm-sed/busybox.wasm'))
+				runtimeRequests.push(request.url());
+		});
+		await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
+		await page.waitForFunction(isStdinEditorReady, undefined);
+		await page.waitForFunction(() => crossOriginIsolated);
+		// The page imports BusyBox's command-name metadata during setup. Only the
+		// actual sed binary is an execution asset for this language's lazy-load check.
+		expect(runtimeRequests).toEqual([]);
+		page.on('pageerror', (error) => pageErrors.push(error.message));
+		await page.locator('#language-select').selectOption('SED');
+		await page.waitForFunction(isStdinEditorReady, 'SED');
+		await page.waitForFunction(
+			(source) => (window as any).__wasmIdleDebug.getEditorValue() === source,
+			editorDefaults.sed
+		);
+		const previousId = await page.evaluate(
+			() => (window as any).__wasmIdleDebug.getExecutionState().id
+		);
+		await page.locator('button.action-button--run').first().click();
+		await page.waitForFunction((id) => {
+			const state = (window as any).__wasmIdleDebug.getExecutionState();
+			return state.id > id && !['idle', 'preparing'].includes(state.status);
+		}, previousId);
+		await page.evaluate(async () => {
+			const api = (window as any).__wasmIdleDebug;
+			await api.writeTerminalInput('hello world\n', false);
+			await api.writeTerminalInput('', true);
+		});
+		await page.waitForFunction((id) => {
+			const state = (window as any).__wasmIdleDebug.getExecutionState();
+			return state.id > id && state.endedAt !== null;
+		}, previousId);
+		const result = await page.evaluate(() => ({
+			state: (window as any).__wasmIdleDebug.getExecutionState(),
+			output: document.querySelector('[data-testid="terminal-debug-output"]')?.textContent
+		}));
+		expect(result.state).toMatchObject({ language: 'SED', status: 'completed', exitCode: 0 });
+		expect(result.output?.replaceAll('\r', '')).toContain('hello sed\n');
+		expect(runtimeRequests.length).toBeGreaterThan(0);
+		expect(pageErrors).toEqual([]);
+	} finally {
+		await browser.close();
+	}
+}
+
 async function prepareConsumerPage(page: Page, browserUrl: string, language: string) {
 	const base = new URL('./', browserUrl);
 	const moduleUrl = new URL('src/lib/playground/index.ts', base).href;
@@ -2119,9 +2261,14 @@ for (const profile of profiles) {
 			{ timeout: 180_000, meta: browserMeta },
 			async () => {
 				await withBrowserPreview(false, async (browserUrl) => {
+					if (profile.language === 'SED') {
+						await runSedDefaultPage(browserUrl);
+						return;
+					}
 					const expectedOutput = profile.defaultOutput ?? 'default 한글 🦀';
 					const summary = await runStdinBrowserProbe({
 						browserUrl,
+						chromiumExecutable: process.env.WASM_IDLE_CHROMIUM_EXECUTABLE || '',
 						language: profile.language,
 						source: profile.defaultSource(),
 						stdinText: profile.defaultInput ?? 'default 한글 🦀\n',

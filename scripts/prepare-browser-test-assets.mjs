@@ -201,7 +201,8 @@ export function normalizeBrowserTestAssetGroups(groups) {
  *   staticDir?: string;
  *   cacheDir?: string;
  *   versionModulePath?: string;
- *   prepareOcamlWrapper?: (options: { sourceRoot: string; staticDir: string; versionModulePath?: string }) => Promise<unknown>;
+ *   temporaryParentDir?: string;
+ *   prepareOcamlWrapper?: (options: { sourceRoot: string; staticDir: string; versionModulePath?: string; temporaryParentDir?: string }) => Promise<unknown>;
  *   baseUrl?: string;
  *   clangdSourceDir?: string;
  *   clangdReceiptPath?: string;
@@ -220,6 +221,7 @@ export async function prepareBrowserTestAssets({
 	scalaLockPath = DEFAULT_SCALA_LOCK_PATH,
 	cacheDir = DEFAULT_CACHE_DIR,
 	versionModulePath,
+	temporaryParentDir,
 	prepareOcamlWrapper = prepareOcamlBrowserWrapper,
 	baseUrl,
 	clangdSourceDir = manifestPath === DEFAULT_MANIFEST_PATH &&
@@ -380,7 +382,8 @@ export async function prepareBrowserTestAssets({
 			await prepareOcamlWrapper({
 				sourceRoot: inputRoot,
 				staticDir,
-				...(versionModulePath ? { versionModulePath } : {})
+				...(versionModulePath ? { versionModulePath } : {}),
+				...(temporaryParentDir ? { temporaryParentDir } : {})
 			});
 		}
 		if (manifest.generatedWorkers?.some((generatedGroup) => generatedGroup === group)) {

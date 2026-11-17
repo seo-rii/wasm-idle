@@ -76,7 +76,6 @@ describe('language registry', () => {
 			projectedRuntimeLanguages
 		);
 		expect(playgroundLanguages.slice(projectedRuntimeLanguages.length)).toEqual([
-			'GRAPHQL',
 			'JSON',
 			'YAML',
 			'TOML',
@@ -215,7 +214,7 @@ describe('language registry', () => {
 		expect(runtimeLspCapabilities.LISP).toBe('lisp');
 		expect(runtimeLspCapabilities.FORTRAN).toBe('fortran');
 		expect(editorOnlyLanguages.has('FORTRAN')).toBe(false);
-		expect(editorOnlyLanguages.has('GRAPHQL')).toBe(true);
+		expect(editorOnlyLanguages.has('GRAPHQL')).toBe(false);
 		expect(editorOnlyLanguages.has('DUCKDB')).toBe(false);
 		for (const language of ['JSON', 'YAML', 'TOML', 'HTML', 'CSS', 'MARKDOWN'] as const) {
 			expect(editorOnlyLanguages.has(language)).toBe(true);

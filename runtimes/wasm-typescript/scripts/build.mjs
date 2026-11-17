@@ -80,6 +80,27 @@ await copyFile(
 	path.join(REPO_ROOT, 'node_modules', 'acorn', 'LICENSE'),
 	path.join(REPO_ROOT, 'dist', 'LICENSE.acorn.txt')
 );
+await copyFile(
+	path.join(REPO_ROOT, 'node_modules', 'coffeescript', 'LICENSE'),
+	path.join(REPO_ROOT, 'dist', 'LICENSE.coffeescript.txt')
+);
+
+// Keep the optional CoffeeScript compiler out of ordinary JS/TS downloads.
+const coffeeScriptDisabledPlugin = {
+	name: 'coffeescript-disabled-entry',
+	setup(esbuild) {
+		esbuild.onResolve({ filter: /coffeescript-compiler\.js$/ }, () => ({
+			path: 'coffeescript-disabled',
+			namespace: 'coffeescript-disabled-entry'
+		}));
+		esbuild.onLoad({ filter: /.*/, namespace: 'coffeescript-disabled-entry' }, () => ({
+			loader: 'js',
+			contents: `export function compileCoffeeScript() {
+				throw new Error('Use coffeescript.js for CoffeeScript source compilation.');
+			}`
+		}));
+	}
+};
 
 // The JavaScript entry executes the same native-JS runner without linking SWC.
 // A TypeScript request against this entry fails explicitly, never as a subset interpreter.
@@ -99,7 +120,7 @@ const javascriptOnlyPlugin = {
 	}
 };
 
-for (const entry of ['index', 'javascript']) {
+for (const entry of ['index', 'javascript', 'coffeescript']) {
 	const result = await build({
 		entryPoints: [path.join(REPO_ROOT, 'src', 'index.ts')],
 		outfile: path.join(REPO_ROOT, 'dist', `${entry}.js`),
@@ -110,17 +131,27 @@ for (const entry of ['index', 'javascript']) {
 		sourcemap: false,
 		minify: true,
 		metafile: true,
-		plugins:
-			entry === 'javascript'
-				? [javascriptOnlyPlugin, emptyNodeBuiltinPlugin, swcBrowserShimPlugin]
-				: [emptyNodeBuiltinPlugin, swcBrowserShimPlugin],
+		plugins: [
+			...(entry !== 'index' ? [javascriptOnlyPlugin] : []),
+			...(entry !== 'coffeescript' ? [coffeeScriptDisabledPlugin] : []),
+			emptyNodeBuiltinPlugin,
+			swcBrowserShimPlugin
+		],
 		banner: { js: `/* wasm-typescript ${entry} browser bundle */` }
 	});
 	if (
-		entry === 'javascript' &&
+		entry !== 'index' &&
 		Object.keys(result.metafile.inputs).some((input) => /node_modules\/.*@swc/.test(input))
 	) {
-		throw new Error('JavaScript entry must not include the SWC compiler');
+		throw new Error(`${entry} entry must not include the SWC compiler`);
+	}
+	if (
+		entry !== 'coffeescript' &&
+		Object.keys(result.metafile.inputs).some((input) =>
+			/node_modules\/.*coffeescript/.test(input)
+		)
+	) {
+		throw new Error(`${entry} entry must not include the CoffeeScript compiler`);
 	}
 }
 

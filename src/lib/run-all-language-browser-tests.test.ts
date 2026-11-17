@@ -233,7 +233,7 @@ describe('all-language browser test runner', () => {
 		expect(plan.env.WASM_IDLE_RUN_REAL_BROWSER_PYTHON_DEBUG).toBe('1');
 	});
 
-	it('runs original WASI interpreters and Sml as required PR-family browser coverage', () => {
+	it('runs original WASI interpreters as required PR-family browser coverage', () => {
 		const plan = createAllLanguageBrowserTestPlan({ family: 'esolangs' });
 		const interpreterRows = supportMatrixRows.filter(
 			(row) => row.browserTest?.file === 'src/lib/playground/esolangs.playwright.test.ts'
@@ -241,17 +241,23 @@ describe('all-language browser test runner', () => {
 		expect(interpreterRows.map((row) => row.ids)).toContainEqual(['BRAINFUCK']);
 		expect(plan.testFiles).toEqual([
 			'src/lib/playground/sml.playwright.test.ts',
+			'src/lib/playground/bc.playwright.test.ts',
+			'src/lib/playground/uiua.playwright.test.ts',
 			'src/lib/playground/esolangs.playwright.test.ts'
 		]);
 		expect(plan.env).toEqual({
 			...Object.fromEntries(interpreterRows.map((row) => [row.browserTest!.env, '1'])),
-			WASM_IDLE_RUN_REAL_BROWSER_SML: '1'
+			WASM_IDLE_RUN_REAL_BROWSER_SML: '1',
+			WASM_IDLE_RUN_REAL_BROWSER_BC: '1',
+			WASM_IDLE_RUN_REAL_BROWSER_UIUA: '1'
 		});
 		expect(plan.env.WASM_IDLE_RUN_REAL_BROWSER_BRAINFUCK).toBe('1');
 		const invocation = createVitestChildInvocation(plan, 'http://127.0.0.1:4573/wasm-idle/');
 		expect(invocation.env.WASM_IDLE_REQUIRE_BROWSER_TESTS).toBe('1');
 		expect(invocation.env.WASM_IDLE_RUN_REAL_BROWSER_BRAINFUCK).toBe('1');
 		expect(invocation.env.WASM_IDLE_RUN_REAL_BROWSER_SML).toBe('1');
+		expect(invocation.env.WASM_IDLE_RUN_REAL_BROWSER_BC).toBe('1');
+		expect(invocation.env.WASM_IDLE_RUN_REAL_BROWSER_UIUA).toBe('1');
 	});
 
 	it('runs C++ standard and long-double regressions with the Clang family', () => {

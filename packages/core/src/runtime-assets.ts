@@ -78,7 +78,12 @@ export interface RuntimeAssetKeySource {
 		manifestReceipt?: RuntimeAssetIntegrityEntry;
 		assetReceipts?: RuntimeAssetIntegrityMap;
 	};
-	typescript?: { moduleUrl?: string; javascriptModuleUrl?: string; libUrl?: string };
+	typescript?: {
+		moduleUrl?: string;
+		javascriptModuleUrl?: string;
+		coffeeScriptModuleUrl?: string;
+		libUrl?: string;
+	};
 	wat?: { moduleUrl?: string };
 	lua?: { moduleUrl?: string };
 	fennel?: { compilerUrl?: string };
@@ -229,6 +234,10 @@ export interface RuntimeAssetKeySource {
 		compilerJavaScriptReceipt?: RuntimeAssetIntegrityEntry;
 		rtlJavaScriptReceipt?: RuntimeAssetIntegrityEntry;
 		systemPascalReceipt?: RuntimeAssetIntegrityEntry;
+		workerReceipt?: RuntimeAssetIntegrityEntry;
+	};
+	graphql?: {
+		workerUrl?: string;
 		workerReceipt?: RuntimeAssetIntegrityEntry;
 	};
 	forth?: {
@@ -767,6 +776,7 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	},
 	{ runtime: 'typescript', property: 'moduleUrl', key: 'typeScriptModuleUrl' },
 	{ runtime: 'typescript', property: 'javascriptModuleUrl', key: 'javaScriptModuleUrl' },
+	{ runtime: 'typescript', property: 'coffeeScriptModuleUrl', key: 'coffeeScriptModuleUrl' },
 	{ runtime: 'typescript', property: 'libUrl', key: 'typeScriptLibUrl' },
 	{ runtime: 'wat', property: 'moduleUrl', key: 'watModuleUrl' },
 	{ runtime: 'lua', property: 'moduleUrl', key: 'luaModuleUrl' },
@@ -1490,6 +1500,13 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'swift', property: 'workerUrl', key: 'swiftWorkerUrl' },
 	{ runtime: 'swift', property: 'manifestUrl', key: 'swiftManifestUrl' },
 	{ runtime: 'postgresql', property: 'moduleUrl', key: 'postgresqlModuleUrl' },
+	{ runtime: 'graphql', property: 'workerUrl', key: 'graphqlWorkerUrl' },
+	{
+		runtime: 'graphql',
+		property: 'workerReceipt',
+		key: 'graphqlWorkerReceipt',
+		serialize: serializeIntegrityEntry
+	},
 	{ runtime: 'sqlite', property: 'moduleUrl', key: 'sqliteModuleUrl' },
 	{ runtime: 'sqlite', property: 'wasmUrl', key: 'sqliteWasmUrl' },
 	{ runtime: 'php', property: 'moduleUrl', key: 'phpModuleUrl' }

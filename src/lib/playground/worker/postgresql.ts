@@ -1,5 +1,11 @@
 import type { SandboxWorkspaceFile } from '$lib/playground/options';
 import { importRuntimeModule } from '$lib/playground/runtimeModule';
+import type { RuntimeAssetCacheOptions } from '@wasm-idle/core';
+import { createModuleAssetFetch } from './moduleAssetCache';
+
+// The runtime loader reads the global fetch at call time; each load installs the cached
+// variant over the fetch this Worker started with.
+let networkFetch: typeof fetch | undefined;
 
 declare var self: any;
 
@@ -187,11 +193,19 @@ self.onmessage = async (event: { data: any }) => {
 		activePath = 'main.sql',
 		workspaceFiles = [],
 		stdin,
-		log
+		log,
+		persistentCache
 	} = event.data;
 	try {
 		if (load) {
 			if (log) console.log('[wasm-idle:postgresql-worker] load');
+			networkFetch ??= globalThis.fetch.bind(globalThis);
+			globalThis.fetch = createModuleAssetFetch(
+				nextModuleUrl || runtimeModuleUrl,
+				'wasm-postgresql',
+				persistentCache as RuntimeAssetCacheOptions | undefined,
+				networkFetch
+			);
 			await loadPostgresql(nextModuleUrl || runtimeModuleUrl);
 			postMessage({ load: true });
 			return;

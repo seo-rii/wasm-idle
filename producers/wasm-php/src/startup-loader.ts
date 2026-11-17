@@ -1,12 +1,14 @@
-import type { PHPLoaderModule } from '@php-wasm/universal';
-
 /** Build-pinned PHP engines. Only immutable code is retained, never a PHP instance. */
 export type PhpAsyncMode = 'jspi' | 'asyncify';
-export interface PhpEngineAsset {
+export interface PhpLoaderMetadata {
+	readonly dependencyFilename: string;
+	readonly dependenciesTotalSize: number;
+}
+export interface PhpEngineAsset<Loader extends PhpLoaderMetadata = PhpLoaderMetadata> {
 	readonly url: string;
 	readonly bytes: number;
 	readonly sha256: string;
-	readonly load: () => Promise<PHPLoaderModule>;
+	readonly load: () => Promise<Loader>;
 }
 
 const MAX_WASM_BYTES = 64 * 1024 * 1024;
@@ -32,7 +34,10 @@ function abortable<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
 	});
 }
 
-async function compileVerifiedEngine(asset: PhpEngineAsset, signal: AbortSignal) {
+async function compileVerifiedEngine(
+	asset: PhpEngineAsset,
+	signal: AbortSignal
+): Promise<WebAssembly.Module> {
 	if (
 		!Number.isSafeInteger(asset.bytes) ||
 		asset.bytes < 8 ||
@@ -133,14 +138,14 @@ async function compileVerifiedEngine(asset: PhpEngineAsset, signal: AbortSignal)
 	}
 }
 
-export function createPhpEngineBootstrap(
-	assets: Readonly<Record<PhpAsyncMode, PhpEngineAsset>>,
+export function createPhpEngineBootstrap<Loader extends PhpLoaderMetadata>(
+	assets: Readonly<Record<PhpAsyncMode, PhpEngineAsset<Loader>>>,
 	detectJspi: () => Promise<boolean>,
 	timeoutMs = 90_000
 ) {
 	const prepared = new Map<
 		PhpAsyncMode,
-		Promise<{ mode: PhpAsyncMode; loader: PHPLoaderModule; module: WebAssembly.Module }>
+		Promise<{ mode: PhpAsyncMode; loader: Loader; module: WebAssembly.Module }>
 	>();
 	let supported: Promise<boolean> | undefined;
 	return async (requested: 'auto' | PhpAsyncMode = 'auto') => {

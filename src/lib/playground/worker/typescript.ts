@@ -190,7 +190,11 @@ self.onmessage = async (event: { data: any }) => {
 		args = [],
 		stdin,
 		language = 'typescript',
-		activePath = language === 'typescript' ? 'main.ts' : 'main.js',
+		activePath = language === 'coffeescript'
+			? 'main.coffee'
+			: language === 'typescript'
+				? 'main.ts'
+				: 'main.js',
 		workspaceFiles = [],
 		log
 	} = event.data;
@@ -249,7 +253,7 @@ self.onmessage = async (event: { data: any }) => {
 				);
 			}
 			if (result.stderr) postMessage({ output: result.stderr });
-			if (!result.artifact?.javascript) {
+			if (typeof result.artifact?.javascript !== 'string') {
 				throw new Error('wasm-typescript did not return a JavaScript artifact');
 			}
 			compiledArtifact = result.artifact;
@@ -274,7 +278,7 @@ self.onmessage = async (event: { data: any }) => {
 						kind: 'ready',
 						state: 'running',
 						reason: 'started',
-						label: `${language === 'typescript' ? 'TypeScript' : 'JavaScript'} program started`
+						label: `${language === 'coffeescript' ? 'CoffeeScript' : language === 'typescript' ? 'TypeScript' : 'JavaScript'} program started`
 					}
 				}),
 			files: workspaceFiles,
@@ -318,7 +322,7 @@ self.onmessage = async (event: { data: any }) => {
 		if (execution.exitCode !== 0) {
 			// stderr was already streamed to the terminal above.
 			throw new Error(
-				`${language === 'typescript' ? 'TypeScript' : 'JavaScript'} program exited with code ${execution.exitCode}`
+				`${language === 'coffeescript' ? 'CoffeeScript' : language === 'typescript' ? 'TypeScript' : 'JavaScript'} program exited with code ${execution.exitCode}`
 			);
 		}
 		postMessage({ results: true });
