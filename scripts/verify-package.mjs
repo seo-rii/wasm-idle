@@ -469,9 +469,10 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Python snapshot startup adds two JavaScript/declaration pairs (3,434 files measured in CI).
 		// The core runtime Wasm module lookup adds one JavaScript/declaration pair (2 files).
 		// Persistent runtime caching for Go, .NET, PHP and PostgreSQL adds two worker JavaScript/declaration pairs (4 files).
+		// The language servers' shared persistent module fetch adds two files (module-asset-fetch.js and .d.ts).
 		// The combined performance changes install 43,200,938 bytes / 3,442 files.
 		// Another 136 KiB covers the measured 138,666-byte overflow; counts stay fixed.
-		budget: { maxBytes: 40 * MiB + 1_229 * 1024, maxFiles: 3_440, maxPackages: 70 },
+		budget: { maxBytes: 40 * MiB + 1_229 * 1024, maxFiles: 3_442, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
