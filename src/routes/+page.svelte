@@ -573,6 +573,11 @@
 	const pascalLspRuntime = $derived(pascalLspEnabled ? runtimeAssets.pascal : undefined);
 	const goLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'go');
 	const goLspCompilerUrl = $derived(goLspEnabled ? runtimeAssets.go?.compilerUrl : undefined);
+	const goLspManifestUrl = $derived(goLspEnabled ? runtimeAssets.go?.manifestUrl : undefined);
+	// Language servers verify runtime files against the bundled lock under this root.
+	const lspAssetRootUrl = browser
+		? new URL(`${applicationRootUrl.replace(/\/$/, '')}/`, location.href).href
+		: undefined;
 	const rustLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'rust');
 	const rustLspCompilerUrl = $derived(
 		rustLspEnabled ? runtimeAssets.rust?.compilerUrl : undefined
@@ -5022,6 +5027,8 @@
 							{pascalLspRuntime}
 							{goLspEnabled}
 							{goLspCompilerUrl}
+							{goLspManifestUrl}
+							{lspAssetRootUrl}
 							{rustLspEnabled}
 							{rustLspCompilerUrl}
 							{zigLspEnabled}
