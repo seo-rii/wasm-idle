@@ -12,15 +12,67 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { transform } from 'esbuild';
+import ts from 'typescript';
 import { selectPageContainerSource } from './lib/page-container-source.mjs';
 import { prepareWebsiteAssetDelivery, websiteReleaseModule } from './prepare-page-container.mjs';
 
 const packageTemplate = JSON.parse(
 	await readFile(new URL('../packages/container/package.json', import.meta.url), 'utf8')
 );
+
+test('generated full and layered releases satisfy the canonical owner configuration type', async () => {
+	const releaseURL = new URL('../src/lib/playground/container/release.ts', import.meta.url);
+	const releaseSource = await readFile(releaseURL, 'utf8');
+	const release = JSON.parse(
+		releaseSource.match(/const release = ([\s\S]*?\n\})(?: satisfies [^\n]+)?;/)[1]
+	);
+	const {
+		sysrootLayers = {
+			schemaVersion: 1,
+			basePackage: 'llvm-sysroot-c',
+			cxxPackage: 'llvm-sysroot-cxx',
+			full: { sha256: 'a'.repeat(64), bytes: 1 }
+		},
+		...fullConfig
+	} = release.config;
+	const sources = new Map(
+		[
+			{ ...fullConfig, sysrootProfile: 'full' },
+			{ ...fullConfig, sysrootProfile: 'c-base-v1', sysrootLayers }
+		].map((config) => [
+			fileURLToPath(new URL(`type-check-${config.sysrootProfile}.ts`, releaseURL)),
+			websiteReleaseModule({ ...release, config }) +
+				`\nconst checkConfiguration: (root: string) => Promise<{
+					config: import('../../container/bash-profile.js').BashProfileConfiguration;
+				}> = createWebsiteBashConfiguration;\n`
+		])
+	);
+	const options = {
+		noEmit: true,
+		strict: true,
+		skipLibCheck: true,
+		target: ts.ScriptTarget.ES2022,
+		module: ts.ModuleKind.ESNext,
+		moduleResolution: ts.ModuleResolutionKind.Bundler,
+		types: []
+	};
+	const host = ts.createCompilerHost(options);
+	const getSourceFile = host.getSourceFile.bind(host);
+	host.getSourceFile = (path, languageVersion, ...args) =>
+		sources.has(path)
+			? ts.createSourceFile(path, sources.get(path), languageVersion, true)
+			: getSourceFile(path, languageVersion, ...args);
+	const program = ts.createProgram([...sources.keys()], options, host);
+	assert.deepEqual(
+		ts
+			.getPreEmitDiagnostics(program)
+			.map((diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n')),
+		[]
+	);
+});
 
 test('sysroot archives retain pinned bytes when using a portable delivery MIME', () => {
 	const receipt = {
