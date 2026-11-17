@@ -457,7 +457,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Java 25 CI adds 31,813 bytes and two files to that baseline; allow another 32 KiB / two files.
 		// Propagate Picat's measured 17 KiB / six-file SDK increase; dependencies are unchanged.
 		// Keep all four language profile allowances when installing the combined SDK.
-		budget: { maxBytes: 40 * MiB + 1_093 * 1024, maxFiles: 3_430, maxPackages: 70 },
+		// Python snapshot startup adds two JavaScript/declaration pairs (3,434 files measured in CI).
+		budget: { maxBytes: 40 * MiB + 1_093 * 1024, maxFiles: 3_434, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
