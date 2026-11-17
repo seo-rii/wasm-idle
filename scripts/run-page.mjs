@@ -13,6 +13,7 @@ const ASSET_PREPARATION = new Set([
 	'sync:c3-lsp',
 	'sync:v-lsp',
 	'sync:wasm-lean4',
+	'sync:wasm-verilog',
 	'prepare:test-assets',
 	'build:page-runtimes',
 	'sync:page-runtimes',
