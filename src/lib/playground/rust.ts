@@ -41,7 +41,7 @@ import {
 	RuntimeAssetCache,
 	resolveExecutionLimits,
 	resolveRuntimeAssetCacheOptions,
-	serveRuntimeWasmModule,
+	serveRuntimeWasmModuleWithLookup,
 	type ResolvedRuntimeAssetCacheOptions,
 	type DebugEvaluateOptions,
 	type DebugSourceBreakpoint,
@@ -925,7 +925,7 @@ class Rust implements Sandbox {
 									'wasm-rust/runtime/rustc/rustc.wasm.gz'
 								];
 							moduleServices.add(
-								serveRuntimeWasmModule(message.port, {
+								serveRuntimeWasmModuleWithLookup(message.port, {
 									cache: this.runtimeAssetCache,
 									receipt: {
 										bytes: receipt.uncompressedBytes,

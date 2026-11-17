@@ -573,6 +573,11 @@
 	const pascalLspRuntime = $derived(pascalLspEnabled ? runtimeAssets.pascal : undefined);
 	const goLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'go');
 	const goLspCompilerUrl = $derived(goLspEnabled ? runtimeAssets.go?.compilerUrl : undefined);
+	const goLspManifestUrl = $derived(goLspEnabled ? runtimeAssets.go?.manifestUrl : undefined);
+	// Language servers verify runtime files against the bundled lock under this root.
+	const lspAssetRootUrl = browser
+		? new URL(`${applicationRootUrl.replace(/\/$/, '')}/`, location.href).href
+		: undefined;
 	const rustLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'rust');
 	const rustLspCompilerUrl = $derived(
 		rustLspEnabled ? runtimeAssets.rust?.compilerUrl : undefined
@@ -992,6 +997,10 @@
 			'.aheui': 'AHEUI',
 			'.um': 'UHMLANG',
 			'.umm': 'UHMLANG',
+			'.pi': 'PICAT',
+			'.gp': 'PARIGP',
+			'.wren': 'WREN',
+			'.nut': 'SQUIRREL',
 			'.lol': 'LOLCODE',
 			'.ape': 'APECODE',
 			'.gs': 'GOLFSCRIPT',
@@ -1154,6 +1163,10 @@
 			MALBOLGE: 'main.mal',
 			AHEUI: 'main.aheui',
 			UHMLANG: 'main.um',
+			PICAT: 'main.pi',
+			PARIGP: 'main.gp',
+			WREN: 'main.wren',
+			SQUIRREL: 'main.nut',
 			LOLCODE: 'main.lol',
 			APECODE: 'main.ape',
 			GOLFSCRIPT: 'main.gs',
@@ -1235,6 +1248,10 @@
 			MALBOLGE: 'malbolge',
 			AHEUI: 'aheui',
 			UHMLANG: 'uhmlang',
+			PICAT: 'picat',
+			PARIGP: 'parigp',
+			WREN: 'wren',
+			SQUIRREL: 'squirrel',
 			LOLCODE: 'lolcode',
 			APECODE: 'apecode',
 			GOLFSCRIPT: 'golfscript',
@@ -2234,6 +2251,12 @@
 			uhmlang: 'UHMLANG',
 			umjunsik: 'UHMLANG',
 			엄준식: 'UHMLANG',
+			picat: 'PICAT',
+			parigp: 'PARIGP',
+			'pari/gp': 'PARIGP',
+			gp: 'PARIGP',
+			wren: 'WREN',
+			squirrel: 'SQUIRREL',
 			lolcode: 'LOLCODE',
 			lol: 'LOLCODE',
 			apecode: 'APECODE',
@@ -5010,6 +5033,8 @@
 							{pascalLspRuntime}
 							{goLspEnabled}
 							{goLspCompilerUrl}
+							{goLspManifestUrl}
+							{lspAssetRootUrl}
 							{rustLspEnabled}
 							{rustLspCompilerUrl}
 							{zigLspEnabled}

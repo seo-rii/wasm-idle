@@ -1,5 +1,6 @@
 import { ContainerError } from '../errors.js';
-import { createRpcBuffer, createRpcServer } from '../transport/rpc.js';
+import { FsError } from '../fs/index.js';
+import { createRpcBuffer, createRpcRevisionPublisher, createRpcServer } from '../transport/rpc.js';
 import type { LiveCommandAdapter } from './types.js';
 import type { CommandWorker } from './worker-adapter.js';
 import { createLiveIo } from './wasi-live/io.js';
@@ -52,10 +53,11 @@ export function createLiveWorkerAdapter(options: LiveWorkerAdapterOptions): Live
       let disposal: Promise<void> | undefined;
       let setup: LiveWorkerSetup | undefined;
       let io: ReturnType<typeof createLiveIo> | undefined, server: ReturnType<typeof createRpcServer> | undefined;
+      let unpublish: (() => void) | undefined;
       const dispose = () => disposal ??= (async () => {
         dead = true; lifetime.abort();
         const errors: unknown[] = [];
-        for (const close of [() => server?.stop(), () => io?.dispose(), () => setup?.dispose?.()]) {
+        for (const close of [() => unpublish?.(), () => server?.stop(), () => io?.dispose(), () => setup?.dispose?.()]) {
           try { close(); } catch (error) { errors.push(error); }
         }
         request.signal.removeEventListener('abort', abort);
@@ -76,6 +78,11 @@ export function createLiveWorkerAdapter(options: LiveWorkerAdapterOptions): Live
         // The source is bound by this owner, never supplied by guest RPC metadata.
         server = createRpcServer(buffer, request.generation, (...args) =>
           request.fs.withMutationSource(request.mutationSource ?? request.generation, () => io!.dispatch(...args)));
+        // Let the worker reuse lookups while no mutation from any source intervenes.
+        // Without a published revision the worker forwards every call, as before.
+        const publish = createRpcRevisionPublisher(buffer, request.generation);
+        try { unpublish = request.fs.onGenerationChange(publish); publish(request.fs.generation); }
+        catch (error) { if (!(error instanceof FsError)) throw error; }
         worker = workerFactory();
         worker.onmessage = ({ data }) => {
           if (dead) return;

@@ -28,6 +28,8 @@ const ASSET_GROUPS = [
 	'lfortran',
 	'lean4',
 	'commonlisp',
+	'picat',
+	'parigp',
 	'scala'
 ];
 const SUPPORTED_GROUPS = new Set(['all', ...ASSET_GROUPS]);
@@ -199,7 +201,8 @@ export function normalizeBrowserTestAssetGroups(groups) {
  *   staticDir?: string;
  *   cacheDir?: string;
  *   versionModulePath?: string;
- *   prepareOcamlWrapper?: (options: { sourceRoot: string; staticDir: string; versionModulePath?: string }) => Promise<unknown>;
+ *   temporaryParentDir?: string;
+ *   prepareOcamlWrapper?: (options: { sourceRoot: string; staticDir: string; versionModulePath?: string; temporaryParentDir?: string }) => Promise<unknown>;
  *   baseUrl?: string;
  *   clangdSourceDir?: string;
  *   clangdReceiptPath?: string;
@@ -218,6 +221,7 @@ export async function prepareBrowserTestAssets({
 	scalaLockPath = DEFAULT_SCALA_LOCK_PATH,
 	cacheDir = DEFAULT_CACHE_DIR,
 	versionModulePath,
+	temporaryParentDir,
 	prepareOcamlWrapper = prepareOcamlBrowserWrapper,
 	baseUrl,
 	clangdSourceDir = manifestPath === DEFAULT_MANIFEST_PATH &&
@@ -274,6 +278,18 @@ export async function prepareBrowserTestAssets({
 			);
 			downloaded += result.downloaded;
 			reused += result.reused;
+			continue;
+		}
+		if (group === 'picat') {
+			await (
+				await import('./sync-wasm-picat.mjs')
+			).syncWasmPicatAssets({ targetDir: path.join(staticDir, 'wasm-picat'), fetchImpl });
+			continue;
+		}
+		if (group === 'parigp') {
+			await (
+				await import('./sync-wasm-parigp.mjs')
+			).syncWasmPariGpAssets({ targetDir: path.join(staticDir, 'wasm-parigp'), fetchImpl });
 			continue;
 		}
 		if (group === 'lean4' || group === 'commonlisp') {
@@ -366,7 +382,8 @@ export async function prepareBrowserTestAssets({
 			await prepareOcamlWrapper({
 				sourceRoot: inputRoot,
 				staticDir,
-				...(versionModulePath ? { versionModulePath } : {})
+				...(versionModulePath ? { versionModulePath } : {}),
+				...(temporaryParentDir ? { temporaryParentDir } : {})
 			});
 		}
 		if (manifest.generatedWorkers?.some((generatedGroup) => generatedGroup === group)) {
@@ -452,6 +469,37 @@ export async function verifyBrowserTestAssets({
 		);
 		if (fingerprint !== profile.fingerprint)
 			throw new Error('Required OCaml browser bundle fingerprint mismatch');
+	}
+	if (selectedGroups.includes('picat')) {
+		const { WASM_PICAT_PROFILE: profile } = await loadBundledProfile(
+			new URL('../src/lib/playground/wasmPicatVersion.ts', import.meta.url)
+		);
+		for (const [name, receipt] of Object.entries({
+			...profile.storage,
+			...profile.notices,
+			'runner-worker.js': profile.workerReceipt
+		})) {
+			receipts.push({
+				target: `wasm-picat/${name}`,
+				size: receipt.bytes,
+				sha256: receipt.sha256
+			});
+		}
+	}
+	if (selectedGroups.includes('parigp')) {
+		const { WASM_PARIGP_PROFILE: profile } = await loadBundledProfile(
+			new URL('../src/lib/playground/wasmPariGpVersion.ts', import.meta.url)
+		);
+		for (const [name, receipt] of Object.entries({
+			...profile.delivery,
+			'runner-worker.js': profile.workerReceipt
+		})) {
+			receipts.push({
+				target: `wasm-parigp/${name}`,
+				size: receipt.bytes,
+				sha256: receipt.sha256
+			});
+		}
 	}
 	for (const group of ['lean4', 'commonlisp']) {
 		if (!selectedGroups.includes(group)) continue;
