@@ -1,0 +1,1 @@
+import e from"./vrC7kWIX.js";var t=class extends e{constructor(){super(`golfscript`)}};export{t as default};

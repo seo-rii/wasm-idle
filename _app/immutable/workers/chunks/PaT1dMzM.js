@@ -1,0 +1,1 @@
+function e(e){return new Worker(new URL(`../dotnet-DwnWtCS_.js`,import.meta.url).href,{type:`module`,name:e?.name})}export{e as default};

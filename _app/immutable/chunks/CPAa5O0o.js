@@ -1,0 +1,1 @@
+import{w as e}from"./Cm0j0eM2.js";import{t}from"./BitWuHN_.js";var n=class extends t{constructor(){super({languageId:`GRAPHQL`,displayName:`GraphQL`,defaultActivePath:`main.graphql`,workerLifetime:{mode:`per-run`},inlineVerifiedWorker:!0,enforcePhaseTimeouts:!0,stdin:{mode:`prebuffered`,sourceHintPattern:/[\s\S]*/u},resolveRuntimeAssets:e})}};export{n as default};

@@ -1,1 +1,0 @@
-import{w as e}from"./C823LBZZ.js";import{t}from"./BrqbEGJr.js";var n=class extends t{constructor(){super({languageId:`GRAPHQL`,displayName:`GraphQL`,defaultActivePath:`main.graphql`,workerLifetime:{mode:`per-run`},inlineVerifiedWorker:!0,enforcePhaseTimeouts:!0,stdin:{mode:`prebuffered`,sourceHintPattern:/[\s\S]*/u},resolveRuntimeAssets:e})}};export{n as default};
