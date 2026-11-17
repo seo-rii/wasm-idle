@@ -139,8 +139,8 @@ export const scenarios = [
 		// Picat CI job 133036878600 measures 2,856,625 bytes with unchanged files/dependencies.
 		// The four-language core measures 1,619,555 bytes, a 3,193-byte increase.
 		// GCC totals 2,858,709 bytes; a 3 KiB increase retains 299 bytes of headroom.
-		// The core runtime Wasm module lookup adds one JavaScript/declaration pair (1,950 bytes / 2 files).
-		budget: { maxBytes: 2.5 * MiB + 234 * 1024, maxFiles: 198, maxPackages: 4 },
+		// The core runtime Wasm module lookup adds one JavaScript/declaration pair (CI measures 2,862,838 bytes / 198 files).
+		budget: { maxBytes: 2.5 * MiB + 237 * 1024, maxFiles: 198, maxPackages: 4 },
 		absentPackageNames: [
 			'wasm-idle',
 			'@wasm-idle/llvm-core',
