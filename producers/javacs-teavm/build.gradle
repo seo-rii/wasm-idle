@@ -5,7 +5,25 @@ plugins {
 
 repositories { mavenCentral() }
 
+sourceSets {
+    teavmDeterminism {
+        java.srcDirs = ['teavm-determinism']
+    }
+    teavmDeterminismTest {
+        java.srcDirs = ['teavm-determinism-tests']
+        compileClasspath += sourceSets.teavmDeterminism.output
+        runtimeClasspath = sourceSets.teavmDeterminism.output + runtimeClasspath
+    }
+}
+
+configurations.teavmDeterminismTestImplementation.extendsFrom(configurations.teavmDeterminismCompileOnly)
+
+
 dependencies {
+    // Compiler-only copies of two 0.16.0 classes; reuse already authenticated daemon dependencies.
+    teavmDeterminismCompileOnly('org.teavm:teavm-core:0.16.0') { transitive = false }
+    teavmDeterminismCompileOnly('org.teavm:teavm-relocated-libs-hppc:0.16.0') { transitive = false }
+
     compileOnly 'com.google.code.gson:gson:2.8.5'
     implementation 'com.google.protobuf:protobuf-java:3.9.1'
     implementation 'org.teavm:teavm-jso:0.16.0'
@@ -48,4 +66,23 @@ teavm {
         processMemory = 4096
         moduleType = org.teavm.gradle.api.JSModuleType.ES2015
     }
+}
+
+// Identity-hashed dependency domains and discovery-ordered class tags otherwise change Wasm
+// constants between clean JVM runs. Keep the overrides ahead of teavm-core in the compiler
+// daemon only, and fail on a version change until these exact upstream copies are reviewed.
+def producerInputs = new groovy.json.JsonSlurper().parse(file('inputs.lock.json'))
+if (producerInputs.teavm.version != '0.16.0') {
+    throw new GradleException('Review teavm-determinism against the new TeaVM version')
+}
+
+tasks.register('verifyTeaVmDeterminism', JavaExec) {
+    classpath = sourceSets.teavmDeterminismTest.runtimeClasspath
+    mainClass = 'org.teavm.dependency.DeterminismTest'
+}
+
+tasks.named('generateWasmGC') {
+    dependsOn tasks.named('verifyTeaVmDeterminism')
+    def upstreamClasspath = new ArrayList<Object>(daemonClasspath.from)
+    daemonClasspath.setFrom(sourceSets.teavmDeterminism.output, upstreamClasspath)
 }

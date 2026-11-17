@@ -173,8 +173,8 @@
 			},
 			{
 				"path": "README.md",
-				"bytes": 7174,
-				"sha256": "857539177f821df773d37eca440ae26d8c989606b82a7b889bf25739e455000c"
+				"bytes": 8339,
+				"sha256": "739bf56c0719b744b2c36ea53c43772bf5681574fd54bbbee32d76695699eca0"
 			},
 			{
 				"path": "THIRD_PARTY_NOTICES.md",
@@ -188,13 +188,13 @@
 			},
 			{
 				"path": "build.gradle",
-				"bytes": 1720,
-				"sha256": "d0d3667e0e6091b206cc2d333a65257d10931446596cf9c215f780bc1b61504b"
+				"bytes": 3352,
+				"sha256": "3b290a419d0c0e2b5fddd789a5cd3bebb9ae5ec863e9948c41446d399708f91b"
 			},
 			{
 				"path": "build.py",
-				"bytes": 4672,
-				"sha256": "6183bb1781250f7cf8e46b070c655f758d29cb73f23cc69f5522c1f8bfd633c1"
+				"bytes": 4901,
+				"sha256": "b13c214e600d68bfcd04a40588bdd6a997423f9eaae3a02c65d867419a4bc286"
 			},
 			{
 				"path": "collect-bodies.mjs",
@@ -297,6 +297,21 @@
 				"sha256": "fb63acb1be5a81dcaefaeb258c40809d44a49b539604bc69660be78a1aa27a58"
 			},
 			{
+				"path": "teavm-determinism/org/teavm/dependency/TypeSet.java",
+				"bytes": 11783,
+				"sha256": "af47e8f908399a22bf98d49056d4a07d67ced74d85b0e0f5ea998b6dbcaf98b2"
+			},
+			{
+				"path": "teavm-determinism/org/teavm/model/classes/TagRegistry.java",
+				"bytes": 5815,
+				"sha256": "b858800dd5b28d755578d2697e73009b612860d5995e2cefbc615aff55217b6b"
+			},
+			{
+				"path": "teavm-determinism-tests/org/teavm/dependency/DeterminismTest.java",
+				"bytes": 5088,
+				"sha256": "d01ef67efe1df6976aa3ce9382e1f1c853aedde6207978b09baf227cc6486aac"
+			},
+			{
 				"path": "test_toolchain.py",
 				"bytes": 3019,
 				"sha256": "0ef64efff72c4e8e4d8d84aef03580ef8cda460730ca3931ebd7851b4b8ff482"
@@ -330,8 +345,8 @@
 			},
 			{
 				"path": "javacs.wasm",
-				"bytes": 6193326,
-				"sha256": "1f1d92aaaf988d8379407b03851925861c1c6b8d858b314c4f8b848fdc9400f9"
+				"bytes": 6193330,
+				"sha256": "c9d20ffac0c78191e6e276e010784f8cedc73e934bc56937190cc298f4397553"
 			},
 			{
 				"path": "jdk-platform.zip",
@@ -358,8 +373,8 @@
 		},
 		{
 			"path": "javacs.wasm",
-			"bytes": 6193326,
-			"sha256": "1f1d92aaaf988d8379407b03851925861c1c6b8d858b314c4f8b848fdc9400f9"
+			"bytes": 6193330,
+			"sha256": "c9d20ffac0c78191e6e276e010784f8cedc73e934bc56937190cc298f4397553"
 		},
 		{
 			"path": "jdk-platform.zip",

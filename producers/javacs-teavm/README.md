@@ -33,6 +33,10 @@ is only a build-transport input, so its creation timestamps are not included in
 the Wasm/SDK artifacts or their receipts.
 The cache may be removed and rebuilt. Cache downloads, the JDK, Gradle and its
 dependency cache; avoid caching generated sources or application outputs.
+For clean-build reproducibility qualification, run `build.py --clean` in separate
+invocations and compare all four artifact receipts and the complete provenance.
+This clears Gradle outputs, disables its build cache and starts fresh compiler JVMs;
+the authenticated toolchain and dependency downloads may still be reused.
 The ZIP packaging subprocess also uses a private, authenticated Debian zlib
 1.2.13 shared library. Its actual runtime version is checked before writing
 archives, so a different Linux distribution's deflater cannot change SDK bytes.
@@ -41,6 +45,18 @@ Run `python3 producers/javacs-teavm/test_toolchain.py` for the private truststor
 regressions (missing host link, external link preservation, corrupt restored
 store and modified CA download rejection). This provisions the authenticated
 private JDK and CA inputs if they are not already cached.
+
+TeaVM 0.16.0 itself assigns class-tag constants in dependency-discovery order,
+which can change between JVM processes because dependency domains use object
+identity hashes. `teavm-determinism/` contains two compiler-only copies from the
+authenticated `teavm-core-0.16.0-sources.jar` recorded in Gradle verification
+metadata: `TypeSet` preserves domain insertion order and `TagRegistry` sorts
+class names before allocating ranges. HPPC imports use TeaVM's relocated package.
+These copies precede `teavm-core` only on the build daemon classpath; they do not
+replace application classes or enter the generated javacs program. Every Wasm
+build runs JVM regression checks for domain/consumer order and for class and
+interface range semantics across 64 discovery orders. A TeaVM version change
+requires reviewing these copies again before building.
 
 `prepare.py` authenticates the complete upstream source tree, copies it to a
 separate browser source directory and verifies its generated changes against

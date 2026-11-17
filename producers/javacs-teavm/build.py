@@ -15,6 +15,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--refresh-dependency-verification', action='store_true',
         help='Maintainer-only: regenerate Gradle SHA-256 metadata for review')
+    parser.add_argument('--clean', action='store_true',
+        help='Rebuild all Gradle outputs without the build cache for reproducibility qualification')
     args = parser.parse_args()
     java_home = pinned_jdk()
     gradle = pinned_gradle()
@@ -28,7 +30,8 @@ def main():
         '--dependency-verification', 'strict']
     if not args.refresh_dependency_verification and not metadata.is_file():
         raise ValueError('Reviewed Gradle verification metadata is missing')
-    subprocess.run([str(gradle), '--no-daemon', '--max-workers=2', *options, 'buildWasmGC'],
+    clean = ['--no-build-cache', 'clean'] if args.clean else []
+    subprocess.run([str(gradle), '--no-daemon', '--max-workers=2', *options, *clean, 'buildWasmGC'],
         check=True, env=env, cwd=HERE)
     dist = HERE / 'build/dist'
     dist.mkdir(parents=True, exist_ok=True)
