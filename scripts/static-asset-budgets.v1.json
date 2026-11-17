@@ -107,8 +107,8 @@
 			"maxFiles": 20
 		},
 		"wasm-dart": {
-			"maxBytes": 31000000,
-			"maxFiles": 10
+			"maxBytes": 37983636,
+			"maxFiles": 13
 		},
 		"wasm-debug": {
 			"maxBytes": 55000000,

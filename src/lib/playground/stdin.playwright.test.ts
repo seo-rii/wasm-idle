@@ -458,6 +458,7 @@ const clangStdinBrowserCases = [
 	...(['C', 'CPP'] as const).map((language) => ({
 		name: `${language} Wasm SIMD`,
 		language,
+		requiresCxxLayer: language === 'CPP',
 		source: readFileSync(
 			new URL('../../../scripts/fixtures/clang-simd.c', import.meta.url),
 			'utf8'
@@ -468,6 +469,8 @@ const clangStdinBrowserCases = [
 	...(['C', 'CPP'] as const).map((language) => ({
 		name: `${language} scalar SIMD override`,
 		language,
+		// Explicit compiler flags conservatively select the full sysroot, including for C.
+		requiresCxxLayer: true,
 		source: readFileSync(
 			new URL('../../../scripts/fixtures/clang-simd-target.c', import.meta.url),
 			'utf8'
@@ -479,6 +482,7 @@ const clangStdinBrowserCases = [
 	{
 		name: 'C',
 		language: 'C',
+		requiresCxxLayer: false,
 		source: cStdinSource,
 		stdinText: '68\n',
 		expectedOutput: 'main=73'
@@ -486,6 +490,7 @@ const clangStdinBrowserCases = [
 	{
 		name: 'CPP',
 		language: 'CPP',
+		requiresCxxLayer: true,
 		source: cppStdinSource,
 		stdinText: '68\n',
 		expectedOutput: 'main=73'
@@ -493,6 +498,7 @@ const clangStdinBrowserCases = [
 	{
 		name: 'CPP Unicode',
 		language: 'CPP',
+		requiresCxxLayer: true,
 		source: cppUnicodeStdinSource,
 		stdinText: '안녕\n',
 		expectedOutput: '안녕'
@@ -755,7 +761,9 @@ describe('wasm-idle browser stdin connection', () => {
 					stdinText
 				});
 				expect(summary.transcript).toContain(expectedOutput);
-				await expectPinnedContainerClangAssets(browserUrl, summary.runtimeRequests);
+				await expectPinnedContainerClangAssets(browserUrl, summary.runtimeRequests, {
+					cxx: testCase.requiresCxxLayer
+				});
 			});
 		}
 	);
@@ -855,7 +863,10 @@ int main() {
 					workspaceFiles: [{ path: 'flags.rsp', content: '-x c++ -std=c++20' }]
 				});
 				expect(summary.transcript).toContain('main=73');
-				await expectPinnedContainerClangAssets(browserUrl, summary.runtimeRequests);
+				// The response file selects -x c++ even though the editor language is C.
+				await expectPinnedContainerClangAssets(browserUrl, summary.runtimeRequests, {
+					cxx: true
+				});
 			});
 		}
 	);

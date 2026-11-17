@@ -139,7 +139,11 @@ int main() {
 				});
 				expect(summary.transcript).toContain(expectedOutput);
 				expect(summary.pageErrors).toEqual([]);
-				await expectPinnedContainerClangAssets(preview.browserUrl, summary.runtimeRequests);
+				await expectPinnedContainerClangAssets(
+					preview.browserUrl,
+					summary.runtimeRequests,
+					{ cxx: true }
+				);
 			});
 		}
 	);

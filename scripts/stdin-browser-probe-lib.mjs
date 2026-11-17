@@ -282,7 +282,7 @@ async function runFollowUp(page, run, runTimeoutMs, language) {
  */
 export function isExecutionRuntimeAssetPath(pathname) {
 	const containerCompiler =
-		/\/container-app\/objects\/[a-f0-9]{64}\/(?:(?:clang|lld)\.wasm\.gz\.bin|sysroot\.tar(?:\.bin)?)$/u.test(
+		/\/container-app\/objects\/[a-f0-9]{64}\/(?:(?:clang|lld)\.wasm\.gz\.bin|sysroot\.tar(?:\.bin)?|sysroot-(?:c|cxx)\.tar\.gz\.bin)$/u.test(
 			pathname
 		);
 	return (
