@@ -70,8 +70,9 @@ export const scenarios = [
 		// Container PCH persistence and background builds add 8,808 bytes to two container modules (svelte-package output), no files.
 		// The Go worker's fmt-build preload and the in-flight write map add 2,568 bytes; allow 3 KiB.
 		// Refreshing the release lock adds 21,831 packed core bytes; the root install measures 7,623,703 bytes.
+		// Owned Clang outputs and serialized workspace reconciliation add 3,590 bytes; measured install: 7,627,293 bytes.
 		// Round to the next KiB while retaining the existing file and package limits.
-		budget: { maxBytes: 7624704, maxFiles: 865, maxPackages: 6 },
+		budget: { maxBytes: 7627776, maxFiles: 865, maxPackages: 6 },
 		absentPackageNames: [
 			'@katana-project/asm',
 			'java-parser',
