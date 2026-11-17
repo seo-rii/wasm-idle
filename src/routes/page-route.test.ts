@@ -1594,7 +1594,7 @@ describe('example route debug actions', () => {
 			expect(editorOnlyLanguages.has(language)).toBe(true);
 		}
 		expect(source).toMatch(
-			/const executionAvailable = \$derived\(!editorOnlyLanguages\.has\(language\)\);/
+			/const executionAvailable = \$derived\(\s*!editorOnlyLanguages\.has\(language\) && !executionUnavailableReason\s*\);/
 		);
 		expect(source).toMatch(/if \(!executionAvailable\) return Promise\.resolve\(\);/);
 		expect(source).toMatch(/fortran: 'FORTRAN'/);
