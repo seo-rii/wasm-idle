@@ -160,6 +160,58 @@ function codeList(values) {
 /** @type {SupportMatrixRow[]} */
 export const supportMatrixRows = [
 	{
+		language: 'Picat',
+		ids: ['PICAT'],
+		runtime: 'Official Picat WebAssembly playground VM',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/picat.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_PICAT',
+			marker: 'real PICAT browser interpreter'
+		}
+	},
+	{
+		language: 'PARI/GP',
+		ids: ['PARIGP'],
+		runtime: 'Official PARI/GP 2.19.0 Emscripten wasm32',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/parigp.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_PARIGP',
+			marker: 'real PARI/GP'
+		}
+	},
+	{
+		language: 'Wren',
+		ids: ['WREN'],
+		runtime: 'Upstream Wren 0.4.0 VM on WASI',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/esolangs.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_WREN',
+			language: 'WREN'
+		}
+	},
+	{
+		language: 'Squirrel',
+		ids: ['SQUIRREL'],
+		runtime: 'Squirrel 3.2 VM on WASI',
+		stdin: 'Yes',
+		editorSupport: 'C++ syntax',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/esolangs.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_SQUIRREL',
+			language: 'SQUIRREL'
+		}
+	},
+	{
 		language: 'GolfScript',
 		ids: ['GOLFSCRIPT'],
 		runtime: 'Original GolfScript interpreter on Ruby/WASI',
@@ -739,6 +791,19 @@ export const supportMatrixRows = [
 		}
 	},
 	{
+		language: 'CoffeeScript',
+		ids: ['COFFEESCRIPT'],
+		runtime: 'CoffeeScript 2.7.0 + JavaScript',
+		stdin: 'Yes',
+		editorSupport: 'syntax + compiler diagnostics',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/coffeescript.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_COFFEESCRIPT',
+			marker: 'runCoffeeScriptBrowserProbe'
+		}
+	},
+	{
 		language: 'JavaScript',
 		ids: ['JAVASCRIPT'],
 		runtime: 'wasm-typescript / TypeScript service',
@@ -1120,6 +1185,47 @@ function staticWorkerCustomizationFor(runtimeKey, envKey = runtimeKey.toUpperCas
 
 /** @type {Map<string, RuntimeDetail>} */
 const runtimeDetailsByLanguage = new Map([
+	[
+		'Picat',
+		{
+			packageBase:
+				'Receipt-pinned official picat-lang.org playground snapshot (experimental, based on 3.9#12); exact producer revision unavailable',
+			execution:
+				'Real Picat VM, CP and SAT in a fresh Worker; unchanged source, line/byte stdin and EOF; entry module must be absent or named user_code',
+			customization:
+				'runtimeAssets.picat.baseUrl, rootUrl, stdin, activePath and workspace data files; cancellation and bounded Wasm memory; no MIP/SMT, timers, program arguments or ASP pre-transpilation'
+		}
+	],
+	[
+		'PARI/GP',
+		{
+			packageBase:
+				'Official PARI/GP 2.19.0 Emscripten wasm32 (GPL-2.0-or-later), SHA-256 pinned upstream binaries',
+			execution:
+				'Fresh Worker per run executes unchanged GP source through the upstream gp_embedded multiline reader; streaming stdin, EOF, workspace files, errors and cancellation; bounded Wasm memory; plots, external processes and optional database downloads unavailable',
+			customization:
+				'runtimeAssets.parigp.baseUrl, runtimeAssets.rootUrl, stdin, activePath, workspaceFiles; no program arguments'
+		}
+	],
+	[
+		'Wren',
+		{
+			packageBase: 'wren-lang/wren 0.4.0 (4a18fc48, MIT), wasi-sdk 33.0 build',
+			execution:
+				'Runs the unchanged upstream VM with classes, fibers, closures, random/meta and workspace imports; host io.Stdin exposes blocking readLine/readByte and io.Stdout exposes write/print/flush; synchronous host bindings do not provide the libuv CLI scheduler or its OS modules',
+			customization: `${code('runtimeAssets.rootUrl')}, ${code('stdin')}, ${code('activePath')}, ${code('workspaceFiles')}; pinned VM and host receipts, fresh WASI state, timeout/output/workspace limits and cancellation`
+		}
+	],
+	[
+		'Squirrel',
+		{
+			packageBase: 'albertodemichelis/squirrel 3.2 (f92bc298, MIT), wasi-sdk 33.0',
+			execution:
+				'Original Squirrel VM and standard libraries in a fresh WASI instance; 32-bit integers, 64-bit floats, byte stdin/stdout, workspace dofile and runtime/compiler diagnostics',
+			customization:
+				'runtimeAssets.rootUrl, stdin, activePath, workspaceFiles; fixed script argv; execution/output/memory limits and cancellation; OS subprocesses unavailable'
+		}
+	],
 	[
 		'GolfScript',
 		{
@@ -1684,6 +1790,14 @@ const runtimeDetailsByLanguage = new Map([
 				`${code('runtimeAssets.ocaml.moduleUrl')}/${code('manifestUrl')} plus ` +
 				`${code('moduleReceipt')}/${code('manifestReceipt')} for a custom generation, or ` +
 				`${code('PUBLIC_WASM_OCAML_*')} for a mirror of the bundled generation; ${code('ocamlBackend')}`
+		}
+	],
+	[
+		'CoffeeScript',
+		{
+			packageBase: `${workspacePackage('runtimes/wasm-typescript')} / ${workspaceDependency('runtimes/wasm-typescript', 'coffeescript')}`,
+			execution: `Official CoffeeScript compiler emits JavaScript executed by the existing browser runner; supports ${code('stdin')} and ${code('programArgs')}`,
+			customization: `${code('runtimeAssets.typescript.coffeeScriptModuleUrl')} or ${code('rootUrl')}; Node builtin modules share the JavaScript runner's documented browser contract`
 		}
 	],
 	[

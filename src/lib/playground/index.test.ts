@@ -23,7 +23,13 @@ const { moduleLoads, sandboxInstances, createMockSandboxClass, MockSandbox } = v
 			sandboxInstances.set(language, existing);
 		}
 
+		runtimeAssetCaches: unknown[] = [];
+
 		eof() {}
+
+		setRuntimeAssetCache(cache: unknown) {
+			this.runtimeAssetCaches.push(cache);
+		}
 
 		async load(...args: any[]) {
 			this.loadCalls.push(args);
@@ -49,6 +55,11 @@ const { moduleLoads, sandboxInstances, createMockSandboxClass, MockSandbox } = v
 		};
 
 	return { moduleLoads, sandboxInstances, createMockSandboxClass, MockSandbox };
+});
+
+vi.mock('$lib/playground/picat', () => {
+	moduleLoads.add('PICAT');
+	return { default: createMockSandboxClass('PICAT') };
 });
 
 vi.mock('$lib/playground/c3', () => {
@@ -253,6 +264,11 @@ vi.mock('$lib/playground/swift', () => {
 	};
 });
 
+vi.mock('$lib/playground/parigp', () => {
+	moduleLoads.add('PARIGP');
+	return { default: createMockSandboxClass('PARIGP') };
+});
+
 vi.mock('$lib/playground/commonlisp', () => {
 	moduleLoads.add('COMMONLISP');
 	return { default: createMockSandboxClass('COMMONLISP') };
@@ -434,6 +450,7 @@ vi.mock('$lib/playground/clang', () => {
 });
 
 import playground, { createPlaygroundBinding, supportedLanguages } from './index';
+import { RuntimeAssetCache } from './runtimeAssetCache';
 
 const moduleLoadsAfterFactoryImport = new Set(moduleLoads);
 
@@ -536,6 +553,12 @@ describe('playground runtime binding', () => {
 		expect(shortAlias).not.toBe(alternateAlias);
 		expect(sandboxInstances.get('COBOL')).toHaveLength(3);
 		expect(moduleLoads).toContain('COBOL');
+	});
+
+	it('routes Wren requests through the real-WASM sandbox profile', async () => {
+		const sandbox = await playground('WREN');
+		expect(sandbox).toBeInstanceOf(MockSandbox);
+		expect(sandboxInstances.get('WASM')).toHaveLength(1);
 	});
 
 	it('loads every canonical language declared by Core', async () => {
@@ -652,6 +675,23 @@ describe('playground runtime binding', () => {
 				progress
 			]
 		]);
+	});
+
+	it('shares one owner runtime cache across a binding and releases it on dispose', async () => {
+		const binding = createPlaygroundBinding('/absproxy/5173');
+		await binding.load('RUST');
+		await binding.load('PYTHON');
+		const [rust] = sandboxInstances.get('RUST')!;
+		const [python] = sandboxInstances.get('PYTHON')!;
+		expect(rust.runtimeAssetCaches).toHaveLength(1);
+		const cache = rust.runtimeAssetCaches[0] as RuntimeAssetCache;
+		expect(cache).toBeInstanceOf(RuntimeAssetCache);
+		expect(python.runtimeAssetCaches).toEqual([cache]);
+		expect(createPlaygroundBinding('/absproxy/5173')).not.toBe(binding);
+		cache.set('probe', 1, 1);
+		expect(cache.stats().entries).toBe(1);
+		await binding.dispose?.();
+		expect(cache.stats().entries).toBe(0);
 	});
 
 	it('routes TinyGo through the public upstream compiler sandbox', async () => {

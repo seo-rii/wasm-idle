@@ -1,0 +1,162 @@
+{
+  "repository": "https://github.com/wren-lang/wren",
+  "version": "0.4.0",
+  "revision": "4a18fc489f9ea3d253b20dd40f4cdad0d6bb40eb",
+  "archive": {
+    "url": "https://codeload.github.com/wren-lang/wren/tar.gz/4a18fc489f9ea3d253b20dd40f4cdad0d6bb40eb",
+    "sha256": "fb885f12767ea8b1101145b9d86735995e28c5298b712c1c3f71ed9bbf17f567",
+    "bytes": 1810731
+  },
+  "files": [
+    {
+      "path": "LICENSE",
+      "sha256": "ee3c38d9dc66cfda45018fc828a895efed1dc61cbec4baff4b9a40ad617d03b1",
+      "bytes": 1098
+    },
+    {
+      "path": "src/include/wren.h",
+      "sha256": "adc881305e55dcde909036de0c930d699c9e1a7cd27996f7e80a7674e494f23a",
+      "bytes": 22928
+    },
+    {
+      "path": "src/include/wren.hpp",
+      "sha256": "9e6f17ff9c923581d49e266e6fff47e07bc9d260a2e790b491b21a1e1ad5b13f",
+      "bytes": 194
+    },
+    {
+      "path": "src/optional/wren_opt_meta.c",
+      "sha256": "0313d3c243f0fbd0a93e6e728c657e13a6cd516d38a6a592477e97d40331345a",
+      "bytes": 2565
+    },
+    {
+      "path": "src/optional/wren_opt_meta.h",
+      "sha256": "d0ed9e9f34dd7194739fdae3438234ab3a6091ceb0010831b1cb708d316fd1d7",
+      "bytes": 482
+    },
+    {
+      "path": "src/optional/wren_opt_meta.wren",
+      "sha256": "c5bbf9c6a90b50656233f3151a7568d2d8b5b38501f55759f26f91003776c001",
+      "bytes": 968
+    },
+    {
+      "path": "src/optional/wren_opt_meta.wren.inc",
+      "sha256": "8523c291c08900128934a1ffe9db933ea603176ea6e3c5bb1c3a65af0db143b1",
+      "bytes": 1225
+    },
+    {
+      "path": "src/optional/wren_opt_random.c",
+      "sha256": "7ee5d0a6325be0505616cc63e5f9bc7e73e3709a72f6108432cacc914a2e4a2f",
+      "bytes": 3820
+    },
+    {
+      "path": "src/optional/wren_opt_random.h",
+      "sha256": "1f949793a55c3a6669e10fa60d5c9fd5c79a4d7772eb48e02c5bf439207d212b",
+      "bytes": 641
+    },
+    {
+      "path": "src/optional/wren_opt_random.wren",
+      "sha256": "4b0b32d509e756cd64731075f293bb688ec8439981394a8763b75b08e9e51b8e",
+      "bytes": 2622
+    },
+    {
+      "path": "src/optional/wren_opt_random.wren.inc",
+      "sha256": "cc61f591c7553578174d9609dd047169605bb02dde5336b4da01401dc2d79cb2",
+      "bytes": 3135
+    },
+    {
+      "path": "src/vm/wren_common.h",
+      "sha256": "40ff64ad1c18eaa1ce6e737b88da3492afc158defa1350698b2805c5649ca1e8",
+      "bytes": 8494
+    },
+    {
+      "path": "src/vm/wren_compiler.c",
+      "sha256": "fa311eb55953e9e28be5591f3b4f73ddb8aa910d0b77d4931ef291877acde6be",
+      "bytes": 127066
+    },
+    {
+      "path": "src/vm/wren_compiler.h",
+      "sha256": "12f3dadeb245216ce35a471e68da3b5b94d13aa74a01f0d26885d0ea58c170c4",
+      "bytes": 2634
+    },
+    {
+      "path": "src/vm/wren_core.c",
+      "sha256": "728225ac0a9a719eb8955af1511a3fbc5e98cc1b1f6f19142071bfa021f3b03a",
+      "bytes": 42444
+    },
+    {
+      "path": "src/vm/wren_core.h",
+      "sha256": "d4b182f2aa9c9642d2e8f1d8c89c31a2a7698b941673f8c7eb67a487e28cf4e1",
+      "bytes": 956
+    },
+    {
+      "path": "src/vm/wren_core.wren",
+      "sha256": "624d7ecadebeb6f5be621cb83ce3dfaf21ebbea5e60ed3bf6f800f87840024e7",
+      "bytes": 9629
+    },
+    {
+      "path": "src/vm/wren_core.wren.inc",
+      "sha256": "9eeb2c657156440587f9f2271f64e982aad3ab8ccf4ef580660c9a46436ac40c",
+      "bytes": 11734
+    },
+    {
+      "path": "src/vm/wren_debug.c",
+      "sha256": "34d4909898aeb0ef9431c9dc4e45e6b2e4126e3e26cf45d63576a41e98e598d7",
+      "bytes": 10524
+    },
+    {
+      "path": "src/vm/wren_debug.h",
+      "sha256": "33b38ebdc7c40cb3af2cc330404cc0209c11d075ee6436b8b1382208f3fcfb89",
+      "bytes": 820
+    },
+    {
+      "path": "src/vm/wren_math.h",
+      "sha256": "d356abb8e198f46dd82c2d93c2ab6e272136b6e2e98feb1dfe8918624feec88b",
+      "bytes": 701
+    },
+    {
+      "path": "src/vm/wren_opcodes.h",
+      "sha256": "cc66b6375e3b15f1417cb90cc1a7d19c48997000ad6519f0dd1f156692f0c00f",
+      "bytes": 7106
+    },
+    {
+      "path": "src/vm/wren_primitive.c",
+      "sha256": "06ae674697bb18a1305771baefe2dc4179fc14d1377bc20be92efe94ea108506",
+      "bytes": 3389
+    },
+    {
+      "path": "src/vm/wren_primitive.h",
+      "sha256": "cdcef99a68a18df9f30479919a0c9516cb46054a687a0250bb5a715bb4c8c73d",
+      "bytes": 5865
+    },
+    {
+      "path": "src/vm/wren_utils.c",
+      "sha256": "5436ceac4e0ab02126c26006d68b52e232595cc374f5a87de61d45d5005c2beb",
+      "bytes": 4843
+    },
+    {
+      "path": "src/vm/wren_utils.h",
+      "sha256": "a4b13fa98744e1fea371d64dc805c7f85ea63f57dc67ef01c742678a65391a07",
+      "bytes": 6549
+    },
+    {
+      "path": "src/vm/wren_value.c",
+      "sha256": "18d1215870e0e859c8b7fc61f15fbc47754b37ce72de065db2c0cb9b0d011b09",
+      "bytes": 36925
+    },
+    {
+      "path": "src/vm/wren_value.h",
+      "sha256": "b4bb27f1ea7923ea1a829b2a56a3450257939ec52a60c919116c3bae7494ee98",
+      "bytes": 30963
+    },
+    {
+      "path": "src/vm/wren_vm.c",
+      "sha256": "c839181a14799b75e48d745c77fe65f4c9d705db4bc4e0bd65e2383392578d63",
+      "bytes": 61172
+    },
+    {
+      "path": "src/vm/wren_vm.h",
+      "sha256": "a2ff3d559557ed54342309ef86e700618d1071b0a9bef3571a4a838beaa84020",
+      "bytes": 8568
+    }
+  ]
+}

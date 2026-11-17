@@ -27,12 +27,13 @@ import {
 } from '$lib/playground/sharedBuffer';
 import {
 	WASM_TYPESCRIPT_MODULE_RECEIPT,
-	WASM_JAVASCRIPT_MODULE_RECEIPT
+	WASM_JAVASCRIPT_MODULE_RECEIPT,
+	WASM_COFFEESCRIPT_MODULE_RECEIPT
 } from '$lib/playground/wasmTypeScriptVersion';
 import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerInputReady, reportWorkerProgress } from '$lib/playground/workerProgress';
 
-type TypeScriptSandboxLanguage = 'JAVASCRIPT' | 'TYPESCRIPT';
+type TypeScriptSandboxLanguage = 'JAVASCRIPT' | 'TYPESCRIPT' | 'COFFEESCRIPT';
 
 type TypeScriptOperation = {
 	token: symbol;
@@ -105,10 +106,12 @@ class TypeScriptSandbox implements Sandbox {
 	}
 
 	private get compileLanguage() {
+		if (this.language === 'COFFEESCRIPT') return 'coffeescript';
 		return this.language === 'JAVASCRIPT' ? 'javascript' : 'typescript';
 	}
 
 	private get languageLabel() {
+		if (this.language === 'COFFEESCRIPT') return 'CoffeeScript';
 		return this.language === 'JAVASCRIPT' ? 'JavaScript' : 'TypeScript';
 	}
 
@@ -355,7 +358,9 @@ class TypeScriptSandbox implements Sandbox {
 		let limits: ReturnType<typeof resolveExecutionLimits>;
 		let nextModuleUrl: string;
 		let moduleReceipt: Readonly<{ bytes: number; sha256: string }> =
-			WASM_TYPESCRIPT_MODULE_RECEIPT;
+			this.language === 'COFFEESCRIPT'
+				? WASM_COFFEESCRIPT_MODULE_RECEIPT
+				: WASM_TYPESCRIPT_MODULE_RECEIPT;
 		let progressTarget: SandboxProgress | undefined;
 		let progressSet: SandboxProgress['set'] | undefined;
 		let unbindPreSessionAbort: () => void = () => undefined;
@@ -374,9 +379,11 @@ class TypeScriptSandbox implements Sandbox {
 				const configuredTypeScript = runtimeAssets.typescript;
 				this.requireOperationActive(activeOperation);
 				const javascriptModuleUrl =
-					this.language === 'JAVASCRIPT'
-						? configuredTypeScript?.javascriptModuleUrl
-						: undefined;
+					this.language === 'COFFEESCRIPT'
+						? configuredTypeScript?.coffeeScriptModuleUrl
+						: this.language === 'JAVASCRIPT'
+							? configuredTypeScript?.javascriptModuleUrl
+							: undefined;
 				this.requireOperationActive(activeOperation);
 				if (javascriptModuleUrl !== undefined && typeof javascriptModuleUrl !== 'string') {
 					throw new TypeError('JavaScript runtime module URL must be a string');
@@ -384,8 +391,11 @@ class TypeScriptSandbox implements Sandbox {
 				const useJavascriptEntry = Boolean(javascriptModuleUrl);
 				const configuredModuleUrl = useJavascriptEntry
 					? javascriptModuleUrl
-					: configuredTypeScript?.moduleUrl;
-				if (useJavascriptEntry) moduleReceipt = WASM_JAVASCRIPT_MODULE_RECEIPT;
+					: this.language === 'COFFEESCRIPT'
+						? undefined
+						: configuredTypeScript?.moduleUrl;
+				if (useJavascriptEntry && this.language === 'JAVASCRIPT')
+					moduleReceipt = WASM_JAVASCRIPT_MODULE_RECEIPT;
 				this.requireOperationActive(activeOperation);
 				if (configuredModuleUrl !== undefined && typeof configuredModuleUrl !== 'string') {
 					throw new TypeError(
@@ -405,11 +415,19 @@ class TypeScriptSandbox implements Sandbox {
 							`${this.languageLabel} runtime root URL must be a string`
 						);
 					}
-					nextModuleUrl = resolveTypeScriptModuleUrl({ rootUrl }, currentUrl);
+					nextModuleUrl = resolveTypeScriptModuleUrl(
+						{ rootUrl },
+						currentUrl,
+						this.language === 'COFFEESCRIPT' ? 'coffeescript.js' : 'index.js'
+					);
 					this.requireOperationActive(activeOperation);
 				}
 			} else {
-				nextModuleUrl = resolveTypeScriptModuleUrl(runtimeAssets, currentUrl);
+				nextModuleUrl = resolveTypeScriptModuleUrl(
+					runtimeAssets,
+					currentUrl,
+					this.language === 'COFFEESCRIPT' ? 'coffeescript.js' : 'index.js'
+				);
 				this.requireOperationActive(activeOperation);
 			}
 			if (moduleReceipt.bytes > limits.maxAssetBytes) {
@@ -678,7 +696,12 @@ class TypeScriptSandbox implements Sandbox {
 			const configuredActivePath = options.activePath;
 			this.requireOperationActive(activeOperation);
 			const activePath =
-				configuredActivePath ?? (this.language === 'JAVASCRIPT' ? 'main.js' : 'main.ts');
+				configuredActivePath ??
+				(this.language === 'COFFEESCRIPT'
+					? 'main.coffee'
+					: this.language === 'JAVASCRIPT'
+						? 'main.js'
+						: 'main.ts');
 			const configuredWorkspaceLimits = options.workspaceLimits;
 			this.requireOperationActive(activeOperation);
 			const workspaceLimits: Partial<WorkspaceLimits> = {};

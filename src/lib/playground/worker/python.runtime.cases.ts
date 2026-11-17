@@ -2,6 +2,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PYTHON_FLUSH_HOOK_FACTORY } from './pythonStdio';
+import { PYTHON_SNAPSHOT_RESTORE_SOURCE } from './pythonSnapshot';
 
 const workerAssets = vi.hoisted(() => ({
 	configureWorkerRuntimeAssetAllowlist: vi.fn(),
@@ -14,8 +15,20 @@ const workerAssets = vi.hoisted(() => ({
 	)
 }));
 const compileBytecode = vi.hoisted(() => vi.fn());
+const snapshotStore = vi.hoisted(() => new Map<string, Uint8Array>());
 
 vi.mock('$lib/playground/worker/assets', () => workerAssets);
+vi.mock('@wasm-idle/core', async (importOriginal) => ({
+	...(await importOriginal<typeof import('@wasm-idle/core')>()),
+	createRuntimeGeneratedAssetCacheBackend: () => ({
+		read: async (key: string) => snapshotStore.get(key),
+		write: async (key: string, bytes: Uint8Array) => {
+			snapshotStore.set(key, Uint8Array.from(bytes));
+			return true;
+		},
+		remove: async (key: string) => void snapshotStore.delete(key)
+	})
+}));
 vi.mock('./pythonCompile', () => ({ compilePythonBytecode: compileBytecode }));
 
 afterEach(() => {
@@ -28,6 +41,7 @@ afterEach(() => {
 	workerAssets.loadWorkerRuntimeAsset.mockReset();
 	workerAssets.loadWorkerRuntimeModule.mockClear();
 	compileBytecode.mockReset();
+	snapshotStore.clear();
 });
 
 const packageAsset = 'demo-1.0-py3-none-any.whl';
@@ -76,9 +90,15 @@ async function createRuntimeHarness({
 			analyzePath: () => ({ exists: false }), unlink: vi.fn()
 		},
 		runPython: vi.fn((source: string) => {
+			if (source === PYTHON_SNAPSHOT_RESTORE_SOURCE) return 2;
 			if (source !== PYTHON_FLUSH_HOOK_FACTORY)
 				throw new Error('Unexpected Python initialization');
 			return installFlushHooks;
+		}),
+		makeMemorySnapshot: vi.fn(() => {
+			const heap = new Uint8Array(4096);
+			heap.set([7, 7, 7], 100);
+			return heap;
 		}),
 		loadPackagesFromImports: vi.fn(async () => undefined),
 		runPythonAsync: vi.fn(async () => {
@@ -99,6 +119,7 @@ globalThis.__pythonModuleEvaluations.push('entry');
 export const version = ${JSON.stringify(version)};
 export async function loadPyodide(options) {
   if (typeof options.createPyodideModule !== 'function') throw new Error('module factory missing');
+  if (options._loadSnapshot && globalThis.__pythonRestoreFails) throw new Error('Snapshot build id mismatch');
   await options.createPyodideModule();
   globalThis.__pythonRuntimeOptions.push(options);
   return globalThis.__pythonRuntimeMock;
@@ -280,13 +301,13 @@ describe('Python worker runtime dispatch', () => {
 		{
 			name: 'bridged',
 			assetConfig: { baseUrl: 'https://wasm-idle.invalid/python/', maxAssetBytes: 4096, useAssetBridge: true },
-			expectedAssets: ['pyodide.asm.mjs', 'pyodide.mjs'],
+			expectedAssets: ['pyodide.asm.mjs', 'pyodide.mjs', 'python_stdlib.zip'],
 			expectedPackageBaseUrl: 'https://wasm-idle.invalid/python/'
 		},
 		{
 			name: 'direct',
 			assetConfig: { baseUrl: 'https://assets.example.test/python/', maxAssetBytes: 4096, useAssetBridge: false },
-			expectedAssets: ['pyodide.asm.mjs', 'pyodide.mjs', 'pyodide-lock.json'],
+			expectedAssets: ['pyodide.asm.mjs', 'pyodide.mjs', 'pyodide-lock.json', 'python_stdlib.zip'],
 			expectedPackageBaseUrl: 'https://cdn.jsdelivr.net/pyodide/v314.0.7/full/'
 		}
 	])('loads $name runtime assets with bounded package configuration and settles empty code',
@@ -323,8 +344,8 @@ describe('Python worker runtime dispatch', () => {
 	);
 
 	it.each([
-		{ name: 'untrusted runtime version', version: '314.0.7/../../untrusted', lock: undefined, error: 'Pyodide runtime version is invalid', expectedAssets: ['pyodide.asm.mjs', 'pyodide.mjs', 'pyodide-lock.json'] },
-		{ name: 'unsafe lock package path', version: '314.0.7', lock: { packages: { demo: { file_name: '../untrusted.whl' } } }, error: 'Python runtime lock file has an unsafe package asset name', expectedAssets: ['pyodide.asm.mjs', 'pyodide.mjs', 'pyodide-lock.json'] }
+		{ name: 'untrusted runtime version', version: '314.0.7/../../untrusted', lock: undefined, error: 'Pyodide runtime version is invalid', expectedAssets: ['pyodide.asm.mjs', 'pyodide.mjs', 'pyodide-lock.json', 'python_stdlib.zip'] },
+		{ name: 'unsafe lock package path', version: '314.0.7', lock: { packages: { demo: { file_name: '../untrusted.whl' } } }, error: 'Python runtime lock file has an unsafe package asset name', expectedAssets: ['pyodide.asm.mjs', 'pyodide.mjs', 'pyodide-lock.json', 'python_stdlib.zip'] }
 	])('fails closed for an $name', async ({ version, lock, error, expectedAssets }) => {
 		const { onmessage, postMessage, runtimeOptions } = await createRuntimeHarness({ version, ...(lock ? { lock } : {}) });
 		await onmessage({ data: { load: true, assets: { baseUrl: 'https://assets.example.test/python/', maxAssetBytes: 4096, useAssetBridge: false } } });
@@ -404,7 +425,10 @@ describe('Python bootstrap scheduling', () => {
 		const loading = harness.onmessage({ data: { load: true, assets: { ...directAssets, useAssetBridge } } });
 		const expected = ['pyodide.asm.mjs', 'pyodide.mjs'];
 		if (!useAssetBridge) expected.push('pyodide-lock.json');
+		// The standard library and Wasm module start with the scripts, not after them.
+		expected.push('python_stdlib.zip');
 		expect([...pending.keys()]).toEqual(expected);
+		expect(workerAssets.loadWorkerRuntimeModule).toHaveBeenCalledWith('pyodide.asm.wasm');
 		expect(harness.moduleEvaluations).toEqual([]);
 		expect(harness.runtimeOptions).toHaveLength(0);
 		expect(harness.postMessage).not.toHaveBeenCalledWith({ load: true });
@@ -417,7 +441,7 @@ describe('Python bootstrap scheduling', () => {
 		expect(harness.postMessage).toHaveBeenCalledWith({ load: true });
 	});
 
-	it.each(['pyodide.asm.mjs', 'pyodide.mjs', 'pyodide-lock.json'])('fails closed and can retry when %s cannot be downloaded', async (failedAsset) => {
+	it.each(['pyodide.asm.mjs', 'pyodide.mjs', 'pyodide-lock.json', 'python_stdlib.zip'])('fails closed and can retry when %s cannot be downloaded', async (failedAsset) => {
 		const harness = await createRuntimeHarness();
 		const loadAsset = workerAssets.loadWorkerRuntimeAsset.getMockImplementation()!;
 		workerAssets.loadWorkerRuntimeAsset.mockImplementation((asset: string) => asset === failedAsset ? Promise.reject(new Error('asset unavailable')) : loadAsset(asset));
@@ -532,5 +556,96 @@ describe('Python prepare-to-run reuse', () => {
 		expect(pyodide.loadPackagesFromImports).not.toHaveBeenCalled();
 		expect(pyodide.runPythonAsync).toHaveBeenCalledOnce();
 		expect(postMessage).toHaveBeenCalledWith({ results: true });
+	});
+});
+
+describe('Python memory snapshots', () => {
+	const cache = { enabled: true, namespace: 'test' };
+	const bridged = { baseUrl: 'https://wasm-idle.invalid/python/', useAssetBridge: true };
+
+	it('boots normally and reports a snapshot key when none is stored', async () => {
+		const { onmessage, postMessage, runtimeOptions } = await createRuntimeHarness();
+		await onmessage({ data: { load: true, assets: bridged, persistentCache: cache } });
+		expect(runtimeOptions).toHaveLength(1);
+		expect(runtimeOptions[0]).not.toHaveProperty('_loadSnapshot');
+		expect(runtimeOptions[0]).not.toHaveProperty('_makeSnapshot');
+		expect(postMessage).toHaveBeenCalledWith({
+			load: true,
+			pythonSnapshotKey: expect.stringContaining('wasm-idle-pyodide-memory-snapshot-v1')
+		});
+	});
+
+	it.each([undefined, { enabled: false }])(
+		'never reads or reports snapshots when the persistent cache is %j',
+		async (persistentCache) => {
+			const { onmessage, postMessage, runtimeOptions } = await createRuntimeHarness();
+			await onmessage({ data: { load: true, assets: bridged, persistentCache } });
+			expect(runtimeOptions[0]).not.toHaveProperty('_loadSnapshot');
+			expect(postMessage).toHaveBeenCalledWith({ load: true });
+		}
+	);
+
+	async function buildSnapshot() {
+		const first = await createRuntimeHarness();
+		await first.onmessage({ data: { load: true, assets: bridged, persistentCache: cache } });
+		const key = first.postMessage.mock.calls.find(([message]) => message?.pythonSnapshotKey)![0]
+			.pythonSnapshotKey as string;
+		vi.resetModules();
+		const builder = await createRuntimeHarness();
+		await builder.onmessage({
+			data: { buildSnapshot: key, assets: bridged, persistentCache: cache }
+		});
+		return { key, builder };
+	}
+
+	it('builds the snapshot in a helper without running the normal runtime setup', async () => {
+		const { key, builder } = await buildSnapshot();
+		expect(builder.runtimeOptions[0]).toMatchObject({ _makeSnapshot: true });
+		expect(builder.pyodide.makeMemorySnapshot).toHaveBeenCalledOnce();
+		expect(builder.pyodide.runPython).not.toHaveBeenCalled();
+		expect(builder.postMessage).toHaveBeenCalledWith({ pythonSnapshot: { stored: true } });
+		expect(snapshotStore.has(key)).toBe(true);
+	});
+
+	it('refuses to store a snapshot under a key for different runtime bytes', async () => {
+		const builder = await createRuntimeHarness();
+		await builder.onmessage({
+			data: { buildSnapshot: 'other-key', assets: bridged, persistentCache: cache }
+		});
+		expect(builder.pyodide.makeMemorySnapshot).not.toHaveBeenCalled();
+		expect(builder.postMessage).toHaveBeenCalledWith({
+			pythonSnapshot: {
+				stored: false,
+				error: 'Python snapshot runtime does not match the request'
+			}
+		});
+		expect(snapshotStore.size).toBe(0);
+	});
+
+	it('restores a stored snapshot, re-seeds it and does not ask for another build', async () => {
+		await buildSnapshot();
+		vi.resetModules();
+		const restored = await createRuntimeHarness();
+		await restored.onmessage({ data: { load: true, assets: bridged, persistentCache: cache } });
+		const heap = restored.runtimeOptions[0]._loadSnapshot as Uint8Array;
+		expect(heap).toBeInstanceOf(Uint8Array);
+		expect([...heap.subarray(100, 103)]).toEqual([7, 7, 7]);
+		expect(restored.pyodide.runPython).toHaveBeenNthCalledWith(
+			1,
+			PYTHON_SNAPSHOT_RESTORE_SOURCE
+		);
+		expect(restored.postMessage).toHaveBeenCalledWith({ load: true });
+	});
+
+	it('falls back to a normal boot and requests a rebuild when restoring fails', async () => {
+		const { key } = await buildSnapshot();
+		vi.resetModules();
+		vi.stubGlobal('__pythonRestoreFails', true);
+		const restored = await createRuntimeHarness();
+		await restored.onmessage({ data: { load: true, assets: bridged, persistentCache: cache } });
+		expect(restored.runtimeOptions).toHaveLength(1);
+		expect(restored.runtimeOptions[0]).not.toHaveProperty('_loadSnapshot');
+		expect(snapshotStore.has(key)).toBe(false);
+		expect(restored.postMessage).toHaveBeenCalledWith({ load: true, pythonSnapshotKey: key });
 	});
 });

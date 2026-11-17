@@ -223,6 +223,7 @@ export interface TypeScriptRuntimeAssetConfig {
 	moduleUrl?: string;
 	/** Optional official JavaScript-only bundle; must match its generated receipt. */
 	javascriptModuleUrl?: string;
+	coffeeScriptModuleUrl?: string;
 	libUrl?: string;
 }
 
@@ -1417,7 +1418,8 @@ export function resolveErlangBundleUrl(
 
 export function resolveTypeScriptModuleUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
-	currentUrl = ''
+	currentUrl = '',
+	entryModule = 'index.js'
 ) {
 	const configuredModuleUrl =
 		typeof options === 'object' ? options?.typescript?.moduleUrl : undefined;
@@ -1428,14 +1430,14 @@ export function resolveTypeScriptModuleUrl(
 
 	if (typeof options === 'string') {
 		return resolveConfiguredUrl(
-			`${normalizeRootUrl(options) || ''}/wasm-typescript/index.js`,
+			`${normalizeRootUrl(options) || ''}/wasm-typescript/${entryModule}`,
 			currentUrl
 		);
 	}
 
 	if (options?.rootUrl) {
 		return resolveConfiguredUrl(
-			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-typescript/index.js`,
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-typescript/${entryModule}`,
 			currentUrl
 		);
 	}

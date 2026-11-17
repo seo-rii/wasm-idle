@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PlaygroundRuntimeAssets } from './assets';
 
 const TEST_RUNTIME_ASSETS = {
-	typescript: { moduleUrl: '/runtime/typescript/index.js' }
+	typescript: {
+		moduleUrl: '/runtime/typescript/index.js',
+		coffeeScriptModuleUrl: '/runtime/typescript/coffeescript.js'
+	}
 } satisfies PlaygroundRuntimeAssets;
 
 import { createWasmIdleSharedBuffer } from './sharedBuffer';
@@ -61,7 +64,7 @@ async function observeSettlement<T>(promise: Promise<T>) {
 	}
 }
 
-describe.each(['TYPESCRIPT', 'JAVASCRIPT'] as const)(
+describe.each(['TYPESCRIPT', 'JAVASCRIPT', 'COFFEESCRIPT'] as const)(
 	'%s terminal sandbox lifecycle',
 	(language) => {
 		beforeEach(() => {
@@ -284,7 +287,10 @@ describe.each(['TYPESCRIPT', 'JAVASCRIPT'] as const)(
 			});
 
 			const replacement = sandbox.load({
-				typescript: { moduleUrl: '/replacement/typescript.js' }
+				typescript: {
+					moduleUrl: '/replacement/typescript.js',
+					coffeeScriptModuleUrl: '/replacement/coffeescript.js'
+				}
 			});
 			const cancellation = await replacement.catch((error) => error);
 

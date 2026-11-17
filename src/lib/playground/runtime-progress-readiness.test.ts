@@ -38,6 +38,18 @@ type RuntimeReadinessAudit = EntryReadiness | StaticWorkerReadiness | TerminalRe
  */
 const runtimeReadinessAudit = {
 	GRAPHQL: { strategy: 'static-worker-fallback', hostModule: 'graphql' },
+	PICAT: { strategy: 'static-worker-fallback', hostModule: 'picat' },
+	PARIGP: { strategy: 'static-worker-fallback', hostModule: 'parigp' },
+	WREN: {
+		strategy: 'entry-signal',
+		hostModule: 'wasm',
+		producerPath: 'src/lib/playground/worker/wasm.ts'
+	},
+	SQUIRREL: {
+		strategy: 'entry-signal',
+		hostModule: 'wasm',
+		producerPath: 'src/lib/playground/worker/wasm.ts'
+	},
 	GOLFSCRIPT: {
 		strategy: 'entry-signal',
 		hostModule: 'golfscript',
@@ -160,6 +172,11 @@ const runtimeReadinessAudit = {
 	},
 	OCAML: { strategy: 'terminal-fallback', hostModule: 'ocaml' },
 	JAVASCRIPT: {
+		strategy: 'entry-signal',
+		hostModule: 'typescript',
+		producerPath: 'src/lib/playground/worker/typescript.ts'
+	},
+	COFFEESCRIPT: {
 		strategy: 'entry-signal',
 		hostModule: 'typescript',
 		producerPath: 'src/lib/playground/worker/typescript.ts'

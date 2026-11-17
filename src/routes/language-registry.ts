@@ -70,6 +70,10 @@ export const playgroundLanguages: PlaygroundLanguage[] = [
 export const playgroundLanguageDescriptors: Readonly<
 	Record<PlaygroundLanguage, PlaygroundLanguageDescriptor>
 > = {
+	PICAT: { label: 'Picat', editorLanguage: 'plaintext' },
+	PARIGP: { label: 'PARI/GP', editorLanguage: 'plaintext' },
+	WREN: { label: 'Wren', editorLanguage: 'plaintext' },
+	SQUIRREL: { label: 'Squirrel', editorLanguage: 'cpp' },
 	UHMLANG: { label: 'UHMLANG (엄준식)', editorLanguage: 'plaintext' },
 	LOLCODE: { label: 'LOLCODE 1.3', editorLanguage: 'plaintext' },
 	APECODE: { label: 'APECode', editorLanguage: 'plaintext' },
@@ -306,6 +310,13 @@ export const playgroundLanguageDescriptors: Readonly<
 		label: 'JavaScript — Browser',
 		editorLanguage: 'javascript',
 		lspProvider: 'typescript',
+		supportsArgs: true,
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
+	COFFEESCRIPT: {
+		label: 'CoffeeScript',
+		editorLanguage: 'coffeescript',
 		supportsArgs: true,
 		compilerDiagnostics: true,
 		diagnosticMarkers: true
@@ -551,6 +562,8 @@ export const diagnosticMarkerLanguages = new Set(
 );
 export const monacoLanguageContributionLoaders: Record<string, MonacoLanguageContributionLoader> = {
 	c: () => import('monaco-editor/esm/vs/basic-languages/cpp/cpp.contribution.js'),
+	coffeescript: () =>
+		import('monaco-editor/esm/vs/basic-languages/coffee/coffee.contribution.js'),
 	cpp: () => import('monaco-editor/esm/vs/basic-languages/cpp/cpp.contribution.js'),
 	'objective-c': () =>
 		import('monaco-editor/esm/vs/basic-languages/objective-c/objective-c.contribution.js'),
