@@ -69,9 +69,9 @@ export const scenarios = [
 		// Persistent runtime caching for Go, .NET, PHP and PostgreSQL adds two worker JavaScript/declaration pairs (9,768 bytes / 4 files measured in CI).
 		// Container PCH persistence and background builds add 8,808 bytes to two container modules (svelte-package output), no files.
 		// The Go worker's fmt-build preload and the in-flight write map add 2,568 bytes; allow 3 KiB.
-		// Measured performance install plus seven reviewed language payloads: 7,555,770 bytes.
-		// Use this rounded byte envelope while each stacked PR retains its file limit.
-		budget: { maxBytes: 7593984, maxFiles: 865, maxPackages: 6 },
+		// Full reviewed language stack adds 46,048 measured packed root/core bytes to the 7,555,770-byte baseline.
+		// The 7,601,818-byte projection uses the next KiB; each stacked PR retains its file limit.
+		budget: { maxBytes: 7602176, maxFiles: 865, maxPackages: 6 },
 		absentPackageNames: [
 			'@katana-project/asm',
 			'java-parser',
@@ -149,8 +149,8 @@ export const scenarios = [
 		// GCC totals 2,858,709 bytes; a 3 KiB increase retains 299 bytes of headroom.
 		// The core runtime Wasm module lookup adds one JavaScript/declaration pair (CI measures 2,862,838 bytes / 198 files).
 		// Seven reviewed language metadata additions grow the shared core by 6,040 bytes.
-		// The combined GCC projection is 2,868,878 bytes; round its cap to the next KiB.
-		budget: { maxBytes: 2876416, maxFiles: 198, maxPackages: 4 },
+		// The final measured core delta projects a 2,874,017-byte GCC install; round to the next KiB.
+		budget: { maxBytes: 2874368, maxFiles: 198, maxPackages: 4 },
 		absentPackageNames: [
 			'wasm-idle',
 			'@wasm-idle/llvm-core',
@@ -472,9 +472,9 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// The core runtime Wasm module lookup adds one JavaScript/declaration pair (2 files).
 		// Persistent runtime caching for Go, .NET, PHP and PostgreSQL adds two worker JavaScript/declaration pairs (4 files).
 		// The language servers' shared persistent module fetch adds two files (module-asset-fetch.js and .d.ts).
-		// Measured performance aggregate is 43,200,938 bytes; language payloads add 47,630.
-		// The combined 43,248,568-byte projection fits this common rounded envelope.
-		budget: { maxBytes: 43255808, maxFiles: 3488, maxPackages: 70 },
+		// The reviewed language root/core delta adds 46,048 bytes to the 43,248,568-byte aggregate baseline.
+		// The 43,294,616-byte projection uses the next KiB; dependency counts remain unchanged.
+		budget: { maxBytes: 43294720, maxFiles: 3488, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
