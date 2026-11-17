@@ -316,7 +316,7 @@
     "wasm-haskell/bsdtar.wasm": 1240004,
     "wasm-j/jamalgam.wasm": 4832581,
     "wasm-janet/janet.wasm": 829432,
-    "wasm-java-lsp/javacs.wasm": 6193326,
+    "wasm-java-lsp/javacs.wasm": 6193330,
     "wasm-julia/julia.data": 42960896,
     "wasm-julia/julia.js": 278345,
     "wasm-julia/julia.wasm": 2573366,

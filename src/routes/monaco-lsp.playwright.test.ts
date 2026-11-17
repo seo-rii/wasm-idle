@@ -1564,7 +1564,12 @@ async function pinnedContainerWorkerUrls(browserUrl: string): Promise<Set<string
 		)
 		.find((entry) => ts.isIdentifier(entry.name) && entry.name.text === 'release');
 	if (!declaration?.initializer) throw new Error('Missing fixed Container release');
-	const release = JSON.parse(declaration.initializer.getText(source));
+	const initializer = declaration.initializer;
+	const release = JSON.parse(
+		(ts.isSatisfiesExpression(initializer) ? initializer.expression : initializer).getText(
+			source
+		)
+	);
 	if (!/^[a-f0-9]{64}$/u.test(release.hostHash))
 		throw new Error('Invalid fixed Container host identity');
 	const host = new URL(`container-app/host/${release.hostHash}/`, browserUrl);

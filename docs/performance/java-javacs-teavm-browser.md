@@ -10,9 +10,36 @@ The unchanged native server and the real Chromium public SDK have passed the
 acceptance fixture. All three isolated browser sessions match the native
 semantic results, including new documents without a source snapshot and Monaco's
 null-root initialization. The pinned producer recipe, native platform controls
-and XML documentation adapter are implemented. A clean build in a separate
-physical source directory reproduces the final five producer artifacts and all
-46 notice files byte for byte.
+and XML documentation adapter are implemented. Two clean builds with the
+compiler determinism fix reproduce the five producer artifacts and all 46
+notice files byte for byte, including the complete provenance.
+
+## Compiler reproducibility
+
+TeaVM 0.16.0 originally allowed dependency discovery to follow identity-hashed
+node sets, then assigned class tags in that discovery order. Rebuilding the old
+qualified input changed 128 Wasm bytes: class-range bounds and their matching
+class-tag assignments. All other sections were identical. Updating the expected
+hash alone would therefore leave later builds unstable.
+
+The producer now loads two narrowly modified upstream compiler classes ahead
+of `teavm-core` in its build daemon. `TypeSet` preserves domain insertion order;
+`TagRegistry` allocates ranges in class-name order. The copies retain their
+upstream Apache headers and are authenticated as part of the producer recipe.
+They do not replace application classes. Behavioral JVM regressions fail with
+the original classes and pass with the overrides, checking consumer ordering
+and class/interface assignability across 64 discovery orders.
+
+On 2026-11-17, two `build.py --clean` invocations started fresh JVMs, cleared
+Gradle outputs and disabled the build cache. Both executed all eight build tasks
+and produced identical Wasm, runtime, SDK, JavaScript-body inventory, provenance
+and notices. The Wasm is 6,193,330 bytes with SHA-256
+`c9d20ffac0c78191e6e276e010784f8cedc73e934bc56937190cc298f4397553`.
+The strict-CSP public SDK gate then passed with Chromium `156.0.8078.4`, including
+all native semantic comparisons, URI/diagnostic metadata cases, cache reuse,
+cancellation, timeout and tampered-byte rejection. All seven Workers terminated
+and there were no page errors. The JavaScript runtime and SDK ZIP remain
+byte-identical to the previous qualified outputs.
 
 ## Source identities
 
@@ -248,12 +275,12 @@ produce the native `Import 'java.util.UUID'` edit. An explicitly supplied client
 diagnostic code remains unchanged. Delayed uncoded markers after a source change
 or diagnostic clear still reach the original cursor handler with an empty
 diagnostic context and return no stale edit.
-The qualified delivery receipts are:
+The delivery receipts requalified after the compiler fix on 2026-11-17 are:
 
 | Asset                | Bytes      | SHA-256                                                            |
 | -------------------- | ---------- | ------------------------------------------------------------------ |
 | `javacs-runtime.mjs` | `17410`    | `1652b9a5a7a833f02205b00e3ba609ac98f7dcb16215df0ae815a77ae555f336` |
-| `javacs.wasm`        | `6193326`  | `1f1d92aaaf988d8379407b03851925861c1c6b8d858b314c4f8b848fdc9400f9` |
+| `javacs.wasm`        | `6193330`  | `c9d20ffac0c78191e6e276e010784f8cedc73e934bc56937190cc298f4397553` |
 | `jdk-platform.zip`   | `18004088` | `7fa8f015e179b1ca89edfc6e6a67db37c613b8f6cc3679834323d711c3036d96` |
 
 | Session                          | Native result groups | Asset requests | Startup | Protocol |

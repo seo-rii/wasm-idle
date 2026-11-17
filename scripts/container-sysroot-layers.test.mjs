@@ -5,6 +5,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import ts from 'typescript';
 import { extractTarPackage, validateDistribution } from '@wasm-idle/container';
 import { CLANG_SIMD_INCLUDE_PATH, clangSimdDriverArgs } from '@wasm-idle/llvm-core/core/clang-simd';
 import { preparePageContainer } from './prepare-page-container.mjs';
@@ -543,10 +544,26 @@ test(
 				{ ...configuration, sysrootProfile },
 				{ output, releasePath }
 			);
-			const releaseSource = await readFile(releasePath, 'utf8'),
-				start = releaseSource.indexOf('const release = ') + 'const release = '.length;
+			const source = ts.createSourceFile(
+				releasePath,
+				await readFile(releasePath, 'utf8'),
+				ts.ScriptTarget.Latest,
+				true
+			);
+			const declaration = source.statements
+				.flatMap((statement) =>
+					ts.isVariableStatement(statement)
+						? [...statement.declarationList.declarations]
+						: []
+				)
+				.find((entry) => ts.isIdentifier(entry.name) && entry.name.text === 'release');
+			assert.ok(declaration?.initializer, 'Missing fixed Container release');
+			const initializer = declaration.initializer;
 			const release = JSON.parse(
-				releaseSource.slice(start, releaseSource.indexOf(';\n', start))
+				(ts.isSatisfiesExpression(initializer)
+					? initializer.expression
+					: initializer
+				).getText(source)
 			);
 			assert.equal(release.config.sysrootProfile, sysrootProfile ?? 'full');
 			const manifest = await readFile(join(output, 'distribution.json'));

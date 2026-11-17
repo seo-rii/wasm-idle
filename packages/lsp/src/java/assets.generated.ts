@@ -7,8 +7,8 @@ export const JAVA_LANGUAGE_SERVER_ASSETS = [
 	},
 	{
 		path: 'javacs.wasm',
-		bytes: 6193326,
-		sha256: '1f1d92aaaf988d8379407b03851925861c1c6b8d858b314c4f8b848fdc9400f9'
+		bytes: 6193330,
+		sha256: 'c9d20ffac0c78191e6e276e010784f8cedc73e934bc56937190cc298f4397553'
 	},
 	{
 		path: 'jdk-platform.zip',
