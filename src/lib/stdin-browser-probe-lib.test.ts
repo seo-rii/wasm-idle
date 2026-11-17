@@ -185,6 +185,9 @@ describe('execution asset request classification', () => {
 		const prefix = '/wasm-idle/container-app/objects/' + 'a'.repeat(64) + '/';
 		expect(isExecutionRuntimeAssetPath(prefix + 'clang.wasm.gz.bin')).toBe(true);
 		expect(isExecutionRuntimeAssetPath(prefix + 'sysroot.tar.bin')).toBe(true);
+		expect(isExecutionRuntimeAssetPath(prefix + 'sysroot-c.tar.gz.bin')).toBe(true);
+		expect(isExecutionRuntimeAssetPath(prefix + 'sysroot-cxx.tar.gz.bin')).toBe(true);
+		expect(isExecutionRuntimeAssetPath(prefix + 'sysroot-unrelated.tar.gz.bin')).toBe(false);
 		expect(isExecutionRuntimeAssetPath(prefix + 'unrelated.js')).toBe(false);
 		expect(isExecutionRuntimeAssetPath('/@fs/project/static/wasm-rescript/compiler.js')).toBe(
 			false
