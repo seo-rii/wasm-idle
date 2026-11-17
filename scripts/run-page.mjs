@@ -19,6 +19,7 @@ const ASSET_PREPARATION = new Set([
 	'build:static-runtime-modules',
 	'prepare:wasm-debug-release',
 	'sync:wasm-commonlisp',
+	'sync:wasm-dart',
 	'layer:static-runtimes',
 	'compress:static-runtimes',
 	'assets:lock'
