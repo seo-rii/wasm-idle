@@ -1,0 +1,145 @@
+{
+  "schemaVersion": 1,
+  "language": "SED",
+  "runtime": "Unchanged BusyBox sed applet from the reviewed container WASI build",
+  "producer": {
+    "repository": "https://github.com/seo-rii/wasm-idle",
+    "revision": "8ead09726cfed3c758c9a6b827bf1fa020549dd4",
+    "receiptSha256": "a726fa35c9959dbe85c9dfec17ddad9004ef43c403658d71c2080180afa084ad"
+  },
+  "source": {
+    "version": "1.37.0",
+    "directory": "busybox-1.37.0",
+    "filename": "busybox-1.37.0.tar.bz2",
+    "url": "https://busybox.net/downloads/busybox-1.37.0.tar.bz2",
+    "checksumUrl": "https://busybox.net/downloads/busybox-1.37.0.tar.bz2.sha256",
+    "size": 2565764,
+    "sha256": "3311dff32e746499f4df0d5df04d7eb396382d7e108bb9250e7b519b837043a4"
+  },
+  "config": {
+    "path": "config/b1.config",
+    "sha256": "a92ab9c2363f33d8e28b011d22a13468312e9d5797c5e804ae8a9431f2b3d7cc",
+    "method": "make allnoconfig; overlay config/b1.config; make oldconfig; assert selected applets/no-shell flags"
+  },
+  "patches": [
+    {
+      "path": "patches/0001-wasi-b0-declarations.patch",
+      "sha256": "7ff3457b045006066b32a7cd02ba8be023b9ff014067a6cc0019cd48c60dcc69",
+      "classification": "wasi-header-profile"
+    },
+    {
+      "path": "patches/0002-wasi-b0-libbb-exclusions.patch",
+      "sha256": "44e30fa7a3543b8bd6428ef1556ee982bf8b3ae4ba87fa3c90de4125a5e0a2ea",
+      "classification": "unused-libbb-feature-exclusion"
+    },
+    {
+      "path": "patches/0003-wasi-b0-build-closure.patch",
+      "sha256": "b1eb579cf59793ee8b864d1a1c82d0744e9390f7f76f22546617dc5044002281",
+      "classification": "minimal-build-closure"
+    },
+    {
+      "path": "patches/0004-wasm-partial-link.patch",
+      "sha256": "2d2c8cf3f7225afb3188eb67a042911e1457d6d389e92a32a24423873342589c",
+      "classification": "build-system-wasm-linker"
+    },
+    {
+      "path": "patches/0005-wasi-b0-help-output.patch",
+      "sha256": "a6b768687730002515907ad4997b8580165b7d275ee7e228394d3041be8410df",
+      "classification": "batch-help-stdio"
+    },
+    {
+      "path": "patches/0006-wasm-final-link.patch",
+      "sha256": "764a9f8fc29f37f6376ad61532fd491b7670fcceb2d890818b7f0bdc8eb0c4d0",
+      "classification": "build-system-wasm-final-link"
+    },
+    {
+      "path": "patches/0007-process-initial-cwd.patch",
+      "sha256": "975deca0bbef3948ab00fc32f1e90ba965ee388cb920f650c1978a967bde73db",
+      "classification": "process-initial-cwd-abi"
+    },
+    {
+      "path": "patches/0008-b1-build-closure.patch",
+      "sha256": "1d03974c023d1e72a40a2ec65a011eeb5bf66042c3b8aeaae208e837a8c94c05",
+      "classification": "selected-b1-build-closure"
+    },
+    {
+      "path": "patches/0009-b1-directory-mode-profile.patch",
+      "sha256": "fca44b0694c0c9a867d22ff0335a44b71ee145d8300752e35dcfa5e9782083af",
+      "classification": "unsupported-metadata-explicit-rejection"
+    },
+    {
+      "path": "patches/0010-b1-file-mutation-profile.patch",
+      "sha256": "0abb360f09c99316ee1e564a66e4132c1b6cde23cf1258cd3dab37ca16844524",
+      "classification": "unsupported-copy-move-explicit-rejection"
+    },
+    {
+      "path": "patches/0011-b1-text-grep-profile.patch",
+      "sha256": "6d1561c7c34a3996f201de3e522745fecc62773b0883246b360330dcbfe09313",
+      "classification": "unsupported-binary-grep-explicit-rejection"
+    },
+    {
+      "path": "patches/0012-b2-command-profile.patch",
+      "sha256": "4e9b5da8e2cff7278e1ebc61611340011eb97e21c21f7cdfe54fb041b34c3aa6",
+      "classification": "noninteractive-directory-and-text-profile"
+    },
+    {
+      "path": "patches/0013-b3-development-commands.patch",
+      "sha256": "0d0e9dd8214fc2ae57b68ce3098b7301de8b0c4ec94a11a24915222b0e9d96da",
+      "classification": "development-text-tree-and-binary-profile"
+    },
+    {
+      "path": "patches/0014-virtual-metadata-profile.patch",
+      "sha256": "c3380e890d90d501035ace7d35272b0f3c1e514c2b25f98cdd3b0923b65d2292",
+      "classification": "real-virtual-mode-and-timestamp-metadata"
+    },
+    {
+      "path": "patches/0015-archive-content-profile.patch",
+      "sha256": "1aa4c7abf966c9ec27ac596898e4c1beba2685aaefa7e6498d3df2dc9c8c3932",
+      "classification": "real-linked-archive-codecs-and-content-profile"
+    },
+    {
+      "path": "patches/0016-buffered-output-errors.patch",
+      "sha256": "eebaf370861b5409f2bf863efccbb59542095bc026842e08c5ba2a01cc50f7c5",
+      "classification": "real-stdio-error-propagation"
+    },
+    {
+      "path": "patches/0017-tar-directory-errors.patch",
+      "sha256": "82b2aec9cc9ef2e0dd8f85368d0df1815deab920fcabea9cc6b0e09557222b03",
+      "classification": "archive-directory-error-propagation"
+    },
+    {
+      "path": "patches/0018-tar-directory-times.patch",
+      "sha256": "ddd7359396e6232c3bcce81d380209ad21b18b1ab26b2e2196d78fc95e72f3db",
+      "classification": "real-deferred-directory-timestamps"
+    },
+    {
+      "path": "patches/0019-zip-stored-crc.patch",
+      "sha256": "fba2691ae4085976d73f9bd375cb03d87f08e843e8bc46ccca05668bf69bacdc",
+      "classification": "real-stored-zip-crc-validation"
+    }
+  ],
+  "license": {
+    "spdx": "GPL-2.0-only",
+    "fileName": "LICENSE.txt",
+    "bytes": 18348,
+    "sha256": "bbfc9843646d483c334664f651c208b9839626891d8f17604db2146962f43548"
+  },
+  "artifact": {
+    "fileName": "busybox.wasm",
+    "bytes": 634885,
+    "sha256": "30ea0ce3a36013b343dddc0045c72f490c468268c1a1fd2050fdc8702f97bd40",
+    "url": "https://raw.githubusercontent.com/seo-rii/wasm-idle/43241f14b7bd2257bbafb7426d52bc97f722a489/_ci/container/262d153656a34ecedced185e21010b6c45e1f16697a6cf27a5c9337db57e165b/container-app/objects/30ea0ce3a36013b343dddc0045c72f490c468268c1a1fd2050fdc8702f97bd40/busybox.wasm"
+  },
+  "execution": {
+    "argv": [
+      "sed",
+      "-f",
+      "<activePath>",
+      "...programArgs"
+    ],
+    "filesystem": "private source snapshot; existing files readonly; writes are not exported",
+    "cwd": "/",
+    "storedModes": "unsupported; explicit negative WASI errno",
+    "inPlace": "rejected by upstream WASI profile"
+  }
+}

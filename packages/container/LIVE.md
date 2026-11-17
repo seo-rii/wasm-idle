@@ -49,6 +49,15 @@ transfers can be partial. Directory-list metadata (names and inode statistics) m
 listings return `ENOSPC` explicitly. No network or arbitrary host function RPC
 exists. Each channel can access only its own descriptor map in its container.
 
+The Supervisor also publishes the filesystem generation in the channel header,
+synchronously with every mutation from any source. A guest Worker answers repeated
+lookups (stat, lstat, readlink, realpath, readdir, fstat, directory listings and
+open misses) from a per-process cache only while that generation is unchanged, and
+records a result only when the generation was identical before and after its RPC.
+A successful open, `EBADF` and resource errors are never reused, and closing a
+descriptor forgets every entry that names it. Owners that do not publish a
+generation leave the flag unset, so their guests forward every call as before.
+
 Each path syscall carries the process-owned directory descriptor to the Supervisor.
 Resolution and the complete operation run synchronously there, including final
 symlink checks for no-follow open, both directory descriptors for rename, and

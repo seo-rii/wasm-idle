@@ -20,6 +20,7 @@ const DEFAULT_VERSION_MODULE_PATH = path.resolve(
 );
 const ENTRY_MODULE = 'index.js';
 const JAVASCRIPT_MODULE = 'javascript.js';
+const COFFEESCRIPT_MODULE = 'coffeescript.js';
 const RUNTIME_BUILD_RECEIPT = 'runtime-build.json';
 
 /** @typedef {{ readonly bytes: number; readonly sha256: string }} TypeScriptModuleReceipt */
@@ -92,15 +93,23 @@ async function computeModuleReceipt(modulePath) {
  * @param {Readonly<TypeScriptModuleReceipt>} moduleReceipt
  * @param {Record<string, unknown>} producer
  * @param {Readonly<TypeScriptModuleReceipt> | undefined} javascriptReceipt
+ * @param {Readonly<TypeScriptModuleReceipt> | undefined} coffeeScriptReceipt
  */
-function runtimeBuildReceipt(fingerprint, moduleReceipt, producer, javascriptReceipt) {
+function runtimeBuildReceipt(
+	fingerprint,
+	moduleReceipt,
+	producer,
+	javascriptReceipt,
+	coffeeScriptReceipt
+) {
 	return {
 		format: 'wasm-typescript-runtime-build-v2',
 		fingerprint,
 		producer,
 		assets: {
 			[ENTRY_MODULE]: moduleReceipt,
-			...(javascriptReceipt ? { [JAVASCRIPT_MODULE]: javascriptReceipt } : {})
+			...(javascriptReceipt ? { [JAVASCRIPT_MODULE]: javascriptReceipt } : {}),
+			...(coffeeScriptReceipt ? { [COFFEESCRIPT_MODULE]: coffeeScriptReceipt } : {})
 		}
 	};
 }
@@ -111,6 +120,7 @@ function runtimeBuildReceipt(fingerprint, moduleReceipt, producer, javascriptRec
  * @param {Readonly<TypeScriptModuleReceipt>} moduleReceipt
  * @param {Record<string, unknown>} producer
  * @param {Readonly<TypeScriptModuleReceipt> | undefined} javascriptReceipt
+ * @param {Readonly<TypeScriptModuleReceipt> | undefined} coffeeScriptReceipt
  * @returns {Promise<string>}
  */
 async function writeRuntimeBuildReceipt(
@@ -118,10 +128,17 @@ async function writeRuntimeBuildReceipt(
 	fingerprint,
 	moduleReceipt,
 	producer,
-	javascriptReceipt
+	javascriptReceipt,
+	coffeeScriptReceipt
 ) {
 	const receiptPath = path.join(targetDir, RUNTIME_BUILD_RECEIPT);
-	const receipt = runtimeBuildReceipt(fingerprint, moduleReceipt, producer, javascriptReceipt);
+	const receipt = runtimeBuildReceipt(
+		fingerprint,
+		moduleReceipt,
+		producer,
+		javascriptReceipt,
+		coffeeScriptReceipt
+	);
 	await writeFile(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`, 'utf8');
 	return receiptPath;
 }
@@ -130,8 +147,9 @@ async function writeRuntimeBuildReceipt(
  * @param {string} fingerprint
  * @param {Readonly<TypeScriptModuleReceipt>} moduleReceipt
  * @param {Readonly<TypeScriptModuleReceipt> | undefined} javascriptReceipt
+ * @param {Readonly<TypeScriptModuleReceipt> | undefined} coffeeScriptReceipt
  */
-function renderVersionModule(fingerprint, moduleReceipt, javascriptReceipt) {
+function renderVersionModule(fingerprint, moduleReceipt, javascriptReceipt, coffeeScriptReceipt) {
 	/** @param {string} name @param {Readonly<TypeScriptModuleReceipt>} receipt */
 	const renderReceipt = (name, receipt) => `export const ${name} = Object.freeze({
 \tbytes: ${receipt.bytes},
@@ -143,6 +161,9 @@ function renderVersionModule(fingerprint, moduleReceipt, javascriptReceipt) {
 		renderReceipt('WASM_TYPESCRIPT_MODULE_RECEIPT', moduleReceipt) +
 		(javascriptReceipt
 			? '\n' + renderReceipt('WASM_JAVASCRIPT_MODULE_RECEIPT', javascriptReceipt)
+			: '') +
+		(coffeeScriptReceipt
+			? '\n' + renderReceipt('WASM_COFFEESCRIPT_MODULE_RECEIPT', coffeeScriptReceipt)
 			: '')
 	);
 }
@@ -152,16 +173,23 @@ function renderVersionModule(fingerprint, moduleReceipt, javascriptReceipt) {
  * @param {string} fingerprint
  * @param {Readonly<TypeScriptModuleReceipt>} moduleReceipt
  * @param {Readonly<TypeScriptModuleReceipt> | undefined} javascriptReceipt
+ * @param {Readonly<TypeScriptModuleReceipt> | undefined} coffeeScriptReceipt
  * @returns {Promise<void>}
  */
 async function writeVersionModule(
 	versionModulePath,
 	fingerprint,
 	moduleReceipt,
-	javascriptReceipt
+	javascriptReceipt,
+	coffeeScriptReceipt
 ) {
 	await mkdir(path.dirname(versionModulePath), { recursive: true });
-	const moduleSource = renderVersionModule(fingerprint, moduleReceipt, javascriptReceipt);
+	const moduleSource = renderVersionModule(
+		fingerprint,
+		moduleReceipt,
+		javascriptReceipt,
+		coffeeScriptReceipt
+	);
 	const current = await readFile(versionModulePath, 'utf8').catch(() => '');
 	if (current === moduleSource) return;
 	await writeFile(versionModulePath, moduleSource, 'utf8');
@@ -219,6 +247,7 @@ export async function verifyWasmTypeScriptDist({
 	}
 
 	const javascriptReceipt = producer.additionalArtifacts?.[JAVASCRIPT_MODULE];
+	const coffeeScriptReceipt = producer.additionalArtifacts?.[COFFEESCRIPT_MODULE];
 	if (javascriptReceipt) {
 		const installed = computeModuleReceiptFromBytes(
 			await readInstalledEntryModule(targetDir, JAVASCRIPT_MODULE)
@@ -229,12 +258,23 @@ export async function verifyWasmTypeScriptDist({
 			);
 		}
 	}
+	if (coffeeScriptReceipt) {
+		const installed = computeModuleReceiptFromBytes(
+			await readInstalledEntryModule(targetDir, COFFEESCRIPT_MODULE)
+		);
+		if (JSON.stringify(installed) !== JSON.stringify(coffeeScriptReceipt)) {
+			throw new Error(
+				'wasm-typescript checked-in CoffeeScript module does not match the current producer output'
+			);
+		}
+	}
 	const fingerprint = await computeBundleFingerprint(sourceDir);
 	const expectedReceipt = runtimeBuildReceipt(
 		fingerprint,
 		sourceModuleReceipt,
 		producer,
-		javascriptReceipt
+		javascriptReceipt,
+		coffeeScriptReceipt
 	);
 	let actualReceipt;
 	try {
@@ -254,7 +294,8 @@ export async function verifyWasmTypeScriptDist({
 	const expectedVersionModule = renderVersionModule(
 		fingerprint,
 		sourceModuleReceipt,
-		javascriptReceipt
+		javascriptReceipt,
+		coffeeScriptReceipt
 	);
 	const actualVersionModule = await readFile(versionModulePath, 'utf8').catch(() => '');
 	if (actualVersionModule !== expectedVersionModule) {
@@ -308,14 +349,22 @@ export async function syncWasmTypeScriptDist({
 	const fingerprint = await computeBundleFingerprint(targetDir);
 	const moduleReceipt = await computeModuleReceipt(path.join(targetDir, ENTRY_MODULE));
 	const javascriptReceipt = producer.additionalArtifacts?.[JAVASCRIPT_MODULE];
+	const coffeeScriptReceipt = producer.additionalArtifacts?.[COFFEESCRIPT_MODULE];
 	const receiptPath = await writeRuntimeBuildReceipt(
 		targetDir,
 		fingerprint,
 		moduleReceipt,
 		producer,
-		javascriptReceipt
+		javascriptReceipt,
+		coffeeScriptReceipt
 	);
-	await writeVersionModule(versionModulePath, fingerprint, moduleReceipt, javascriptReceipt);
+	await writeVersionModule(
+		versionModulePath,
+		fingerprint,
+		moduleReceipt,
+		javascriptReceipt,
+		coffeeScriptReceipt
+	);
 	return {
 		sourceDir,
 		targetDir,

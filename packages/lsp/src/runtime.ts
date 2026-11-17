@@ -229,6 +229,11 @@ export function resolveRustLanguageServerCompilerUrl(
 	);
 }
 
+/** Resolve a configured asset URL the way the runtime module URLs are resolved. */
+export function resolveLanguageServerAssetUrl(value: string, currentUrl = '') {
+	return resolveFileUrl(value, currentUrl);
+}
+
 export function resolveGoLanguageServerCompilerUrl(
 	options: EditorLanguageServerOptions | undefined,
 	currentUrl = ''

@@ -37,6 +37,22 @@ type RuntimeReadinessAudit = EntryReadiness | StaticWorkerReadiness | TerminalRe
  * is the first safe user-visible readiness signal.
  */
 const runtimeReadinessAudit = {
+	BC: {
+		strategy: 'entry-signal',
+		hostModule: 'bc',
+		producerPath: 'src/lib/playground/worker/wasm.ts'
+	},
+	UIUA: {
+		strategy: 'entry-signal',
+		hostModule: 'uiua',
+		producerPath: 'src/lib/playground/worker/wasm.ts'
+	},
+	SED: {
+		strategy: 'entry-signal',
+		hostModule: 'sed',
+		producerPath: 'src/lib/playground/worker/wasm.ts'
+	},
+	GRAPHQL: { strategy: 'static-worker-fallback', hostModule: 'graphql' },
 	PICAT: { strategy: 'static-worker-fallback', hostModule: 'picat' },
 	PARIGP: { strategy: 'static-worker-fallback', hostModule: 'parigp' },
 	WREN: {
@@ -176,6 +192,11 @@ const runtimeReadinessAudit = {
 		hostModule: 'typescript',
 		producerPath: 'src/lib/playground/worker/typescript.ts'
 	},
+	COFFEESCRIPT: {
+		strategy: 'entry-signal',
+		hostModule: 'typescript',
+		producerPath: 'src/lib/playground/worker/typescript.ts'
+	},
 	TYPESCRIPT: {
 		strategy: 'entry-signal',
 		hostModule: 'typescript',
@@ -305,7 +326,9 @@ describe('runtime progress readiness audit', () => {
 				? readProjectSource('src/lib/playground/python.ts')
 				: ownHostSource.includes('extends Ruby')
 					? readProjectSource('src/lib/playground/ruby.ts')
-					: ownHostSource;
+					: ownHostSource.includes('extends Wasm')
+						? readProjectSource('src/lib/playground/wasm.ts')
+						: ownHostSource;
 
 			expect(producerSource, `${languageId} producer must emit ready`).toMatch(
 				/kind:\s*['"]ready['"]/u

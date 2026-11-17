@@ -24,6 +24,37 @@ export type ContainerPlaygroundBindingOptions = {
 	workerFactory?: () => ContainerOwnerWorker;
 	/** Deterministic transport contract tests only. */
 	clientFactory?: () => ContainerWorkerClient;
+	/** Deterministic tests only; defaults to the browser's idle and data-saving signals. */
+	prewarmEnvironment?: ContainerPrewarmEnvironment;
+};
+export interface ContainerPrewarmEnvironment {
+	canStart(): boolean;
+	/** Run the callback later, never synchronously; return its cancellation. */
+	schedule(callback: () => void): () => void;
+}
+/** Speculative runtime work honors Save-Data, slow links and hidden pages, like core's prewarmer. */
+const browserPrewarmEnvironment: ContainerPrewarmEnvironment = {
+	canStart() {
+		if (typeof document === 'undefined' || typeof navigator === 'undefined') return false;
+		const connection = (
+			navigator as Navigator & {
+				connection?: { saveData?: boolean; effectiveType?: string };
+			}
+		).connection;
+		return (
+			document.visibilityState !== 'hidden' &&
+			connection?.saveData !== true &&
+			!['slow-2g', '2g'].includes(connection?.effectiveType ?? '')
+		);
+	},
+	schedule(callback) {
+		if (typeof requestIdleCallback === 'function') {
+			const id = requestIdleCallback(callback, { timeout: 1500 });
+			return () => cancelIdleCallback(id);
+		}
+		const id = setTimeout(callback, 250);
+		return () => clearTimeout(id);
+	}
 };
 const copyFiles = (files: readonly ContainerWorkspaceFile[]) =>
 	files.map((file) => ({
@@ -87,6 +118,30 @@ export function createContainerPlaygroundBinding(
 	let shellConnection: Promise<void> | undefined;
 	let requestedShellLanguage: string | undefined;
 	let terminalExecution = false;
+	const prewarmEnvironment = options.prewarmEnvironment ?? browserPrewarmEnvironment;
+	let prewarmEnabled = true;
+	let warm:
+		| {
+				language: string;
+				controller: AbortController;
+				result: Promise<boolean>;
+				released: boolean;
+		  }
+		| undefined;
+	const abortWarm = () => {
+		const current = warm;
+		warm = undefined;
+		current?.controller.abort(new DOMException('Runtime prewarm cancelled', 'AbortError'));
+	};
+	// Effects cancel and then re-request in one task; the same language keeps its progress.
+	const releaseWarm = () => {
+		const current = warm;
+		if (!current) return;
+		current.released = true;
+		setTimeout(() => {
+			if (warm === current && current.released) abortWarm();
+		}, 0);
+	};
 	const decoders = new Map<string, TextDecoder>();
 	const decoder = (key: string) => {
 		let value = decoders.get(key);
@@ -330,13 +385,50 @@ export function createContainerPlaygroundBinding(
 			sandboxes.set(language, record);
 			return record;
 		},
-		// Owner and command index can be ready without fetching compiler bodies at page boot.
-		async prewarm() {
-			connection();
-			return true;
+		// Boot the owner, then fetch and compile the language runtime once the page is idle.
+		// A Run claims that work in the owner, so cancelling here never aborts a Run.
+		async prewarm(language) {
+			const owner = connection();
+			if (!prewarmEnabled || !prewarmEnvironment.canStart()) return false;
+			if (warm?.language === language) {
+				warm.released = false;
+				return await warm.result;
+			}
+			abortWarm();
+			const controller = new AbortController();
+			const result = new Promise<boolean>((resolve) => {
+				const cancel = prewarmEnvironment.schedule(() => {
+					if (controller.signal.aborted || disposed || !prewarmEnvironment.canStart())
+						return resolve(false);
+					owner.call<boolean>('prewarm', [language], { signal: controller.signal }).then(
+						(value) => resolve(value === true && !controller.signal.aborted),
+						() => resolve(false)
+					);
+				});
+				controller.signal.addEventListener(
+					'abort',
+					() => {
+						cancel();
+						resolve(false);
+					},
+					{ once: true }
+				);
+			});
+			const current = { language, controller, result, released: false };
+			warm = current;
+			void result.then(() => {
+				if (warm === current) warm = undefined;
+			});
+			return await result;
 		},
-		async setPrewarmEnabled() {},
-		async cancelPrewarm() {},
+		async setPrewarmEnabled(enabled) {
+			if (typeof enabled !== 'boolean') throw new TypeError('prewarm must be a boolean');
+			prewarmEnabled = enabled;
+			if (!enabled) abortWarm();
+		},
+		async cancelPrewarm() {
+			releaseWarm();
+		},
 		syncWorkspace,
 		async readWorkspace(language) {
 			const previous = readQueues.get(language);
@@ -387,6 +479,7 @@ export function createContainerPlaygroundBinding(
 		async dispose() {
 			if (disposed) return;
 			disposed = true;
+			abortWarm();
 			changes.clear();
 			reads.clear();
 			readQueues.clear();
