@@ -10,8 +10,10 @@ import {
 	normalizeLanguageId,
 	supportedLanguageIds,
 	type PlaygroundBindingOptions,
-	type CanonicalLanguageId
+	type CanonicalLanguageId,
+	type RuntimeAssetCacheConsumer
 } from '@wasm-idle/core';
+import { RuntimeAssetCache } from './runtimeAssetCache';
 
 interface SandboxRoute {
 	languageId: CanonicalLanguageId;
@@ -24,6 +26,27 @@ const sandboxRoutes = [
 		load: async () => {
 			const { default: Bc } = await import('$lib/playground/bc');
 			return new Bc();
+		}
+	},
+	{
+		languageId: 'UIUA',
+		load: async () => {
+			const { default: Uiua } = await import('$lib/playground/uiua');
+			return new Uiua();
+		}
+	},
+	{
+		languageId: 'SED',
+		load: async () => {
+			const { default: Sed } = await import('$lib/playground/sed');
+			return new Sed();
+		}
+	},
+	{
+		languageId: 'GRAPHQL',
+		load: async () => {
+			const { default: Graphql } = await import('$lib/playground/graphql');
+			return new Graphql();
 		}
 	},
 	{
@@ -429,6 +452,13 @@ const sandboxRoutes = [
 		}
 	},
 	{
+		languageId: 'COFFEESCRIPT',
+		load: async () => {
+			const { default: TypeScriptSandbox } = await import('$lib/playground/typescript');
+			return new TypeScriptSandbox('COFFEESCRIPT');
+		}
+	},
+	{
 		languageId: 'TYPESCRIPT',
 		load: async () => {
 			const { default: TypeScriptSandbox } = await import('$lib/playground/typescript');
@@ -568,11 +598,27 @@ export function createPlaygroundBinding(
 	runtimeAssets: SandboxRuntimeAssets,
 	options: PlaygroundBindingOptions = {}
 ): PlaygroundBinding {
-	return createCorePlaygroundBinding(
+	// One owner cache per binding, as createRuntimeSession provides. Without it, runtimes that
+	// compile their toolchain through a host module service (TinyGo, Nim, LFortran, C3, ...)
+	// recompile it for every disposable worker, and each sandbox re-verifies bootstrap bytes.
+	const cache = new RuntimeAssetCache();
+	const binding = createCorePlaygroundBinding(
 		runtimeAssets as never,
-		playground as never,
+		(async (language: string) => {
+			const sandbox = (await playground(language)) as Sandbox &
+				Partial<RuntimeAssetCacheConsumer>;
+			try {
+				sandbox.setRuntimeAssetCache?.(cache);
+			} catch {
+				// A sandbox that cannot adopt the shared cache keeps its own.
+			}
+			return sandbox;
+		}) as never,
 		options
-	) as PlaygroundBinding;
+	) as PlaygroundBinding & { dispose(): Promise<void> };
+	const dispose = binding.dispose.bind(binding);
+	binding.dispose = () => dispose().finally(() => cache.dispose());
+	return binding;
 }
 
 async function playground(language: string): Promise<Sandbox>;

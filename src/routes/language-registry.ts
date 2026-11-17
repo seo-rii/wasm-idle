@@ -2,15 +2,7 @@ import { supportedLanguageIds, type CanonicalLanguageId } from '@wasm-idle/core'
 
 type PlaygroundRuntimeLanguage = Exclude<CanonicalLanguageId, 'PYTHON3'> | 'PYTHON';
 
-const editorOnlyLanguageIds = [
-	'GRAPHQL',
-	'JSON',
-	'YAML',
-	'TOML',
-	'HTML',
-	'CSS',
-	'MARKDOWN'
-] as const;
+const editorOnlyLanguageIds = ['JSON', 'YAML', 'TOML', 'HTML', 'CSS', 'MARKDOWN'] as const;
 
 export type PlaygroundLanguage = PlaygroundRuntimeLanguage | (typeof editorOnlyLanguageIds)[number];
 
@@ -79,6 +71,13 @@ export const playgroundLanguageDescriptors: Readonly<
 	Record<PlaygroundLanguage, PlaygroundLanguageDescriptor>
 > = {
 	BC: { label: 'bc 7.0.3', editorLanguage: 'plaintext', supportsArgs: true },
+	UIUA: { label: 'Uiua', editorLanguage: 'plaintext', supportsArgs: true },
+	SED: {
+		label: 'sed — BusyBox',
+		editorLanguage: 'plaintext',
+		supportsArgs: true,
+		argsLabel: 'sed options / input files'
+	},
 	PICAT: { label: 'Picat', editorLanguage: 'plaintext' },
 	PARIGP: { label: 'PARI/GP', editorLanguage: 'plaintext' },
 	WREN: { label: 'Wren', editorLanguage: 'plaintext' },
@@ -323,6 +322,13 @@ export const playgroundLanguageDescriptors: Readonly<
 		compilerDiagnostics: true,
 		diagnosticMarkers: true
 	},
+	COFFEESCRIPT: {
+		label: 'CoffeeScript',
+		editorLanguage: 'coffeescript',
+		supportsArgs: true,
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
 	TYPESCRIPT: {
 		label: 'TypeScript',
 		editorLanguage: 'typescript',
@@ -456,7 +462,7 @@ export const playgroundLanguageDescriptors: Readonly<
 		compilerDiagnostics: true,
 		diagnosticMarkers: true
 	},
-	GRAPHQL: { label: 'GraphQL', editorLanguage: 'graphql' },
+	GRAPHQL: { label: 'GraphQL', editorLanguage: 'graphql', diagnosticMarkers: true },
 	DUCKDB: { label: 'SQL — DuckDB', editorLanguage: 'sql', lspLanguageOverride: 'duckdb' },
 	SQLITE: {
 		label: 'SQL — SQLite dialect',
@@ -564,6 +570,8 @@ export const diagnosticMarkerLanguages = new Set(
 );
 export const monacoLanguageContributionLoaders: Record<string, MonacoLanguageContributionLoader> = {
 	c: () => import('monaco-editor/esm/vs/basic-languages/cpp/cpp.contribution.js'),
+	coffeescript: () =>
+		import('monaco-editor/esm/vs/basic-languages/coffee/coffee.contribution.js'),
 	cpp: () => import('monaco-editor/esm/vs/basic-languages/cpp/cpp.contribution.js'),
 	'objective-c': () =>
 		import('monaco-editor/esm/vs/basic-languages/objective-c/objective-c.contribution.js'),

@@ -34,6 +34,22 @@ export const RUNTIMES = [
 		manual: true
 	},
 	{
+		name: 'wasm-uiua',
+		module: './sync-wasm-uiua.mjs',
+		exportName: 'syncWasmUiuaAssets',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir',
+		manual: true
+	},
+	{
+		name: 'wasm-graphql',
+		module: './sync-wasm-graphql.mjs',
+		exportName: 'syncWasmGraphqlAssets',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir',
+		manual: true
+	},
+	{
 		name: 'wasm-wren',
 		module: './sync-wasm-wren.mjs',
 		exportName: 'syncWasmWrenDist',

@@ -15,6 +15,10 @@ export {
 	type RuntimeWasmModuleRequestOptions
 } from './runtime-wasm-module-service.js';
 export {
+	runtimeWasmModuleCacheKey,
+	serveRuntimeWasmModuleWithLookup
+} from './runtime-wasm-module-lookup.js';
+export {
 	fetchPinnedRuntimeAsset,
 	prefetchRuntimeAssets,
 	type PinnedRuntimeAssetRequest,

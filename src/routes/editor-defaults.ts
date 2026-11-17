@@ -39,14 +39,17 @@ export type EditorDefaultLanguage =
 	| 'j'
 	| 'bqn'
 	| 'bc'
+	| 'uiua'
 	| 'janet'
 	| 'julia'
 	| 'nim'
+	| 'sed'
 	| 'bash'
 	| 'clojurescript'
 	| 'rescript'
 	| 'hy'
 	| 'ocaml'
+	| 'coffeescript'
 	| 'javascript'
 	| 'typescript'
 	| 'assemblyscript'
@@ -119,14 +122,17 @@ export const editorDefaults: Record<
 	| 'j'
 	| 'bqn'
 	| 'bc'
+	| 'uiua'
 	| 'janet'
 	| 'julia'
 	| 'nim'
+	| 'sed'
 	| 'bash'
 	| 'clojurescript'
 	| 'rescript'
 	| 'hy'
 	| 'ocaml'
+	| 'coffeescript'
 	| 'javascript'
 	| 'typescript'
 	| 'assemblyscript'
@@ -809,6 +815,9 @@ smoutput 'fibonacci=', ": 3 + fib n`,
 	bc: `value = read()
 print "value=", value + 1, "\\n"
 `,
+	uiua: `# Read one complete line, then print it.
+&p &sc
+`,
 	bqn: `bonus ← 3
 fibonacci ← {𝕩 ≤ 1 ? 1 ; (fibonacci (𝕩 - 1)) + (fibonacci (𝕩 - 2))}
 n ← •ParseFloat •GetLine @
@@ -873,6 +882,9 @@ let n =
     4
 
 echo "fibonacci=", fibonacci(n) + bonus`,
+	sed: `# Replace world in each input line. Type input, then send EOF.
+s/world/sed/g
+`,
 	bash: `bonus=3
 declare -A memo=( [0]=1 [1]=1 )
 
@@ -968,6 +980,13 @@ let read_int_or_default default =
 let () =
   let n = read_int_or_default 4 in
   Printf.printf "fibonacci=%d\\n%!" (fibonacci n + bonus)`,
+	coffeescript: `fs = require 'fs'
+n = Number fs.readFileSync(0, 'utf8').trim()
+[a, b] = [0, 1]
+for i in [0...n]
+  [a, b] = [b, a + b]
+console.log "fibonacci=#{a}"
+`,
 	javascript: `const fs = require('fs');
 
 const bonus = 3;
@@ -1327,9 +1346,18 @@ fn main() {
 	mut memo := map[int]i64{}
 	println('fibonacci=\${fibonacci(n, mut memo)}')
 }`,
-	graphql: `# memo cache: 0 => 1, 1 => 1
-query Fibonacci($n: Int = 4) {
-  fibonacci(n: $n)
+	graphql: `# Optional JSON goes in Preloaded stdin before Run.
+# Example: {"rootValue":{"greeting":"Hello GraphQL!","numbers":[1,2,3]},"variables":{"showNumbers":true}}
+# Leave input empty to query the schema and a null greeting.
+type Query {
+  greeting: String
+  numbers: [Int!]!
+}
+
+query Example($showNumbers: Boolean! = false) {
+  __typename
+  greeting
+  numbers @include(if: $showNumbers)
 }`,
 	duckdb: `WITH RECURSIVE memo(n, prev, curr) AS (
     SELECT 0, 1, 1
@@ -1642,14 +1670,17 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.j ||
 		source === editorDefaults.bqn ||
 		source === editorDefaults.bc ||
+		source === editorDefaults.uiua ||
 		source === editorDefaults.janet ||
 		source === editorDefaults.julia ||
 		source === editorDefaults.nim ||
+		source === editorDefaults.sed ||
 		source === editorDefaults.bash ||
 		source === editorDefaults.clojurescript ||
 		source === editorDefaults.rescript ||
 		source === editorDefaults.hy ||
 		source === editorDefaults.ocaml ||
+		source === editorDefaults.coffeescript ||
 		source === editorDefaults.javascript ||
 		source === editorDefaults.typescript ||
 		source === editorDefaults.assemblyscript ||

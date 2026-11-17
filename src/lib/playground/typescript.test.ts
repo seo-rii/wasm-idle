@@ -3,7 +3,10 @@ import type { PlaygroundRuntimeAssets } from './assets';
 import type { SandboxExecutionOptions } from './options';
 
 const TEST_RUNTIME_ASSETS = {
-	typescript: { moduleUrl: '/wasm-typescript/index.js' }
+	typescript: {
+		moduleUrl: '/wasm-typescript/index.js',
+		coffeeScriptModuleUrl: '/wasm-typescript/coffeescript.js'
+	}
 } satisfies PlaygroundRuntimeAssets;
 import { readBufferedStdin } from './stdinBuffer';
 import { configureRuntimeAssetCache } from '@wasm-idle/core';
@@ -165,7 +168,27 @@ console.log(value);`;
 		);
 	});
 
-	it.each(['JAVASCRIPT', 'TYPESCRIPT'] as const)(
+	it('uses the CoffeeScript entry and original source path without compiling on the main thread', async () => {
+		const sandbox = new TypeScriptSandbox('COFFEESCRIPT');
+		await sandbox.load({ rootUrl: '/runtime' });
+		await expect(sandbox.run('console.log "coffee"', false)).resolves.toBe(true);
+		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
+			1,
+			expect.objectContaining({
+				moduleUrl: expect.stringMatching(/\/runtime\/wasm-typescript\/coffeescript\.js$/u)
+			})
+		);
+		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
+			2,
+			expect.objectContaining({
+				language: 'coffeescript',
+				activePath: 'main.coffee',
+				code: 'console.log "coffee"'
+			})
+		);
+	});
+
+	it.each(['JAVASCRIPT', 'TYPESCRIPT', 'COFFEESCRIPT'] as const)(
 		'rejects unsupported %s debug requests before dispatch and remains usable',
 		async (language) => {
 			const sandbox = new TypeScriptSandbox(language);

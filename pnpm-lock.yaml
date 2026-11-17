@@ -291,6 +291,9 @@ importers:
       globals:
         specifier: ^17.13.0
         version: 17.13.0
+      graphql:
+        specifier: 17.0.2
+        version: 17.0.2
       java-parser:
         specifier: 3.0.1
         version: 3.0.1
@@ -863,6 +866,9 @@ importers:
       buffer:
         specifier: ^6.0.3
         version: 6.0.3
+      coffeescript:
+        specifier: 2.7.0
+        version: 2.7.0
     devDependencies:
       '@types/node':
         specifier: ^24.19.2
@@ -2761,6 +2767,11 @@ packages:
 
   codemirror@6.0.2:
     resolution: {integrity: sha512-VhydHotNW5w1UGK0Qj96BwSk/Zqbp9WbnyK2W/eVMv4QyF41INRGpjUhFJY7/uDNuudSc33a/PKr4iDqRduvHw==}
+
+  coffeescript@2.7.0:
+    resolution: {integrity: sha512-hzWp6TUE2d/jCcN67LrW1eh5b/rSDKQK6oD6VMLlggYVUUFexgTH9z3dNYihzX4RMhze5FTUsUmOXViJKFQR/A==}
+    engines: {node: '>=6'}
+    hasBin: true
 
   color-convert@2.0.1:
     resolution: {integrity: sha512-RRECPsj7iu/xb5oKYcsFHSppFNnsj/52OVTRKb4zP5onXwVF3zVmmToNcOfGC+CRDpfK/U584fMg38ZHCaElKQ==}
@@ -5908,6 +5919,8 @@ snapshots:
       '@codemirror/search': 6.7.0
       '@codemirror/state': 6.6.0
       '@codemirror/view': 6.43.0
+
+  coffeescript@2.7.0: {}
 
   color-convert@2.0.1:
     dependencies:

@@ -5,7 +5,8 @@ import workerSource from './clang.ts?raw';
 
 const clangState = vi.hoisted(() => ({
 	compileArtifact: vi.fn(),
-	compileLinkRun: vi.fn()
+	compileLinkRun: vi.fn(),
+	prefetch: vi.fn()
 }));
 
 vi.mock('@wasm-idle/llvm-core/clang', () => ({
@@ -32,6 +33,10 @@ vi.mock('@wasm-idle/llvm-core/clang', () => ({
 		compileLinkRun(...args: unknown[]) {
 			return clangState.compileLinkRun(...args);
 		}
+
+		prefetch(...args: unknown[]) {
+			return clangState.prefetch(...args);
+		}
 	}
 }));
 
@@ -52,6 +57,36 @@ describe('Clang worker source', () => {
 		expect(workerSource).toContain(
 			"postProgress(100, `${language === 'C' ? 'C' : 'C++'} program ready`);"
 		);
+	});
+});
+
+describe('Clang worker prefetch', () => {
+	beforeEach(() => {
+		vi.resetModules();
+		clangState.prefetch.mockReset();
+		(globalThis as any).self = globalThis as any;
+		(globalThis as any).document = undefined;
+		(globalThis as any).postMessage = vi.fn();
+	});
+
+	it.each(['C', 'CPP'] as const)(
+		'prefetches the %s compile and link assets while loading',
+		async (language) => {
+			await import('./clang');
+			await (globalThis as any).self.onmessage({
+				data: { load: true, path: '/clang/', log: false, language }
+			});
+			expect(clangState.prefetch).toHaveBeenCalledExactlyOnceWith(language);
+			expect((globalThis as any).postMessage).toHaveBeenCalledWith({ load: true });
+		}
+	);
+
+	it('does not prefetch for helper workers that load without a language', async () => {
+		await import('./clang');
+		await (globalThis as any).self.onmessage({
+			data: { load: true, path: '/clang/', log: false }
+		});
+		expect(clangState.prefetch).not.toHaveBeenCalled();
 	});
 });
 

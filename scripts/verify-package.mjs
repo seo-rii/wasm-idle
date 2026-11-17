@@ -62,9 +62,14 @@ export const scenarios = [
 		// Picat packed root/core deltas are 16,284 + 1,109 bytes and six files.
 		// Add 17 KiB / six files for its adapter, assets and profile; runtime payloads stay external.
 		// Cumulative Squirrel, Wren, PARI/GP and WASI memory limits add another 27 KiB/12 files.
-		// With bc, the integrated SDK measures 7,453,849 bytes / 813 files / five packages.
-		// Another 3 KiB covers the 2,201-byte overflow; the adapter/profile add four files.
-		budget: { maxBytes: 7 * MiB + 112 * 1024, maxFiles: 813, maxPackages: 6 },
+		// Python snapshot startup adds its snapshot cache and builder modules (15,364 bytes / 4 files measured in CI).
+		// The core runtime Wasm module lookup adds one JavaScript/declaration pair (1,950 bytes / 2 files measured in CI).
+		// C/C++ startup prefetch adds 595 bytes to the existing llvm-core runtime (measured in CI).
+		// Container prewarm adds owner and binding wiring: 6,339 bytes measured in CI, no files.
+		// Persistent runtime caching for Go, .NET, PHP and PostgreSQL adds two worker JavaScript/declaration pairs (9,768 bytes / 4 files measured in CI).
+		// Container PCH persistence and background builds add 8,808 bytes to two container modules (svelte-package output), no files.
+		// The Go worker's fmt-build preload and the in-flight write map add 2,568 bytes; allow 3 KiB.
+		budget: { maxBytes: 7 * MiB + 181 * 1024, maxFiles: 835, maxPackages: 6 },
 		absentPackageNames: [
 			'@katana-project/asm',
 			'java-parser',
@@ -140,9 +145,8 @@ export const scenarios = [
 		// Picat CI job 133036878600 measures 2,856,625 bytes with unchanged files/dependencies.
 		// The four-language core measures 1,619,555 bytes, a 3,193-byte increase.
 		// GCC totals 2,858,709 bytes; a 3 KiB increase retains 299 bytes of headroom.
-		// bc core receipts measure 2,859,240 bytes / 196 files / four packages.
-		// The 232-byte overflow needs 1 KiB, preserving file and dependency caps.
-		budget: { maxBytes: 2.5 * MiB + 233 * 1024, maxFiles: 196, maxPackages: 4 },
+		// The core runtime Wasm module lookup adds one JavaScript/declaration pair (CI measures 2,862,838 bytes / 198 files).
+		budget: { maxBytes: 2 * MiB + 751 * 1024, maxFiles: 198, maxPackages: 4 },
 		absentPackageNames: [
 			'wasm-idle',
 			'@wasm-idle/llvm-core',
@@ -302,7 +306,7 @@ void [request, compiler, host, target, workerFactory, wasiRequest, wasiTarget, s
 			'@wasm-idle/core',
 			'@wasm-idle/llvm-core'
 		],
-		budget: { maxBytes: 8 * MiB, maxFiles: 1_100, maxPackages: 7 },
+		budget: { maxBytes: 8 * MiB, maxFiles: 1100, maxPackages: 7 },
 		absentPackageNames: [
 			'@wasm-idle/terminal',
 			'@wasm-idle/debug',
@@ -353,7 +357,7 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		name: '@wasm-idle/terminal install',
 		packageNames: ['@wasm-idle/terminal', '@wasm-idle/core'],
 		// Existing 64 KiB headroom plus 832 KiB for core's shared loader and pinned fflate.
-		budget: { maxBytes: 16 * MiB + 896 * 1024, maxFiles: 1_370, maxPackages: 32 },
+		budget: { maxBytes: 16 * MiB + 896 * 1024, maxFiles: 1370, maxPackages: 32 },
 		absentPackageNames: [
 			'@wasm-idle/debug',
 			'@wasm-idle/lsp',
@@ -369,7 +373,7 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		name: '@wasm-idle/debug install',
 		packageNames: ['@wasm-idle/debug', '@wasm-idle/core'],
 		// Shared loader/fflate costs 832 KiB; the existing file/package caps still fit.
-		budget: { maxBytes: 7 * MiB + 832 * 1024, maxFiles: 1_200, maxPackages: 25 },
+		budget: { maxBytes: 7 * MiB + 832 * 1024, maxFiles: 1200, maxPackages: 25 },
 		absentPackageNames: [
 			'@lezer/rust',
 			'@wasm-idle/lsp',
@@ -390,7 +394,7 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		packageNames: ['@wasm-idle/lsp', '@wasm-idle/llvm-core', '@wasm-idle/core'],
 		// Java's XML platform adapter and llvm-core's pinned SIMD compatibility headers.
 		// Add 384 KiB for the reviewed SIMD integration to the Java install limit.
-		budget: { maxBytes: 5.25 * MiB + 384 * 1024, maxFiles: 1_050, maxPackages: 10 },
+		budget: { maxBytes: 5 * MiB + 640 * 1024, maxFiles: 1050, maxPackages: 10 },
 		absentPackageNames: [
 			'@lezer/rust',
 			'@wasm-idle/debug',
@@ -460,9 +464,11 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Java 25 CI adds 31,813 bytes and two files to that baseline; allow another 32 KiB / two files.
 		// Propagate Picat's measured 17 KiB / six-file SDK increase; dependencies are unchanged.
 		// Keep all four language profile allowances when installing the combined SDK.
-		// The integrated bc aggregate is 43,040,088 bytes / 3,434 files / 66 packages.
-		// Its four adapter/profile files fit the existing byte and dependency caps.
-		budget: { maxBytes: 40 * MiB + 1_093 * 1024, maxFiles: 3_434, maxPackages: 70 },
+		// Python snapshot startup adds two JavaScript/declaration pairs (3,434 files measured in CI).
+		// The core runtime Wasm module lookup adds one JavaScript/declaration pair (2 files).
+		// Persistent runtime caching for Go, .NET, PHP and PostgreSQL adds two worker JavaScript/declaration pairs (4 files).
+		// The language servers' shared persistent module fetch adds two files (module-asset-fetch.js and .d.ts).
+		budget: { maxBytes: 41 * MiB + 69 * 1024, maxFiles: 3458, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

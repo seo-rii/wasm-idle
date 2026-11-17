@@ -14,6 +14,7 @@ const ASSET_PREPARATION = new Set([
 	'sync:v-lsp',
 	'sync:wasm-lean4',
 	'sync:wasm-bc',
+	'sync:wasm-uiua',
 	'prepare:test-assets',
 	'build:page-runtimes',
 	'sync:page-runtimes',
