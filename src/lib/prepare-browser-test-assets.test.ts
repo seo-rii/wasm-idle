@@ -236,15 +236,27 @@ describe('browser test asset preparation', () => {
 			createHash('sha256').update(bytes).digest('hex');
 		const json = (value: unknown) => Buffer.from(JSON.stringify(value, null, 2) + '\n');
 		expect(manifest.groupBaseUrls.container).toMatch(
-			/^https:\/\/raw\.githubusercontent\.com\/seo-rii\/wasm-idle\/[a-f0-9]{40}\/_ci\/container\/[a-f0-9]{64}\/$/u
+			/^https:\/\/raw\.githubusercontent\.com\/seo-rii\/wasm-idle\/[a-f0-9]{40}\/$/u
 		);
 
 		const objects = release.distribution.packages.flatMap(
 			(pkg: {
-				assets: Array<{ url: string; delivery: { bytes: number; sha256: string } }>;
+				assets: Array<{
+					id: string;
+					url: string;
+					delivery: { bytes: number; sha256: string };
+				}>;
 			}) => pkg.assets
 		);
-		expect(objects).toHaveLength(6);
+		expect(objects.map((object: { id: string }) => object.id)).toEqual([
+			'sdk',
+			'bash',
+			'busybox',
+			'clang',
+			'lld',
+			'sysroot-c',
+			'sysroot-cxx'
+		]);
 		for (const object of objects) {
 			const relative = new URL(object.url).pathname.slice(
 				new URL(release.baseURL).pathname.length
@@ -293,6 +305,7 @@ describe('browser test asset preparation', () => {
 			schemaVersion: 1,
 			hostHash: release.hostHash,
 			profile: 'live',
+			sysrootProfile: 'c-base-v1',
 			containerVersion: release.container.version,
 			containerSource: release.container.source,
 			containerProfile: release.container.profile,
@@ -311,7 +324,7 @@ describe('browser test asset preparation', () => {
 				sha256: hash(bytes)
 			});
 		}
-		expect(expectedTargets).toHaveLength(12);
+		expect(expectedTargets).toHaveLength(13);
 		expect(assets.map((asset) => asset.target).sort()).toEqual(expectedTargets.sort());
 		expect(assets.every((asset) => asset.decoded === undefined)).toBe(true);
 	});
