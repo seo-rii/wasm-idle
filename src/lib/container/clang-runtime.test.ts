@@ -32,7 +32,7 @@ function fixture(
 				await hooks.compile?.(options?.signal);
 				if (code === 0 && argv.includes('-o'))
 					fs.withMutationSource(pid, () => {
-						const path = argv[argv.indexOf('-o') + 1];
+						const path = argv[argv.lastIndexOf('-o') + 1];
 						fs.writeFile(path, Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0));
 						if (!argv.includes('c++-header'))
 							fs.grantExecutable(fs.captureFileVersion(path));
@@ -229,6 +229,139 @@ async function liveStdinFixture(
 	};
 }
 
+describe('container Clang automatic output ownership', () => {
+	it.each(['C', 'CPP'])(
+		'keeps %s Run outputs out of the editable project and preserves user Wasm files',
+		async (language) => {
+			const f = fixture();
+			const code = 'int main(void) { return 0; }';
+			const existing = [
+				{
+					path: 'program.wasm',
+					content: Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0, 0, 2, 1, 112)
+				},
+				{
+					path: 'input.wasm',
+					content: Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0, 0, 2, 1, 105)
+				},
+				{
+					path: language === 'C' ? 'main.c' : 'main.cpp',
+					content: new TextEncoder().encode(code)
+				}
+			];
+			f.adapter.syncWorkspace(language, existing);
+			expect(
+				await f.runtime.prepare(
+					language,
+					code,
+					[],
+					{},
+					new AbortController().signal,
+					f.progress,
+					1
+				)
+			).toBe(true);
+			expect(await f.run(code, {}, language)).toBe(true);
+			expect(f.adapter.readWorkspace(language)).toEqual(expect.arrayContaining(existing));
+			expect(f.adapter.readWorkspaceDelta(language).files).toHaveLength(existing.length);
+			const compile = f.spawn.mock.calls.find(([command]) => command === 'clang')!;
+			const artifact = compile[1].at(-1)!;
+			expect(artifact).not.toMatch(new RegExp(`^/workspace/${language}/`));
+			expect(compile[2]).toMatchObject({ cwd: `/workspace/${language}` });
+			expect(f.spawn.mock.calls.find(([command]) => command === 'wasm-run')![1][0]).toBe(
+				artifact
+			);
+			await f.runtime.dispose();
+			expect(f.adapter.readWorkspace(language)).toEqual(expect.arrayContaining(existing));
+		}
+	);
+
+	it('allocates exclusively without adopting an existing user file or directory', async () => {
+		const f = fixture();
+		const ids = [
+			'00000000-0000-4000-8000-000000000001',
+			'00000000-0000-4000-8000-000000000002',
+			'00000000-0000-4000-8000-000000000003'
+		] as const;
+		const paths = ids.map((id) => `/workspace/.wasm-idle-run-${id}`);
+		const kept = Uint8Array.of(1, 2, 3);
+		f.fs.mkdir(paths[0]);
+		f.fs.writeFile(`${paths[0]}/notes`, kept);
+		f.fs.writeFile(paths[1], kept);
+		const uuid = vi.spyOn(crypto, 'randomUUID');
+		for (const id of ids) uuid.mockReturnValueOnce(id);
+		try {
+			expect(await f.prepare('int main() {}')).toBe(true);
+			expect(f.spawn.mock.calls[0][1].at(-1)).toBe(`${paths[2]}/CPP.wasm`);
+			await f.runtime.dispose();
+			expect(f.fs.readFile(`${paths[0]}/notes`)).toEqual(kept);
+			expect(f.fs.readFile(paths[1])).toEqual(kept);
+			expect(() => f.fs.lstat(paths[2])).toThrow();
+		} finally {
+			uuid.mockRestore();
+		}
+	});
+
+	it('keeps the owned final output and source cwd when user flags request another output', async () => {
+		const f = fixture();
+		const compileArgs = ['-o', 'user.wasm', '-MMD', '-MF', 'dependencies.d'];
+		expect(
+			await f.prepare('int main() {}', {
+				compileArgs,
+				workspaceFiles: [{ path: 'user.wasm', content: 'retained' }]
+			})
+		).toBe(true);
+		const [, argv, options] = f.spawn.mock.calls[0];
+		expect(argv).toEqual(expect.arrayContaining(compileArgs));
+		expect(argv.slice(-2)).toEqual([
+			'-o',
+			expect.stringMatching(/^\/workspace\/\.wasm-idle-run-[a-f0-9-]+\/CPP\.wasm$/)
+		]);
+		expect(options).toMatchObject({ cwd: '/workspace/CPP' });
+		expect(new TextDecoder().decode(f.fs.readFile('/workspace/CPP/user.wasm'))).toBe(
+			'retained'
+		);
+		await f.runtime.dispose();
+	});
+
+	it('removes only unchanged owned outputs and preserves extra or edited files on disposal', async () => {
+		const f = fixture();
+		await f.prepare('int main() {}', {}, 'C');
+		const c = f.spawn.mock.calls[0][1].at(-1)!;
+		await f.prepare('int main() {}', {}, 'CPP');
+		const cpp = f.spawn.mock.calls[1][1].at(-1)!;
+		const directory = c.slice(0, c.lastIndexOf('/'));
+		expect(cpp).toBe(`${directory}/CPP.wasm`);
+		const edited = Uint8Array.of(7, 8);
+		f.fs.writeFile(c, edited);
+		f.fs.writeFile(`${directory}/notes.txt`, edited);
+		await f.runtime.dispose();
+		expect(f.fs.readFile(c)).toEqual(edited);
+		expect(f.fs.readFile(`${directory}/notes.txt`)).toEqual(edited);
+		expect(() => f.fs.lstat(cpp)).toThrow();
+	});
+
+	it('does not clean outputs while cancelled compiler admission is still settling', async () => {
+		const f = fixture();
+		await f.prepare('int main() {}', {}, 'C');
+		const artifact = f.spawn.mock.calls[0][1].at(-1)!;
+		const started = completionGate(),
+			finish = completionGate();
+		f.hooks.compile = async (signal) => {
+			started.resolve();
+			await finish.promise;
+			signal?.throwIfAborted();
+		};
+		const compiling = f.prepare('int main() {}', {}, 'CPP');
+		const failed = expect(compiling).rejects.toMatchObject({ name: 'AbortError' });
+		await started.promise;
+		await f.runtime.dispose();
+		expect(f.fs.stat(artifact).size).toBeGreaterThan(0);
+		finish.resolve();
+		await failed;
+	});
+});
+
 describe('container Clang stdin completion', () => {
 	it.each([
 		{ consumed: 0, queued: false, code: 0 },
@@ -411,11 +544,7 @@ describe('website container Clang compilation', () => {
 			expect(compilerArgs).not.toContain('hello world');
 			expect(compilerArgs.indexOf('-O2')).toBeGreaterThan(compilerArgs.indexOf(expected));
 			expect(await f.run(code, options, language)).toBe(true);
-			expect(f.spawn.mock.calls[1][1]).toEqual([
-				`/workspace/${language}/program.wasm`,
-				'hello world',
-				''
-			]);
+			expect(f.spawn.mock.calls[1][1]).toEqual([compilerArgs.at(-1), 'hello world', '']);
 		}
 	);
 	it('uses the explicitly selected C delivery profile for stock C and preserves compiler arguments', async () => {
@@ -641,8 +770,8 @@ describe('website container Clang compilation', () => {
 			expect(
 				f.spawn.mock.calls.filter(([name]) => name === 'wasm-run').map(([, args]) => args)
 			).toEqual([
-				[`/workspace/${language}/program.wasm`, 'one'],
-				[`/workspace/${language}/program.wasm`, 'two']
+				[f.spawn.mock.calls[0][1].at(-1), 'one'],
+				[f.spawn.mock.calls[0][1].at(-1), 'two']
 			]);
 			expect(f.writes.map((bytes) => new TextDecoder().decode(bytes))).toEqual([
 				'first',
@@ -741,9 +870,9 @@ describe('website container Clang compilation', () => {
 	it.each(['replace', 'unlink', 'rename', 'timestamp'])(
 		'rebuilds after artifact %s',
 		async (change) => {
-			const f = fixture(),
-				artifact = '/workspace/C/program.wasm';
+			const f = fixture();
 			await f.prepare('int main() {}', {}, 'C');
+			const artifact = f.spawn.mock.calls[0][1].at(-1)!;
 			if (change === 'replace') f.fs.writeFile(artifact, f.fs.readFile(artifact));
 			else if (change === 'unlink') f.fs.unlink(artifact);
 			else if (change === 'rename') f.fs.rename(artifact, `${artifact}.old`);

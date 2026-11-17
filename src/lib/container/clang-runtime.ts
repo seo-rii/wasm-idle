@@ -63,10 +63,12 @@ interface PreparedProgram {
 	reusable: boolean;
 	diagnostics: ContainerWorkerEvent[];
 }
-/** The Run button uses the same real Clang command and artifacts as Bash. Debug uses its qualified backend. */
+/** Run uses the real Clang command with owner-managed outputs. Debug uses its qualified backend. */
 export class ContainerClangRuntime {
 	#active = new Map<string, Execution>();
 	#prepared = new Map<string, PreparedProgram>();
+	#artifactDirectory?: { path: string; inode: number };
+	#artifactVersions = new Map<string, FileVersion>();
 	#input = new Map<string, { chunks: string[]; size: number; eof: boolean }>();
 	#header?: Header;
 	#pendingHeader?: HeaderPlan;
@@ -106,6 +108,32 @@ export class ContainerClangRuntime {
 			options.activePath,
 			options.env
 		]);
+	}
+	private artifact(language: string) {
+		const fs = this.profile.container.fs;
+		if (this.#artifactDirectory) {
+			try {
+				const current = fs.lstat(this.#artifactDirectory.path);
+				if (current.type === 'directory' && current.inode === this.#artifactDirectory.inode)
+					return `${this.#artifactDirectory.path}/${language}.wasm`;
+			} catch {
+				/* A removed owner directory is replaced without adopting an existing path. */
+			}
+		}
+		// Compiler qualification stays under /workspace, while editable/saved projects
+		// are confined to /workspace/<LANG>. Never reuse a user-created directory.
+		for (let attempt = 0; attempt < 8; attempt++) {
+			const path = `/workspace/.wasm-idle-run-${crypto.randomUUID()}`;
+			try {
+				fs.mkdir(path);
+			} catch (error) {
+				if ((error as { code?: string }).code === 'EEXIST') continue;
+				throw error;
+			}
+			this.#artifactDirectory = { path, inode: fs.lstat(path).inode };
+			return `${path}/${language}.wasm`;
+		}
+		throw new Error('Could not allocate a private compiler output directory');
 	}
 	private currentProgram(program: PreparedProgram | undefined, key: string, artifact: string) {
 		const fs = this.profile.container.fs;
@@ -310,7 +338,7 @@ export class ContainerClangRuntime {
 			signal.throwIfAborted();
 			const input = this.files.inputs(language, code, options);
 			const cwd = this.files.directory(language),
-				artifact = `${cwd}/program.wasm`,
+				artifact = this.artifact(language),
 				key = this.key(language, input.code, args, input.options);
 			const cached = this.currentProgram(previous, key, artifact);
 			if (cached?.reusable) {
@@ -625,6 +653,7 @@ export class ContainerClangRuntime {
 					const version = fs.captureFileVersion(artifact),
 						stat = fs.stat(artifact);
 					if (version === oldVersion || !stat.size || !(stat.mode & 0o111)) return false;
+					this.#artifactVersions.set(artifact, version);
 					this.#prepared.set(language, {
 						key,
 						generation: fs.generation,
@@ -655,7 +684,7 @@ export class ContainerClangRuntime {
 		signal.throwIfAborted();
 		const input = this.files.inputs(language, code, options);
 		const cwd = this.files.directory(language),
-			artifact = `${cwd}/program.wasm`;
+			artifact = this.artifact(language);
 		if (
 			!this.currentProgram(
 				this.#prepared.get(language),
@@ -681,12 +710,10 @@ export class ContainerClangRuntime {
 		let admitted: ContainerProcess | undefined, drained: Promise<ProcessResult> | undefined;
 		try {
 			const { programArgs } = resolveSandboxExecutionArgs(language, args, options);
-			job.process = admitted = await this.spawn(
-				job,
-				'wasm-run',
-				[`${cwd}/program.wasm`, ...programArgs],
-				{ cwd, env: options.env }
-			);
+			job.process = admitted = await this.spawn(job, 'wasm-run', [artifact, ...programArgs], {
+				cwd,
+				env: options.env
+			});
 			job.writer = job.process.stdin.getWriter();
 			drained = this.drain(job.process, language, requestId);
 			// A callback or stdin failure must not leave an output rejection unobserved.
@@ -850,6 +877,28 @@ export class ContainerClangRuntime {
 			this.#headerBuild?.promise
 		]);
 		this.discardHeader();
+		// Admission can still be settling after cancellation. The container owner will
+		// retire that filesystem; never remove an output while a command may use it.
+		if (!this.#active.size) {
+			const fs = this.profile.container.fs;
+			for (const [path, version] of this.#artifactVersions) {
+				try {
+					if (fs.captureFileVersion(path) === version) fs.unlink(path);
+				} catch {
+					/* Removed or changed outputs belong to the current filesystem owner. */
+				}
+			}
+			const directory = this.#artifactDirectory;
+			if (directory) {
+				try {
+					if (fs.lstat(directory.path).inode === directory.inode)
+						fs.rmdir(directory.path);
+				} catch {
+					/* Nonrecursive cleanup preserves unexpected files and replaced directories. */
+				}
+			}
+		}
+		this.#artifactVersions.clear();
 	}
 }
 
