@@ -2428,6 +2428,9 @@
 		pascalLspRuntime?: PascalLspRuntimeConfig;
 		goLspEnabled?: boolean;
 		goLspCompilerUrl?: string;
+		goLspManifestUrl?: string;
+		/** Distribution root of the bundled runtime asset lock, for persistent LSP assets. */
+		lspAssetRootUrl?: string;
 		rustLspEnabled?: boolean;
 		rustLspCompilerUrl?: string;
 		typescriptLspLibUrl?: string;
@@ -2562,6 +2565,8 @@
 		pascalLspRuntime,
 		goLspEnabled = false,
 		goLspCompilerUrl,
+		goLspManifestUrl,
+		lspAssetRootUrl,
 		rustLspEnabled = false,
 		rustLspCompilerUrl,
 		typescriptLspLibUrl,
@@ -2767,6 +2772,8 @@
 			tclLspEnabled ? tclLspWorkerUrl || '' : '',
 			pascalLspEnabled ? JSON.stringify(pascalLspRuntime) : '',
 			goLspEnabled ? goLspCompilerUrl || '' : '',
+			goLspEnabled ? goLspManifestUrl || '' : '',
+			lspAssetRootUrl || '',
 			goTarget,
 			rustLspEnabled ? rustLspCompilerUrl || '' : '',
 			rustTargetTriple,
@@ -3309,6 +3316,7 @@
 				}[activeDotnetLanguage];
 				return await load({
 					currentUrl,
+					rootUrl: lspAssetRootUrl,
 					dotnet: { moduleUrl: dotnetLspModuleUrl || '' },
 					onStatus: (status) => (dotnetLspStatus = status)
 				});
@@ -3426,8 +3434,10 @@
 				const { getGoLanguageServer } = await import('@wasm-idle/lsp/go');
 				return await getGoLanguageServer({
 					currentUrl,
+					rootUrl: lspAssetRootUrl,
 					go: {
 						compilerUrl: goLspCompilerUrl || '',
+						runtimeManifestUrl: goLspManifestUrl,
 						target: goTarget
 					},
 					onStatus: (status) => (goLspStatus = status)

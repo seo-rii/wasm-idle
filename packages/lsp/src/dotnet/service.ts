@@ -1,4 +1,5 @@
 import type { LspDiagnostic, LspDocument, WorkerLanguageService } from '../lsp.js';
+import { installPersistentModuleAssetFetch } from '../module-asset-fetch.js';
 
 export type DotnetLanguage = 'csharp' | 'fsharp' | 'vbnet';
 
@@ -365,6 +366,7 @@ export function createDotnetWorkerService(
 					`[wasm-idle:dotnet-lsp] initialize language=${language} moduleUrl=${config.moduleUrl}`
 				);
 			}
+			installPersistentModuleAssetFetch(config.moduleUrl);
 			const module = await loadModule(config.moduleUrl);
 			if (typeof module.createDotnetCompiler !== 'function') {
 				throw new Error('wasm-dotnet module must export createDotnetCompiler');
