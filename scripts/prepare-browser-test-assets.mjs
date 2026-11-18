@@ -363,7 +363,12 @@ export async function prepareBrowserTestAssets({
 				manifest.groupBaseUrls?.[group] ||
 				resolvedBaseUrl.href
 		);
-		const directAssets = assets.filter((asset) => !asset.decoded);
+		const mirrorContainer =
+			group === 'container' && (baseUrl || process.env.WASM_IDLE_TEST_ASSET_BASE_URL);
+		// A container mirror serves the assembled website paths, including immutable host objects.
+		const directAssets = assets
+			.filter((asset) => !asset.decoded)
+			.map((asset) => (mirrorContainer ? { ...asset, source: asset.target } : asset));
 		const result = await installAssets(directAssets, inputRoot, groupBaseUrl, {
 			bypassCookie,
 			fetchImpl,
