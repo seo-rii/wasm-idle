@@ -275,10 +275,10 @@
     },
     {
       "group": "container",
-      "source": "6689b111f6f2abeb9bd1c91f81864db5d3dc95d2/artifacts/container-bash/readline-control/distribution.json",
+      "source": "23b7107fa1ac3934d1227cab1ffd445fa13cca1a/artifacts/container-bash/readline-control/distribution.json",
       "target": "container-app/distribution.json",
       "size": 15958,
-      "sha256": "e9977781ecf3508eb45c164e8a5b1027990cca3e3b999f99f9cd8b4a26129cf6"
+      "sha256": "22762f876fe277c0ef0ea8634e2bfa9696042f38859551faf9b94f4ab0a65e50"
     },
     {
       "group": "container",
@@ -331,10 +331,10 @@
     },
     {
       "group": "container",
-      "source": "6689b111f6f2abeb9bd1c91f81864db5d3dc95d2/artifacts/container-bash/readline-control/bash.webc.bin",
-      "target": "container-app/objects/c5a10a4032a71c6e31509afeb08b38469091960f94b3c0acfc4f09ef2340b974/bash.webc.bin",
-      "size": 1823096,
-      "sha256": "c5a10a4032a71c6e31509afeb08b38469091960f94b3c0acfc4f09ef2340b974"
+      "source": "23b7107fa1ac3934d1227cab1ffd445fa13cca1a/artifacts/container-bash/readline-control/bash.webc.bin",
+      "target": "container-app/objects/ae7dcc11371244b16273af3f1e11988c9293d1cd86743015f955bb464ad91c91/bash.webc.bin",
+      "size": 1823229,
+      "sha256": "ae7dcc11371244b16273af3f1e11988c9293d1cd86743015f955bb464ad91c91"
     },
     {
       "group": "container",
@@ -359,10 +359,10 @@
     },
     {
       "group": "container",
-      "source": "6689b111f6f2abeb9bd1c91f81864db5d3dc95d2/artifacts/container-bash/readline-control/page-config.json",
+      "source": "23b7107fa1ac3934d1227cab1ffd445fa13cca1a/artifacts/container-bash/readline-control/page-config.json",
       "target": "container-app/page-config.json",
       "size": 426,
-      "sha256": "09c9cab92238ae16c084a3cf40c10435aecad92b6e358024fae1bb53efec8917"
+      "sha256": "91b5483a16915bd70482d139ead2f6acf2f89b2c6cae15e4696e9823b268e27e"
     }
   ],
   "groupBaseUrls": {
