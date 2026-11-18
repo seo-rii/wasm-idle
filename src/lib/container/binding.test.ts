@@ -661,6 +661,22 @@ describe('existing playground container binding', () => {
 		expect(call.mock.calls.some((row) => ['shellWrite', 'write'].includes(row[0]))).toBe(false);
 	});
 
+	it('keeps the original prompt when Run is cancelled during shell startup', async () => {
+		const { binding, call } = fixture();
+		let started!: () => void;
+		call.mockImplementationOnce(() => new Promise<void>((resolve) => (started = resolve)));
+		const connected = binding.shell.connect(() => {});
+		await vi.waitFor(() => expect(call).toHaveBeenCalledOnce());
+		const controller = new AbortController();
+		const acquisition = binding.beginTerminalExecution(controller.signal);
+		controller.abort(new Error('cancelled before suspend'));
+		started();
+		await expect(acquisition).rejects.toThrow('cancelled before suspend');
+		await connected;
+		await binding.endTerminalExecution();
+		expect(call.mock.calls.map(([method]) => method)).toEqual(['shellStart']);
+	});
+
 	it('delays a first shell connection until an already running program releases the display', async () => {
 		const { binding, call } = fixture();
 		await binding.beginTerminalExecution();
