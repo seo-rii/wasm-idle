@@ -23,10 +23,14 @@ describe('isolated shared workspace storage', () => {
 		}
 	});
 	it('uses independent keys for imported shares and keeps that key after a reload', () => {
-		const original = new URL('https://example.test/wasm-idle/#workspace=source');
+		const original = new URL(
+			'https://example.test/wasm-idle/?lang=c&code=old&theme=dark#workspace=source'
+		);
 		const first = createSharedWorkspaceUrl(original);
 		const second = createSharedWorkspaceUrl(original);
 		expect(first.hash).toBe('');
+		expect([...first.searchParams.keys()].sort()).toEqual(['theme', 'workspace']);
+		expect(first.searchParams.get('theme')).toBe('dark');
 		expect(original.hash).toBe('#workspace=source');
 		expect(workspaceStorageKey(first)).not.toBe(WORKSPACE_STORAGE_KEY);
 		expect(workspaceStorageKey(second)).not.toBe(workspaceStorageKey(first));

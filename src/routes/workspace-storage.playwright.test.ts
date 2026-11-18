@@ -64,6 +64,23 @@ async function withWorkspacePage(
 	});
 }
 
+async function retrySaveAfterStorageError(page: Page) {
+	// Autosave may replace the error banner before the Retry click is delivered.
+	await page.evaluate(() => {
+		function restoreStorage(event: MouseEvent) {
+			if (
+				!(event.target instanceof Element) ||
+				event.target.closest('button')?.textContent?.trim() !== 'Retry save'
+			)
+				return;
+			(window as any).__restoreWorkspaceStorage();
+			document.removeEventListener('click', restoreStorage, true);
+		}
+		document.addEventListener('click', restoreStorage, true);
+	});
+	await page.getByRole('button', { name: 'Retry save', exact: true }).click();
+}
+
 describe('workspace storage browser integration', () => {
 	it(
 		'preserves both tabs when a stale workspace conflicts and is saved as a separate copy',
@@ -295,13 +312,13 @@ describe('workspace storage browser integration', () => {
 					(source) => (window as any).__wasmIdleDebug.getEditorValue() === source,
 					source
 				);
+				await page.getByRole('button', { name: 'Save', exact: true }).click();
+				await page.locator('[data-workspace-save-state="saved"]').waitFor();
 				const editableUrl = new URL(page.url());
 				expect(editableUrl.searchParams.get('workspace')).toBeTruthy();
 				expect(editableUrl.searchParams.has('lang')).toBe(false);
 				expect(editableUrl.searchParams.has('code')).toBe(false);
 				expect(editableUrl.searchParams.has('code64')).toBe(false);
-				await page.getByRole('button', { name: 'Save', exact: true }).click();
-				await page.locator('[data-workspace-save-state="saved"]').waitFor();
 				const storageKey = `wasm-idle:example-workspace:v3:${editableUrl.searchParams.get('workspace')}`;
 				expect(
 					await page.evaluate(
@@ -345,6 +362,122 @@ describe('workspace storage browser integration', () => {
 						localStorage.getItem('wasm-idle:example-workspace:v3')
 					)
 				).toBe(original);
+			});
+		}
+	);
+
+	it.each(['query', 'fragment'])(
+		'retains a %s import across the first isolation reload until it can be saved',
+		browserOptions,
+		async (format) => {
+			await withWorkspacePage(async (page, context, browserUrl) => {
+				const key = 'wasm-idle:example-workspace:v3';
+				const previous = JSON.stringify({
+					version: 6,
+					language: 'CPP',
+					files: [{ path: 'original.cpp', content: 'int previous_work;' }]
+				});
+				const source = 'print("공유 문서")';
+				const url = new URL(browserUrl);
+				url.searchParams.set('theme', 'dark');
+				if (format === 'query') {
+					url.searchParams.set('lang', 'python');
+					url.searchParams.set('code', source);
+					url.searchParams.set('args', '--shared-input');
+				} else {
+					url.hash =
+						'workspace=' +
+						Buffer.from(
+							JSON.stringify({
+								version: 6,
+								language: 'PYTHON',
+								activePath: 'shared.py',
+								files: [{ path: 'shared.py', content: source }]
+							})
+						).toString('base64url');
+				}
+				// The worker takes control on the second navigation and supplies isolation.
+				await page.route(
+					(requestUrl) => requestUrl.pathname === url.pathname,
+					async (route) => {
+						const response = await route.fetch();
+						const headers = response.headers();
+						delete headers['cross-origin-opener-policy'];
+						delete headers['cross-origin-embedder-policy'];
+						await route.fulfill({ response, headers });
+					},
+					{ times: 1 }
+				);
+				await context.addInitScript(
+					({ key, previous, format }) => {
+						if (!navigator.serviceWorker.controller)
+							localStorage.setItem(key, previous);
+						const { getItem, setItem } = Storage.prototype;
+						(window as any).__restoreWorkspaceStorage = () =>
+							Object.assign(Storage.prototype, { getItem, setItem });
+						const isolatedKey = (storage: Storage, name: string) =>
+							storage === localStorage && name.startsWith(key + ':');
+						Storage.prototype.getItem = function (name) {
+							if (format === 'fragment' && isolatedKey(this, name))
+								throw new DOMException('Storage denied', 'SecurityError');
+							return getItem.call(this, name);
+						};
+						Storage.prototype.setItem = function (name, value) {
+							if (format === 'query' && isolatedKey(this, name))
+								throw new DOMException('Quota full', 'QuotaExceededError');
+							setItem.call(this, name, value);
+						};
+					},
+					{ key, previous, format }
+				);
+				await page.goto(url.href, { waitUntil: 'domcontentloaded' });
+				await page.waitForFunction(() => {
+					const [entry] = performance.getEntriesByType(
+						'navigation'
+					) as PerformanceNavigationTiming[];
+					return (
+						entry?.type === 'reload' &&
+						crossOriginIsolated &&
+						!!navigator.serviceWorker.controller
+					);
+				});
+				await page.locator('[data-workspace-save-state="error"]').waitFor();
+				expect(page.url()).toBe(url.href);
+				expect(await page.locator('#language-select').inputValue()).toBe('PYTHON');
+				expect(
+					await page.evaluate(() => (window as any).__wasmIdleDebug.getEditorValue())
+				).toBe(source);
+
+				const edited = 'print("편집한 문서")';
+				await page.evaluate(
+					(text) => (window as any).__wasmIdleDebug.setEditorValue(text),
+					edited
+				);
+				await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+				await page.getByRole('button', { name: 'Share', exact: true }).click();
+				await page.getByText('Share URL copied', { exact: true }).waitFor();
+				const share = new URL(await page.evaluate(() => navigator.clipboard.readText()));
+				expect(share.searchParams.get('theme')).toBe('dark');
+				for (const name of ['lang', 'code', 'args', 'workspace'])
+					expect(share.searchParams.has(name)).toBe(false);
+				const exported = JSON.parse(
+					Buffer.from(share.hash.slice('#workspace='.length), 'base64url').toString()
+				);
+				expect(exported.files).toContainEqual(expect.objectContaining({ content: edited }));
+				expect(page.url()).toBe(url.href);
+
+				await retrySaveAfterStorageError(page);
+				await page.waitForURL((current) => current.searchParams.has('workspace'));
+				const editable = new URL(page.url());
+				expect(editable.hash).toBe('');
+				expect(editable.searchParams.has('code')).toBe(false);
+				const saved = await page.evaluate(
+					(key) => JSON.parse(localStorage.getItem(key)!),
+					`${key}:${editable.searchParams.get('workspace')}`
+				);
+				expect(saved.language).toBe('PYTHON');
+				expect(saved.files).toContainEqual(expect.objectContaining({ content: edited }));
+				expect(await page.evaluate((key) => localStorage.getItem(key), key)).toBe(previous);
 			});
 		}
 	);
@@ -764,7 +897,10 @@ describe('workspace storage browser integration', () => {
 				);
 				await page.evaluate(() => {
 					const target = window as any;
-					target.__originalSetItem = Storage.prototype.setItem;
+					const setItem = Storage.prototype.setItem;
+					target.__restoreWorkspaceStorage = () => {
+						Storage.prototype.setItem = setItem;
+					};
 					Storage.prototype.setItem = function () {
 						throw new DOMException('Quota full', 'QuotaExceededError');
 					};
@@ -800,20 +936,7 @@ describe('workspace storage browser integration', () => {
 					content: 'latest unsaved content',
 					encoding: 'utf-8'
 				});
-				// Autosave may replace the error banner before the Retry click is delivered.
-				await page.evaluate(() => {
-					function restoreStorage(event: MouseEvent) {
-						if (
-							!(event.target instanceof Element) ||
-							event.target.closest('button')?.textContent?.trim() !== 'Retry save'
-						)
-							return;
-						Storage.prototype.setItem = (window as any).__originalSetItem;
-						document.removeEventListener('click', restoreStorage, true);
-					}
-					document.addEventListener('click', restoreStorage, true);
-				});
-				await page.getByRole('button', { name: 'Retry save', exact: true }).click();
+				await retrySaveAfterStorageError(page);
 				await page.locator('[data-workspace-save-state="saved"]').waitFor();
 				expect(
 					await page.getByRole('alert').filter({ hasText: 'Not saved locally' }).count()
