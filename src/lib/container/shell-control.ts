@@ -72,15 +72,11 @@ function rcfile(session: string, languages: readonly string[]) {
 		'    if [[ "$__wic_version" == 4 && "$__wic_session" == "$__wic_expected_session" && "$__wic_language" == resize && -z "$__wic_extra" && "$__wic_generation" =~ ^[1-9][0-9]{0,9}$ ]] &&',
 		`       (( __wic_generation <= ${MAX_GENERATION} && __wic_generation > \${__wasm_idle_resize_generation:-0} )); then`,
 		'      __wasm_idle_resize_generation=$__wic_generation',
-		// Active prompts use native rl_resize_terminal and its wrapped-line cleanup.
-		// While Run owns output, TERM refreshes geometry without repainting a prompt.
-		'      if [[ ${__wasm_idle_terminal_suspended:-0} == 0 ]] || TERM=${TERM-}; then',
-		`        if '${SHELL_CONTROL_ROUTE}' 4 "$__wic_session" "$__wic_generation" resize ok; then :; else :; fi`,
-		'        [[ ${__wasm_idle_terminal_suspended:-0} == 0 ]] && return 125',
-		'        return 0',
-		'      else',
-		`        if '${SHELL_CONTROL_ROUTE}' 4 "$__wic_session" "$__wic_generation" resize failed; then :; else :; fi`,
-		'      fi',
+		// Native resize preserves TERM, including an unset or readonly user value.
+		// Silent refresh keeps Run output intact until the ordinary resume redraw.
+		`      if '${SHELL_CONTROL_ROUTE}' 4 "$__wic_session" "$__wic_generation" resize ok; then :; else :; fi`,
+		'      [[ ${__wasm_idle_terminal_suspended:-0} == 0 ]] && return 125',
+		'      return 126',
 		'    fi',
 		'  fi',
 		// WASIX dup2 restoration loses stdin's polling rights. Read through a fresh

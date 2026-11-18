@@ -159,21 +159,35 @@ describe('real Bash directory control protocol', () => {
 				`TERM=dumb\n__wasm_idle_terminal_suspended=${suspended ? 1 : 0}\n__wasm_idle_poll\nprintf 'result=%s\\n' "$?"`
 			);
 			expect(result.status).toBe(0);
-			expect(result.stdout).toBe(`result=${suspended ? 0 : 125}\n`);
+			expect(result.stdout).toBe(`result=${suspended ? 126 : 125}\n`);
 			expect(readFileSync(native.ack, 'utf8')).toContain(
 				'|4|' + 'ab'.repeat(16) + '|1|resize|ok\n'
 			);
 		}
 	);
 
-	it('refreshes geometry safely when the user unsets TERM under nounset', () => {
-		const native = nativeFixture('1 ' + 'ab'.repeat(16) + ' 0 CPP\n');
-		writeFileSync(native.resizeRequest, '4 ' + 'ab'.repeat(16) + ' 1 resize\n');
-		const result = native.run(
-			'unset TERM\nset -eu\nif __wasm_idle_poll; then status=0; else status=$?; fi\nprintf "result=%s\\n" "$status"'
-		);
-		expect(result).toMatchObject({ status: 0, stdout: 'result=125\n', stderr: '' });
-	});
+	it.each([
+		[false, false],
+		[false, true],
+		[true, false],
+		[true, true]
+	])(
+		'preserves unset or readonly TERM while resizing (suspended=%s, readonly=%s)',
+		(suspended, readonly) => {
+			const native = nativeFixture('1 ' + 'ab'.repeat(16) + ' 0 CPP\n');
+			writeFileSync(native.resizeRequest, '4 ' + 'ab'.repeat(16) + ' 1 resize\n');
+			const setup = readonly ? 'TERM=custom; readonly TERM' : 'unset TERM';
+			const check = readonly ? '[[ $TERM == custom ]]' : '[[ ! -v TERM ]]';
+			const result = native.run(
+				`${setup}\nset -eu\n__wasm_idle_terminal_suspended=${suspended ? 1 : 0}\nif __wasm_idle_poll; then status=0; else status=$?; fi\n${check}\nprintf "result=%s\\n" "$status"`
+			);
+			expect(result).toMatchObject({
+				status: 0,
+				stdout: `result=${suspended ? 126 : 125}\n`,
+				stderr: ''
+			});
+		}
+	);
 
 	it('installs a readonly bounded rcfile and a separate mutable request mailbox', () => {
 		const { control, fs, settings } = fixture();
