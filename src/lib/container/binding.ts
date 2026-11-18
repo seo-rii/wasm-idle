@@ -16,6 +16,16 @@ import type {
 	ContainerWorkspaceEntry
 } from './protocol.js';
 
+// The Bash image has no termcap database. Readline needs erase-to-end-of-line
+// and an explicit newline at its right margin when the browser wraps elsewhere.
+const shellEnvironment = {
+	PS1: '\\[\\e[1;34m\\]\\w\\[\\e[0m\\] $ ',
+	TERM: 'xterm',
+	TERMCAP: String.raw`xterm:am:do=^J:ce=\E[K:cd=\E[J:cl=\E[H\E[2J:cr=^M:le=^H:nd=\E[C:up=\E[A:ku=\E[A:kd=\E[B:kr=\E[C:kl=\E[D:`,
+	// Prompts use stderr. Join it to stdout before the first prompt to preserve write order.
+	PROMPT_COMMAND: 'unset PROMPT_COMMAND; exec 2>&1'
+};
+
 export type ContainerPlaygroundBindingOptions = {
 	applicationRootURL: string;
 	workspaceId: string;
@@ -277,7 +287,7 @@ export function createContainerPlaygroundBinding(
 				await connection().call('shellStart', [
 					{
 						cwd: `/workspace/${language}`,
-						env: { PS1: '\\[\\e[1;34m\\]\\w\\[\\e[0m\\] $ ' }
+						env: shellEnvironment
 					}
 				]);
 			})());
