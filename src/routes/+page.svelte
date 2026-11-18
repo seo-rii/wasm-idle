@@ -3092,6 +3092,7 @@
 					// The complete workspace above is authoritative; legacy keys are optional.
 				}
 			}
+			const releaseInput = terminal.reserveInput?.(stopExecution);
 			try {
 				await publishContainerWorkspace(
 					language,
@@ -3156,6 +3157,7 @@
 						: stdinInput;
 				const result = await executeTerminalRun({
 					terminal,
+					playground,
 					language,
 					code: codeToRun,
 					log,
@@ -3199,6 +3201,7 @@
 						: 'failed';
 				if (!executionWasCancelled && !executionTimedOut) throw error;
 			} finally {
+				releaseInput?.();
 				executionObserver.finish(generation, progressOutcome, executionError);
 				progressSession.report?.({ kind: 'settled', outcome: progressOutcome });
 				if (executionAbortController === abortController)

@@ -672,6 +672,47 @@ describe('existing playground container binding', () => {
 		expect(call.mock.calls.some((row) => ['shellWrite', 'write'].includes(row[0]))).toBe(false);
 	});
 
+	it('keeps the original prompt when Run is cancelled during shell startup', async () => {
+		const { binding, call } = fixture();
+		let started!: () => void;
+		call.mockImplementationOnce(() => new Promise<void>((resolve) => (started = resolve)));
+		const connected = binding.shell.connect(() => {});
+		await vi.waitFor(() => expect(call).toHaveBeenCalledOnce());
+		const controller = new AbortController();
+		const acquisition = binding.beginTerminalExecution(controller.signal);
+		controller.abort(new Error('cancelled before suspend'));
+		started();
+		await expect(acquisition).rejects.toThrow('cancelled before suspend');
+		await connected;
+		await binding.endTerminalExecution();
+		expect(call.mock.calls.map(([method]) => method)).toEqual(['shellStart']);
+	});
+
+	it('delays a first shell connection until an already running program releases the display', async () => {
+		const { binding, call } = fixture();
+		await binding.beginTerminalExecution();
+		const connected = binding.shell.connect(() => {});
+		const sandbox = await binding.load('JAVASCRIPT');
+		await sandbox.run('code', false);
+		expect(call.mock.calls.map(([method]) => method)).toEqual(['run']);
+		await binding.endTerminalExecution();
+		await connected;
+		expect(call.mock.calls.map(([method]) => method)).toEqual(['run', 'shellStart']);
+	});
+
+	it.each(['shell', 'playground'] as const)(
+		'settles a delayed shell connection on %s disposal',
+		async (target) => {
+			const { binding, call } = fixture();
+			await binding.beginTerminalExecution();
+			const connected = binding.shell.connect(() => {});
+			await (target === 'shell' ? binding.shell.dispose() : binding.dispose());
+			await connected;
+			await binding.endTerminalExecution();
+			expect(call.mock.calls.map(([method]) => method)).not.toContain('shellStart');
+		}
+	);
+
 	it('keeps batch execution independent from an unused or unavailable shell and skips redraw after disposal', async () => {
 		const { binding, call } = fixture();
 		await binding.beginTerminalExecution();

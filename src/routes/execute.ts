@@ -1,4 +1,5 @@
 import type { ProgressLike } from '@wasm-idle/core';
+import type { ContainerPlaygroundBinding } from '$lib/container/binding';
 import type { SandboxExecutionOptions } from '$lib/playground/options';
 
 interface TerminalRunner {
@@ -23,6 +24,7 @@ interface TerminalRunner {
 
 interface ExecuteTerminalRunOptions {
 	terminal: TerminalRunner;
+	playground: Pick<ContainerPlaygroundBinding, 'beginTerminalExecution' | 'endTerminalExecution'>;
 	language: string;
 	code: string;
 	log?: boolean;
@@ -33,6 +35,7 @@ interface ExecuteTerminalRunOptions {
 
 export async function executeTerminalRun({
 	terminal,
+	playground,
 	language,
 	code,
 	log = true,
@@ -42,12 +45,18 @@ export async function executeTerminalRun({
 }: ExecuteTerminalRunOptions) {
 	const signal = options.signal;
 	signal?.throwIfAborted();
-	await terminal.clear();
-	signal?.throwIfAborted();
-	const prepared = await terminal.prepare(language, code, log, progress, args, options);
-	signal?.throwIfAborted();
-	if (!prepared) return prepared;
-	const result = await terminal.run(language, code, log, progress, args, options);
-	signal?.throwIfAborted();
-	return result;
+	await playground.beginTerminalExecution(signal);
+	try {
+		signal?.throwIfAborted();
+		await terminal.clear();
+		signal?.throwIfAborted();
+		const prepared = await terminal.prepare(language, code, log, progress, args, options);
+		signal?.throwIfAborted();
+		if (!prepared) return prepared;
+		const result = await terminal.run(language, code, log, progress, args, options);
+		signal?.throwIfAborted();
+		return result;
+	} finally {
+		await playground.endTerminalExecution();
+	}
 }

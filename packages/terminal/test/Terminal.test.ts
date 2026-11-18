@@ -16,9 +16,6 @@ describe('Terminal source', () => {
 		expect(source).toMatch(
 			/const isCopyShortcut =\s+\(ev\.ctrlKey \|\| ev\.metaKey\) && ev\.key\.toLowerCase\(\) === 'c';/
 		);
-		expect(source).toMatch(
-			/if \(isCopyShortcut\) \{\s+ev\.preventDefault\(\);\s+sandbox\.kill\?\.\(\);\s+\}/s
-		);
 	});
 
 	it('requires an injected playground binding without importing the root runtime', () => {
@@ -84,14 +81,8 @@ describe('Terminal source', () => {
 		);
 	});
 
-	it('submits pending stdin and sends EOF on ctrl+d for read-to-end programs', () => {
-		expect(source).toMatch(
-			/else if \(\(ev\.ctrlKey \|\| ev\.metaKey\) && ev\.key\.toLowerCase\(\) === 'd'\) \{\s+ev\.preventDefault\(\);\s+if \(input\.length > 0\) submitCurrentInput\(\);\s+submitSandboxEof\(\);\s+\}/s
-		);
-	});
-
 	it('uses xterm onData for printable keys, Enter, and Backspace instead of relying on keydown heuristics', () => {
-		expect(source).toMatch(/term\.onData\(\(data: string\) => \{/);
+		expect(source).toMatch(/term\.onData\(function receiveInput\(data: string\) \{/);
 		expect(source).toMatch(/if \(chunk === '\\r' \|\| chunk === '\\n'\)/);
 		expect(source).toMatch(/if \(chunk === '\\u007f'\)/);
 		expect(source).toMatch(/inputCursor = 0,/);
@@ -194,12 +185,6 @@ describe('Terminal source', () => {
 		);
 		expect(source).toMatch(
 			/function submitSandboxEof\(\) \{\s+if \(sandbox && sandboxAcceptingInput\) sandbox\.eof\?\.\(\);\s+else pendingSandboxEof = true;\s+\}/s
-		);
-		expect(source).toMatch(
-			/async write\(input: string\) \{\s+const shellTarget = finish && executionInputOwners === 0 \? shell : undefined;\s+await waitForInput\(\);\s+if \(!input\) return;\s+if \(shellTarget\) return await sendShellInput\(shellTarget, input\);\s+applyPastedText\(input\);/s
-		);
-		expect(source).toMatch(
-			/sandboxAcceptingInput = true;\s+flushPendingSandboxInput\(\);\s+executionRunWillFinalize = true;\s+const result = await runSandbox\(\s+sandbox\.run\(code, false, log, runProgress, args, executionOptions\)\s+\);/s
 		);
 		expect(source).toMatch(
 			/function finishSandboxRun\(\) \{\s+sandboxAcceptingInput = false;/s

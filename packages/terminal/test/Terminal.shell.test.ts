@@ -287,6 +287,52 @@ describe('Terminal host shell binding', () => {
 		expect(shell.binding.write).toHaveBeenCalledWith('echo shell\n');
 	});
 
+	it('keeps keyboard edits, early writes and EOF through clear and sandbox replacement', async () => {
+		const shell = createShell();
+		const { terminal, sandbox } = await mountTerminal(shell.binding);
+		await terminal.run('FIRST', 'old');
+		const release = terminal.reserveInput!(vi.fn());
+		renderer.data?.('12\u007f0\r');
+		const clearing = terminal.clear();
+		await terminal.write('100\n');
+		await clearing;
+		await terminal.prepare('SECOND', 'new');
+		renderer.data?.('third');
+		dispatchKey(new KeyboardEvent('keydown', { ctrlKey: true, key: 'd' }), '\u0004');
+		expect(shell.binding.write).not.toHaveBeenCalled();
+		expect(sandbox.write).not.toHaveBeenCalled();
+
+		await terminal.run('SECOND', 'new');
+		expect(vi.mocked(sandbox.write!).mock.calls).toEqual([['10\n'], ['100\n'], ['third\n']]);
+		expect(sandbox.eof).toHaveBeenCalledOnce();
+		expect(vi.mocked(sandbox.write!).mock.invocationCallOrder.at(-1)).toBeLessThan(
+			vi.mocked(sandbox.eof!).mock.invocationCallOrder[0]!
+		);
+		release();
+		await terminal.write('echo shell\n');
+		expect(shell.binding.write).toHaveBeenCalledExactlyOnceWith('echo shell\n');
+	});
+
+	it('drops cancelled startup input without releasing the next foreground run', async () => {
+		const shell = createShell();
+		const { terminal, sandbox } = await mountTerminal(shell.binding);
+		const interrupt = vi.fn();
+		const cancelled = terminal.reserveInput!(interrupt);
+		renderer.data?.('stale\r');
+		await terminal.eof?.();
+		dispatchKey(new KeyboardEvent('keydown', { ctrlKey: true, key: 'c' }), '\u0003');
+		expect(interrupt).toHaveBeenCalledOnce();
+		expect(shell.binding.interrupt).not.toHaveBeenCalled();
+		const current = terminal.reserveInput!(vi.fn());
+		cancelled();
+		await terminal.write('current\n');
+		await terminal.run('C', 'new');
+		current();
+		expect(sandbox.write).toHaveBeenCalledExactlyOnceWith('current\n');
+		expect(sandbox.eof).not.toHaveBeenCalled();
+		expect(shell.binding.write).not.toHaveBeenCalled();
+	});
+
 	it('does not report shell output as Run readiness and preserves sandbox stop controls', async () => {
 		const running = deferred<boolean>();
 		const shell = createShell();

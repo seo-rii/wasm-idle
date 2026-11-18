@@ -2,7 +2,50 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { executeTerminalRun } from './execute';
 
+function playgroundBinding() {
+	return {
+		beginTerminalExecution: vi.fn(async () => {}),
+		endTerminalExecution: vi.fn(async () => {})
+	};
+}
+
 describe('executeTerminalRun', () => {
+	it('waits for Bash to yield the display before clearing it and restores the prompt after Run', async () => {
+		let grant!: () => void;
+		const playground = playgroundBinding();
+		playground.beginTerminalExecution.mockImplementation(
+			() => new Promise<void>((resolve) => (grant = resolve))
+		);
+		const terminal = {
+			clear: vi.fn(async () => {}),
+			prepare: vi.fn(async () => true),
+			run: vi.fn(async () => 'finished')
+		};
+		const run = executeTerminalRun({ terminal, playground, language: 'JAVASCRIPT', code: '' });
+		expect(playground.beginTerminalExecution).toHaveBeenCalledOnce();
+		expect(terminal.clear).not.toHaveBeenCalled();
+		expect(playground.endTerminalExecution).not.toHaveBeenCalled();
+		grant();
+		await expect(run).resolves.toBe('finished');
+		expect(terminal.run).toHaveBeenCalledBefore(playground.endTerminalExecution);
+		expect(playground.endTerminalExecution).toHaveBeenCalledOnce();
+	});
+
+	it('leaves a busy shell intact when it cannot yield the display', async () => {
+		const playground = playgroundBinding();
+		playground.beginTerminalExecution.mockRejectedValue(new Error('Shell is busy'));
+		const terminal = {
+			clear: vi.fn(async () => {}),
+			prepare: vi.fn(async () => true),
+			run: vi.fn(async () => true)
+		};
+		await expect(
+			executeTerminalRun({ terminal, playground, language: 'CPP', code: '' })
+		).rejects.toThrow('Shell is busy');
+		expect(terminal.clear).not.toHaveBeenCalled();
+		expect(playground.endTerminalExecution).not.toHaveBeenCalled();
+	});
+
 	it('runs prepare then execute with debug options', async () => {
 		const terminal = {
 			clear: vi.fn(async () => {}),
@@ -12,6 +55,7 @@ describe('executeTerminalRun', () => {
 
 		const result = await executeTerminalRun({
 			terminal,
+			playground: playgroundBinding(),
 			language: 'CPP',
 			code: 'int main() {}',
 			log: false,
@@ -50,6 +94,7 @@ describe('executeTerminalRun', () => {
 
 		const result = await executeTerminalRun({
 			terminal,
+			playground: playgroundBinding(),
 			language: 'CPP',
 			code: 'int main() {}'
 		});
@@ -70,10 +115,12 @@ describe('executeTerminalRun', () => {
 			prepare: vi.fn(async () => true),
 			run: vi.fn(async () => 'should not happen')
 		};
+		const playground = playgroundBinding();
 		const controller = new AbortController();
 		const reason = new DOMException('execution stopped during clear', 'AbortError');
 		const execution = executeTerminalRun({
 			terminal,
+			playground,
 			language: 'C',
 			code: 'int main(void) { return 0; }',
 			options: { signal: controller.signal }
@@ -85,6 +132,7 @@ describe('executeTerminalRun', () => {
 		releaseClear?.();
 
 		await rejected;
+		expect(playground.endTerminalExecution).toHaveBeenCalledOnce();
 		expect(terminal.prepare).not.toHaveBeenCalled();
 		expect(terminal.run).not.toHaveBeenCalled();
 	});
@@ -105,6 +153,7 @@ describe('executeTerminalRun', () => {
 		const reason = new DOMException('execution stopped during prepare', 'AbortError');
 		const execution = executeTerminalRun({
 			terminal,
+			playground: playgroundBinding(),
 			language: 'CPP',
 			code: 'int main() { return 0; }',
 			options: { signal: controller.signal }
@@ -142,6 +191,7 @@ describe('executeTerminalRun', () => {
 
 		await executeTerminalRun({
 			terminal,
+			playground: playgroundBinding(),
 			language: 'PYTHON',
 			code: 'print(1)',
 			progress
@@ -175,6 +225,7 @@ describe('executeTerminalRun', () => {
 
 		await executeTerminalRun({
 			terminal,
+			playground: playgroundBinding(),
 			language: 'NIM',
 			code: 'echo "ok"',
 			progress

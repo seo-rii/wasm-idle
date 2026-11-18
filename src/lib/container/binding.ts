@@ -95,7 +95,7 @@ export interface ContainerPlaygroundBinding extends PlaygroundBinding {
 	inspect(): Promise<unknown>;
 	setShellDirectory(language: string): Promise<void>;
 	/** Claim the shared display at Bash's real primary prompt without consuming its input. */
-	beginTerminalExecution(): Promise<void>;
+	beginTerminalExecution(signal?: AbortSignal): Promise<void>;
 	/** Redraw the actual Bash prompt after the Terminal has written its execution footer. */
 	endTerminalExecution(): Promise<void>;
 	syncWorkspace(language: string, files: readonly ContainerWorkspaceFile[]): Promise<void>;
@@ -139,7 +139,12 @@ export function createContainerPlaygroundBinding(
 	let appliedShellSize: typeof shellSize;
 	let resizingShell: Promise<void> | undefined;
 	let requestedShellLanguage: string | undefined;
-	let terminalExecution = false;
+	let terminalExecution: 'before-shell' | 'suspended' | undefined;
+	let startDeferredShell: ((start: boolean) => void) | undefined;
+	const settleShellStartup = (start: boolean) => {
+		startDeferredShell?.(start);
+		startDeferredShell = undefined;
+	};
 	const prewarmEnvironment = options.prewarmEnvironment ?? browserPrewarmEnvironment;
 	let prewarmEnabled = true;
 	let warm:
@@ -289,6 +294,13 @@ export function createContainerPlaygroundBinding(
 			shellOutput = output;
 			shellError = error;
 			return (shellConnection ??= (async () => {
+				if (terminalExecution === 'before-shell') {
+					// A cold Run may own the display before the Terminal connects Bash.
+					const start = await new Promise<boolean>(
+						(resolve) => (startDeferredShell = resolve)
+					);
+					if (!start) return;
+				}
 				const language = requestedShellLanguage ?? options.getLanguage?.() ?? 'CPP';
 				await queues.get(language)?.catch(() => {});
 				const initialSize = shellSize;
@@ -340,25 +352,34 @@ export function createContainerPlaygroundBinding(
 			await connection().call('shellInterrupt');
 		},
 		async dispose() {
+			settleShellStartup(false);
 			await cleanupOwner('shellDispose');
 		}
 	};
 	const binding: ContainerPlaygroundBinding = {
-		async beginTerminalExecution() {
-			if (terminalExecution || !shellConnection || disposed) return;
+		async beginTerminalExecution(signal) {
+			signal?.throwIfAborted();
+			if (terminalExecution || disposed) return;
+			if (!shellConnection) {
+				terminalExecution = 'before-shell';
+				return;
+			}
 			// A shell unavailable without cross-origin isolation must not block batch Run.
 			try {
 				await shellConnection;
 			} catch {
 				return;
 			}
+			// A cancelled cold Run can leave the original prompt exactly where Bash drew it.
+			signal?.throwIfAborted();
 			await connection().call('shellSuspend');
-			terminalExecution = true;
+			terminalExecution = 'suspended';
 		},
 		async endTerminalExecution() {
-			if (!terminalExecution) return;
-			terminalExecution = false;
-			await cleanupOwner('shellResume');
+			const previous = terminalExecution;
+			terminalExecution = undefined;
+			if (previous === 'before-shell') settleShellStartup(true);
+			if (previous === 'suspended') await cleanupOwner('shellResume');
 		},
 		async setShellDirectory(language) {
 			if (!/^[A-Z][A-Z0-9_]*$/.test(language)) throw new TypeError('Invalid shell language');
@@ -542,6 +563,7 @@ export function createContainerPlaygroundBinding(
 		async dispose() {
 			if (disposed) return;
 			disposed = true;
+			settleShellStartup(false);
 			abortWarm();
 			changes.clear();
 			reads.clear();
