@@ -63,10 +63,15 @@ printf alive
 
 test('WASI Readline readiness accepts terminal input and retains the bounded idle timeout', async () => {
 	const patch = await readFile(new URL('readline-control.patch', here), 'utf8');
-	const branches = [...patch.matchAll(/\+#if defined \(__wasi__\)\n(?:\+.*\n)*?\+#else/g)];
+	const branches = [...patch.matchAll(/\+#if defined \(__wasi__\)\n(?:\+.*\n)*?\+#else/g)].filter(
+		([branch]) => /\+  (?:result = select|return \(select)/.test(branch)
+	);
 	assert.equal(branches.length, 2, 'both actual WASI readiness branches must be present');
 	const calls = branches.map(([branch]) =>
-		branch.split('\n').find((line) => /^\+  (?:result = select|return \(select)/.test(line)).slice(1)
+		branch
+			.split('\n')
+			.find((line) => /^\+  (?:result = select|return \(select)/.test(line))
+			.slice(1)
 	);
 	const fixture = await readFile(new URL('readline-input.fixture.c', here), 'utf8');
 	const directory = await mkdtemp(path.join(tmpdir(), 'bash-readline-input-'));
@@ -116,6 +121,47 @@ test('exact C initialization protects only imported control, and the hook defers
 		);
 		execFileSync('cc', ['-std=c11', '-Wall', '-Wextra', '-Werror', source, '-o', binary]);
 		execFileSync(binary);
+	} finally {
+		await rm(directory, { recursive: true, force: true });
+	}
+});
+
+test('actual WASI Readline gather distinguishes EOF from temporarily empty input', async () => {
+	const patch = await readFile(new URL('readline-control.patch', here), 'utf8');
+	const source = patch
+		.slice(patch.indexOf('--- a/lib/readline/input.c'))
+		.split('\n')
+		.filter((line) => /^[ +]/.test(line) && !line.startsWith('+++'))
+		.map((line) => line.slice(1))
+		.join('\n');
+	const gather = source.match(/static int\nrl_gather_tyi \(void\)\n\{[\s\S]*?\n\}/)?.[0];
+	assert(gather, 'compile the actual complete gather function from the producer patch');
+	const readKey = source.match(/int\nrl_read_key \(void\)\n\{[\s\S]*?\n\}/)?.[0];
+	assert(readKey, 'compile the actual key loop so physical EOF cannot become a newline');
+	const fixture = await readFile(new URL('readline-eof.fixture.c', here), 'utf8');
+	const directory = await mkdtemp(path.join(tmpdir(), 'bash-readline-eof-'));
+	try {
+		const file = path.join(directory, 'input.c'),
+			binary = path.join(directory, 'input');
+		await writeFile(
+			file,
+			fixture.replace('/* GATHER_SOURCE */', gather).replace('/* KEY_SOURCE */', readKey)
+		);
+		// The pinned upstream key loop intentionally assigns inside a condition.
+		execFileSync('cc', [
+			'-std=c11',
+			'-Wall',
+			'-Wextra',
+			'-Werror',
+			'-Wno-parentheses',
+			file,
+			'-o',
+			binary
+		]);
+		assert.equal(
+			execFileSync(binary, { encoding: 'utf8', timeout: 2000 }),
+			'input; idle timeout; EAGAIN; buffered input before EOF; repeated EOF: passed\n'
+		);
 	} finally {
 		await rm(directory, { recursive: true, force: true });
 	}
