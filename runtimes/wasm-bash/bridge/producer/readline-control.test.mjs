@@ -26,6 +26,7 @@ test('Readline control is an explicit opt-in and all producer patch bytes are pi
 	assert.equal(policy.readonlyFunctionRequired, true);
 	assert.equal(policy.redrawExitCode, 124);
 	assert.equal(policy.resizeExitCode, 125);
+	assert.equal(policy.silentResizeExitCode, 126);
 	assert.equal(policy.ignoreReturnFlag, 'SEVAL_IGNORE_RETURN');
 	assert.deepEqual(policy.importedFunctionInitialization, {
 		readonly: true,
@@ -52,7 +53,7 @@ test('actual Bash conditional command semantics retain control statuses without 
 set -eE
 trap 'printf unexpected-ERR; exit 99' ERR
 __wasm_idle_poll() { return "$1"; }
-for expected in 124 125; do
+for expected in 124 125 126; do
 if __wasm_idle_poll "$expected"; then result=0; else result=$?; fi
 test "$result" -eq "$expected"
 done

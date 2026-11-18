@@ -10,8 +10,8 @@
 	"sourceRevision": "fc8096485478055f4fcf31402004fdd8ff6b72b7",
 	"patch": {
 		"path": "readline-control.patch",
-		"bytes": 14688,
-		"sha256": "c3267bc5b86f06c1bee1bafd62f7d893ae96691af3a79898ac6405c62b3e599b"
+		"bytes": 14839,
+		"sha256": "a523d3f59adc46d6f86b4d13a2f5ea6c1779c0f442dbdd91e8f9e8ea509e6a43"
 	},
 	"files": {
 		"bashline.c": {
@@ -20,8 +20,8 @@
 				"sha256": "a4c59b4484c3e056b9ccca7f7cddd016e9f12697f717ff27c3a7052c8566b4d9"
 			},
 			"patched": {
-				"bytes": 132108,
-				"sha256": "820c031105339655ea4d2d5efdc92a911d8161b9fca9da5ee274aafab2990405"
+				"bytes": 132253,
+				"sha256": "51a6bc25afd04c6c86276cbe01ebf10468395daf69bef5d4abd867065412eef0"
 			}
 		},
 		"builtins/common.h": {
@@ -74,5 +74,6 @@
 		],
 		"closedInput": "read-ready with FIONREAD zero uses a nonblocking read; physical EOF reaches the key loop without a synthetic newline"
 	},
-	"resizeExitCode": 125
+	"resizeExitCode": 125,
+	"silentResizeExitCode": 126
 }

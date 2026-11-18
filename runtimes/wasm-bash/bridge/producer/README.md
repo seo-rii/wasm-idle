@@ -252,16 +252,18 @@ and mark. The callback also restores the previous signal status and `$_`.
 Alias expansion is disabled only for the fixed readonly function invocation.
 The new internal `SEVAL_IGNORE_RETURN` flag applies Bash's actual
 `CMD_IGNORE_RETURN` conditional context to that invocation, so an intentional
-`124` or `125` cannot activate a user's `set -e` or `ERR` trap. Existing eval/bind callers
+`124`, `125` or `126` cannot activate a user's `set -e` or `ERR` trap. Existing eval/bind callers
 retain their original behavior.
 
 The function returns `0` for an unchanged state or `124` after a transition that
 requires a redraw. On `124`, Bash decodes the current `PS1` again and redraws the
 preserved editing line. For a terminal geometry change it returns `125`: after
-restoring the editing buffer, Bash calls Readline's public `rl_resize_terminal()`
-to read the current TTY dimensions and run its SIGWINCH redisplay path. This
-clears and redraws the previous wrapped line without decoding a new prompt or
-appending a second copy of the editing buffer. Ordinary `bind -x` retains its
+restoring the editing buffer, Bash clears the old visible editing region and
+resets its display coordinates before calling Readline's public
+`rl_resize_terminal()` to read the current TTY dimensions and redisplay the line.
+The silent status `126` calls `rl_reset_screen_size()` without repainting while
+another Run owns terminal output. Neither resize status assigns the user's
+`TERM` variable. Ordinary `bind -x` retains its
 existing handling of all return codes. The function must not read terminal input, replace the
 editing variables, execute an unbounded command, or print terminal output.
 Mailbox handling, allowed cwd targets, and actual `builtin cd` belong to the

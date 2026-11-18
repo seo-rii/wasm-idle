@@ -43,8 +43,11 @@ static char restored_lastarg[128];
 static int wasm_idle_readline_poll(void);
 static int (*rl_event_hook)(void);
 static int array_needs_making;
-static int resizes, forced_redraws, prompt_redraws;
-void rl_resize_terminal(void) { resizes++; }
+static int resizes, size_resets, forced_redraws, prompt_redraws, display_step;
+int rl_clear_visible_line(void) { assert(display_step == 0); display_step = 1; return 0; }
+int rl_on_new_line(void) { assert(display_step == 1); display_step = 2; return 0; }
+void rl_resize_terminal(void) { assert(display_step == 2); resizes++; display_step = 0; }
+void rl_reset_screen_size(void) { size_resets++; }
 static void rl_forced_update_display(void) { forced_redraws++; }
 static void rl_redraw_prompt_last_line(void) { prompt_redraws++; }
 static void redisplay(int poll, int r, int ce) {
@@ -94,12 +97,16 @@ int main(void) {
   assert(resizes == 0 && forced_redraws == 0 && prompt_redraws == 0);
   redisplay(1, 125, 0);
   assert(resizes == 1 && forced_redraws == 0 && prompt_redraws == 0);
+  redisplay(1, 126, 0);
+  assert(size_resets == 1 && resizes == 1 && forced_redraws == 0 && prompt_redraws == 0);
   redisplay(1, 124, 0);
   assert(resizes == 1 && forced_redraws == 1 && prompt_redraws == 0);
   redisplay(0, 125, 1); /* bind -x does not gain a new control status. */
   assert(resizes == 1 && forced_redraws == 1 && prompt_redraws == 1);
   redisplay(0, 124, 1);
   assert(resizes == 1 && forced_redraws == 2 && prompt_redraws == 1);
+  redisplay(0, 126, 1);
+  assert(size_resets == 1 && prompt_redraws == 2);
 
   /* Only normal Bash-imported host control is made readonly and nonexported.
      An absent or invalid opt-in leaves all existing function state untouched. */

@@ -102,7 +102,7 @@
    restore_parser_state (&ps);
  
    v = find_variable ("READLINE_LINE");
-@@ -4496,11 +4538,57 @@
+@@ -4496,11 +4538,63 @@
    /* If we clear the last line of the prompt above, redraw only that last
       line.  If the command returns 124, we redraw unconditionally as in
       previous versions. */
@@ -110,7 +110,13 @@
 +  if (poll)
 +    {
 +      if (r == 125)
-+        rl_resize_terminal ();
++        {
++          rl_clear_visible_line ();
++          rl_on_new_line ();
++          rl_resize_terminal ();
++        }
++      else if (r == 126)
++        rl_reset_screen_size ();
 +      else if (r == 124)
 +        rl_forced_update_display ();
 +    }
