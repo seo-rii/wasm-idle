@@ -546,6 +546,11 @@ it.each([
 				await page.keyboard.type(input);
 				if (clearScreen) {
 					await page.keyboard.press('Control+l');
+					// The full erase invalidates xterm's previous marker. The new origin
+					// must be parsed before any queued Readline echo can move the cursor.
+					await expect
+						.poll(() => page.getByTestId('terminal-debug-output').textContent())
+						.toContain('\x1b[2J\x1b]6973;P\x07');
 					await expect
 						.poll(async () => {
 							const { rows, text } = await readShellScreen(page);

@@ -654,3 +654,35 @@
        (*rl_redisplay_function) ();
      }
  
+--- a/lib/readline/display.c
++++ b/lib/readline/display.c
+@@ -57,6 +57,7 @@
+ #include "history.h"
+ 
+ #include "rlprivate.h"
++#include "rlshell.h"
+ #include "xmalloc.h"
+ 
+ #if !defined (strchr) && !defined (__STDC__)
+@@ -3182,6 +3183,8 @@
+ void
+ _rl_clear_screen (int clrscr)
+ {
++  const char *profile;
++
+ #if defined (__DJGPP__)
+   ScreenClear ();
+   ScreenSetCursor (0, 0);
+@@ -3195,6 +3198,12 @@
+   else
+     rl_crlf ();
+ #endif /* __DJGPP__ */
++
++  /* Redisplay starts here after Ctrl-L or clear-display. A full erase has
++     disposed the website terminal's marker for the previous prompt. */
++  profile = rl_event_hook ? sh_get_env_value ("WASM_IDLE_SHELL_CONTROL") : 0;
++  if (profile && strcmp (profile, "1") == 0)
++    fputs ("\033]6973;P\007", rl_outstream);
+ }
+ 
+ /* Insert COUNT characters from STRING to the output stream at column COL. */

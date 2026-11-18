@@ -10,8 +10,8 @@
 	"sourceRevision": "fc8096485478055f4fcf31402004fdd8ff6b72b7",
 	"patch": {
 		"path": "readline-control.patch",
-		"bytes": 17785,
-		"sha256": "a982352cf7e510d23bc2e4fa792be55d71fa060ddf7eecf64652f00cbf650f10"
+		"bytes": 18638,
+		"sha256": "7703eee03d2649e15a04166cc993c65afc5754ed13f505a06e518a85388a9828"
 	},
 	"files": {
 		"bashline.c": {
@@ -62,6 +62,16 @@
 			"patched": {
 				"bytes": 44501,
 				"sha256": "e5347828be6506370f012124d95e45ee9b62b47ab43d6615f2bac0dcaa52af76"
+			}
+		},
+		"lib/readline/display.c": {
+			"original": {
+				"bytes": 115988,
+				"sha256": "313faa78ee7e0e5feb0818930ba205538d7d2c3105421c7e162078a2ce1d48b5"
+			},
+			"patched": {
+				"bytes": 116349,
+				"sha256": "4314bca8768e60a2b45be2bdb68200e9997925cd4f02cd7dc20ab18e13faa552"
 			}
 		}
 	},
