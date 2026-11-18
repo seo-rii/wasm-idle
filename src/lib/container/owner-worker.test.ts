@@ -193,7 +193,7 @@ describe('application-owned container worker', () => {
 		}
 	});
 
-	it('rejects invalid geometry before starting or resizing and cancels a pending resize on exit', async () => {
+	it('validates geometry and settles pending, queued and later resizes when Bash exits', async () => {
 		const f = await shellInputFixture();
 		try {
 			f.initialize();
@@ -208,8 +208,41 @@ describe('application-owned container worker', () => {
 			expect(f.resize).not.toHaveBeenCalled();
 			f.send(4, 'shellResize', [90, 30]);
 			await vi.waitFor(() => expect(f.resize).toHaveBeenCalledOnce());
+			f.send(5, 'shellResize', [53, 30]);
 			f.finish({ code: 0, reason: 'exited' });
-			expect(await f.response(4)).toMatchObject({ type: 'error' });
+			expect(await f.response(4)).toMatchObject({ type: 'result' });
+			expect(await f.response(5)).toMatchObject({ type: 'result' });
+			f.send(6, 'shellResize', [106, 30]);
+			expect(await f.response(6)).toMatchObject({ type: 'result' });
+			expect(f.resize).toHaveBeenCalledExactlyOnceWith(90, 30);
+			f.send(7, 'shellResize', [0, 30]);
+			expect(await f.response(7)).toMatchObject({ type: 'error' });
+			f.send(8, 'shellWrite', ['after exit']);
+			expect(await f.response(8)).toMatchObject({
+				type: 'error',
+				error: { message: 'Shell is not running' }
+			});
+		} finally {
+			await f.owner.dispose();
+		}
+	});
+
+	it('settles a resize if the SDK session exits before its output has drained', async () => {
+		const f = await shellInputFixture();
+		const { ContainerError } = await import('@wasm-idle/container');
+		try {
+			f.initialize();
+			await f.response(0);
+			f.send(1, 'shellStart');
+			await f.response(1);
+			f.resize.mockRejectedValueOnce(new ContainerError('DISPOSED', 'Shell has exited'));
+			f.send(2, 'shellResize', [53, 30]);
+			expect(await f.response(2)).toMatchObject({ type: 'result' });
+			f.send(3, 'inspect');
+			expect(await f.response(3)).toMatchObject({
+				type: 'result',
+				value: { shell: { control: { resizeGeneration: 0 } } }
+			});
 		} finally {
 			await f.owner.dispose();
 		}
