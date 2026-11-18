@@ -452,7 +452,7 @@ export async function createBashProfile({
 				env: {
 					PATH: `${BASH_BIN}:/usr/bin:/bin`,
 					HOME: '/workspace',
-					LANG: 'C',
+					LANG: 'C.UTF-8',
 					...options.env
 				},
 				signal: signal ? AbortSignal.any([signal, stop.signal]) : stop.signal,

@@ -443,6 +443,54 @@ async function openShellPage(
 	return { context, page };
 }
 
+it(
+	'preserves UTF-8 bytes when deleting and inserting at the Bash cursor',
+	{ skip: !enabled, timeout: 120_000, meta: { browser: true, requiredBrowser: enabled } },
+	async () => {
+		await withShellBrowser(async (browser, url) => {
+			const errors: string[] = [];
+			const { context, page } = await openShellPage(browser, url, 53, errors);
+			try {
+				for (const [path, initial, inserted, expected] of [
+					['ascii.txt', 'abZ', 'N', 'aNZ'],
+					['hangul.txt', '한글Z', '나', '한나Z'],
+					['accent.txt', 'aéZ', 'N', 'aNZ'],
+					['emoji.txt', 'a😀Z', 'N', 'aNZ']
+				]) {
+					await page.keyboard.type(`printf %s > ${path} `);
+					await page.keyboard.insertText(initial);
+					await page.keyboard.press('ArrowLeft');
+					await page.keyboard.press('Backspace');
+					await page.keyboard.insertText(inserted);
+					await page.keyboard.press('Enter');
+					await expect
+						.poll(
+							() =>
+								page.evaluate(async (path) => {
+									const files = await (
+										globalThis as SiteWindow
+									).__wasmIdleContainer!.readWorkspace('BASH');
+									const bytes = files.find((file) => file.path === path)?.content;
+									return bytes === undefined
+										? null
+										: Array.from(
+												typeof bytes === 'string'
+													? new TextEncoder().encode(bytes)
+													: bytes
+											);
+								}, path),
+							{ timeout: 10_000 }
+						)
+						.toEqual(Array.from(new TextEncoder().encode(expected)));
+				}
+				expect(errors).toEqual([]);
+			} finally {
+				await context.close();
+			}
+		});
+	}
+);
+
 async function expectResizeSettled(page: Page) {
 	// Check acknowledgement after execution so typing immediately after a viewport
 	// change continues to exercise the input/resize race.
