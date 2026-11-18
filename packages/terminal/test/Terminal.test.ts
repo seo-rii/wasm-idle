@@ -92,7 +92,7 @@ describe('Terminal source', () => {
 
 	it('activates xterm Unicode 11 width rules for CJK terminal cells', () => {
 		expect(pluginSource).toMatch(/term\.unicode\.activeVersion = '11';/);
-		expect(source).toContain(')?._core?.unicodeService;');
+		expect(source).toContain('const unicode = core?.unicodeService;');
 		expect(source).toMatch(/unicode\?\.getStringCellWidth\?\.\(text\)/);
 		expect(source).not.toContain('const unicode = term?.unicode');
 	});

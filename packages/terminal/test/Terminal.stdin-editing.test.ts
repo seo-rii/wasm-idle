@@ -187,3 +187,25 @@ it('moves over a grapheme whose xterm cells span two rows', async () => {
 	expect(write).toHaveBeenCalledWith('abcdz\n');
 	expect((await screen(term)).rows).toEqual(['> abcdz', '', '', '', '']);
 });
+
+it('edits pasted tabs at active VT tab stops and submits the original bytes', async () => {
+	const { term, sandbox, write } = await runningTerminal();
+	term.resize(16, 5);
+	sandbox.output!('> ');
+	term.input('abc\tb');
+	term.input('\x1b[D');
+	expect(await screen(term)).toMatchObject({ row: 0, col: 8 });
+	term.input('\x1b[H\x1b[3~');
+	expect((await screen(term)).rows[0]).toBe('> bc    b');
+	term.input('\x1b[F\x1b[DZ\r');
+	expect(write).toHaveBeenCalledWith('bc\tZb\n');
+	expect((await screen(term)).rows[0]).toBe('> bc    Zb');
+
+	// Set a custom tab stop at column six, as a foreground program can.
+	sandbox.output!('\x1b[3g\x1b[6G\x1bH\r> ');
+	term.input('a\tb\x1b[D');
+	expect(await screen(term)).toMatchObject({ row: 1, col: 5 });
+	term.input('X\r');
+	expect(write).toHaveBeenCalledWith('a\tXb\n');
+	expect((await screen(term)).rows[1]).toBe('> a  Xb');
+});

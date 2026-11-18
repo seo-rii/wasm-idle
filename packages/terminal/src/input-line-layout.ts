@@ -1,4 +1,4 @@
-type CellWidth = (character: string) => number;
+type CellWidth = (character: string, offset: number) => number;
 
 // Offsets count terminal cells from column zero of the input's first screen row.
 // A wide character wraps early when only one cell remains on that row.
@@ -19,7 +19,7 @@ export class InputLineLayout {
 			// One editable grapheme can occupy several xterm cells (e.g. a ZWJ
 			// emoji sequence under Unicode 11) and wrap between its code points.
 			for (const codePoint of character) {
-				const cells = width(codePoint);
+				const cells = width(codePoint, offset);
 				const remaining = columns - (offset % columns);
 				if (cells > remaining) {
 					if (offset === start) start += remaining;
@@ -54,7 +54,9 @@ export class InputLineLayout {
 		if (index < this.characters.length) return this.moveToCell(fromRow, this.offsets[index]);
 		if (this.characters.length && this.end % this.columns === 0) {
 			// CHA cannot select the pending-wrap position one past the final column.
-			const last = this.characters.length - 1;
+			let last = this.characters.length - 1;
+			// A horizontal tab at the pending right margin does not move the cursor.
+			while (last > 0 && this.offsets[last] === this.end) last--;
 			return this.moveToCell(fromRow, this.offsets[last]) + this.characters[last];
 		}
 		return this.moveToCell(fromRow, this.end);
@@ -64,7 +66,15 @@ export class InputLineLayout {
 		// Begin immediately after the unchanged prefix so an old wide-character
 		// wrap can also be filled by a newly inserted narrow character.
 		const start = changed ? this.ends[changed - 1] : this.startColumn;
-		const tail = this.characters.slice(changed).join('');
+		// A raw tab moves over old text without erasing it during a redraw.
+		const tail = this.characters
+			.slice(changed)
+			.map((character, index) =>
+				character === '\t'
+					? ' '.repeat(this.ends[changed + index] - this.offsets[changed + index])
+					: character
+			)
+			.join('');
 		let echo = this.moveToCell(fromRow, start) + tail;
 		let row = tail ? this.lastWrittenRow(this.end) : Math.floor(start / this.columns);
 		for (let offset = this.end; offset < oldEnd;) {

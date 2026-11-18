@@ -455,7 +455,7 @@
 					pendingScreenUpdates = undefined;
 					return;
 				}
-				inputStartColumn = current.buffer.active.cursorX % current.cols;
+				inputStartColumn = current.buffer.active.cursorX;
 				const updates = pendingScreenUpdates!;
 				pendingScreenUpdates = undefined;
 				for (const update of updates) updateScreen(update);
@@ -509,13 +509,14 @@
 			: Array.from(text);
 	}
 
-	function getInputCellWidth(text: string) {
+	function getInputCellWidth(text: string, offset: number) {
 		if (!text) return 0;
-		// The public Unicode API selects a provider but does not expose its width functions.
-		const unicode = (
+		// xterm exposes neither Unicode cell widths nor the active VT tab stops publicly.
+		const core = (
 			term as
 				| (TerminalType & {
 						_core?: {
+							buffers?: { active: { nextStop(column: number): number } };
 							unicodeService?: {
 								getStringCellWidth?: (text: string) => number;
 								wcwidth?: (codepoint: number) => 0 | 1 | 2;
@@ -523,7 +524,17 @@
 						};
 				  })
 				| undefined
-		)?._core?.unicodeService;
+		)?._core;
+		if (text === '\t' && term) {
+			const column = offset % term.cols;
+			if (offset > 0 && column === 0) return 0;
+			const step = term.options.tabStopWidth || 8;
+			const next =
+				core?.buffers?.active.nextStop(column) ??
+				Math.min(term.cols - 1, column + step - (column % step));
+			return next - column;
+		}
+		const unicode = core?.unicodeService;
 		return (
 			unicode?.getStringCellWidth?.(text) ??
 			Array.from(text).reduce(
@@ -1052,7 +1063,7 @@
 							eraseInputCharacter(getInputCharacters(input), inputCursor - 1);
 							continue;
 						}
-						if ((chunk.codePointAt(0) || 0) >= 0x20) {
+						if (chunk === '\t' || codePoint >= 0x20) {
 							pendingText += chunk;
 						}
 					}
