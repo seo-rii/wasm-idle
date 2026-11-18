@@ -11,15 +11,16 @@
  
  #if defined (HAVE_UNISTD_H)
  #  include <unistd.h>
-@@ -112,6 +116,7 @@
+@@ -112,6 +116,8 @@
  #else
  extern int tputs PARAMS((const char *string, int nlines, int (*outx)(int)));
  #endif
 +extern char *tgetstr PARAMS((char *, char **));
++extern int _rl_last_v_pos;
  
  /* Forward declarations */
  
-@@ -213,6 +218,8 @@
+@@ -213,6 +219,8 @@
  #endif
  
  static int bash_event_hook PARAMS((void));
@@ -28,7 +29,7 @@
  
  #if defined (PROGRAMMABLE_COMPLETION)
  static int find_cmd_start PARAMS((int));
-@@ -635,6 +642,25 @@
+@@ -635,6 +643,25 @@
      posix_readline_initialize (1);
  #endif
  
@@ -54,7 +55,7 @@
    bash_readline_initialized = 1;
  }
  
-@@ -4419,12 +4445,7 @@
+@@ -4419,12 +4446,7 @@
  )
  {
    int type;
@@ -68,7 +69,7 @@
    Keymap cmd_xmap;
  
    /* First, we need to find the right command to execute.  This is tricky,
-@@ -4444,13 +4465,87 @@
+@@ -4444,13 +4466,88 @@
        return 1;
      }
  
@@ -84,6 +85,7 @@
 +{
 +  char *cd;
 +
++  fprintf (rl_outstream, "\033]6973;R%d\007", _rl_last_v_pos);
 +  rl_clear_visible_line ();
 +  rl_on_new_line ();
 +  cd = tgetstr ("cd", (char **)NULL);
@@ -158,7 +160,7 @@
      rl_crlf ();	/* move to a new line */
  
    v = bind_variable ("READLINE_LINE", rl_line_buffer, 0);
-@@ -4471,9 +4566,19 @@
+@@ -4471,9 +4568,19 @@
    array_needs_making = 1;
  
    save_parser_state (&ps);
@@ -179,7 +181,7 @@
    restore_parser_state (&ps);
  
    v = find_variable ("READLINE_LINE");
-@@ -4496,11 +4601,64 @@
+@@ -4496,11 +4603,67 @@
    /* If we clear the last line of the prompt above, redraw only that last
       line.  If the command returns 124, we redraw unconditionally as in
       previous versions. */
@@ -191,7 +193,10 @@
 +      else if (r == 126)
 +        rl_reset_screen_size ();
 +      else if (r == 124)
-+        rl_forced_update_display ();
++        {
++          fputs ("\033]6973;P\007", rl_outstream);
++          rl_forced_update_display ();
++        }
 +    }
 +  else if (ce && r != 124)
      rl_redraw_prompt_last_line ();
@@ -636,3 +641,16 @@
        result = pselect (fileno (stream) + 1, &readfds, NULL, NULL, NULL, &_rl_orig_sigset);
  #  else
        sigemptyset (&empty_set);
+--- a/lib/readline/readline.c
++++ b/lib/readline/readline.c
+@@ -457,6 +457,10 @@
+ 	rl_on_new_line_with_prompt ();
+       else
+ 	rl_on_new_line ();
++      /* The website can retain this editing origin as its terminal reflows. */
++      if (rl_event_hook && sh_get_env_value ("WASM_IDLE_SHELL_CONTROL") &&
++          strcmp (sh_get_env_value ("WASM_IDLE_SHELL_CONTROL"), "1") == 0)
++        fputs ("\033]6973;P\007", rl_outstream);
+       (*rl_redisplay_function) ();
+     }
+ 

@@ -511,10 +511,15 @@ async function expectResizeSettled(page: Page) {
 		.toEqual({ applied: true, settled: true });
 }
 
-it.each(['read -e', 'continuation'])(
-	'redraws one editable %s line and acknowledges resize before submission',
+it.each([
+	['read -e', false],
+	['read -e', true],
+	['continuation', false],
+	['continuation', true]
+] as const)(
+	'redraws one editable %s line across resize (queued cursor input = %s)',
 	{ skip: !enabled, timeout: 150_000, meta: { browser: true, requiredBrowser: enabled } },
-	async (mode) => {
+	async (mode, queued) => {
 		await withShellBrowser(async (browser, url) => {
 			const errors: string[] = [];
 			const { context, page } = await openShellPage(browser, url, 106, errors);
@@ -522,14 +527,37 @@ it.each(['read -e', 'continuation'])(
 				const nested = mode === 'read -e';
 				const prompt = nested ? 'READ> ' : '> ';
 				const command = nested
-					? "IFS= read -e -r -t 30 -p 'READ> ' answer; printf '%s' \"$answer\" > result.txt"
+					? "IFS= read -e -r -t 90 -p 'READ> ' answer; printf '%s' \"$answer\" > result.txt"
 					: "printf '%s' > result.txt 'open";
 				const input = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'.repeat(4);
+				await page.keyboard.type("printf '%s\\n' HISTORY_BEFORE_EDIT");
+				await page.keyboard.press('Enter');
+				await expect
+					.poll(async () => (await readShellScreen(page)).rows)
+					.toContain('HISTORY_BEFORE_EDIT');
 				await page.keyboard.type(command);
 				await page.keyboard.press('Enter');
+				await expect
+					.poll(async () => (await readShellScreen(page)).rows.filter(Boolean).at(-1))
+					.toBe(prompt.trimEnd());
+				const prefix = (await readShellScreen(page)).text + ' ';
 				await page.keyboard.type(input);
 				for (let index = 0; index < input.length - 68; index++)
 					await page.keyboard.press('ArrowLeft');
+				if (!queued) {
+					await expect
+						.poll(
+							async () => {
+								const { text, cursorOffset } = await readShellScreen(page);
+								return { text, cursorOffset };
+							},
+							{ timeout: 15_000 }
+						)
+						.toEqual({
+							text: prefix + input,
+							cursorOffset: prefix.length + 68
+						});
+				}
 				await page.setViewportSize(shellViewport(53));
 				await expect.poll(async () => (await readShellScreen(page)).columns).toBe(53);
 				await expectResizeSettled(page);
@@ -561,6 +589,7 @@ it.each(['read -e', 'continuation'])(
 						{ timeout: 15_000 }
 					)
 					.toBe((nested ? '' : 'open\n') + 'HEAD_' + input);
+				expect((await readShellScreen(page)).rows).toContain('HISTORY_BEFORE_EDIT');
 				expect(errors).toEqual([]);
 			} finally {
 				await context.close();

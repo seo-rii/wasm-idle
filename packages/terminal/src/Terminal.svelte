@@ -22,6 +22,7 @@
 	import type { Terminal as TerminalType } from '@xterm/xterm';
 	import { loadWebglPlugin, registerBasicPlugins } from './plugin/index.js';
 	import Theme from './theme.js';
+	import { createReadlineOutput } from './readline-output.js';
 	import type {
 		BoundSandbox,
 		CompilerDiagnostic,
@@ -103,6 +104,7 @@
 	let terminalDisposal: Promise<void> | undefined;
 	let connectedShell: TerminalShellBinding | undefined;
 	let shellConnection: Promise<void> | undefined;
+	let readlineOutput: ReturnType<typeof createReadlineOutput> | undefined;
 	let shellInput = Promise.resolve();
 	const shellDisposals = new Map<TerminalShellBinding, Promise<void>>();
 	const progressController = new RuntimeProgressController();
@@ -204,6 +206,10 @@
 		if (connectedShell === binding && shellConnection) return shellConnection;
 		const previous = connectedShell;
 		connectedShell = binding;
+		readlineOutput?.dispose();
+		readlineOutput = term && createReadlineOutput(term, writeTerminalOutput, () =>
+			!terminalDisposed && connectedShell === binding && finish && executionInputOwners === 0
+		);
 		let previousCarriageReturn = false;
 		shellConnection = Promise.resolve().then(() => {
 			if (terminalDisposed || connectedShell !== binding) return;
@@ -216,7 +222,8 @@
 							: '\r\n'
 					);
 					previousCarriageReturn = text.endsWith('\r');
-					writeTerminalOutput(output);
+					if (readlineOutput) readlineOutput.write(output);
+					else writeTerminalOutput(output);
 				},
 				(error) => {
 					if (connectedShell === binding) reportShellError(error);
@@ -255,6 +262,7 @@
 	function disposeTerminal() {
 		return (terminalDisposal ??= (async () => {
 			terminalDisposed = true;
+			readlineOutput?.dispose();
 			abortInitialization?.();
 			progressController.invalidate();
 			invalidatePreparedExecution();

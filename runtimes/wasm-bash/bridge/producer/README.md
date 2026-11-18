@@ -283,6 +283,12 @@ the resize. Each new request gets a fresh inode so a cancelled request cannot
 acknowledge its replacement. The nested handler preserves errno and does not
 run the Bash parser, use terminal stdin or consume other control requests.
 
+The website profile marks each prompt origin with OSC 6973 `P` and identifies
+the old Readline cursor row with OSC 6973 `R<n>` just before clearing. xterm
+can anchor a redraw to the prompt even when typeahead is still painting at the
+previous width. Other terminals ignore these records and retain the ordinary
+Readline clear and redraw sequences.
+
 ```sh
 node runtimes/wasm-bash/bridge/producer/build.mjs \
   --cache /private/inputs --output /private/new-control-build --jobs 1 --webc \

@@ -49,6 +49,8 @@ static char restored_lastarg[128];
 static int wasm_idle_readline_poll(void);
 static int (*rl_event_hook)(void);
 static int array_needs_making;
+static int _rl_last_v_pos;
+static FILE *rl_outstream;
 static int resizes, size_resets, forced_redraws, prompt_redraws, display_step;
 static int cap_lookups, tail_erases, output_chars, has_tail_capability = 1;
 char *tgetstr(char *cap, char **area) {
@@ -119,6 +121,7 @@ static void initialize_control(void) {
 }
 
 int main(void) {
+  rl_outstream = tmpfile(); assert(rl_outstream);
   redisplay(1, 0, 0);
   assert(resizes == 0 && forced_redraws == 0 && prompt_redraws == 0);
   redisplay(1, 125, 0);
