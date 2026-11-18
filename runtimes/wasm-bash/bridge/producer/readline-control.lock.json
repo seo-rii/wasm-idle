@@ -10,8 +10,8 @@
 	"sourceRevision": "fc8096485478055f4fcf31402004fdd8ff6b72b7",
 	"patch": {
 		"path": "readline-control.patch",
-		"bytes": 15159,
-		"sha256": "f7a9e30de8a4dc7ddd5c5140d27bd3d264150cbf596ec56920fd0a1d929466bf"
+		"bytes": 15191,
+		"sha256": "75150bb6021dfda4f678373a5f2c00b8744f51abce9c97d96a6d41fa9e9927fa"
 	},
 	"files": {
 		"bashline.c": {

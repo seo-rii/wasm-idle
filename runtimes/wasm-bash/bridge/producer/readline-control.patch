@@ -1,10 +1,13 @@
 --- a/bashline.c
 +++ b/bashline.c
-@@ -112,3 +112,4 @@
+@@ -112,6 +112,7 @@
  #else
  extern int tputs PARAMS((const char *string, int nlines, int (*outx)(int)));
  #endif
 +extern char *tgetstr PARAMS((char *, char **));
+ 
+ /* Forward declarations */
+ 
 @@ -213,6 +214,8 @@
  #endif
  
