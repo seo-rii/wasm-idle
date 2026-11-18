@@ -284,6 +284,17 @@ it(
 					)
 					.toBe(true);
 				await file.waitFor();
+				await page.locator('.terminal-shell .xterm-helper-textarea').focus();
+				const pending = 'echo EOF-$((4 + 2))';
+				await page.keyboard.type(pending);
+				await expect
+					.poll(async () => (await visibleRows()).at(-1))
+					.toBe(`~/BASH $ ${pending}`);
+				await page.keyboard.press('Control+d');
+				await expect
+					.poll(visibleRows)
+					.toContain('Shell exited; reload to open a new shell.');
+				expect(await visibleRows()).not.toContain('EOF-6');
 				expect(errors).toEqual([]);
 			} catch (error) {
 				let timer: ReturnType<typeof setTimeout> | undefined;
