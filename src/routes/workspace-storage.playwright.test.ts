@@ -806,18 +806,19 @@ describe('workspace storage browser integration', () => {
 					content: 'latest unsaved content',
 					encoding: 'utf-8'
 				});
-				// Keep autosave failing until the actual Retry click is delivered.
-				await page
-					.getByRole('button', { name: 'Retry save', exact: true })
-					.evaluate((button) => {
-						button.addEventListener(
-							'click',
-							() => {
-								Storage.prototype.setItem = (window as any).__originalSetItem;
-							},
-							{ capture: true, once: true }
-						);
-					});
+				// Autosave may replace the error banner before the Retry click is delivered.
+				await page.evaluate(() => {
+					function restoreStorage(event: MouseEvent) {
+						if (
+							!(event.target instanceof Element) ||
+							event.target.closest('button')?.textContent?.trim() !== 'Retry save'
+						)
+							return;
+						Storage.prototype.setItem = (window as any).__originalSetItem;
+						document.removeEventListener('click', restoreStorage, true);
+					}
+					document.addEventListener('click', restoreStorage, true);
+				});
 				await page.getByRole('button', { name: 'Retry save', exact: true }).click();
 				await page.locator('[data-workspace-save-state="saved"]').waitFor();
 				expect(
