@@ -16,6 +16,7 @@ import {
 	SHELL_CONTROL_FUNCTION_ENV,
 	SHELL_CONTROL_RCFILE,
 	SHELL_CONTROL_REQUEST,
+	SHELL_RESIZE_REQUEST,
 	SHELL_CONTROL_ROUTE
 } from './shell-control.js';
 
@@ -43,9 +44,10 @@ function fixture() {
 function acknowledgement(
 	fs: MemoryFileSystem,
 	cwd?: string,
-	verdict = 'ok'
+	verdict = 'ok',
+	requestPath = SHELL_CONTROL_REQUEST
 ): HostCommandInvocation {
-	const fields = decoder.decode(fs.readFile(SHELL_CONTROL_REQUEST)).trim().split(' ');
+	const fields = decoder.decode(fs.readFile(requestPath)).trim().split(' ');
 	return {
 		path: SHELL_CONTROL_ROUTE,
 		argv: [SHELL_CONTROL_ROUTE, ...fields, verdict],
@@ -66,6 +68,7 @@ function nativeFixture(mailbox: string) {
 	for (const language of ['C', 'CPP', 'PYTHON'])
 		mkdirSync(join(workspace, language), { recursive: true });
 	const request = join(root, 'request'),
+		resizeRequest = join(root, 'resize-request'),
 		route = join(root, 'acknowledge'),
 		ack = join(root, 'ack'),
 		rc = join(root, 'rcfile');
@@ -80,12 +83,14 @@ function nativeFixture(mailbox: string) {
 		decoder
 			.decode(fs.readFile(SHELL_CONTROL_RCFILE))
 			.replaceAll(SHELL_CONTROL_REQUEST, request)
+			.replaceAll(SHELL_RESIZE_REQUEST, resizeRequest)
 			.replaceAll(SHELL_CONTROL_ROUTE, route)
 			.replaceAll('/workspace', workspace)
 	);
 	return {
 		workspace,
 		request,
+		resizeRequest,
 		ack,
 		run(script: string, options: { input?: string; ackExit?: string } = {}) {
 			return spawnSync(
@@ -109,6 +114,67 @@ function nativeFixture(mailbox: string) {
 }
 
 describe('real Bash directory control protocol', () => {
+	it('keeps pending directory control intact while a separate resize is acknowledged', async () => {
+		const { control, fs } = fixture();
+		const changing = control.requestDirectory('CPP');
+		const original = fs.readFile(SHELL_CONTROL_REQUEST).slice();
+		const resizing = control.requestResize();
+		expect(fs.readFile(SHELL_CONTROL_REQUEST)).toEqual(original);
+		expect(
+			control.onInvocation(acknowledgement(fs, '/workspace/C', 'ok', SHELL_RESIZE_REQUEST))
+		).toBe(0);
+		await resizing;
+		expect(control.inspect()).toMatchObject({
+			pendingCwd: '/workspace/CPP',
+			generation: 1,
+			appliedGeneration: 0,
+			appliedResizeGeneration: 1
+		});
+		expect(control.onInvocation(acknowledgement(fs))).toBe(0);
+		await changing;
+	});
+
+	it('cancels resize without changing the main mailbox and rejects it on EOF', async () => {
+		const { control, fs } = fixture();
+		const changing = control.requestDirectory('CPP');
+		const original = fs.readFile(SHELL_CONTROL_REQUEST).slice();
+		const aborted = new AbortController();
+		const resizing = control.requestResize(aborted.signal);
+		aborted.abort();
+		await expect(resizing).rejects.toMatchObject({ name: 'AbortError' });
+		expect(fs.readFile(SHELL_CONTROL_REQUEST)).toEqual(original);
+		const next = control.requestResize();
+		control.closeInput();
+		await expect(changing).rejects.toMatchObject({ name: 'AbortError' });
+		await expect(next).rejects.toMatchObject({ name: 'AbortError' });
+		expect(decoder.decode(fs.readFile(SHELL_CONTROL_REQUEST))).toMatch(/^3 .* eof\n$/);
+	});
+
+	it.each([false, true])(
+		'requests native resize and defers redraw during Run: %s',
+		(suspended) => {
+			const native = nativeFixture('1 ' + 'ab'.repeat(16) + ' 0 CPP\n');
+			writeFileSync(native.resizeRequest, '4 ' + 'ab'.repeat(16) + ' 1 resize\n');
+			const result = native.run(
+				`TERM=dumb\n__wasm_idle_terminal_suspended=${suspended ? 1 : 0}\n__wasm_idle_poll\nprintf 'result=%s\\n' "$?"`
+			);
+			expect(result.status).toBe(0);
+			expect(result.stdout).toBe(`result=${suspended ? 0 : 125}\n`);
+			expect(readFileSync(native.ack, 'utf8')).toContain(
+				'|4|' + 'ab'.repeat(16) + '|1|resize|ok\n'
+			);
+		}
+	);
+
+	it('refreshes geometry safely when the user unsets TERM under nounset', () => {
+		const native = nativeFixture('1 ' + 'ab'.repeat(16) + ' 0 CPP\n');
+		writeFileSync(native.resizeRequest, '4 ' + 'ab'.repeat(16) + ' 1 resize\n');
+		const result = native.run(
+			'unset TERM\nset -eu\nif __wasm_idle_poll; then status=0; else status=$?; fi\nprintf "result=%s\\n" "$status"'
+		);
+		expect(result).toMatchObject({ status: 0, stdout: 'result=125\n', stderr: '' });
+	});
+
 	it('installs a readonly bounded rcfile and a separate mutable request mailbox', () => {
 		const { control, fs, settings } = fixture();
 		expect(settings.args).toEqual(['--noprofile', '--norc', '-i']);

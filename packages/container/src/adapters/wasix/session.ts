@@ -4,6 +4,7 @@ import { createHostCommandHandler, HOST_COMMAND_STATUS, type HostCommandInvocati
 import { createShellFilesystem, type ShellFilesystemBinding } from '../../shell/filesystem.js';
 import type { ProcessResult } from '../../types.js';
 import type { WasixShellOptions, WasixShellSession, WasixRuntime, WasixDirectory, WasixCommand, WasixInstance, WasixAssetReference } from './types.js';
+import { resizeWasixTty, validateTerminalSize } from './tty-size.js';
 
 const owners = new WeakSet<object>();
 const canonical = (path: string) => typeof path === 'string' && path.startsWith('/') && path.length > 1 && path.length <= 4096 &&
@@ -35,6 +36,7 @@ function discardInstance(instance: WasixInstance): void {
 
 /** One real Bash/WASIX execution in a dedicated owner realm, with raw byte streams. */
 export async function createWasixShellSession(options: WasixShellOptions): Promise<WasixShellSession> {
+  if (options.columns !== undefined || options.rows !== undefined) validateTerminalSize(options.columns!, options.rows!);
   options = { ...options, sdkAsset: { ...options.sdkAsset }, shellAsset: { ...options.shellAsset }, memory: { ...options.memory },
     routes: Object.fromEntries(Object.entries(options.routes).map(([path, route]) => [path, { ...route, args: route.args && [...route.args] }])),
     moduleDirectories: options.moduleDirectories && [...options.moduleDirectories], mounts: options.mounts && [...options.mounts],
@@ -66,7 +68,9 @@ export async function createWasixShellSession(options: WasixShellOptions): Promi
   for (const path of mounts) if (options.container.fs.stat(path).type !== 'directory') throw new ContainerError('INVALID_ARGUMENT', 'Shell mount is not a directory');
   const handler = createHostCommandHandler(options.container, { routes: options.routes, moduleDirectories: options.moduleDirectories, timeoutMs: options.timeoutMs, onRecord: options.onRecord });
   owners.add(options.workers);
-  const stop = new AbortController(), sources = [options.signal, options.container.disposalSignal, options.workers.failure].filter((s): s is AbortSignal => Boolean(s));
+  const stop = new AbortController(), resizeStop = new AbortController();
+  const resizeSignal = AbortSignal.any([stop.signal, resizeStop.signal]);
+  const sources = [options.signal, options.container.disposalSignal, options.workers.failure].filter((s): s is AbortSignal => Boolean(s));
   let terminationReason: ProcessResult['reason'] = 'terminated';
   const stops = sources.map(signal => {
     const listener = () => { if (signal === options.workers.failure) terminationReason = 'runtime-error'; stop.abort(signal.reason); };
@@ -108,6 +112,7 @@ export async function createWasixShellSession(options: WasixShellOptions): Promi
   let startupAssets: Promise<unknown>[] = [];
   let resources: Promise<void> | undefined;
   const release = () => resources ??= (async () => {
+    resizeStop.abort(new ContainerError('DISPOSED', 'Shell has exited'));
     interrupt();
     // Terminating a Worker releases CPU/blocked guest work before awaiting any
     // host callback. The pinned SDK routes all thread creation to this owner.
@@ -140,6 +145,7 @@ export async function createWasixShellSession(options: WasixShellOptions): Promi
     const [, shellBytes] = await Promise.all([initialized, shellAsset]);
     stop.signal.throwIfAborted();
     runtime = new options.sdk.Runtime({ registry: null });
+    if (options.columns !== undefined) await resizeWasixTty(options.sdk, runtime, options.columns, options.rows!, resizeSignal);
     for (const path of Object.keys(options.routes)) runtime.registerHostCommand(path, dispatch);
     for (const path of options.moduleDirectories ?? []) runtime.registerHostCommandDirectory(path, dispatch);
     const loaded = await abortable(options.sdk.Wasmer.fromFile(shellBytes, runtime), stop.signal, value => { try { value.entrypoint?.free?.(); } finally { value.free?.(); } }); pkg = loaded;
@@ -209,7 +215,18 @@ export async function createWasixShellSession(options: WasixShellOptions): Promi
       if (!Number.isSafeInteger(result.code) || result.code < 0 || result.code > 0xffffffff) throw new ContainerError('STARTUP_FAILED', 'SDK returned an invalid exit status');
       return finish({ code: result.code, reason: 'exited' });
     }).catch(error => { terminationReason = 'runtime-error'; stop.abort(error); });
-    return Object.freeze({ pid: 0, stdin, stdout: output(0), stderr: output(1), exited, interrupt, terminate, dispose: terminate });
+    let resizing = Promise.resolve();
+    const resize = (columns: number, rows: number) => {
+      validateTerminalSize(columns, rows);
+      const next = resizing.catch(() => {}).then(async () => {
+        resizeSignal.throwIfAborted();
+        if (ending) throw new ContainerError('DISPOSED', 'Shell has exited');
+        await resizeWasixTty(options.sdk, runtime!, columns, rows, resizeSignal);
+      });
+      resizing = next;
+      return next;
+    };
+    return Object.freeze({ pid: 0, stdin, stdout: output(0), stderr: output(1), exited, interrupt, resize, terminate, dispose: terminate });
   } catch (error) {
     const cancelled = stop.signal.aborted;
     stop.abort(error);

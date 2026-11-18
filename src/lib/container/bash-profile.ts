@@ -420,7 +420,10 @@ export async function createBashProfile({
 			return prepareSysroot(profile, signal);
 		},
 		startShell(
-			options: Pick<WasixShellOptions, 'mounts' | 'args' | 'cwd' | 'env'> = {},
+			options: Pick<
+				WasixShellOptions,
+				'mounts' | 'args' | 'cwd' | 'env' | 'columns' | 'rows'
+			> = {},
 			signal?: AbortSignal
 		) {
 			if (starting || stop.signal.aborted)
@@ -444,6 +447,8 @@ export async function createBashProfile({
 				timeoutMs: config.commandTimeoutMs,
 				args: options.args ?? ['--noprofile', '--norc'],
 				cwd: options.cwd ?? '/workspace',
+				columns: options.columns,
+				rows: options.rows,
 				env: {
 					PATH: `${BASH_BIN}:/usr/bin:/bin`,
 					HOME: '/workspace',
