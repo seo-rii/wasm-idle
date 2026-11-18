@@ -788,12 +788,6 @@ describe('workspace storage browser integration', () => {
 				expect(new URL(shareUrl).hash).toMatch(/^#workspace=/);
 				expect(new URL(page.url()).hash).toBe('');
 				await page.getByRole('alert').filter({ hasText: 'Not saved locally' }).waitFor();
-				expect(
-					await page
-						.getByRole('alert')
-						.filter({ hasText: 'Not saved locally' })
-						.isVisible()
-				).toBe(true);
 				const backupDownload = page.waitForEvent('download');
 				await page.getByRole('button', { name: 'Export workspace', exact: true }).click();
 				const backupPath = await (await backupDownload).path();
