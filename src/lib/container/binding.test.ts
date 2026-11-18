@@ -214,7 +214,7 @@ describe('existing playground container binding', () => {
 		expect((call.mock.calls[0] as unknown[])[1]).toEqual([
 			'C',
 			[{ path: 'binary.bin', content: Uint8Array.of(0, 255, 1) }],
-			undefined
+			[]
 		]);
 		expect(((call.mock.calls[1] as unknown[])[1] as unknown[])[2]).toEqual([
 			{ path: 'binary.bin', content: Uint8Array.of(0, 255, 1) }
@@ -334,6 +334,17 @@ describe('existing playground container binding', () => {
 		expect(await second).toEqual([]);
 		expect(call.mock.calls[1]).toEqual(['readWorkspaceDelta', ['C', 1]]);
 	});
+	it('guards the first publish against a pre-existing shell entry and retains it on rejection', async () => {
+		const { binding, call } = fixture();
+		const incoming = [{ path: 'main.py', content: 'editor' }];
+		call.mockRejectedValueOnce(new Error('Workspace changed while editing main.py'));
+		await expect(binding.syncWorkspace('PYTHON', incoming)).rejects.toThrow(
+			'Workspace changed'
+		);
+		expect(call.mock.calls[0]).toEqual(['syncWorkspace', ['PYTHON', incoming, []]]);
+		expect(binding.publishedWorkspace('PYTHON')).toEqual([]);
+	});
+
 	it('does not let a later publish overtake an in-flight workspace read', async () => {
 		const { binding, call } = fixture();
 		const original = [{ path: 'main.c', content: 'base' }];

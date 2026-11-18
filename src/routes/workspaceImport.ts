@@ -1,6 +1,6 @@
 import { parseWorkspaceBackupBytes } from './workspaceBackup';
 import { workspaceFileFromBytes, type WorkspaceFile } from './workspaceCodec';
-import { normalizeWorkspacePath } from './workspacePath';
+import { assertWorkspaceFileHierarchy, normalizeWorkspacePath } from './workspacePath';
 
 type ImportFile = Pick<File, 'name' | 'arrayBuffer'> & { webkitRelativePath?: string };
 export type WorkspaceImportPlan =
@@ -50,5 +50,6 @@ export async function stageWorkspaceImport(
 		}
 	}
 	assertDestination();
+	assertWorkspaceFileHierarchy(paths);
 	return backup ? { kind: 'backup', backup } : { kind: 'files', files, fromZip };
 }

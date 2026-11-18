@@ -47,6 +47,14 @@ export function createWorkspaceStorage(
 	}
 	return {
 		observe,
+		pending() {
+			if (state.phase === 'saved' || state.phase === 'saving') {
+				publish({ phase: 'dirty', revision: state.revision + 1 });
+			}
+		},
+		fail(error: string) {
+			publish({ phase: 'error', savedRevision: -1, error });
+		},
 		getState: () => ({ ...state }),
 		checkExternalChanges(storageIdentity: string) {
 			if (!options || storageIdentity !== currentStorageIdentity) return;

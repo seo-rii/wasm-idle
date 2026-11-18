@@ -2,6 +2,65 @@ import { describe, expect, it } from 'vitest';
 import { mergeContainerWorkspace } from './workspace.js';
 const f = (path: string, content: string) => ({ path, content });
 describe('container editor reconciliation', () => {
+	it('lets a newly created shell entry replace only a pristine, unpublished starter', () => {
+		const defaultFile = f('main.py', 'example');
+		const remote = [f('main.py', 'shell'), f('notes', 'new')];
+		expect(mergeContainerWorkspace([defaultFile], [], remote, { defaultFile })).toEqual({
+			files: remote,
+			conflicts: []
+		});
+		expect(mergeContainerWorkspace([defaultFile], [], [], { defaultFile }).files).toEqual([
+			defaultFile
+		]);
+		expect(
+			mergeContainerWorkspace([f('main.py', 'custom')], [], remote, { defaultFile }).conflicts
+		).toEqual(['main.py']);
+		expect(mergeContainerWorkspace([], [], remote, { defaultFile }).files).toEqual(remote);
+	});
+
+	it.each([
+		['main.py', 'main.py/note'],
+		['src/main.py', 'src']
+	])(
+		'lets a shell entry at %s or its parent displace only an unpublished starter',
+		(starter, shell) => {
+			const defaultFile = f(starter, 'example');
+			const remote = [f(shell, 'shell bytes')];
+			expect(mergeContainerWorkspace([defaultFile], [], remote, { defaultFile })).toEqual({
+				files: remote,
+				conflicts: []
+			});
+		}
+	);
+
+	it.each([true, false])(
+		'keeps competing files and directories out of the same snapshot (local file %j)',
+		(localFile) => {
+			const file = f('include', 'file contents');
+			const children = [f('include/one.h', 'first'), f('include/nested/two.h', 'second')];
+			const local = localFile ? [file] : children;
+			const remote = localFile ? children : [file];
+			const independent = f('notes', 'unpublished editor change');
+			const shellOnly = f('output', 'shell output');
+			for (const acceptRemoteConflicts of [false, true]) {
+				const merged = mergeContainerWorkspace(
+					[...local, independent],
+					[],
+					[...remote, shellOnly],
+					{
+						acceptRemoteConflicts
+					}
+				);
+				expect(new Set(merged.conflicts)).toEqual(
+					new Set([file.path, ...children.map((entry) => entry.path)])
+				);
+				expect(new Set(merged.files)).toEqual(
+					new Set([...(acceptRemoteConflicts ? remote : local), independent, shellOnly])
+				);
+			}
+		}
+	);
+
 	it('adopts shell creates, writes and deletions when editor revision is unchanged', () => {
 		const baseline = [f('main.c', 'before'), f('old.txt', 'remove')];
 		expect(

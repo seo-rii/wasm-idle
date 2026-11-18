@@ -15,6 +15,62 @@ export function normalizeWorkspacePath(value: string): string {
 	return path;
 }
 
+function workspaceDirectories(files: Set<string>) {
+	const directories = new Set<string>();
+	for (const file of files) {
+		for (let slash = file.indexOf('/'); slash !== -1; slash = file.indexOf('/', slash + 1)) {
+			directories.add(file.slice(0, slash));
+		}
+	}
+	return directories;
+}
+
+function unusedSibling(path: string, files: Set<string>, directories: Set<string>) {
+	const dot = path.lastIndexOf('.');
+	const extension = dot > path.lastIndexOf('/') ? path.slice(dot) : '';
+	const stem = path.slice(0, path.length - extension.length);
+	let number = 2;
+	let candidate = `${stem}-${number}${extension}`;
+	while (files.has(candidate) || directories.has(candidate)) {
+		candidate = `${stem}-${++number}${extension}`;
+	}
+	return candidate;
+}
+
+/** Check both directions of a file/directory collision before changing the editor. */
+export function workspaceFilePath(path: string, existing: Iterable<string>, copy = false) {
+	const files = new Set(existing);
+	const directories = workspaceDirectories(files);
+	for (let slash = path.indexOf('/'); slash !== -1; slash = path.indexOf('/', slash + 1)) {
+		const parent = path.slice(0, slash);
+		if (files.has(parent)) throw new Error(`Cannot create ${path}: ${parent} is a file`);
+	}
+	if (directories.has(path)) throw new Error(`Cannot create ${path}: it is a directory`);
+	if (!files.has(path)) return path;
+	if (!copy) throw new Error('File already exists');
+	return unusedSibling(path, files, directories);
+}
+
+export function assertWorkspaceFileHierarchy(paths: Set<string>) {
+	for (const directory of workspaceDirectories(paths)) {
+		if (paths.has(directory)) throw new Error(`Cannot create ${directory}: it is a directory`);
+	}
+}
+
+/** Older snapshots allowed a file to double as a directory. Keep every file's bytes. */
+export function recoverWorkspaceFilePaths(paths: string[]) {
+	const files = new Set(paths);
+	const directories = workspaceDirectories(files);
+	const renamed = new Map<string, string>();
+	for (const path of paths) {
+		if (!directories.has(path)) continue;
+		const next = unusedSibling(path, files, directories);
+		renamed.set(path, next);
+		files.add(next);
+	}
+	return renamed;
+}
+
 /**
  * Resolve the workspace file a compiler diagnostic belongs to. Diagnostics without a file, or
  * naming a compiler scratch path that matches no workspace file, stay on the run's entry file.

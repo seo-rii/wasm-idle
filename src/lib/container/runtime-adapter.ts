@@ -390,7 +390,7 @@ export class ContainerRuntimeAdapter {
 		this.#published.set(language, publishedNext);
 	}
 	readWorkspaceDelta(language: string, since?: number): ContainerWorkspaceDelta {
-		const root = this.directory(language);
+		const root = this.directoryPath(language);
 		const previous = this.#workspaceReads.get(language);
 		const reset = !previous || since !== previous.revision;
 		const versions = new Map<string, FileVersion>();
@@ -412,7 +412,15 @@ export class ContainerRuntimeAdapter {
 				}
 			}
 		};
-		visit('');
+		// Projects can be removed or replaced by a shell file. Only the directory
+		// represents project contents; unrelated read failures must remain retryable.
+		let isDirectory = false;
+		try {
+			isDirectory = this.fs.lstat(root).type === 'directory';
+		} catch (error) {
+			if ((error as { code?: string }).code !== 'ENOENT') throw error;
+		}
+		if (isDirectory) visit('');
 		const deleted = reset
 			? []
 			: [...previous!.versions.keys()].filter((path) => !versions.has(path));

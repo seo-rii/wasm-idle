@@ -222,3 +222,192 @@ it(
 		});
 	}
 );
+
+it(
+	'preserves project files across shell writes, switches, saves, and older explorer conflicts',
+	{
+		skip: !enabled,
+		timeout: 180_000,
+		meta: { browser: true, requiredBrowser: enabled }
+	},
+	async () => {
+		await runWithBrowserProbeSessionLock(async () => {
+			const provided = process.env.WASM_IDLE_BROWSER_URL;
+			const server =
+				provided && shouldReuseProvidedBrowserUrl(provided)
+					? { browserUrl: provided, close: async () => {} }
+					: await startBrowserPreviewServer({
+							origin: 'http://127.0.0.1:4679',
+							serverMode: 'preview'
+						});
+			let browser: Browser | undefined;
+			try {
+				browser = await chromium.launch({
+					executablePath: await resolveChromiumExecutable(
+						process.env.WASM_IDLE_CHROMIUM_EXECUTABLE || ''
+					)
+				});
+				const context = await browser.newContext({
+					serviceWorkers: 'allow',
+					viewport: { width: 1440, height: 1000 }
+				});
+				await addBrowserTestCookies(context, server.browserUrl);
+				await disableBrowserPrewarm(context);
+				const legacyFiles = [
+					{ path: 'main.cpp', content: 'int main(){return 0;}' },
+					{ path: 'include/numbers.h', content: '#define NUMBER 3' },
+					{ path: 'include', content: 'user bytes' },
+					{ path: 'include-2', content: 'existing sibling' }
+				];
+				await context.addInitScript(
+					({ key, files }) => {
+						if (!localStorage.getItem(key))
+							localStorage.setItem(
+								key,
+								JSON.stringify({
+									version: 6,
+									language: 'CPP',
+									files,
+									activePath: 'include',
+									openTabs: ['main.cpp', 'include'],
+									lspEnabled: false,
+									sidebarOpen: true
+								})
+							);
+					},
+					{ key: storageKey, files: legacyFiles }
+				);
+				const page = await context.newPage();
+				const errors: string[] = [];
+				page.on('pageerror', (error) => errors.push(error.message));
+				page.setDefaultTimeout(20_000);
+				await page.goto(server.browserUrl, { waitUntil: 'domcontentloaded' });
+				await page.locator('#language-select[data-workspace-ready="true"]').waitFor();
+				await expect
+					.poll(() =>
+						page.evaluate(() =>
+							(globalThis as SiteWindow).__wasmIdleDebug?.getEditorValue()
+						)
+					)
+					.toBe('user bytes');
+				expect(await page.locator('.file-tab.active').getAttribute('title')).toBe(
+					'include-3'
+				);
+				expect(await page.locator('.file-tab[title="main.cpp"]').count()).toBe(1);
+				for (const [action, path, source] of [
+					['New file', 'include'],
+					['New file', 'include-2/child'],
+					['Rename', 'include'],
+					['Rename', 'include-3/child'],
+					['Rename', 'include', 'include/numbers.h']
+				]) {
+					if (source)
+						await page.locator(`.workspace-files button[title="${source}"]`).click();
+					const oldFiles = await page
+						.locator('.workspace-files button')
+						.allTextContents();
+					page.once('dialog', (dialog) => void dialog.accept(path));
+					await page.getByRole('button', { name: action, exact: true }).click();
+					await expect
+						.poll(() => page.locator('.statusbar__message').textContent())
+						.toMatch(/is a (file|directory)/);
+					expect(await page.locator('.workspace-files button').allTextContents()).toEqual(
+						oldFiles
+					);
+				}
+				async function choose(language: string) {
+					await page.locator('.language-trigger').click();
+					await page.locator('#language-option-' + language).click();
+				}
+				async function shell(command: string) {
+					await page.locator('.terminal-shell .xterm-helper-textarea').focus();
+					await page.keyboard.type(command);
+					await page.keyboard.press('Enter');
+				}
+				const remote = () =>
+					page.evaluate(async () => {
+						const binding = (
+							globalThis as SiteWindow & {
+								__wasmIdleContainer: {
+									readWorkspace(
+										language: string
+									): Promise<Array<{ path: string; content: Uint8Array }>>;
+								};
+							}
+						).__wasmIdleContainer;
+						return Object.fromEntries(
+							(await binding.readWorkspace('PYTHON')).map((f) => [
+								f.path,
+								new TextDecoder().decode(f.content)
+							])
+						);
+					});
+				const saved = () =>
+					page.evaluate((key) => {
+						const snapshot = JSON.parse(localStorage.getItem(key)!) as SavedWorkspace;
+						return Object.fromEntries(
+							snapshot.workspaces.PYTHON.files.map((f) => [f.path, f.content])
+						);
+					}, storageKey);
+				await page.waitForFunction(
+					() =>
+						document
+							.querySelector('.terminal-shell .xterm-rows')
+							?.textContent?.replaceAll('\u00a0', ' ')
+							.includes('~/CPP $'),
+					undefined,
+					{ timeout: 60_000 }
+				);
+				await shell(
+					"mkdir -p ../PYTHON; echo 'print(7)' > ../PYTHON/main.py; echo first > ../PYTHON/scratch.py"
+				);
+				const initialPython = { 'main.py': 'print(7)\n', 'scratch.py': 'first\n' };
+				await expect.poll(remote, { timeout: 20_000 }).toEqual(initialPython);
+				await choose('PYTHON');
+				await expect
+					.poll(() =>
+						page.evaluate(() =>
+							(globalThis as SiteWindow).__wasmIdleDebug?.getEditorValue()
+						)
+					)
+					.toBe(initialPython['main.py']);
+				expect(await remote()).toEqual(initialPython);
+				await choose('CPP');
+				await shell(
+					"echo 'print(9)' > /workspace/PYTHON/main.py; rm /workspace/PYTHON/scratch.py; echo next > /workspace/PYTHON/new.py"
+				);
+				const updatedPython = { 'main.py': 'print(9)\n', 'new.py': 'next\n' };
+				await expect.poll(remote, { timeout: 20_000 }).toEqual(updatedPython);
+				await page.getByRole('button', { name: 'Save', exact: true }).click();
+				await expect.poll(saved).toEqual(updatedPython);
+				await page.locator('[data-workspace-save-state="saved"]').waitFor();
+				await page.reload({ waitUntil: 'domcontentloaded' });
+				await page.locator('#language-select[data-workspace-ready="true"]').waitFor();
+				await expect.poll(remote, { timeout: 30_000 }).toEqual(updatedPython);
+				await choose('PYTHON');
+				await expect
+					.poll(() =>
+						page.evaluate(() =>
+							(globalThis as SiteWindow).__wasmIdleDebug?.getEditorValue()
+						)
+					)
+					.toBe(updatedPython['main.py']);
+				await choose('CPP');
+				await shell('rm /workspace/PYTHON/main.py /workspace/PYTHON/new.py');
+				await expect.poll(remote, { timeout: 20_000 }).toEqual({});
+				await page.getByRole('button', { name: 'Save', exact: true }).click();
+				await expect.poll(saved).toEqual({});
+				await page.locator('[data-workspace-save-state="saved"]').waitFor();
+				await page.reload({ waitUntil: 'domcontentloaded' });
+				await page.locator('#language-select[data-workspace-ready="true"]').waitFor();
+				await choose('PYTHON');
+				await expect.poll(() => page.locator('.workspace-files button').count()).toBe(0);
+				expect(await saved()).toEqual({});
+				expect(errors).toEqual([]);
+			} finally {
+				await browser?.close();
+				await server.close();
+			}
+		});
+	}
+);
