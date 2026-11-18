@@ -1,4 +1,4 @@
-import { createContainer, type Container } from '@wasm-idle/container';
+import { ContainerError, createContainer, type Container } from '@wasm-idle/container';
 import { installWasixWorkerGroup } from '@wasm-idle/container/adapters/wasix';
 import type { ProgressLike, WorkspaceFile } from '@wasm-idle/core';
 import { createBashProfile, type BashProfileConfiguration } from './bash-profile.js';
@@ -489,23 +489,25 @@ export function serveContainerWorker(options: ContainerWorkerOptions): {
 				.catch(() => {})
 				.then(async () => {
 					await shellStarting;
-					if (shellInputClosed) return;
+					if (shellClosed || shellInputClosed) return;
 					const current = shell;
-					if (!current || shellClosed || !shellControl)
-						throw new Error('Shell is not running');
+					if (!current || !shellControl) throw new Error('Shell is not running');
 					signal.throwIfAborted();
-					await current.resize(args[0] as number, args[1] as number);
-					if (shellInputClosed) return;
-					if (shell !== current || shellClosed) throw new Error('Shell has exited');
 					try {
+						await current.resize(args[0] as number, args[1] as number);
+						if (shellClosed || shellInputClosed) return;
 						await shellControl.requestResize(
 							AbortSignal.any([signal, lifetime.signal])
 						);
 					} catch (error) {
-						// EOF retires the primary prompt, including an automatic resize
-						// waiting behind foreground stdin. It needs no further redraw.
-						if (!shellInputClosed || (error as Error)?.name !== 'AbortError')
-							throw error;
+						// The SDK can retire the TTY before stdout/stderr finish draining.
+						if (error instanceof ContainerError && error.code === 'DISPOSED') return;
+						if (
+							(shellClosed || shellInputClosed) &&
+							(error as Error)?.name === 'AbortError'
+						)
+							return;
+						throw error;
 					}
 				});
 			shellResizes = resize;
