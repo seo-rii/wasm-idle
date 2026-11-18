@@ -866,8 +866,29 @@
 	$effect(() => {
 		let _ = clientWidth + clientHeight;
 		if (!plugin || !term || terminalDisposed) return;
-		plugin.fit?.fit();
 		const binding = shell;
+		const nextSize = plugin.fit?.proposeDimensions?.();
+		// Readline redraws relative to its old cursor row. xterm can move that row
+		// when other lines reflow, even with reflowCursorLine disabled.
+		const buffer =
+			binding?.resize &&
+			nextSize &&
+			nextSize.cols !== term.cols &&
+			finish &&
+			executionInputOwners === 0 &&
+			term.modes.bracketedPasteMode
+				? term.buffer.active
+				: undefined;
+		const marker = buffer?.type === 'normal' ? term.registerMarker(0) : undefined;
+		const column = buffer?.cursorX ?? 0;
+		plugin.fit?.fit();
+		if (marker && buffer) {
+			const row = marker.line - buffer.baseY;
+			if (!marker.isDisposed && row >= 0 && row < term.rows) {
+				term.write(`\x1b[${row + 1};${Math.min(column + 1, term.cols)}H`);
+			}
+			marker.dispose();
+		}
 		if (binding) {
 			void binding.resize?.(term.cols, term.rows).catch((error) => {
 				if (connectedShell === binding) reportShellError(error);
