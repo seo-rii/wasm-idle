@@ -661,6 +661,31 @@ describe('existing playground container binding', () => {
 		expect(call.mock.calls.some((row) => ['shellWrite', 'write'].includes(row[0]))).toBe(false);
 	});
 
+	it('delays a first shell connection until an already running program releases the display', async () => {
+		const { binding, call } = fixture();
+		await binding.beginTerminalExecution();
+		const connected = binding.shell.connect(() => {});
+		const sandbox = await binding.load('JAVASCRIPT');
+		await sandbox.run('code', false);
+		expect(call.mock.calls.map(([method]) => method)).toEqual(['run']);
+		await binding.endTerminalExecution();
+		await connected;
+		expect(call.mock.calls.map(([method]) => method)).toEqual(['run', 'shellStart']);
+	});
+
+	it.each(['shell', 'playground'] as const)(
+		'settles a delayed shell connection on %s disposal',
+		async (target) => {
+			const { binding, call } = fixture();
+			await binding.beginTerminalExecution();
+			const connected = binding.shell.connect(() => {});
+			await (target === 'shell' ? binding.shell.dispose() : binding.dispose());
+			await connected;
+			await binding.endTerminalExecution();
+			expect(call.mock.calls.map(([method]) => method)).not.toContain('shellStart');
+		}
+	);
+
 	it('keeps batch execution independent from an unused or unavailable shell and skips redraw after disposal', async () => {
 		const { binding, call } = fixture();
 		await binding.beginTerminalExecution();
