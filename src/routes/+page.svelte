@@ -78,7 +78,12 @@
 		type CompilerOptionsByLanguage
 	} from './compilerOptions';
 	import { createWorkspaceStorage, type WorkspaceSaveState } from './workspaceStorage';
-	import { normalizeWorkspacePath, resolveCompilerDiagnosticPath } from './workspacePath';
+	import {
+		normalizeWorkspacePath,
+		recoverWorkspaceFilePaths,
+		resolveCompilerDiagnosticPath,
+		workspaceFilePath
+	} from './workspacePath';
 	import {
 		createSharedWorkspaceUrl,
 		WORKSPACE_STORAGE_KEY,
@@ -1329,10 +1334,17 @@
 	function sanitizeWorkspace(
 		value: Partial<LanguageWorkspace> | undefined,
 		nextLanguage: PlaygroundLanguage,
-		snapshotVersion?: number
+		snapshotVersion?: number,
+		recovered?: string[]
 	): LanguageWorkspace {
 		const fallback = createDefaultWorkspace(nextLanguage);
 		const nextFiles = sanitizeFiles(value?.files);
+		const renamed = recovered && recoverWorkspaceFilePaths(nextFiles.map((file) => file.path));
+		if (recovered && renamed?.size) {
+			for (const file of nextFiles) file.path = renamed.get(file.path) ?? file.path;
+			for (const [original, next] of renamed)
+				recovered.push(`${nextLanguage}/${original} → ${next}`);
+		}
 		const files = (nextFiles.length ? nextFiles : fallback.files).map((file) =>
 			migrateLegacyWorkspaceFile(file, {
 				version: snapshotVersion,
@@ -1343,10 +1355,17 @@
 		);
 		const requestedActivePath =
 			typeof value?.activePath === 'string' ? normalizePath(value.activePath) : '';
-		const activePath = files.some((file) => file.path === requestedActivePath)
-			? requestedActivePath
+		const restoredPath = renamed?.get(requestedActivePath) ?? requestedActivePath;
+		const activePath = files.some((file) => file.path === restoredPath)
+			? restoredPath
 			: files[0].path;
-		const openTabs = normalizeWorkspaceTabs(value?.openTabs, files, activePath);
+		const openTabs = normalizeWorkspaceTabs(
+			Array.isArray(value?.openTabs)
+				? value.openTabs.map((tab) => renamed?.get(tab) ?? tab)
+				: value?.openTabs,
+			files,
+			activePath
+		);
 		return {
 			activePath,
 			files,
@@ -1661,24 +1680,6 @@
 			?.scrollIntoView({ block: 'nearest' });
 	});
 
-	function uniquePath(requestedPath: string) {
-		const safePath = normalizeWorkspacePath(requestedPath) || 'untitled.txt';
-		if (!files.some((file) => file.path === safePath)) return safePath;
-		const slash = safePath.lastIndexOf('/');
-		const directory = slash === -1 ? '' : safePath.slice(0, slash + 1);
-		const name = slash === -1 ? safePath : safePath.slice(slash + 1);
-		const dot = name.lastIndexOf('.');
-		const base = dot === -1 ? name : name.slice(0, dot);
-		const ext = dot === -1 ? '' : name.slice(dot);
-		let index = 2;
-		let next = `${directory}${base}-${index}${ext}`;
-		while (files.some((file) => file.path === next)) {
-			index += 1;
-			next = `${directory}${base}-${index}${ext}`;
-		}
-		return next;
-	}
-
 	function sanitizeFiles(value: unknown) {
 		if (!Array.isArray(value)) return [];
 		const seen: string[] = [];
@@ -1727,7 +1728,11 @@
 		select = true,
 		encoding?: WorkspaceFile['encoding']
 	) {
-		const nextPath = uniquePath(filePath);
+		const nextPath = workspaceFilePath(
+			normalizeWorkspacePath(filePath) || 'untitled.txt',
+			files.map((file) => file.path),
+			true
+		);
 		files = [...files, { path: nextPath, content, encoding }];
 		if (select) selectFile(nextPath);
 		saveStatus = `${basename(nextPath)} added`;
@@ -1753,13 +1758,13 @@
 		let nextPath: string;
 		try {
 			nextPath = normalizeWorkspacePath(requested);
+			if (!nextPath || nextPath === file.path) return;
+			workspaceFilePath(
+				nextPath,
+				files.filter((item) => item !== file).map((item) => item.path)
+			);
 		} catch (error) {
 			saveStatus = error instanceof Error ? error.message : String(error);
-			return;
-		}
-		if (!nextPath || nextPath === file.path) return;
-		if (files.some((item) => item.path === nextPath)) {
-			saveStatus = 'File already exists';
 			return;
 		}
 		const previousPath = file.path;
@@ -1854,12 +1859,14 @@
 			languageForPath(typeof value?.activePath === 'string' ? value.activePath : '') ??
 			'CPP';
 		const nextWorkspaces = createDefaultLanguageWorkspaces();
+		const recovered: string[] = [];
 		for (const nextLanguageKey of playgroundLanguages) {
 			const workspace = value?.workspaces?.[nextLanguageKey];
 			nextWorkspaces[nextLanguageKey] = sanitizeWorkspace(
 				workspace,
 				nextLanguageKey,
-				value?.version
+				value?.version,
+				recovered
 			);
 		}
 		if (!value?.workspaces) {
@@ -1870,7 +1877,8 @@
 					openTabs: value?.openTabs
 				},
 				nextLanguage,
-				value?.version
+				value?.version,
+				recovered
 			);
 		}
 		editorWorkspaceRevision += 1;
@@ -1912,7 +1920,9 @@
 		if (value?.ocamlWasmBinaryenMode === 'fast' || value?.ocamlWasmBinaryenMode === 'full')
 			ocamlWasmBinaryenMode = value.ocamlWasmBinaryenMode;
 		sidebarOpen = value?.sidebarOpen ?? desktopExampleLayout;
-		saveStatus = message;
+		saveStatus = recovered.length
+			? `${message}. Renamed conflicting files: ${recovered.join(', ')}`
+			: message;
 	}
 
 	async function saveWorkspace(showStatus = false) {
@@ -2155,9 +2165,14 @@
 			} else if (plan.fromZip) {
 				imported = await openImportedZipWorkspace(plan.files, destination);
 			} else {
-				imported = plan.files.map((file) =>
-					addWorkspaceFile(file.path, file.content, false, file.encoding)
-				);
+				const paths = files.map((file) => file.path);
+				const additions = plan.files.map((file) => {
+					const path = workspaceFilePath(file.path, paths, true);
+					paths.push(path);
+					return { ...file, path };
+				});
+				files = [...files, ...additions];
+				imported = additions.map((file) => file.path);
 			}
 			if (imported[0]) selectFile(imported[0]);
 			saveStatus = `${imported.length} file${imported.length === 1 ? '' : 's'} imported`;

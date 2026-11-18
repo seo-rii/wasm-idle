@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeWorkspacePath, resolveCompilerDiagnosticPath } from './workspacePath';
+import {
+	assertWorkspaceFileHierarchy,
+	normalizeWorkspacePath,
+	recoverWorkspaceFilePaths,
+	resolveCompilerDiagnosticPath,
+	workspaceFilePath
+} from './workspacePath';
 
 describe('workspace path normalization', () => {
 	it.each([
@@ -38,6 +44,43 @@ describe('workspace path normalization', () => {
 		expect(normalizeWorkspacePath('é.py')).toBe('é.py');
 		expect(normalizeWorkspacePath('e\u0301.py')).toBe('e\u0301.py');
 		expect(normalizeWorkspacePath('.../a..b.py')).toBe('.../a..b.py');
+	});
+});
+
+describe('editor file and directory names', () => {
+	it('checks either insertion order and preserves same-name files in other directories', () => {
+		expect(() => workspaceFilePath('include', ['include/number.h'])).toThrow(
+			'it is a directory'
+		);
+		expect(() => workspaceFilePath('include/number.h', ['include'])).toThrow(
+			'include is a file'
+		);
+		expect(() =>
+			assertWorkspaceFileHierarchy(new Set(['include/number.h', 'include']))
+		).toThrow('directory');
+		expect(workspaceFilePath('other/include', ['include/number.h'])).toBe('other/include');
+	});
+
+	it('keeps generated copies out of existing files and directories', () => {
+		expect(workspaceFilePath('test.h', ['test.h', 'test-2.h/other', 'test-3.h'], true)).toBe(
+			'test-4.h'
+		);
+	});
+
+	it('recovers nested older collisions independently of input order, preserving every descendant', () => {
+		const paths = ['include/nested/test.h', 'include/nested', 'include', 'include-2/another.h'];
+		for (const ordered of [paths, [...paths].reverse()]) {
+			const renamed = recoverWorkspaceFilePaths(ordered);
+			expect(Object.fromEntries(renamed)).toEqual({
+				include: 'include-3',
+				'include/nested': 'include/nested-2'
+			});
+			expect(() =>
+				assertWorkspaceFileHierarchy(
+					new Set(ordered.map((path) => renamed.get(path) ?? path))
+				)
+			).not.toThrow();
+		}
 	});
 });
 
