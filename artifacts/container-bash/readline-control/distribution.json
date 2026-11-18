@@ -3,13 +3,13 @@
   "packages": [
     {
       "id": "shell",
-      "identity": "sha256:2d5b18ff88b3f460cc25452063da7984452173012f266f454b200ecf9a9e700a",
+      "identity": "sha256:969ed051790bb62184e8a0bf2e06aa05ee088f7782cac22ff10cfabafc0cd02d",
       "dependencies": [],
       "mount": "/opt/toolchains/bash",
       "producer": {
         "repository": "https://github.com/seo-rii/wasm-idle",
-        "revision": "0cd3fdc19e53904dc24968c98b0df4c18b073585",
-        "receiptSha256": "229f57fb66ba6c5563434c300ed9ef4ef343445533232348fb3667d023863eb1"
+        "revision": "cf228a81ddae92f4a6e2ec96af3d0ae239192efc",
+        "receiptSha256": "4bd30773468d0fcfe1bb41a3f04a8f16266251189a5476baba3494c4060d1cb0"
       },
       "capabilities": [
         "wasix"
@@ -32,16 +32,16 @@
         },
         {
           "id": "bash",
-          "url": "https://seo-rii.github.io/wasm-idle/container-app/objects/c5a10a4032a71c6e31509afeb08b38469091960f94b3c0acfc4f09ef2340b974/bash.webc.bin",
+          "url": "https://seo-rii.github.io/wasm-idle/container-app/objects/ae7dcc11371244b16273af3f1e11988c9293d1cd86743015f955bb464ad91c91/bash.webc.bin",
           "encoding": "identity",
           "delivery": {
-            "bytes": 1823096,
-            "sha256": "c5a10a4032a71c6e31509afeb08b38469091960f94b3c0acfc4f09ef2340b974",
+            "bytes": 1823229,
+            "sha256": "ae7dcc11371244b16273af3f1e11988c9293d1cd86743015f955bb464ad91c91",
             "mediaType": "application/octet-stream"
           },
           "logical": {
-            "bytes": 1823096,
-            "sha256": "c5a10a4032a71c6e31509afeb08b38469091960f94b3c0acfc4f09ef2340b974",
+            "bytes": 1823229,
+            "sha256": "ae7dcc11371244b16273af3f1e11988c9293d1cd86743015f955bb464ad91c91",
             "mediaType": "application/octet-stream"
           }
         }
@@ -574,5 +574,5 @@
       ]
     }
   ],
-  "distributionId": "website-aa7a6324a85978bbf0a00015abc3fd01857fdf5ccc1f8b03cee5cc2df3fa3f67"
+  "distributionId": "website-5c0496e278f02da4566dcf39a88db74c24e56cd3fbe425e73183259eba28a76a"
 }
