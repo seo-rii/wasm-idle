@@ -73,7 +73,8 @@ export const scenarios = [
 		// Owned Clang outputs and serialized workspace reconciliation add 3,590 bytes; measured install: 7,627,293 bytes.
 		// Round to the next KiB while retaining the existing file and package limits.
 		// Bash terminal capabilities and EOF handling add 2,377 installed bytes.
-		budget: { maxBytes: 7629824, maxFiles: 865, maxPackages: 6 },
+		// The terminal geometry binding and owner bring the root install to 7,638,591 bytes.
+		budget: { maxBytes: 7639040, maxFiles: 865, maxPackages: 6 },
 		absentPackageNames: [
 			'@katana-project/asm',
 			'java-parser',
@@ -481,7 +482,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Current full verification measures 43,326,389 bytes after that fix; add 5 KiB
 		// to reach the next KiB while retaining the existing file and package limits.
 		// The full install with Bash terminal and copy fixes measures 43,330,188 bytes.
-		budget: { maxBytes: 43330560, maxFiles: 3488, maxPackages: 70 },
+		// With the WASIX tty helper, the aggregate measures 43,347,130 bytes and 3,490 files.
+		budget: { maxBytes: 43347968, maxFiles: 3490, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
