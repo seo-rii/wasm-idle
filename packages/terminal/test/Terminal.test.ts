@@ -5,7 +5,7 @@ import { compile } from 'svelte/compiler';
 import { describe, expect, it } from 'vitest';
 
 describe('Terminal source', () => {
-	it('restores the cursor and copies terminal selections before ctrl+c stop handling', () => {
+	it('restores the cursor and retains ctrl+c stop handling', () => {
 		expect(() =>
 			compile(source, {
 				filename: 'packages/terminal/src/Terminal.svelte',
@@ -15,9 +15,6 @@ describe('Terminal source', () => {
 		expect(source).toMatch(/term\.write\('\\u001B\[\?25h'\);/);
 		expect(source).toMatch(
 			/const isCopyShortcut =\s+\(ev\.ctrlKey \|\| ev\.metaKey\) && ev\.key\.toLowerCase\(\) === 'c';/
-		);
-		expect(source).toMatch(
-			/if \(isCopyShortcut && term\.hasSelection\(\)\) \{\s+const selectedText = term\.getSelection\(\);\s+if \(selectedText\) \{\s+ev\.preventDefault\(\);\s+navigator\.clipboard\.writeText\(selectedText\)\.catch\(\(\) => \{\}\);\s+return;\s+\}\s+\}\s+if \(finish && executionInputOwners === 0\) return;/s
 		);
 		expect(source).toMatch(
 			/if \(isCopyShortcut\) \{\s+ev\.preventDefault\(\);\s+sandbox\.kill\?\.\(\);\s+\}/s

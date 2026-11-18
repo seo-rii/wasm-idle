@@ -58,6 +58,8 @@ export function serveContainerWorker(options: ContainerWorkerOptions): {
 		shellClosed = false;
 	let shellWriter: WritableStreamDefaultWriter<Uint8Array> | undefined;
 	let shellWrites = Promise.resolve();
+	let shellClosingInput: Promise<void> | undefined;
+	let shellInputClosed = false;
 	let watcher: ReadableStreamDefaultReader | undefined;
 	let disposal: Promise<void> | undefined;
 	const lifetime = new AbortController();
@@ -288,6 +290,7 @@ export function serveContainerWorker(options: ContainerWorkerOptions): {
 	}
 	async function shellWrite(text: string | Uint8Array) {
 		if (!shellWriter || shellClosed) throw new Error('Shell is not running');
+		if (shellInputClosed) throw new Error('Shell input is closed');
 		const bytes =
 			typeof text === 'string'
 				? new TextEncoder().encode(text.replaceAll('\r\n', '\n').replaceAll('\r', '\n'))
@@ -478,8 +481,17 @@ export function serveContainerWorker(options: ContainerWorkerOptions): {
 		}
 		if (method === 'shellWrite') return await shellWrite(args[0] as string);
 		if (method === 'shellEof') {
+			const writer = shellWriter;
+			if (!writer || shellClosed) return;
+			shellInputClosed = true;
+			// Finish admitted writes and give foreground programs actual pipe EOF.
+			// A failed mailbox update must not prevent EOF or poison a later retry.
 			await shellWrites;
-			await shellWriter?.close();
+			try {
+				shellControl?.closeInput();
+			} finally {
+				await (shellClosingInput ??= writer.close());
+			}
 			return;
 		}
 		if (method === 'shellInterrupt') {

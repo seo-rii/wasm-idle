@@ -476,7 +476,13 @@ describe('existing playground container binding', () => {
 		expect(call).not.toHaveBeenCalled();
 		await binding.shell.connect(() => {});
 		expect(call).toHaveBeenCalledExactlyOnceWith('shellStart', [
-			{ cwd: '/workspace/PYTHON', env: { PS1: '\\[\\e[1;34m\\]\\w\\[\\e[0m\\] $ ' } }
+			{
+				cwd: '/workspace/PYTHON',
+				env: expect.objectContaining({
+					TERM: 'xterm',
+					PS1: '\\[\\e[1;34m\\]\\w\\[\\e[0m\\] $ '
+				})
+			}
 		]);
 	});
 

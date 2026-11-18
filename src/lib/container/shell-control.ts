@@ -60,7 +60,7 @@ function rcfile(session: string, languages: readonly string[]) {
 	return [
 		'# Trusted application rcfile. The mailbox is data and is never evaluated.',
 		'__wasm_idle_poll() {',
-		'  local __wic_version __wic_session __wic_generation __wic_language __wic_extra __wic_oldpwd __wic_fd',
+		'  local __wic_exit_status=$? __wic_version __wic_session __wic_generation __wic_language __wic_extra __wic_oldpwd __wic_fd',
 		`  local __wic_expected_session='${session}'`,
 		// WASIX dup2 restoration loses stdin's polling rights. Read through a fresh
 		// descriptor instead of temporarily replacing the live terminal's fd 0.
@@ -75,6 +75,13 @@ function rcfile(session: string, languages: readonly string[]) {
 		'  [[ "$__wic_session" == "$__wic_expected_session" && -z "$__wic_extra" ]] || return 0',
 		'  [[ "$__wic_generation" =~ ^[1-9][0-9]{0,9}$ ]] || return 0',
 		`  (( __wic_generation <= ${MAX_GENERATION} && __wic_generation > \${__wasm_idle_control_generation:-0} )) || return 0`,
+		// stdin has real EOF; the native hook reaches this only at a primary prompt.
+		// Exit directly instead of accepting or changing the unfinished editing buffer.
+		'  if [[ "$__wic_version" == 3 ]]; then',
+		'    [[ "$__wic_language" == eof ]] || return 0',
+		'    __wasm_idle_control_generation=$__wic_generation',
+		'    builtin exit "$__wic_exit_status"',
+		'  fi',
 		'  if [[ "$__wic_version" == 2 ]]; then',
 		'    case "$__wic_language" in suspend|resume) ;; *) return 0 ;; esac',
 		'    __wasm_idle_control_generation=$__wic_generation',
@@ -124,6 +131,7 @@ export function createShellControl(options: ShellControlOptions) {
 		throw new Error('Invalid initial shell directory');
 	let filesystem: MemoryFileSystem | undefined,
 		disposed = false,
+		inputClosed = false,
 		generation = 0,
 		appliedGeneration = 0;
 	let pending: PendingControl | undefined,
@@ -231,6 +239,7 @@ export function createShellControl(options: ShellControlOptions) {
 	const request = (version: '1' | '2', target: string, signal?: AbortSignal): Promise<void> => {
 		try {
 			const fs = currentFilesystem();
+			if (inputClosed) throw new Error('Shell input is closed');
 			signal?.throwIfAborted();
 			if (version === '1' ? !allowed.has(target) : !['suspend', 'resume'].includes(target))
 				throw new Error('Unknown shell control target');
@@ -377,6 +386,20 @@ export function createShellControl(options: ShellControlOptions) {
 		requestPrompt(action: 'suspend' | 'resume', signal?: AbortSignal): Promise<void> {
 			return request('2', action, signal);
 		},
+		/** Finish at the next primary prompt after the owner closes real stdin. */
+		closeInput() {
+			const fs = currentFilesystem();
+			if (inputClosed) return;
+			if (generation === MAX_GENERATION)
+				throw new Error('Shell control generation exhausted');
+			writeRequest(fs, `3 ${session} ${generation + 1} eof\n`);
+			inputClosed = true;
+			generation += 1;
+			pending?.removeAbort?.();
+			pending?.reject(abortError('Shell input is closed'));
+			pending = undefined;
+			changed();
+		},
 		onInvocation(invocation: HostCommandInvocation): number | undefined {
 			return invocation.path === SHELL_CONTROL_ROUTE
 				? acknowledge(invocation.argv.slice(1), invocation.cwd)
@@ -395,7 +418,7 @@ export function createShellControl(options: ShellControlOptions) {
 						filesystem.lstat(SHELL_CONTROL_REQUEST).type === 'file' &&
 						new TextDecoder()
 							.decode(filesystem.readFile(SHELL_CONTROL_REQUEST))
-							.startsWith(`1 ${session} `)
+							.match(new RegExp(`^[123] ${session} `))
 					)
 						filesystem.unlink(SHELL_CONTROL_REQUEST);
 				} catch {

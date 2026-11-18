@@ -188,6 +188,39 @@ describe('real Bash directory control protocol', () => {
 		}
 	});
 
+	it('ends the shell at an EOF boundary without accepting an editing buffer and preserves its status', () => {
+		const local = nativeFixture(`3 ${'ab'.repeat(16)} 1 eof\n`);
+		const result = local.run(
+			[
+				"READLINE_LINE='echo must-not-run'",
+				'trap \'printf "exit-trap\\n"\' EXIT',
+				'false',
+				'__wasm_idle_poll',
+				'printf "unexpected-continuation\\n"'
+			].join('\n')
+		);
+		expect(result).toMatchObject({ status: 1, stdout: 'exit-trap\n', stderr: '' });
+		expect(() => readFileSync(local.ack)).toThrow();
+	});
+
+	it('keeps a terminal EOF request after pending cancellation and rejects later control changes', async () => {
+		const { control, fs } = fixture();
+		const abort = new AbortController();
+		const pending = control.requestPrompt('resume', abort.signal);
+		const rejected = expect(pending).rejects.toThrow(/input.*closed/i);
+		control.closeInput();
+		await rejected;
+		const mailbox = decoder.decode(fs.readFile(SHELL_CONTROL_REQUEST));
+		expect(mailbox).toBe(`3 ${'ab'.repeat(16)} 2 eof\n`);
+		abort.abort();
+		control.closeInput();
+		await expect(control.requestDirectory('CPP')).rejects.toThrow(/input.*closed/i);
+		await expect(control.requestPrompt('suspend')).rejects.toThrow(/input.*closed/i);
+		expect(decoder.decode(fs.readFile(SHELL_CONTROL_REQUEST))).toBe(mailbox);
+		control.dispose();
+		expect(() => fs.lstat(SHELL_CONTROL_REQUEST)).toThrow();
+	});
+
 	it('does not execute malformed mailbox bytes and rejects overlong, noncanonical, and foreign requests', () => {
 		const local = nativeFixture('');
 		const marker = join(local.workspace, 'injected');
@@ -197,7 +230,11 @@ describe('real Bash directory control protocol', () => {
 			`1 ${'ab'.repeat(16)} 01 CPP\n`,
 			`1 ${'ab'.repeat(16)} 2147483648 CPP\n`,
 			`1 ${'cd'.repeat(16)} 1 CPP\n`,
-			`1 ${'ab'.repeat(16)} 1 CPP ${'x'.repeat(512)}\n`
+			`1 ${'ab'.repeat(16)} 1 CPP ${'x'.repeat(512)}\n`,
+			`3 ${'cd'.repeat(16)} 1 eof\n`,
+			`3 ${'ab'.repeat(16)} 0 eof\n`,
+			`3 ${'ab'.repeat(16)} 1 other\n`,
+			`3 ${'ab'.repeat(16)} 1 eof extra\n`
 		]) {
 			writeFileSync(local.request, mailbox);
 			const result = local.run(

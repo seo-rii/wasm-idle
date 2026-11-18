@@ -143,6 +143,36 @@ it(
 						.querySelector('[data-testid="terminal-debug-output"]')
 						?.textContent?.includes('SIDEBAR-READY')
 				);
+				await page.locator('.terminal-shell .xterm-helper-textarea').focus();
+				await page.keyboard.type('echo first; echo second >&2');
+				await page.keyboard.press('Enter');
+				// A raw transcript also contains Readline's cursor movements. Check the
+				// rows users see, including the prompt on which the next command was typed.
+				const visibleRows = async () =>
+					(await page.locator('.terminal-shell .xterm-rows > div').allTextContents())
+						.map((row) => row.replaceAll('\u00a0', ' ').trimEnd())
+						.filter(Boolean);
+				await expect
+					.poll(async () => (await visibleRows()).slice(-5))
+					.toEqual([
+						'SIDEBAR-READY',
+						'~/PYTHON $ echo first; echo second >&2',
+						'first',
+						'second',
+						'~/PYTHON $'
+					]);
+				const longWord = '0123456789'.repeat(9);
+				await page.keyboard.type(`echo ${longWord}x`);
+				await page.keyboard.press('Backspace');
+				await expect
+					.poll(async () =>
+						(await visibleRows()).join('').endsWith(`~/PYTHON $ echo ${longWord}`)
+					)
+					.toBe(true);
+				await page.keyboard.press('Enter');
+				await expect
+					.poll(async () => (await visibleRows()).join(''))
+					.toContain(`~/PYTHON $ echo ${longWord}${longWord}~/PYTHON $`);
 				await expect
 					.poll(
 						() =>
@@ -254,6 +284,17 @@ it(
 					)
 					.toBe(true);
 				await file.waitFor();
+				await page.locator('.terminal-shell .xterm-helper-textarea').focus();
+				const pending = 'echo EOF-$((4 + 2))';
+				await page.keyboard.type(pending);
+				await expect
+					.poll(async () => (await visibleRows()).at(-1))
+					.toBe(`~/BASH $ ${pending}`);
+				await page.keyboard.press('Control+d');
+				await expect
+					.poll(visibleRows)
+					.toContain('Shell exited; reload to open a new shell.');
+				expect(await visibleRows()).not.toContain('EOF-6');
 				expect(errors).toEqual([]);
 			} catch (error) {
 				let timer: ReturnType<typeof setTimeout> | undefined;

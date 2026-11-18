@@ -56,7 +56,174 @@ async function retirementFixture(
 	return { owner, initialize, postMessage };
 }
 
+async function shellInputFixture() {
+	const { createContainer } = await import('@wasm-idle/container');
+	const container = createContainer();
+	const bytes: Uint8Array[] = [];
+	let releaseWrite!: () => void;
+	const blocked = new Promise<void>((resolve) => {
+		releaseWrite = resolve;
+	});
+	const write = vi.fn(async (value: Uint8Array) => {
+		bytes.push(value.slice());
+		await blocked;
+	});
+	const close = vi.fn();
+	let finish!: (value: { code: number; reason: 'exited' }) => void;
+	const empty = () =>
+		new ReadableStream<Uint8Array>({
+			start(c) {
+				c.close();
+			}
+		});
+	const shell = {
+		stdin: new WritableStream<Uint8Array>({ write, close }),
+		stdout: empty(),
+		stderr: empty(),
+		exited: new Promise<{ code: number; reason: 'exited' }>((resolve) => {
+			finish = resolve;
+		}),
+		dispose: async () => {
+			finish({ code: 0, reason: 'exited' });
+		}
+	};
+	vi.doMock('./bash-profile.js', () => ({
+		createBashProfile: async () => ({
+			container,
+			startShell: async () => shell,
+			dispose: () => container.dispose()
+		})
+	}));
+	const { owner, initialize, postMessage } = await retirementFixture(
+		async () =>
+			({
+				config: { sdkWorkerUrl: 'https://app.test/sdk.worker.js' },
+				sdk: {}
+			}) as never
+	);
+	const send = (id: number, method: string, args: unknown[] = []) =>
+		(
+			globalThis as unknown as {
+				onmessage(event: { data: ContainerWorkerRequest }): void;
+			}
+		).onmessage({
+			data: { version: 1, channel: 'retirement-test', id, type: 'call', method, args }
+		});
+	const response = async (id: number) => {
+		await vi.waitFor(() =>
+			expect(
+				postMessage.mock.calls.some(
+					([value]) => value.id === id && ['result', 'error'].includes(value.type)
+				)
+			).toBe(true)
+		);
+		return postMessage.mock.calls.find(
+			([value]) => value.id === id && ['result', 'error'].includes(value.type)
+		)![0];
+	};
+	return {
+		owner,
+		initialize,
+		container,
+		bytes,
+		write,
+		close,
+		releaseWrite,
+		finish,
+		send,
+		response
+	};
+}
+
 describe('application-owned container worker', () => {
+	it('still delivers real EOF if the control mailbox fails and can retry that control request', async () => {
+		const { owner, initialize, container, close, send, response } = await shellInputFixture();
+		const mailbox = '/tmp/.wasm-idle-shell-control-request';
+		try {
+			initialize();
+			expect(await response(0)).toMatchObject({ type: 'result' });
+			send(1, 'shellStart');
+			expect(await response(1)).toMatchObject({ type: 'result' });
+			container.fs.unlink(mailbox);
+			container.fs.mkdir(mailbox);
+			send(2, 'shellEof');
+			expect(await response(2)).toMatchObject({
+				type: 'error',
+				error: { message: expect.stringMatching(/mailbox.*regular file/) }
+			});
+			expect(close).toHaveBeenCalledOnce();
+			container.fs.rmdir(mailbox);
+			send(3, 'shellEof');
+			expect(await response(3)).toMatchObject({ type: 'result' });
+			expect(close).toHaveBeenCalledOnce();
+			expect(new TextDecoder().decode(container.fs.readFile(mailbox))).toMatch(
+				/^3 [a-f0-9]{32} 1 eof\n$/
+			);
+		} finally {
+			await owner.dispose();
+		}
+	});
+
+	it('does not latch EOF before shell startup and tolerates exit during real stdin close', async () => {
+		const { owner, initialize, close, finish, send, response } = await shellInputFixture();
+		try {
+			initialize();
+			expect(await response(0)).toMatchObject({ type: 'result' });
+			send(1, 'shellEof');
+			expect(await response(1)).toMatchObject({ type: 'result' });
+			expect(close).not.toHaveBeenCalled();
+			send(2, 'shellStart');
+			expect(await response(2)).toMatchObject({ type: 'result' });
+			close.mockImplementationOnce(() => {
+				finish({ code: 0, reason: 'exited' });
+			});
+			send(3, 'shellEof');
+			expect(await response(3)).toMatchObject({ type: 'result' });
+			send(4, 'shellEof');
+			expect(await response(4)).toMatchObject({ type: 'result' });
+			expect(close).toHaveBeenCalledOnce();
+		} finally {
+			await owner.dispose();
+		}
+	});
+
+	it('drains admitted input before real EOF, leaves terminal EOF control, and rejects later writes', async () => {
+		const { owner, initialize, container, bytes, write, close, releaseWrite, send, response } =
+			await shellInputFixture();
+		try {
+			initialize();
+			expect(await response(0)).toMatchObject({ type: 'result' });
+			send(1, 'shellStart');
+			expect(await response(1)).toMatchObject({ type: 'result' });
+			send(2, 'shellWrite', ['foreground data\n']);
+			await vi.waitFor(() => expect(write).toHaveBeenCalledOnce());
+			send(3, 'shellEof');
+			send(4, 'shellWrite', ['must-not-reach-stdin']);
+			expect(await response(4)).toMatchObject({
+				type: 'error',
+				error: { message: expect.stringMatching(/input.*closed/i) }
+			});
+			expect(close).not.toHaveBeenCalled();
+			releaseWrite();
+			expect(await response(2)).toMatchObject({ type: 'result' });
+			expect(await response(3)).toMatchObject({ type: 'result' });
+			send(5, 'shellEof');
+			expect(await response(5)).toMatchObject({ type: 'result' });
+			expect(close).toHaveBeenCalledOnce();
+			expect(bytes.map((value) => new TextDecoder().decode(value))).toEqual([
+				'foreground data\n'
+			]);
+			expect(
+				new TextDecoder().decode(
+					container.fs.readFile('/tmp/.wasm-idle-shell-control-request')
+				)
+			).toMatch(/^3 [a-f0-9]{32} 1 eof\n$/);
+		} finally {
+			releaseWrite();
+			await owner.dispose();
+		}
+	});
+
 	it('imports the public entry without starting workers, fetching assets, or changing the realm', async () => {
 		const worker = vi.fn();
 		const fetcher = vi.fn();

@@ -72,7 +72,8 @@ export const scenarios = [
 		// Refreshing the release lock adds 21,831 packed core bytes; the root install measures 7,623,703 bytes.
 		// Owned Clang outputs and serialized workspace reconciliation add 3,590 bytes; measured install: 7,627,293 bytes.
 		// Round to the next KiB while retaining the existing file and package limits.
-		budget: { maxBytes: 7627776, maxFiles: 865, maxPackages: 6 },
+		// Bash terminal capabilities and EOF handling add 2,377 installed bytes.
+		budget: { maxBytes: 7629824, maxFiles: 865, maxPackages: 6 },
 		absentPackageNames: [
 			'@katana-project/asm',
 			'java-parser',
@@ -479,7 +480,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// The workspace recovery fix adds 3,590 root package bytes; allow 4 KiB for that change.
 		// Current full verification measures 43,326,389 bytes after that fix; add 5 KiB
 		// to reach the next KiB while retaining the existing file and package limits.
-		budget: { maxBytes: 43326464, maxFiles: 3488, maxPackages: 70 },
+		// The full install with Bash terminal and copy fixes measures 43,330,188 bytes.
+		budget: { maxBytes: 43330560, maxFiles: 3488, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

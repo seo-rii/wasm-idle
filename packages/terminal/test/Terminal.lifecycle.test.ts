@@ -36,6 +36,7 @@ vi.mock('@xterm/xterm', () => ({
 			return false;
 		}
 		onData() {}
+		attachCustomKeyEventHandler() {}
 		onKey(callback: (event: { domEvent: KeyboardEvent; key: string }) => void) {
 			xtermCallbacks.onKey = callback;
 		}

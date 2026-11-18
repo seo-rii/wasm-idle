@@ -11,6 +11,8 @@ import TerminalHarness from './TerminalHarness.svelte';
 const renderer = vi.hoisted(() => ({
 	data: undefined as ((text: string) => void) | undefined,
 	key: undefined as ((event: { key: string; domEvent: KeyboardEvent }) => void) | undefined,
+	customKey: undefined as ((event: KeyboardEvent) => boolean) | undefined,
+	selection: '',
 	writes: [] as string[],
 	disposals: 0
 }));
@@ -30,16 +32,19 @@ vi.mock('@xterm/xterm', () => ({
 			this.options = options;
 		}
 		open() {}
+		attachCustomKeyEventHandler(callback: (event: KeyboardEvent) => boolean) {
+			renderer.customKey = callback;
+		}
 		focus() {}
 		reset() {}
 		dispose() {
 			renderer.disposals += 1;
 		}
 		hasSelection() {
-			return false;
+			return Boolean(renderer.selection);
 		}
 		getSelection() {
-			return '';
+			return renderer.selection;
 		}
 		write(text: string) {
 			renderer.writes.push(text);
@@ -65,6 +70,16 @@ function deferred<T>() {
 		reject = no;
 	});
 	return { promise, resolve, reject };
+}
+
+function dispatchKey(event: KeyboardEvent, text: string) {
+	// xterm's public custom handler runs first. Otherwise onData follows onKey even
+	// when an onKey observer calls preventDefault on the original DOM event.
+	if (renderer.customKey?.(event) !== false && event.type === 'keydown') {
+		renderer.key?.({ key: text, domEvent: event });
+		renderer.data?.(text);
+	}
+	return event;
 }
 
 function createShell(connected = Promise.resolve()) {
@@ -125,6 +140,8 @@ afterEach(async () => {
 	for (const component of mounted.splice(0)) await unmount(component);
 	renderer.data = undefined;
 	renderer.key = undefined;
+	renderer.customKey = undefined;
+	renderer.selection = '';
 	renderer.writes.length = 0;
 	renderer.disposals = 0;
 	document.body.replaceChildren();
@@ -189,11 +206,7 @@ describe('Terminal host shell binding', () => {
 		await mountTerminal(shell.binding);
 		renderer.data?.('printf hello\r');
 		await vi.waitFor(() => expect(shell.binding.write).toHaveBeenCalledWith('printf hello\r'));
-		renderer.key?.({
-			key: '\u0003',
-			domEvent: new KeyboardEvent('keydown', { ctrlKey: true, key: 'c' })
-		});
-		renderer.data?.('\u0003');
+		dispatchKey(new KeyboardEvent('keydown', { ctrlKey: true, key: 'c' }), '\u0003');
 		renderer.key?.({
 			key: '\u0004',
 			domEvent: new KeyboardEvent('keydown', { ctrlKey: true, key: 'd' })
@@ -204,6 +217,26 @@ describe('Terminal host shell binding', () => {
 		expect(shell.binding.write).toHaveBeenCalledOnce();
 		expect(renderer.writes).toEqual([]);
 	});
+
+	it.each([{ ctrlKey: true }, { metaKey: true }])(
+		'leaves selection copy to the browser without interrupting the shell (%j)',
+		async (modifiers) => {
+			const shell = createShell();
+			const { terminal } = await mountTerminal(shell.binding);
+			renderer.selection = 'selected output';
+			const event = dispatchKey(
+				new KeyboardEvent('keydown', { ...modifiers, key: 'c', cancelable: true }),
+				'\u0003'
+			);
+			expect(event.defaultPrevented).toBe(false);
+			expect(
+				renderer.customKey?.(new KeyboardEvent('keyup', { ...modifiers, key: 'c' }))
+			).toBe(true);
+			await terminal.write('still alive\n');
+			expect(shell.binding.interrupt).not.toHaveBeenCalled();
+			expect(shell.binding.write).toHaveBeenCalledExactlyOnceWith('still alive\n');
+		}
+	);
 
 	it('keeps renderer readiness independent of connection while writes wait for the shell', async () => {
 		const connected = deferred<void>();
@@ -267,10 +300,11 @@ describe('Terminal host shell binding', () => {
 		await vi.waitFor(() => expect(sandbox.run).toHaveBeenCalledTimes(2));
 		shell.output('background shell output\n');
 		expect(report.mock.calls.some(([event]) => event.kind === 'ready')).toBe(false);
-		renderer.key?.({
-			key: '\u0003',
-			domEvent: new KeyboardEvent('keydown', { ctrlKey: true, key: 'c' })
-		});
+		renderer.selection = 'program output';
+		dispatchKey(new KeyboardEvent('keydown', { ctrlKey: true, key: 'c' }), '\u0003');
+		expect(sandbox.kill).not.toHaveBeenCalled();
+		renderer.selection = '';
+		dispatchKey(new KeyboardEvent('keydown', { ctrlKey: true, key: 'c' }), '\u0003');
 		expect(sandbox.kill).toHaveBeenCalledOnce();
 		expect(shell.binding.interrupt).not.toHaveBeenCalled();
 		running.resolve(true);
