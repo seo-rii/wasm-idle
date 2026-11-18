@@ -101,6 +101,7 @@
 	let executionInputOwners = 0;
 	let inputStartColumn = 0;
 	let pendingScreenUpdates: Array<() => void> | undefined;
+	let reservedInput: { queued?: Array<() => void>; interrupt: () => void } | undefined;
 	let terminalDisposed = false;
 	let abortInitialization: (() => void) | undefined;
 	let terminalDisposal: Promise<void> | undefined;
@@ -605,6 +606,16 @@
 		}
 	}
 
+	function whenInputReady(write: () => void) {
+		if (reservedInput?.queued) reservedInput.queued.push(write);
+		else write();
+	}
+
+	function writeProgramInput(text: string) {
+		applyPastedText(text);
+		if (!text.endsWith('\n') && !text.endsWith('\r')) submitCurrentInput();
+	}
+
 	async function waitForInput() {
 		await wait();
 		if (finish && executionInputOwners === 0 && shell) await connectShell(shell);
@@ -612,6 +623,16 @@
 
 	const terminalControl: TerminalControl = {
 		getExecutionError: () => lastExecutionError,
+		reserveInput(interrupt) {
+			const reservation = { queued: [] as Array<() => void>, interrupt };
+			if (!reservedInput) executionInputOwners++;
+			reservedInput = reservation;
+			return () => {
+				if (reservedInput !== reservation) return;
+				reservedInput = undefined;
+				executionInputOwners--;
+			};
+		},
 		async clear() {
 			await wait();
 			lastExecutionError = undefined;
@@ -762,6 +783,11 @@
 					activeExecutionLanguage = language;
 					sandboxAcceptingInput = true;
 					flushPendingSandboxInput();
+					if (reservedInput?.queued) {
+						const queued = reservedInput.queued;
+						reservedInput.queued = undefined;
+						for (const write of queued) write();
+					}
 					executionRunWillFinalize = true;
 					const result = await runSandbox(
 						sandbox.run(code, false, log, runProgress, args, executionOptions)
@@ -939,14 +965,21 @@
 			await waitForInput();
 		},
 		async write(input: string) {
+			if (reservedInput?.queued) {
+				if (input) reservedInput.queued.push(() => writeProgramInput(input));
+				return;
+			}
 			const shellTarget = finish && executionInputOwners === 0 ? shell : undefined;
 			await waitForInput();
 			if (!input) return;
 			if (shellTarget) return await sendShellInput(shellTarget, input);
-			applyPastedText(input);
-			if (!input.endsWith('\n') && !input.endsWith('\r')) submitCurrentInput();
+			writeProgramInput(input);
 		},
 		async eof() {
+			if (reservedInput?.queued) {
+				reservedInput.queued.push(submitSandboxEof);
+				return;
+			}
 			const shellTarget = finish && executionInputOwners === 0 ? shell : undefined;
 			await waitForInput();
 			if (shellTarget) return await sendShellInput(shellTarget, '\u0004');
@@ -1023,8 +1056,12 @@
 						term?.hasSelection()
 					);
 				});
-				term.onData((data: string) => {
+				term.onData(function receiveInput(data: string) {
 					if (!term || terminalDisposed) return;
+					if (reservedInput?.queued) {
+						reservedInput.queued.push(() => receiveInput(data));
+						return;
+					}
 					if (finish && executionInputOwners === 0) {
 						if (shell) void sendShellInput(shell, data).catch(reportShellError);
 						return;
@@ -1080,19 +1117,26 @@
 					onkey?.(ev);
 					if (isCopyShortcut) {
 						ev.preventDefault();
-						sandbox.kill?.();
+						if (reservedInput?.queued) reservedInput.interrupt();
+						else sandbox?.kill?.();
 					} else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'd') {
 						ev.preventDefault();
-						if (input.length > 0) submitCurrentInput();
-						submitSandboxEof();
+						whenInputReady(() => {
+							if (input.length > 0) submitCurrentInput();
+							submitSandboxEof();
+						});
 					} else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'v') {
 						ev.preventDefault();
 						const generation = sandboxInputGeneration;
+						const reservation = reservedInput;
 						navigator.clipboard
 							.readText()
 							.then((text) => {
-								if (generation !== sandboxInputGeneration) return;
-								applyPastedText(text);
+								const current = reservation
+									? reservation === reservedInput
+									: generation === sandboxInputGeneration;
+								if (!current) return;
+								whenInputReady(() => applyPastedText(text));
 							})
 							.catch(() => {});
 					}
