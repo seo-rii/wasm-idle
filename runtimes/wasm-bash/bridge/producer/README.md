@@ -219,6 +219,16 @@ WASIX libc rejects any nonempty exception set with `ENOSYS` before polling input
 The read descriptor and existing keyboard timeout remain in place, so terminal
 input and bounded idle callbacks both keep working. A native pipe fixture checks
 ready input, the idle timeout, and subsequent input using both actual patched calls.
+When a WASIX pipe becomes readable with zero buffered bytes, input gathering uses
+the existing nonblocking read path to distinguish actual EOF from `EAGAIN`.
+This lets Bash handle continuation syntax errors and return from `read -e` normally
+after stdin closes, rather than spinning on the closed descriptor. Physical EOF
+reaches the key loop directly: `rl_stuff_char(EOF)` would first inject a newline
+and accept an unfinished edit. The primary-prompt control hook still gets its
+normal guarded opportunity to close the shell. The executable fixture compiles
+the exact patched gather function and key loop and checks queued bytes before
+EOF, repeated EOF without a newline, temporary emptiness, and restoration of the
+descriptor flags.
 
 `--readline-control` additionally applies `readline-control.patch` to the exact
 pinned `bashline.c`; both the original and patched file identities are verified

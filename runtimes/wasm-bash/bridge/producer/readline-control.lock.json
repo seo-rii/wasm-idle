@@ -1,76 +1,77 @@
 {
-  "schemaVersion": 1,
-  "profile": "bash-readline-workspace-control-v1",
-  "environment": {
-    "WASM_IDLE_SHELL_CONTROL": "1"
-  },
-  "function": "__wasm_idle_poll",
-  "readonlyFunctionRequired": true,
-  "redrawExitCode": 124,
-  "sourceRevision": "fc8096485478055f4fcf31402004fdd8ff6b72b7",
-  "patch": {
-    "path": "readline-control.patch",
-    "bytes": 6819,
-    "sha256": "2449fba8df113b7633e11b7da8cd594756dd37d1cf1460799cab35d38c777026"
-  },
-  "files": {
-    "bashline.c": {
-      "original": {
-        "bytes": 129048,
-        "sha256": "a4c59b4484c3e056b9ccca7f7cddd016e9f12697f717ff27c3a7052c8566b4d9"
-      },
-      "patched": {
-        "bytes": 132052,
-        "sha256": "a79eb1469bb497e1af1605025eae1342f27b3af4c370659f5d0c4c05fc5af50b"
-      }
-    },
-    "builtins/common.h": {
-      "original": {
-        "bytes": 9077,
-        "sha256": "b19017c4179334ecf1122ce1b3d25ee7e98d11b278cb27e3d176567b16e90226"
-      },
-      "patched": {
-        "bytes": 9156,
-        "sha256": "2322aa5ad7aad205702ff82b47832c0a9bac27dac26ef9e7a2ba762240871cda"
-      }
-    },
-    "builtins/evalstring.c": {
-      "original": {
-        "bytes": 21554,
-        "sha256": "443c216249f97eb515ba05a7b641a93677c29393baccc2e7019445ea5cfd5604"
-      },
-      "patched": {
-        "bytes": 21593,
-        "sha256": "f72dd2a260526a64b910b467a83a1b44bd51297ae55df01f8757b4c66e8dba72"
-      }
-    },
-    "lib/readline/input.c": {
-      "original": {
-        "bytes": 16504,
-        "sha256": "1bc7cd66a233a92ca62819280ae5ba5503a0b48381c80619d501ca1a1d3413a1"
-      },
-      "patched": {
-        "bytes": 16970,
-        "sha256": "b6585eb04bab39b84497e8e2a65f00cbdada1366f18bb801f74f16fa8addf7f2"
-      }
-    }
-  },
-  "qualification": "Source-pinned Bash-only control profile; actual browser execution is a separate gate",
-  "ignoreReturnFlag": "SEVAL_IGNORE_RETURN",
-  "importedFunctionInitialization": {
-    "readonly": true,
-    "exported": false,
-    "requiresImportedAttribute": true
-  },
-  "inputReadiness": {
-    "target": "__wasi__",
-    "exceptionSet": false,
-    "readReadiness": true,
-    "idleTimeout": "existing Readline keyboard timeout",
-    "reason": "pinned WASIX pselect rejects nonempty exceptfds with ENOSYS",
-    "paths": [
-      "rl_gather_tyi",
-      "_rl_input_available"
-    ]
-  }
+	"schemaVersion": 1,
+	"profile": "bash-readline-workspace-control-v1",
+	"environment": {
+		"WASM_IDLE_SHELL_CONTROL": "1"
+	},
+	"function": "__wasm_idle_poll",
+	"readonlyFunctionRequired": true,
+	"redrawExitCode": 124,
+	"sourceRevision": "fc8096485478055f4fcf31402004fdd8ff6b72b7",
+	"patch": {
+		"path": "readline-control.patch",
+		"bytes": 14630,
+		"sha256": "414b6383d04615569d425f2419a4f75139e5a3bac95cd1de685e491038e438b6"
+	},
+	"files": {
+		"bashline.c": {
+			"original": {
+				"bytes": 129048,
+				"sha256": "a4c59b4484c3e056b9ccca7f7cddd016e9f12697f717ff27c3a7052c8566b4d9"
+			},
+			"patched": {
+				"bytes": 132052,
+				"sha256": "a79eb1469bb497e1af1605025eae1342f27b3af4c370659f5d0c4c05fc5af50b"
+			}
+		},
+		"builtins/common.h": {
+			"original": {
+				"bytes": 9077,
+				"sha256": "b19017c4179334ecf1122ce1b3d25ee7e98d11b278cb27e3d176567b16e90226"
+			},
+			"patched": {
+				"bytes": 9156,
+				"sha256": "2322aa5ad7aad205702ff82b47832c0a9bac27dac26ef9e7a2ba762240871cda"
+			}
+		},
+		"builtins/evalstring.c": {
+			"original": {
+				"bytes": 21554,
+				"sha256": "443c216249f97eb515ba05a7b641a93677c29393baccc2e7019445ea5cfd5604"
+			},
+			"patched": {
+				"bytes": 21593,
+				"sha256": "f72dd2a260526a64b910b467a83a1b44bd51297ae55df01f8757b4c66e8dba72"
+			}
+		},
+		"lib/readline/input.c": {
+			"original": {
+				"bytes": 16504,
+				"sha256": "1bc7cd66a233a92ca62819280ae5ba5503a0b48381c80619d501ca1a1d3413a1"
+			},
+			"patched": {
+				"bytes": 17801,
+				"sha256": "24533cd23f0846c3dd9671f112c9c09509ad37f39b470ade2b36ad6702232f2a"
+			}
+		}
+	},
+	"qualification": "Source-pinned Bash-only control profile; actual browser execution is a separate gate",
+	"ignoreReturnFlag": "SEVAL_IGNORE_RETURN",
+	"importedFunctionInitialization": {
+		"readonly": true,
+		"exported": false,
+		"requiresImportedAttribute": true
+	},
+	"inputReadiness": {
+		"target": "__wasi__",
+		"exceptionSet": false,
+		"readReadiness": true,
+		"idleTimeout": "existing Readline keyboard timeout",
+		"reason": "pinned WASIX pselect rejects nonempty exceptfds with ENOSYS",
+		"paths": [
+			"rl_gather_tyi",
+			"_rl_input_available"
+		],
+		"closedInput": "read-ready with FIONREAD zero uses a nonblocking read; physical EOF reaches the key loop without a synthetic newline"
+	}
 }

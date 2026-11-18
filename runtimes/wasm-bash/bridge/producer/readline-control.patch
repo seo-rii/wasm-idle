@@ -183,7 +183,56 @@
  #if defined (ONESHOT)
 --- a/lib/readline/input.c
 +++ b/lib/readline/input.c
-@@ -229,7 +229,13 @@
+@@ -180,226 +180,250 @@
+ #if 0
+   if (pop_index >= ibuffer_len)
+ #else
+   if (pop_index > ibuffer_len)
+ #endif
+     pop_index = 0;
+ 
+   return (1);
+ }
+ 
+ /* Stuff KEY into the *front* of the input buffer.
+    Returns non-zero if successful, zero if there is
+    no space left in the buffer. */
+ int
+ _rl_unget_char (int key)
+ {
+   if (ibuffer_space ())
+     {
+       pop_index--;
+       if (pop_index < 0)
+ 	pop_index = ibuffer_len;
+       ibuffer[pop_index] = key;
+       return (1);
+     }
+   return (0);
+ }
+ 
+ /* If a character is available to be read, then read it and stuff it into
+    IBUFFER.  Otherwise, just return.  Returns number of characters read
+    (0 if none available) and -1 on error (EIO). */
+ static int
+ rl_gather_tyi (void)
+ {
+   int tty;
+   register int tem, result;
+   int chars_avail, k;
+   char input;
+ #if defined(HAVE_SELECT)
+   fd_set readfds, exceptfds;
+   struct timeval timeout;
+ #endif
+ 
+   chars_avail = 0;
+   input = 0;
+   tty = fileno (rl_instream);
+ 
+ #if defined (HAVE_SELECT)
+   FD_ZERO (&readfds);
+   FD_ZERO (&exceptfds);
    FD_SET (tty, &readfds);
    FD_SET (tty, &exceptfds);
    USEC_TO_TIMEVAL (_keyboard_input_timeout, timeout);
@@ -197,7 +246,133 @@
    if (result <= 0)
      return 0;	/* Nothing to read. */
  #endif
-@@ -350,7 +356,12 @@
+ 
+   result = -1;
+   errno = 0;
+ #if defined (FIONREAD)
+   result = ioctl (tty, FIONREAD, &chars_avail);
+   if (result == -1 && errno == EIO)
+     return -1;
+   if (result == -1)
+     chars_avail = 0;
+ #endif
+ 
++#if defined (__wasi__) && defined (HAVE_SELECT) && defined (O_NDELAY)
++  /* Read readiness with no buffered bytes can mean a closed WASIX pipe.
++     Use the existing nonblocking read to distinguish EOF from EAGAIN;
++     otherwise the event-hook loop polls the closed descriptor forever. */
++  if (result != -1 && chars_avail == 0)
++    result = -1;
++#endif
++
+ #if defined (O_NDELAY)
+   if (result == -1)
+     {
+       tem = fcntl (tty, F_GETFL, 0);
+ 
+       fcntl (tty, F_SETFL, (tem | O_NDELAY));
+       chars_avail = read (tty, &input, 1);
+ 
+       fcntl (tty, F_SETFL, tem);
+       if (chars_avail == -1 && errno == EAGAIN)
+ 	return 0;
+       if (chars_avail == -1 && errno == EIO)
+ 	return -1;
+       if (chars_avail == 0)	/* EOF */
+ 	{
++#if defined (__wasi__)
++	  /* Keep physical EOF distinct from rl_stuff_char's synthetic newline. */
++	  return -2;
++#else
+ 	  rl_stuff_char (EOF);
+ 	  return (0);
++#endif
+ 	}
+     }
+ #endif /* O_NDELAY */
+ 
+ #if defined (__MINGW32__)
+   /* Use getch/_kbhit to check for available console input, in the same way
+      that we read it normally. */
+    chars_avail = isatty (tty) ? _kbhit () : 0;
+    result = 0;
+ #endif
+ 
+   /* If there's nothing available, don't waste time trying to read
+      something. */
+   if (chars_avail <= 0)
+     return 0;
+ 
+   tem = ibuffer_space ();
+ 
+   if (chars_avail > tem)
+     chars_avail = tem;
+ 
+   /* One cannot read all of the available input.  I can only read a single
+      character at a time, or else programs which require input can be
+      thwarted.  If the buffer is larger than one character, I lose.
+      Damn! */
+   if (tem < ibuffer_len)
+     chars_avail = 0;
+ 
+   if (result != -1)
+     {
+       while (chars_avail--)
+ 	{
+ 	  RL_CHECK_SIGNALS ();
+ 	  k = (*rl_getc_function) (rl_instream);
+ 	  if (rl_stuff_char (k) == 0)
+ 	    break;			/* some problem; no more room */
+ 	  if (k == NEWLINE || k == RETURN)
+ 	    break;
+ 	}
+     }
+   else
+     {
+       if (chars_avail)
+ 	rl_stuff_char (input);
+     }
+ 
+   return 1;
+ }
+ 
+ int
+ rl_set_keyboard_input_timeout (int u)
+ {
+   int o;
+ 
+   o = _keyboard_input_timeout;
+   if (u >= 0)
+     _keyboard_input_timeout = u;
+   return (o);
+ }
+ 
+ /* Is there input available to be read on the readline input file
+    descriptor?  Only works if the system has select(2) or FIONREAD.
+    Uses the value of _keyboard_input_timeout as the timeout; if another
+    readline function wants to specify a timeout and not leave it up to
+    the user, it should use _rl_input_queued(timeout_value_in_microseconds)
+    instead. */
+ int
+ _rl_input_available (void)
+ {
+ #if defined(HAVE_SELECT)
+   fd_set readfds, exceptfds;
+   struct timeval timeout;
+ #endif
+ #if !defined (HAVE_SELECT) && defined(FIONREAD)
+   int chars_avail;
+ #endif
+   int tty;
+ 
+   if (rl_input_available_hook)
+     return (*rl_input_available_hook) ();
+ 
+   tty = fileno (rl_instream);
+ 
+ #if defined (HAVE_SELECT)
+   FD_ZERO (&readfds);
+   FD_ZERO (&exceptfds);
    FD_SET (tty, &readfds);
    FD_SET (tty, &exceptfds);
    USEC_TO_TIMEVAL (_keyboard_input_timeout, timeout);
@@ -210,3 +385,168 @@
  #else
  
  #if defined (FIONREAD)
+   if (ioctl (tty, FIONREAD, &chars_avail) == 0)
+     return (chars_avail);
+ #endif
+ 
+ #endif
+ 
+ #if defined (__MINGW32__)
+   if (isatty (tty))
+     return (_kbhit ());
+ #endif
+ 
+   return 0;
+ }
+ 
+ int
+ _rl_nchars_available ()
+ {
+   int chars_avail, fd, result;
+   
+   chars_avail = 0;
+      
+ #if defined (FIONREAD)
+   fd = fileno (rl_instream);
+   errno = 0;    
+   result = ioctl (fd, FIONREAD, &chars_avail);    
+   if (result == -1 && errno == EIO)    
+     return -1;    
+ #endif
+ 
+   return chars_avail;
+ }
+ 
+ int
+ _rl_input_queued (int t)
+ {
+   int old_timeout, r;
+ 
+   old_timeout = rl_set_keyboard_input_timeout (t);
+   r = _rl_input_available ();
+   rl_set_keyboard_input_timeout (old_timeout);
+   return r;
+ }
+ 
+ void
+ _rl_insert_typein (int c)
+ {    	
+   int key, t, i;
+   char *string;
+ 
+@@ -447,104 +471,115 @@
+ 
+ /* Make C be the next command to be executed. */
+ int
+ rl_execute_next (int c)
+ {
+   rl_pending_input = c;
+   RL_SETSTATE (RL_STATE_INPUTPENDING);
+   return 0;
+ }
+ 
+ /* Clear any pending input pushed with rl_execute_next() */
+ int
+ rl_clear_pending_input (void)
+ {
+   rl_pending_input = 0;
+   RL_UNSETSTATE (RL_STATE_INPUTPENDING);
+   return 0;
+ }
+ 
+ /* **************************************************************** */
+ /*								    */
+ /*			     Character Input			    */
+ /*								    */
+ /* **************************************************************** */
+ 
+ /* Read a key, including pending input. */
+ int
+ rl_read_key (void)
+ {
+   int c, r;
+ 
+   if (rl_pending_input)
+     {
+       c = rl_pending_input;	/* XXX - cast to unsigned char if > 0? */
+       rl_clear_pending_input ();
+     }
+   else
+     {
+       /* If input is coming from a macro, then use that. */
+       if (c = _rl_next_macro_key ())
+ 	return ((unsigned char)c);
+ 
+       /* If the user has an event function, then call it periodically. */
+       if (rl_event_hook)
+ 	{
+ 	  while (rl_event_hook)
+ 	    {
+ 	      if (rl_get_char (&c) != 0)
+ 		break;
+ 		
+ 	      if ((r = rl_gather_tyi ()) < 0)	/* XXX - EIO */
+ 		{
++#if defined (__wasi__)
++		  if (r == -2)	/* Physical EOF, not a line acceptance key. */
++		    {
++		      RL_CHECK_SIGNALS ();
++		      /* Preserve the primary-prompt close hook before returning EOF.
++			 Its native guard still defers nested reads and continuations. */
++		      if (rl_event_hook)
++			(*rl_event_hook) ();
++		      return EOF;
++		    }
++#endif
+ 		  rl_done = 1;
+ 		  return (errno == EIO ? (RL_ISSTATE (RL_STATE_READCMD) ? READERR : EOF) : '\n');
+ 		}
+ 	      else if (r > 0)			/* read something */
+ 		continue;
+ 
+ 	      RL_CHECK_SIGNALS ();
+ 	      if (rl_done)		/* XXX - experimental */
+ 		return ('\n');
+ 	      (*rl_event_hook) ();
+ 	    }
+ 	}
+       else
+ 	{
+ 	  if (rl_get_char (&c) == 0)
+ 	    c = (*rl_getc_function) (rl_instream);
+ /* fprintf(stderr, "rl_read_key: calling RL_CHECK_SIGNALS: _rl_caught_signal = %d\r\n", _rl_caught_signal); */
+ 	  RL_CHECK_SIGNALS ();
+ 	}
+     }
+ 
+   return (c);
+ }
+ 
+ int
+ rl_getc (FILE *stream)
+ {
+   int result;
+   unsigned char c;
+ #if defined (HAVE_PSELECT)
+   sigset_t empty_set;
+   fd_set readfds;
+ #endif
+ 
+   while (1)
+     {
+       RL_CHECK_SIGNALS ();
+ 
+       /* We know at this point that _rl_caught_signal == 0 */
+ 
+ #if defined (__MINGW32__)
+       if (isatty (fileno (stream)))
+ 	return (_getch ());	/* "There is no error return." */
+ #endif
+       result = 0;
+ #if defined (HAVE_PSELECT)
+       FD_ZERO (&readfds);
+       FD_SET (fileno (stream), &readfds);
+ #  if defined (HANDLE_SIGNALS)
+       result = pselect (fileno (stream) + 1, &readfds, NULL, NULL, NULL, &_rl_orig_sigset);
+ #  else
+       sigemptyset (&empty_set);
