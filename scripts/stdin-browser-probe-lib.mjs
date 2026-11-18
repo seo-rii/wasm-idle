@@ -610,12 +610,10 @@ export async function runStdinBrowserProbe(options) {
 					previousRunId,
 					{ polling: 50, timeout: runTimeoutMs }
 				);
-				const ended = await page.evaluate(
-					() =>
-						/** @type {any} */ (window).__wasmIdleDebug?.getExecutionState?.()
-							.endedAt !== null
+				const run = await page.evaluate(() =>
+					/** @type {any} */ (window).__wasmIdleDebug.getExecutionState()
 				);
-				if (ended) return;
+				if (run.endedAt !== null) return;
 				if (waitForOutputBeforeStdin) {
 					await page.waitForFunction(
 						({ initial, marker }) => {
@@ -641,12 +639,13 @@ export async function runStdinBrowserProbe(options) {
 				}
 				if (sendEof) {
 					await page.waitForTimeout(500);
-					await page.evaluate(async () => {
-						await /** @type {any} */ (window).__wasmIdleDebug.writeTerminalInput(
-							'',
-							true
-						);
-					});
+					await page.evaluate(async (id) => {
+						const debug = /** @type {any} */ (window).__wasmIdleDebug;
+						const state = debug.getExecutionState();
+						// A program can finish on its last line of input before the delayed EOF.
+						if (state.id === id && state.endedAt === null)
+							await debug.writeTerminalInput('', true);
+					}, run.id);
 				}
 			})().catch((error) => {
 				stdinDeliveryError = error;
