@@ -73,8 +73,8 @@ export const scenarios = [
 		// Owned Clang outputs and serialized workspace reconciliation add 3,590 bytes; measured install: 7,627,293 bytes.
 		// Round to the next KiB while retaining the existing file and package limits.
 		// Bash terminal capabilities and EOF handling add 2,377 installed bytes.
-		// The geometry owner and resize promise cleanup measure 7,639,246 installed bytes (865 files).
-		budget: { maxBytes: 7640064, maxFiles: 865, maxPackages: 6 },
+		// Cross-project saves and shell display ownership measure 7,642,873 installed bytes (865 files).
+		budget: { maxBytes: 7643136, maxFiles: 865, maxPackages: 6 },
 		absentPackageNames: [
 			'@katana-project/asm',
 			'java-parser',
@@ -363,8 +363,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 	{
 		name: '@wasm-idle/terminal install',
 		packageNames: ['@wasm-idle/terminal', '@wasm-idle/core'],
-		// Existing 64 KiB headroom plus 832 KiB for core's shared loader and pinned fflate.
-		budget: { maxBytes: 17694720, maxFiles: 1370, maxPackages: 32 },
+		// Wrapped stdin and Readline redraws with Svelte 5.58.0 measure 17,711,709 bytes (1,340 files).
+		budget: { maxBytes: 17712128, maxFiles: 1370, maxPackages: 32 },
 		absentPackageNames: [
 			'@wasm-idle/debug',
 			'@wasm-idle/lsp',
@@ -381,7 +381,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		packageNames: ['@wasm-idle/debug', '@wasm-idle/core'],
 		// Shared loader/fflate costs 832 KiB; the existing file/package caps still fit.
 		// Current install verification measures 8,208,067 bytes; round to the next KiB.
-		budget: { maxBytes: 8208384, maxFiles: 1200, maxPackages: 25 },
+		// Installing the supported Svelte 5.58.0 peer measures 8,218,040 bytes.
+		budget: { maxBytes: 8218624, maxFiles: 1200, maxPackages: 25 },
 		absentPackageNames: [
 			'@lezer/rust',
 			'@wasm-idle/lsp',
@@ -482,8 +483,9 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Current full verification measures 43,326,389 bytes after that fix; add 5 KiB
 		// to reach the next KiB while retaining the existing file and package limits.
 		// The full install with Bash terminal and copy fixes measures 43,330,188 bytes.
-		// With resize promise cleanup, the aggregate measures 43,348,083 bytes and 3,490 files.
-		budget: { maxBytes: 43348992, maxFiles: 3490, maxPackages: 70 },
+		// The combined install measures 43,370,121 bytes with Svelte 5.58.0.
+		// The input layout and Readline renderer each add a JavaScript file and a declaration.
+		budget: { maxBytes: 43370496, maxFiles: 3494, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
