@@ -390,7 +390,7 @@ export class ContainerRuntimeAdapter {
 		this.#published.set(language, publishedNext);
 	}
 	readWorkspaceDelta(language: string, since?: number): ContainerWorkspaceDelta {
-		const root = this.directory(language);
+		const root = this.directoryPath(language);
 		const previous = this.#workspaceReads.get(language);
 		const reset = !previous || since !== previous.revision;
 		const versions = new Map<string, FileVersion>();
@@ -412,7 +412,13 @@ export class ContainerRuntimeAdapter {
 				}
 			}
 		};
-		visit('');
+		// A deleted project still needs to report its file deletions. Reading it
+		// must not recreate the directory (or a new watcher event).
+		try {
+			visit('');
+		} catch (error) {
+			if ((error as { code?: string }).code !== 'ENOENT') throw error;
+		}
 		const deleted = reset
 			? []
 			: [...previous!.versions.keys()].filter((path) => !versions.has(path));

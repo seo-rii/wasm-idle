@@ -2,6 +2,22 @@ import { describe, expect, it } from 'vitest';
 import { mergeContainerWorkspace } from './workspace.js';
 const f = (path: string, content: string) => ({ path, content });
 describe('container editor reconciliation', () => {
+	it('lets a newly created shell entry replace only a pristine, unpublished starter', () => {
+		const defaultFile = f('main.py', 'example');
+		const remote = [f('main.py', 'shell'), f('notes', 'new')];
+		expect(mergeContainerWorkspace([defaultFile], [], remote, { defaultFile })).toEqual({
+			files: remote,
+			conflicts: []
+		});
+		expect(mergeContainerWorkspace([defaultFile], [], [], { defaultFile }).files).toEqual([
+			defaultFile
+		]);
+		expect(
+			mergeContainerWorkspace([f('main.py', 'custom')], [], remote, { defaultFile }).conflicts
+		).toEqual(['main.py']);
+		expect(mergeContainerWorkspace([], [], remote, { defaultFile }).files).toEqual(remote);
+	});
+
 	it('adopts shell creates, writes and deletions when editor revision is unchanged', () => {
 		const baseline = [f('main.c', 'before'), f('old.txt', 'remove')];
 		expect(

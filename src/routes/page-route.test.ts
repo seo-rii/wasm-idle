@@ -1,9 +1,11 @@
 import layoutSource from './+layout.svelte?raw';
 import source from './+page.svelte?raw';
 import { createApplicationRuntimeAssets } from '$lib/playground/applicationAssets';
-import { mergeContainerWorkspace } from '$lib/playground/container/workspace';
+import { mergeContainerWorkspace, sameWorkspaceFiles } from '$lib/playground/container/workspace';
 import type { WorkspaceFile } from './workspaceCodec';
 import { runInNewContext } from 'node:vm';
+import { stripTypeScriptTypes } from 'node:module';
+import { normalizeWorkspaceTabs } from './workspaceSnapshot';
 import { compile, parse } from 'svelte/compiler';
 import { describe, expect, it, vi } from 'vitest';
 import { createExecutionPreflightGate } from './executionPreflight';
@@ -70,14 +72,34 @@ describe('shared workspace refresh scheduling', () => {
 			openTabs: ['main.c'],
 			activeFile: baseline[0],
 			debug: { active: false },
-			containerWorkspaceConflict: '',
+			containerWorkspaceConflicts: new Set<string>(),
+			changedContainerProjects: new Set<string>(),
+			containerChangeRevision: 0,
+			containerReadRevision: 0,
+			scheduleWorkspaceSave: vi.fn(),
+			containerRescanPending: false,
+			containerReady: false,
+			playgroundLanguages: ['C', 'PYTHON'],
+			languageWorkspaces: {
+				PYTHON: {
+					activePath: 'main.py',
+					openTabs: ['main.py'],
+					files: [{ path: 'main.py', content: 'example' }]
+				}
+			},
+			createDefaultWorkspace: (project: string) => ({
+				files: project === 'C' ? baseline : [{ path: 'main.py', content: 'example' }]
+			}),
+			sameWorkspaceFiles,
+			normalizeWorkspaceTabs,
 			saveStatus: '',
 			editorFiles: (values: unknown) => values,
 			mergeContainerWorkspace
 		};
-		const refresh = runInNewContext(`${refreshSource}\nrefreshContainerWorkspace`, context) as (
-			force?: boolean
-		) => Promise<void>;
+		const refresh = runInNewContext(
+			`${stripTypeScriptTypes(refreshSource)}\nrefreshContainerWorkspace`,
+			context
+		) as (force?: boolean) => Promise<void>;
 		return { context, binding, refresh };
 	}
 	function selectionFixture() {
@@ -124,6 +146,25 @@ describe('shared workspace refresh scheduling', () => {
 		expect(context.files).toEqual([{ path: 'main.c', content: 'int main(){}' }]);
 		expect(context.saveStatus).toBe('Workspace backup restored');
 		expect(binding.acceptWorkspace).toHaveBeenCalledOnce();
+	});
+
+	it('reconciles a changed inactive project through saves and retains its starter when only a sibling was created', async () => {
+		const { context, binding, refresh } = fixture();
+		context.runningMode = null;
+		context.changedContainerProjects.add('PYTHON');
+		binding.publishedWorkspace = (project: string) =>
+			project === 'PYTHON' ? [] : context.files;
+		binding.readWorkspace.mockImplementation(async (project) =>
+			project === 'PYTHON'
+				? [{ path: 'scratch.py', content: 'written by shell' }]
+				: context.files
+		);
+		await refresh();
+		expect(context.languageWorkspaces.PYTHON.files).toEqual([
+			{ path: 'main.py', content: 'example' },
+			{ path: 'scratch.py', content: 'written by shell' }
+		]);
+		expect(context.activePath).toBe('main.c');
 	});
 
 	it('publishes guest-created file metadata during Run and replays editor reconciliation on Stop', async () => {
@@ -189,7 +230,7 @@ describe('shared workspace refresh scheduling', () => {
 		});
 		await refresh();
 		expect(context.files).toEqual([{ path: 'main.c', content: 'second edit' }]);
-		expect(context.containerWorkspaceConflict).toBe('');
+		expect(context.containerWorkspaceConflicts.size).toBe(0);
 		expect(binding.acceptWorkspace).toHaveBeenCalledOnce();
 	});
 
@@ -206,7 +247,7 @@ describe('shared workspace refresh scheduling', () => {
 		await context.containerRefresh;
 		expect(confirm).toHaveBeenCalledOnce();
 		expect(context.files).toEqual([{ path: 'main.c', content: 'terminal' }]);
-		expect(context.containerWorkspaceConflict).toBe('');
+		expect(context.containerWorkspaceConflicts.size).toBe(0);
 		expect(binding.acceptWorkspace).toHaveBeenCalledOnce();
 		expect(context.containerRefresh).toBeUndefined();
 	});
@@ -222,7 +263,7 @@ describe('shared workspace refresh scheduling', () => {
 		const confirm = vi.fn(() => false);
 		Object.assign(context, { confirm });
 		await refresh();
-		expect(context.containerWorkspaceConflict).toBe('C');
+		expect(context.containerWorkspaceConflicts.has('C')).toBe(true);
 		expect(context.files).toEqual([
 			{ path: 'main.c', content: 'editor' },
 			{ path: 'notes.txt', content: 'unsaved notes' }

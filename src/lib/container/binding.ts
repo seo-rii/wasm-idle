@@ -253,7 +253,10 @@ export function createContainerPlaygroundBinding(
 						bytes: bytes(file.content).byteLength
 					}))
 				]);
-			} else await connection().call('syncWorkspace', [language, snapshot, undefined]);
+			} else {
+				// A project can already contain shell files before its first editor publish.
+				await connection().call('syncWorkspace', [language, snapshot, []]);
+			}
 			// snapshot already owns its bytes, including while queued behind another write.
 			published.set(language, snapshot);
 		});
