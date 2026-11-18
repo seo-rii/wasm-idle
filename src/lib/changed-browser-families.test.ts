@@ -407,8 +407,9 @@ describe('runtime browser CI selection', () => {
 	])('selects one required workspace family for %s', (file) => {
 		expect(changedBrowserFamilies([file])).toEqual(['workspace']);
 		const files = createAllLanguageBrowserTestPlan({ family: 'workspace' }).testFiles;
-		expect(files).toHaveLength(10);
+		expect(files).toHaveLength(11);
 		expect(files).toContain('src/routes/workspace-cpp.playwright.test.ts');
+		expect(files).toContain('src/routes/container-shell-eof.playwright.test.ts');
 	});
 	it('selects recovery tests alongside normal .NET and Nim execution', () => {
 		const dotnet = createAllLanguageBrowserTestPlan({ family: 'dotnet' });
