@@ -95,7 +95,7 @@ export interface ContainerPlaygroundBinding extends PlaygroundBinding {
 	inspect(): Promise<unknown>;
 	setShellDirectory(language: string): Promise<void>;
 	/** Claim the shared display at Bash's real primary prompt without consuming its input. */
-	beginTerminalExecution(): Promise<void>;
+	beginTerminalExecution(signal?: AbortSignal): Promise<void>;
 	/** Redraw the actual Bash prompt after the Terminal has written its execution footer. */
 	endTerminalExecution(): Promise<void>;
 	syncWorkspace(language: string, files: readonly ContainerWorkspaceFile[]): Promise<void>;
@@ -354,7 +354,8 @@ export function createContainerPlaygroundBinding(
 		}
 	};
 	const binding: ContainerPlaygroundBinding = {
-		async beginTerminalExecution() {
+		async beginTerminalExecution(signal) {
+			signal?.throwIfAborted();
 			if (terminalExecution || disposed) return;
 			if (!shellConnection) {
 				terminalExecution = 'before-shell';
@@ -366,6 +367,8 @@ export function createContainerPlaygroundBinding(
 			} catch {
 				return;
 			}
+			// A cancelled cold Run can leave the original prompt exactly where Bash drew it.
+			signal?.throwIfAborted();
 			await connection().call('shellSuspend');
 			terminalExecution = 'suspended';
 		},

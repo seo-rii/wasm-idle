@@ -45,7 +45,7 @@ export async function executeTerminalRun({
 }: ExecuteTerminalRunOptions) {
 	const signal = options.signal;
 	signal?.throwIfAborted();
-	await playground.beginTerminalExecution();
+	await playground.beginTerminalExecution(signal);
 	try {
 		signal?.throwIfAborted();
 		await terminal.clear();
