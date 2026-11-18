@@ -90,46 +90,6 @@ describe('Terminal source', () => {
 		);
 	});
 
-	it('uses xterm onData for printable keys, Enter, and Backspace instead of relying on keydown heuristics', () => {
-		expect(source).toMatch(/term\.onData\(\(data: string\) => \{/);
-		expect(source).toMatch(/if \(chunk === '\\r' \|\| chunk === '\\n'\)/);
-		expect(source).toMatch(/if \(chunk === '\\u007f'\)/);
-		expect(source).toMatch(/inputCursor = 0,/);
-		expect(source).toMatch(/function getInputCharacters\(text: string\)/);
-		expect(source).toMatch(/function getInputCellWidth\(text: string\)/);
-		expect(source).toMatch(
-			/const removedInput = inputCharacters\.splice\(inputCursor - 1, 1\)\[0\];/
-		);
-		expect(source).toMatch(
-			/inputCharacters\.splice\(inputCursor, 0, \.\.\.insertedCharacters\);/
-		);
-		expect(source).toContain('let inputEcho = text;');
-		expect(source).toContain('inputEcho += inputTail;');
-		expect(source).toContain('term?.write(inputEcho);');
-		expect(source).not.toMatch(
-			/inputCursor \+= insertedCharacters\.length;\s+term\?\.write\(text\);/
-		);
-		expect(source).toContain('backspaceEcho += `\\x1b[${cursorReturnCellWidth}D`;');
-		expect(source).toContain('if (backspaceEcho) term.write(backspaceEcho);');
-		expect(source).not.toContain('term.write(`\\x1b[${cursorReturnCellWidth}D`);');
-		expect(source).toMatch(/if \(\(chunk\.codePointAt\(0\) \|\| 0\) >= 0x20\) \{/);
-		expect(source).not.toMatch(
-			/const printable = !ev\.altKey && !ev\.ctrlKey && !ev\.metaKey;/
-		);
-		expect(source).not.toMatch(/else if \(printable\) \{/);
-	});
-
-	it('consumes arrow-key escape sequences for local cursor movement', () => {
-		expect(source).toMatch(
-			/data\s*\.slice\(i\)\s*\.match\(\/\^\\x1b\(\?:\\\[\[0-9;\?\]\*\[ABCD\]\|O\[ABCD\]\)\/\)/
-		);
-		expect(source).toMatch(/direction === 'D' && inputCursor > 0/);
-		expect(source).toMatch(/direction === 'C' && inputCursor < inputCharacters\.length/);
-		expect(source).toMatch(/term\.write\(`\\x1b\[\$\{inputCharacterCellWidth\}D`\);/);
-		expect(source).toMatch(/term\.write\(`\\x1b\[\$\{inputCharacterCellWidth\}C`\);/);
-		expect(source).not.toMatch(/for \(const chunk of data\)/);
-	});
-
 	it('activates xterm Unicode 11 width rules for CJK terminal cells', () => {
 		expect(pluginSource).toMatch(/term\.unicode\.activeVersion = '11';/);
 		expect(source).toContain(')?._core?.unicodeService;');

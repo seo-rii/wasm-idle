@@ -490,6 +490,48 @@
 		);
 	}
 
+	function moveInputCursor(characters: string[], position: number) {
+		const forward = position > inputCursor;
+		const moved = forward
+			? characters.slice(inputCursor, position)
+			: characters.slice(position, inputCursor);
+		const width = getInputCellWidth(moved.join(''));
+		if (width) term?.write(`\x1b[${width}${forward ? 'C' : 'D'}`);
+		inputCursor = position;
+	}
+
+	function eraseInputCharacter(characters: string[], position: number) {
+		if (position < 0 || position >= characters.length) return;
+		moveInputCursor(characters, position);
+		const [removed] = characters.splice(position, 1);
+		const tail = characters.slice(position).join('');
+		const removedWidth = getInputCellWidth(removed);
+		const width = getInputCellWidth(tail) + removedWidth;
+		const rewind = width ? `\x1b[${width}D` : '';
+		term?.write(tail + ' '.repeat(removedWidth) + rewind);
+		input = characters.join('');
+	}
+
+	function handleInputKey(key: string) {
+		const characters = getInputCharacters(input);
+		switch (key) {
+			case 'D':
+				return moveInputCursor(characters, Math.max(0, inputCursor - 1));
+			case 'C':
+				return moveInputCursor(characters, Math.min(characters.length, inputCursor + 1));
+			case 'H':
+			case '1~':
+			case '7~':
+				return moveInputCursor(characters, 0);
+			case 'F':
+			case '4~':
+			case '8~':
+				return moveInputCursor(characters, characters.length);
+			case '3~':
+				return eraseInputCharacter(characters, inputCursor);
+		}
+	}
+
 	function submitCurrentInput() {
 		term?.write('\r\n');
 		const submittedInput = input + '\n';
@@ -933,29 +975,15 @@
 					}
 					let pendingText = '';
 					for (let i = 0; i < data.length;) {
-						const escapeSequence = data
-							.slice(i)
-							.match(/^\x1b(?:\[[0-9;?]*[ABCD]|O[ABCD])/);
+						// Match a complete CSI or SS3 key, including modifiers and unsupported keys.
+						const escapeSequence =
+							data[i] === '\x1b' &&
+							/^\x1b(?:\[|O)([0-?]*)[ -/]*([@-~])/.exec(data.slice(i));
 						if (escapeSequence) {
-							if (pendingText) {
-								appendInputText(pendingText);
-								pendingText = '';
-							}
-							const direction = escapeSequence[0].at(-1);
-							const inputCharacters = getInputCharacters(input);
-							if (direction === 'D' && inputCursor > 0) {
-								const inputCharacter = inputCharacters[inputCursor - 1];
-								const inputCharacterCellWidth = getInputCellWidth(inputCharacter);
-								if (inputCharacterCellWidth > 0)
-									term.write(`\x1b[${inputCharacterCellWidth}D`);
-								inputCursor--;
-							} else if (direction === 'C' && inputCursor < inputCharacters.length) {
-								const inputCharacter = inputCharacters[inputCursor];
-								const inputCharacterCellWidth = getInputCellWidth(inputCharacter);
-								if (inputCharacterCellWidth > 0)
-									term.write(`\x1b[${inputCharacterCellWidth}C`);
-								inputCursor++;
-							}
+							appendInputText(pendingText);
+							pendingText = '';
+							const [, parameters, final] = escapeSequence;
+							handleInputKey(final === '~' ? parameters.split(';')[0] + '~' : final);
 							i += escapeSequence[0].length;
 							continue;
 						}
@@ -976,28 +1004,7 @@
 								appendInputText(pendingText);
 								pendingText = '';
 							}
-							if (inputCursor > 0) {
-								const inputCharacters = getInputCharacters(input);
-								const removedInput = inputCharacters.splice(inputCursor - 1, 1)[0];
-								if (removedInput) {
-									inputCursor--;
-									const inputTail = inputCharacters.slice(inputCursor).join('');
-									const removedInputCellWidth = getInputCellWidth(removedInput);
-									const inputTailCellWidth = getInputCellWidth(inputTail);
-									let backspaceEcho = '';
-									if (removedInputCellWidth > 0)
-										backspaceEcho += `\x1b[${removedInputCellWidth}D`;
-									if (inputTail) backspaceEcho += inputTail;
-									if (removedInputCellWidth > 0)
-										backspaceEcho += ' '.repeat(removedInputCellWidth);
-									const cursorReturnCellWidth =
-										inputTailCellWidth + removedInputCellWidth;
-									if (cursorReturnCellWidth > 0)
-										backspaceEcho += `\x1b[${cursorReturnCellWidth}D`;
-									if (backspaceEcho) term.write(backspaceEcho);
-									input = inputCharacters.join('');
-								}
-							}
+							eraseInputCharacter(getInputCharacters(input), inputCursor - 1);
 							continue;
 						}
 						if ((chunk.codePointAt(0) || 0) >= 0x20) {
