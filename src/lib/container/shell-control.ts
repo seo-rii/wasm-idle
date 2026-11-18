@@ -204,10 +204,26 @@ export function createShellControl(options: ShellControlOptions) {
 		try {
 			if (fs.lstat(path).type !== 'file')
 				throw new Error('Shell control mailbox must be a regular file');
+			// A late nested Readline acknowledgement can only write its original inode.
+			if (path === SHELL_RESIZE_REQUEST) fs.unlink(path);
 		} catch (reason) {
 			if ((reason as { code?: string }).code !== 'ENOENT') throw reason;
 		}
 		fs.writeFile(path, encoder.encode(value), { mode: 0o600 });
+	};
+	const settleResize = (received: number, success: boolean) => {
+		if (received > resizeGeneration) return 126;
+		if (received < resizeGeneration) return 0;
+		if (!pendingResize) return received === appliedResizeGeneration && success ? 0 : 126;
+		const completed = pendingResize;
+		pendingResize = undefined;
+		completed.removeAbort?.();
+		if (success) {
+			appliedResizeGeneration = received;
+			completed.resolve();
+		} else completed.reject(new Error('Bash could not refresh its terminal size'));
+		changed();
+		return 0;
 	};
 	const acknowledge = (args: readonly string[], actualCwd: string) => {
 		if (args[0] === '4') {
@@ -223,19 +239,7 @@ export function createShellControl(options: ShellControlOptions) {
 			)
 				return 126;
 			const received = Number(args[2]);
-			if (received > resizeGeneration) return 126;
-			if (received < resizeGeneration) return 0;
-			if (!pendingResize)
-				return received === appliedResizeGeneration && args[4] === 'ok' ? 0 : 126;
-			const completed = pendingResize;
-			pendingResize = undefined;
-			completed.removeAbort?.();
-			if (args[4] === 'ok') {
-				appliedResizeGeneration = received;
-				completed.resolve();
-			} else completed.reject(new Error('Bash could not refresh its terminal size'));
-			changed();
-			return 0;
+			return settleResize(received, args[4] === 'ok');
 		}
 		if (
 			disposed ||
@@ -409,7 +413,7 @@ export function createShellControl(options: ShellControlOptions) {
 			}
 			ensureDirectory(fs, cwd);
 			writeRequest(fs, `1 ${session} 0 -\n`);
-			// The pinned C locale otherwise interprets UTF-8 input as Meta keys.
+			// Pass all eight input bits to Readline, including in user-selected locales.
 			// Keep this on the writable mount: WASIX overrequests rights on open.
 			fs.writeFile(
 				SHELL_INPUTRC,
@@ -444,11 +448,10 @@ export function createShellControl(options: ShellControlOptions) {
 				if (pendingResize) return pendingResize.promise;
 				if (resizeGeneration === MAX_GENERATION)
 					throw new Error('Shell resize generation exhausted');
-				writeRequest(
-					fs,
-					`4 ${session} ${resizeGeneration + 1} resize\n`,
-					SHELL_RESIZE_REQUEST
-				);
+				const received = resizeGeneration + 1;
+				const record = `${session} ${received} resize\n`;
+				writeRequest(fs, `4 ${record}`, SHELL_RESIZE_REQUEST);
+				const inode = fs.lstat(SHELL_RESIZE_REQUEST).inode;
 				let resolve!: () => void, reject!: (reason: Error) => void;
 				const promise = new Promise<void>((yes, no) => {
 					resolve = yes;
@@ -462,7 +465,34 @@ export function createShellControl(options: ShellControlOptions) {
 					reject
 				};
 				pendingResize = next;
-				resizeGeneration += 1;
+				resizeGeneration = received;
+				// A nested Readline prompt cannot safely evaluate our Bash function.
+				// It marks the same open request after applying the new dimensions.
+				const stopWatching = fs.onGenerationChange(() => {
+					if (pendingResize !== next) return;
+					try {
+						const stat = fs.lstat(SHELL_RESIZE_REQUEST);
+						if (
+							stat.inode === inode &&
+							stat.size === record.length + 2 &&
+							new TextDecoder().decode(fs.readFile(SHELL_RESIZE_REQUEST)) ===
+								`5 ${record}`
+						)
+							settleResize(received, true);
+					} catch {
+						/* The guest may have removed its mailbox. */
+					}
+				});
+				const finish = () => {
+					stopWatching();
+					try {
+						if (fs.lstat(SHELL_RESIZE_REQUEST).inode === inode)
+							fs.unlink(SHELL_RESIZE_REQUEST);
+					} catch {
+						/* A cancellation or new request may have replaced it. */
+					}
+				};
+				void promise.then(finish, finish);
 				if (signal) {
 					const abort = () => {
 						if (pendingResize !== next) return;

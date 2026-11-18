@@ -28,6 +28,7 @@ test('Readline control is an explicit opt-in and all producer patch bytes are pi
 	assert.equal(policy.resizeExitCode, 125);
 	assert.equal(policy.silentResizeExitCode, 126);
 	assert.equal(policy.resizeTailCapability, 'cd');
+	assert.equal(policy.nestedResizeAcknowledgement, '5');
 	assert.equal(policy.ignoreReturnFlag, 'SEVAL_IGNORE_RETURN');
 	assert.deepEqual(policy.importedFunctionInitialization, {
 		readonly: true,
@@ -123,6 +124,9 @@ test('exact C initialization protects only imported control, and the hook defers
 		.split('\n')
 		.map((line) => line.slice(1))
 		.join('\n');
+	const resizeSource = patch.match(/\+static void\n\+wasm_idle_resize_readline \(void\)[\s\S]*?\n\+\}\n\+\n\+\/\* At a secondary[\s\S]*?\n\+\}/);
+	assert(resizeSource, 'the native redraw and nested mailbox reader must be present');
+	const resize = resizeSource[0].split('\n').map((line) => line.slice(1)).join('\n');
 	const fixture = await readFile(new URL('readline-control.fixture.c', here), 'utf8');
 	const directory = await mkdtemp(path.join(tmpdir(), 'bash-readline-control-'));
 	try {
@@ -132,11 +136,12 @@ test('exact C initialization protects only imported control, and the hook defers
 			source,
 			fixture
 				.replace('/* POLL_SOURCE */', hook)
+				.replace('/* RESIZE_SOURCE */', resize)
 				.replace('/* INIT_SOURCE */', initialize)
 				.replace('/* REDISPLAY_SOURCE */', display)
 		);
 		execFileSync('cc', ['-std=c11', '-Wall', '-Wextra', '-Werror', source, '-o', binary]);
-		execFileSync(binary);
+		execFileSync(binary, { cwd: directory });
 	} finally {
 		await rm(directory, { recursive: true, force: true });
 	}

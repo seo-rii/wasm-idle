@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { stripVTControlCharacters } from 'node:util';
 import { chromium, type Browser, type Page } from 'playwright-core';
 import { expect, it } from 'vitest';
 import { addBrowserTestCookies } from '../../scripts/browser-test-cookies.mjs';
@@ -23,7 +24,7 @@ type EofWindow = typeof globalThis & {
 	};
 	__wasmIdleDebug?: { writeTerminalInput(text: string, eof: boolean): Promise<void> };
 };
-const text = (value: string) => value.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '').replaceAll('\r', '');
+const text = (value: string) => stripVTControlCharacters(value).replaceAll('\r', '');
 const transcript = (page: Page) =>
 	page
 		.locator('[data-testid="terminal-debug-output"]')

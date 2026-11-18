@@ -27,6 +27,7 @@ vi.stubGlobal(
 );
 vi.mock('@xterm/xterm', () => ({
 	Terminal: class {
+		parser = { registerOscHandler: () => ({ dispose() {} }) };
 		options: Record<string, unknown> = {};
 		constructor(options: Record<string, unknown>) {
 			this.options = options;

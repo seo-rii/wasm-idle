@@ -10,8 +10,8 @@
 	"sourceRevision": "fc8096485478055f4fcf31402004fdd8ff6b72b7",
 	"patch": {
 		"path": "readline-control.patch",
-		"bytes": 15191,
-		"sha256": "75150bb6021dfda4f678373a5f2c00b8744f51abce9c97d96a6d41fa9e9927fa"
+		"bytes": 18638,
+		"sha256": "7703eee03d2649e15a04166cc993c65afc5754ed13f505a06e518a85388a9828"
 	},
 	"files": {
 		"bashline.c": {
@@ -20,8 +20,8 @@
 				"sha256": "a4c59b4484c3e056b9ccca7f7cddd016e9f12697f717ff27c3a7052c8566b4d9"
 			},
 			"patched": {
-				"bytes": 132453,
-				"sha256": "dc6a7d5a987f4fcaea38c1082045ea3535013d46ca89c4371b620d4ce5296871"
+				"bytes": 134409,
+				"sha256": "a470fd6b4c4dffcd3483bc7910f338ef55ff2ed86da491e04f5ce392f5159331"
 			}
 		},
 		"builtins/common.h": {
@@ -53,6 +53,26 @@
 				"bytes": 17801,
 				"sha256": "24533cd23f0846c3dd9671f112c9c09509ad37f39b470ade2b36ad6702232f2a"
 			}
+		},
+		"lib/readline/readline.c": {
+			"original": {
+				"bytes": 44222,
+				"sha256": "f66bb4a2cf74b5ad34ccb07e17d1023b819b6334d86d10d43e8aed5302f86f77"
+			},
+			"patched": {
+				"bytes": 44501,
+				"sha256": "e5347828be6506370f012124d95e45ee9b62b47ab43d6615f2bac0dcaa52af76"
+			}
+		},
+		"lib/readline/display.c": {
+			"original": {
+				"bytes": 115988,
+				"sha256": "313faa78ee7e0e5feb0818930ba205538d7d2c3105421c7e162078a2ce1d48b5"
+			},
+			"patched": {
+				"bytes": 116349,
+				"sha256": "4314bca8768e60a2b45be2bdb68200e9997925cd4f02cd7dc20ab18e13faa552"
+			}
 		}
 	},
 	"qualification": "Source-pinned Bash-only control profile; actual browser execution is a separate gate",
@@ -76,5 +96,11 @@
 	},
 	"resizeExitCode": 125,
 	"silentResizeExitCode": 126,
-	"resizeTailCapability": "cd"
+	"resizeTailCapability": "cd",
+	"nestedResizeAcknowledgement": "5",
+	"displayControl": {
+		"osc": 6973,
+		"prompt": "P",
+		"resize": "R followed by previous Readline row"
+	}
 }

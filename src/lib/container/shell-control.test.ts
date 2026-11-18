@@ -134,6 +134,32 @@ describe('real Bash directory control protocol', () => {
 		await changing;
 	});
 
+	it('only acknowledges the current native nested edit and keeps primary control queued', async () => {
+		const { control, fs } = fixture();
+		const directory = control.requestDirectory('CPP');
+		const first = new AbortController();
+		const previous = control.requestResize(first.signal);
+		const stale = fs.open(SHELL_RESIZE_REQUEST, { write: true });
+		first.abort();
+		await expect(previous).rejects.toMatchObject({ name: 'AbortError' });
+
+		const current = control.requestResize();
+		fs.write(stale, encoder.encode('5'));
+		fs.close(stale);
+		expect(control.inspect().appliedResizeGeneration).toBe(0);
+		const fd = fs.open(SHELL_RESIZE_REQUEST, { write: true });
+		fs.write(fd, encoder.encode('5'));
+		fs.close(fd);
+		await current;
+		expect(control.inspect()).toMatchObject({
+			appliedResizeGeneration: 2,
+			appliedGeneration: 0,
+			pendingCwd: '/workspace/CPP'
+		});
+		expect(control.onInvocation(acknowledgement(fs))).toBe(0);
+		await directory;
+	});
+
 	it('cancels resize without changing the main mailbox and rejects it on EOF', async () => {
 		const { control, fs } = fixture();
 		const changing = control.requestDirectory('CPP');

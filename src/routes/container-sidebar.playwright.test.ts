@@ -443,25 +443,185 @@ async function openShellPage(
 	return { context, page };
 }
 
-async function expectResizeSettled(page: Page) {
+it(
+	'preserves UTF-8 bytes when deleting and inserting at the Bash cursor',
+	{ skip: !enabled, timeout: 120_000, meta: { browser: true, requiredBrowser: enabled } },
+	async () => {
+		await withShellBrowser(async (browser, url) => {
+			const errors: string[] = [];
+			const { context, page } = await openShellPage(browser, url, 53, errors);
+			try {
+				for (const [path, initial, inserted, expected] of [
+					['ascii.txt', 'abZ', 'N', 'aNZ'],
+					['hangul.txt', '한글Z', '나', '한나Z'],
+					['accent.txt', 'aéZ', 'N', 'aNZ'],
+					['emoji.txt', 'a😀Z', 'N', 'aNZ']
+				]) {
+					await page.keyboard.type(`printf %s > ${path} `);
+					await page.keyboard.insertText(initial);
+					await page.keyboard.press('ArrowLeft');
+					await page.keyboard.press('Backspace');
+					await page.keyboard.insertText(inserted);
+					await page.keyboard.press('Enter');
+					await expect
+						.poll(
+							() =>
+								page.evaluate(async (path) => {
+									const files = await (
+										globalThis as SiteWindow
+									).__wasmIdleContainer!.readWorkspace('BASH');
+									const bytes = files.find((file) => file.path === path)?.content;
+									return bytes === undefined
+										? null
+										: Array.from(
+												typeof bytes === 'string'
+													? new TextEncoder().encode(bytes)
+													: bytes
+											);
+								}, path),
+							{ timeout: 10_000 }
+						)
+						.toEqual(Array.from(new TextEncoder().encode(expected)));
+				}
+				expect(errors).toEqual([]);
+			} finally {
+				await context.close();
+			}
+		});
+	}
+);
+
+async function expectResizeSettled(page: Page, minimumGeneration = 1) {
 	// Check acknowledgement after execution so typing immediately after a viewport
 	// change continues to exercise the input/resize race.
 	await expect
 		.poll(
 			() =>
-				page.evaluate(async () => {
+				page.evaluate(async (minimum) => {
 					const control = (
 						await (globalThis as SiteWindow).__wasmIdleContainer!.inspect()
 					).shell?.control;
 					return {
-						applied: (control?.appliedResizeGeneration ?? 0) > 0,
+						applied: (control?.appliedResizeGeneration ?? 0) >= minimum,
 						settled: control?.resizeGeneration === control?.appliedResizeGeneration
 					};
-				}),
+				}, minimumGeneration),
 			{ timeout: 30_000 }
 		)
 		.toEqual({ applied: true, settled: true });
 }
+
+it.each([
+	['read -e', false, false],
+	['read -e', true, false],
+	['read -e', true, true],
+	['continuation', false, false],
+	['continuation', true, false],
+	['continuation', true, true]
+] as const)(
+	'redraws one editable %s line across resize (queued cursor input = %s, Ctrl+L = %s)',
+	{ skip: !enabled, timeout: 150_000, meta: { browser: true, requiredBrowser: enabled } },
+	async (mode, queued, clearScreen) => {
+		await withShellBrowser(async (browser, url) => {
+			const errors: string[] = [];
+			const { context, page } = await openShellPage(browser, url, 106, errors);
+			try {
+				const nested = mode === 'read -e';
+				const prompt = nested ? 'READ> ' : '> ';
+				const command = nested
+					? "IFS= read -e -r -t 90 -p 'READ> ' answer; printf '%s' \"$answer\" > result.txt"
+					: "printf '%s' > result.txt 'open";
+				const input = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'.repeat(4);
+				await page.keyboard.type("printf '%s\\n' HISTORY_BEFORE_EDIT");
+				await page.keyboard.press('Enter');
+				await expect
+					.poll(async () => (await readShellScreen(page)).rows)
+					.toContain('HISTORY_BEFORE_EDIT');
+				await page.keyboard.type(command);
+				await page.keyboard.press('Enter');
+				await expect
+					.poll(async () => (await readShellScreen(page)).rows.filter(Boolean).at(-1))
+					.toBe(prompt.trimEnd());
+				const prefix = (await readShellScreen(page)).text + ' ';
+				await page.keyboard.type(input);
+				if (clearScreen) {
+					await page.keyboard.press('Control+l');
+					// The full erase invalidates xterm's previous marker. The new origin
+					// must be parsed before any queued Readline echo can move the cursor.
+					await expect
+						.poll(() => page.getByTestId('terminal-debug-output').textContent())
+						.toContain('\x1b[2J\x1b]6973;P\x07');
+					await expect
+						.poll(async () => {
+							const { rows, text } = await readShellScreen(page);
+							return { firstRowIsPrompt: rows[0].startsWith(prompt), text };
+						})
+						.toEqual({ firstRowIsPrompt: true, text: prompt + input });
+				}
+				const visibleEdit = async () => {
+					const { rows } = await readShellScreen(page);
+					const first = clearScreen ? 0 : rows.findIndex((row) => row.startsWith(prompt));
+					return rows.slice(first).join('');
+				};
+				for (let index = 0; index < input.length - 68; index++)
+					await page.keyboard.press('ArrowLeft');
+				if (!queued) {
+					await expect
+						.poll(
+							async () => {
+								const { text, cursorOffset } = await readShellScreen(page);
+								return { text, cursorOffset };
+							},
+							{ timeout: 15_000 }
+						)
+						.toEqual({
+							text: prefix + input,
+							cursorOffset: prefix.length + 68
+						});
+				}
+				await page.setViewportSize(shellViewport(53));
+				await expect.poll(async () => (await readShellScreen(page)).columns).toBe(53);
+				await expectResizeSettled(page);
+				await page.keyboard.press('Control+a');
+				await page.keyboard.type('HEAD_');
+				await expect.poll(visibleEdit).toBe(prompt + 'HEAD_' + input);
+				// Expand again with real keypresses still in flight at the narrow width.
+				for (let index = 0; index < 70; index++) await page.keyboard.press('ArrowRight');
+				await page.setViewportSize(shellViewport(106));
+				await expectResizeSettled(page, 2);
+				await page.keyboard.press('Control+a');
+				await page.keyboard.type('BACK_');
+				await expect.poll(visibleEdit).toBe(prompt + 'BACK_HEAD_' + input);
+				await page.keyboard.press('Control+e');
+				if (!nested) await page.keyboard.type("'");
+				await page.keyboard.press('Enter');
+				await expect
+					.poll(
+						() =>
+							page.evaluate(async () => {
+								const files = await (
+									globalThis as SiteWindow
+								).__wasmIdleContainer!.readWorkspace('BASH');
+								const bytes = files.find(
+									(file) => file.path === 'result.txt'
+								)?.content;
+								return typeof bytes === 'string'
+									? bytes
+									: bytes && new TextDecoder().decode(bytes);
+							}),
+						{ timeout: 15_000 }
+					)
+					.toBe((nested ? '' : 'open\n') + 'BACK_HEAD_' + input);
+				expect((await readShellScreen(page)).rows.includes('HISTORY_BEFORE_EDIT')).toBe(
+					!clearScreen
+				);
+				expect(errors).toEqual([]);
+			} finally {
+				await context.close();
+			}
+		});
+	}
+);
 
 it.each([53, 106])(
 	'keeps long shell input and its cursor intact while editing and resizing from %i columns',

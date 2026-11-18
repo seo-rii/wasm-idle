@@ -275,6 +275,20 @@ trusted function and application. This cooperative hook is not an isolation
 boundary against arbitrary shell code. A language switch during a foreground
 command or continuation remains queued until a genuine primary prompt boundary.
 
+While GNU Readline is editing a continuation or a `read -e` argument, the
+native hook reads only the dedicated resize request. It redraws at the new TTY
+size and changes the request's first byte from `4` to `5` on the same open
+descriptor. The host checks the inode, session and generation before settling
+the resize. Each new request gets a fresh inode so a cancelled request cannot
+acknowledge its replacement. The nested handler preserves errno and does not
+run the Bash parser, use terminal stdin or consume other control requests.
+
+The website profile marks each prompt origin with OSC 6973 `P` and identifies
+the old Readline cursor row with OSC 6973 `R<n>` just before clearing. xterm
+can anchor a redraw to the prompt even when typeahead is still painting at the
+previous width. Other terminals ignore these records and retain the ordinary
+Readline clear and redraw sequences.
+
 ```sh
 node runtimes/wasm-bash/bridge/producer/build.mjs \
   --cache /private/inputs --output /private/new-control-build --jobs 1 --webc \

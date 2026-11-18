@@ -73,8 +73,8 @@ export const scenarios = [
 		// Owned Clang outputs and serialized workspace reconciliation add 3,590 bytes; measured install: 7,627,293 bytes.
 		// Round to the next KiB while retaining the existing file and package limits.
 		// Bash terminal capabilities and EOF handling add 2,377 installed bytes.
-		// Cross-project saves and shell display ownership measure 7,642,873 installed bytes (865 files).
-		budget: { maxBytes: 7643136, maxFiles: 865, maxPackages: 6 },
+		// Cross-project reconciliation and cancellable terminal ownership measure 7,644,207 installed bytes (865 files).
+		budget: { maxBytes: 7645184, maxFiles: 865, maxPackages: 6 },
 		absentPackageNames: [
 			'@katana-project/asm',
 			'java-parser',
@@ -363,8 +363,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 	{
 		name: '@wasm-idle/terminal install',
 		packageNames: ['@wasm-idle/terminal', '@wasm-idle/core'],
-		// Wrapped stdin and Readline redraws with Svelte 5.58.0 measure 17,711,709 bytes (1,340 files).
-		budget: { maxBytes: 17712128, maxFiles: 1370, maxPackages: 32 },
+		// Early stdin, tab-stop editing and Readline redraws with Svelte 5.58.0 measure 17,714,131 bytes (1,340 files).
+		budget: { maxBytes: 17714176, maxFiles: 1370, maxPackages: 32 },
 		absentPackageNames: [
 			'@wasm-idle/debug',
 			'@wasm-idle/lsp',
@@ -483,9 +483,9 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Current full verification measures 43,326,389 bytes after that fix; add 5 KiB
 		// to reach the next KiB while retaining the existing file and package limits.
 		// The full install with Bash terminal and copy fixes measures 43,330,188 bytes.
-		// The combined install measures 43,370,121 bytes with Svelte 5.58.0.
+		// The combined install measures 43,373,829 bytes with Svelte 5.58.0.
 		// The input layout and Readline renderer each add a JavaScript file and a declaration.
-		budget: { maxBytes: 43370496, maxFiles: 3494, maxPackages: 70 },
+		budget: { maxBytes: 43374592, maxFiles: 3494, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

@@ -6,6 +6,6 @@
   "containerVersion": "0.3.0",
   "containerSource": "workspace",
   "containerProfile": "virtual-metadata-v1",
-  "manifestSha256": "7689d9f070df2bd91fa6d50fa8dd4ad2ec3f7f20f61d7c1745df2c1e5a82ef5b",
+  "manifestSha256": "22762f876fe277c0ef0ea8634e2bfa9696042f38859551faf9b94f4ab0a65e50",
   "baseURL": "https://seo-rii.github.io/wasm-idle/container-app/"
 }

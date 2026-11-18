@@ -788,12 +788,6 @@ describe('workspace storage browser integration', () => {
 				expect(new URL(shareUrl).hash).toMatch(/^#workspace=/);
 				expect(new URL(page.url()).hash).toBe('');
 				await page.getByRole('alert').filter({ hasText: 'Not saved locally' }).waitFor();
-				expect(
-					await page
-						.getByRole('alert')
-						.filter({ hasText: 'Not saved locally' })
-						.isVisible()
-				).toBe(true);
 				const backupDownload = page.waitForEvent('download');
 				await page.getByRole('button', { name: 'Export workspace', exact: true }).click();
 				const backupPath = await (await backupDownload).path();
@@ -806,18 +800,19 @@ describe('workspace storage browser integration', () => {
 					content: 'latest unsaved content',
 					encoding: 'utf-8'
 				});
-				// Keep autosave failing until the actual Retry click is delivered.
-				await page
-					.getByRole('button', { name: 'Retry save', exact: true })
-					.evaluate((button) => {
-						button.addEventListener(
-							'click',
-							() => {
-								Storage.prototype.setItem = (window as any).__originalSetItem;
-							},
-							{ capture: true, once: true }
-						);
-					});
+				// Autosave may replace the error banner before the Retry click is delivered.
+				await page.evaluate(() => {
+					function restoreStorage(event: MouseEvent) {
+						if (
+							!(event.target instanceof Element) ||
+							event.target.closest('button')?.textContent?.trim() !== 'Retry save'
+						)
+							return;
+						Storage.prototype.setItem = (window as any).__originalSetItem;
+						document.removeEventListener('click', restoreStorage, true);
+					}
+					document.addEventListener('click', restoreStorage, true);
+				});
 				await page.getByRole('button', { name: 'Retry save', exact: true }).click();
 				await page.locator('[data-workspace-save-state="saved"]').waitFor();
 				expect(
