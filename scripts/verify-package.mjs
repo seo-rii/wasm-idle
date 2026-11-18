@@ -73,7 +73,7 @@ export const scenarios = [
 		// Owned Clang outputs and serialized workspace reconciliation add 3,590 bytes; measured install: 7,627,293 bytes.
 		// Round to the next KiB while retaining the existing file and package limits.
 		// Bash terminal capabilities and EOF handling add 2,377 installed bytes.
-		// The final geometry owner measures 7,639,058 installed bytes on CI (865 files).
+		// The geometry owner and resize promise cleanup measure 7,639,246 installed bytes (865 files).
 		budget: { maxBytes: 7640064, maxFiles: 865, maxPackages: 6 },
 		absentPackageNames: [
 			'@katana-project/asm',
@@ -482,8 +482,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Current full verification measures 43,326,389 bytes after that fix; add 5 KiB
 		// to reach the next KiB while retaining the existing file and package limits.
 		// The full install with Bash terminal and copy fixes measures 43,330,188 bytes.
-		// With the final geometry owner, the aggregate measures 43,347,895 bytes and 3,490 files.
-		budget: { maxBytes: 43347968, maxFiles: 3490, maxPackages: 70 },
+		// With resize promise cleanup, the aggregate measures 43,348,083 bytes and 3,490 files.
+		budget: { maxBytes: 43348992, maxFiles: 3490, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
