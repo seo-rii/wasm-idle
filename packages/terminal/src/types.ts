@@ -103,6 +103,8 @@ export interface TerminalControl extends Omit<
 	CoreTerminalControl,
 	'prepare' | 'run' | 'debugCommand'
 > {
+	/** Reserve stdin before asynchronous Run setup. Release it when that Run finishes or is cancelled. */
+	reserveInput?: (interrupt: () => void) => () => void;
 	/** The original failure when the compatibility runner resolves false. */
 	getExecutionError?: () => unknown;
 	prepare: (
