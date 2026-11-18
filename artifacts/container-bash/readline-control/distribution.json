@@ -3,13 +3,13 @@
   "packages": [
     {
       "id": "shell",
-      "identity": "sha256:a438ba3d8872b47d1c634db69af7cc4c4dba2d94d14a56a5490c46e834c107de",
+      "identity": "sha256:b2a6872787eefb4a5e77eb0fd966e3036d29a8c47492e9af65bb052f9833e95f",
       "dependencies": [],
       "mount": "/opt/toolchains/bash",
       "producer": {
         "repository": "https://github.com/seo-rii/wasm-idle",
-        "revision": "27d25b62fb839c87c69a74082889deb44bc2f9cb",
-        "receiptSha256": "19f0cd17570cb465437c2bbd2a8fde25bfd146cfc84ac00e3aca5a108467ac98"
+        "revision": "435cd2007c056289547b861f71fb6cc09919a336",
+        "receiptSha256": "ee16c792266dc163855af9ffb5acabd12c7a6c352924bd926d17f9e45aeae121"
       },
       "capabilities": [
         "wasix"
@@ -32,16 +32,16 @@
         },
         {
           "id": "bash",
-          "url": "https://seo-rii.github.io/wasm-idle/container-app/objects/3acb4e9a8bbf31eba94392620ae93376212e37d9b2e51d665b31d5ba81332a36/bash.webc.bin",
+          "url": "https://seo-rii.github.io/wasm-idle/container-app/objects/b84c4775999555609c02ba6660d16051635c5de40855c401372e48b5c44e4578/bash.webc.bin",
           "encoding": "identity",
           "delivery": {
-            "bytes": 1814238,
-            "sha256": "3acb4e9a8bbf31eba94392620ae93376212e37d9b2e51d665b31d5ba81332a36",
+            "bytes": 1815568,
+            "sha256": "b84c4775999555609c02ba6660d16051635c5de40855c401372e48b5c44e4578",
             "mediaType": "application/octet-stream"
           },
           "logical": {
-            "bytes": 1814238,
-            "sha256": "3acb4e9a8bbf31eba94392620ae93376212e37d9b2e51d665b31d5ba81332a36",
+            "bytes": 1815568,
+            "sha256": "b84c4775999555609c02ba6660d16051635c5de40855c401372e48b5c44e4578",
             "mediaType": "application/octet-stream"
           }
         }
@@ -574,5 +574,5 @@
       ]
     }
   ],
-  "distributionId": "website-6c280bff1548d408e1eef0a926032b17e8254ce692a49d012380c0f7a6ac89c0"
+  "distributionId": "website-7d73313cdb5c5bbed6defaf6a86a4b6773a716604369fd164104453ab0e15887"
 }
