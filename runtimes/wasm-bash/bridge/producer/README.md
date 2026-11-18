@@ -259,7 +259,11 @@ The function returns `0` for an unchanged state or `124` after a transition that
 requires a redraw. On `124`, Bash decodes the current `PS1` again and redraws the
 preserved editing line. For a terminal geometry change it returns `125`: after
 restoring the editing buffer, Bash clears the old visible editing region and
-resets its display coordinates before calling Readline's public
+resets its display coordinates. If the terminal provides `cd`, it clears from
+that editing origin through the end of the display to remove fragments left
+by a browser reflow, without erasing preceding output or scrollback. The
+capability is read with `tgetstr`, emitted to Readline's output stream through
+`tputs`, and freed before calling Readline's public
 `rl_resize_terminal()` to read the current TTY dimensions and redisplay the line.
 The silent status `126` calls `rl_reset_screen_size()` without repainting while
 another Run owns terminal output. Neither resize status assigns the user's

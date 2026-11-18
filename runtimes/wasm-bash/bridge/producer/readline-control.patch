@@ -1,6 +1,11 @@
 --- a/bashline.c
 +++ b/bashline.c
-@@ -213,6 +213,8 @@
+@@ -112,3 +112,4 @@
+ #else
+ extern int tputs PARAMS((const char *string, int nlines, int (*outx)(int)));
+ #endif
++extern char *tgetstr PARAMS((char *, char **));
+@@ -213,6 +214,8 @@
  #endif
  
  static int bash_event_hook PARAMS((void));
@@ -9,7 +14,7 @@
  
  #if defined (PROGRAMMABLE_COMPLETION)
  static int find_cmd_start PARAMS((int));
-@@ -634,6 +636,25 @@
+@@ -634,6 +637,25 @@
    if (posixly_correct)
      posix_readline_initialize (1);
  #endif
@@ -35,7 +40,7 @@
  
    bash_readline_initialized = 1;
  }
-@@ -4419,12 +4440,7 @@
+@@ -4419,12 +4441,7 @@
  )
  {
    int type;
@@ -49,7 +54,7 @@
    Keymap cmd_xmap;
  
    /* First, we need to find the right command to execute.  This is tricky,
-@@ -4444,13 +4460,29 @@
+@@ -4444,13 +4461,29 @@
        return 1;
      }
  
@@ -81,7 +86,7 @@
      rl_crlf ();	/* move to a new line */
  
    v = bind_variable ("READLINE_LINE", rl_line_buffer, 0);
-@@ -4471,9 +4503,19 @@
+@@ -4471,9 +4504,19 @@
    array_needs_making = 1;
  
    save_parser_state (&ps);
@@ -102,7 +107,7 @@
    restore_parser_state (&ps);
  
    v = find_variable ("READLINE_LINE");
-@@ -4496,11 +4538,63 @@
+@@ -4496,11 +4539,69 @@
    /* If we clear the last line of the prompt above, redraw only that last
       line.  If the command returns 124, we redraw unconditionally as in
       previous versions. */
@@ -113,6 +118,12 @@
 +        {
 +          rl_clear_visible_line ();
 +          rl_on_new_line ();
++          ce = tgetstr ("cd", (char **)NULL);
++          if (ce)
++            {
++              tputs (ce, 1, putx);
++              FREE (ce);
++            }
 +          rl_resize_terminal ();
 +        }
 +      else if (r == 126)

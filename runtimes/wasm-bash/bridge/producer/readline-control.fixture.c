@@ -44,13 +44,30 @@ static int wasm_idle_readline_poll(void);
 static int (*rl_event_hook)(void);
 static int array_needs_making;
 static int resizes, size_resets, forced_redraws, prompt_redraws, display_step;
+static int cap_lookups, tail_erases, output_chars, has_tail_capability = 1;
+char *tgetstr(char *cap, char **area) {
+  assert(strcmp(cap, "cd") == 0 && area == NULL);
+  cap_lookups++;
+  return has_tail_capability ? strdup("erase-tail") : NULL;
+}
+int putx(int c) {
+  assert(c == "erase-tail"[output_chars++]);
+  return c;
+}
+int tputs(const char *cap, int lines, int (*output)(int)) {
+  assert(display_step == 2 && lines == 1 && output == putx);
+  assert(strcmp(cap, "erase-tail") == 0);
+  tail_erases++;
+  while (*cap) output(*cap++);
+  return 0;
+}
 int rl_clear_visible_line(void) { assert(display_step == 0); display_step = 1; return 0; }
 int rl_on_new_line(void) { assert(display_step == 1); display_step = 2; return 0; }
 void rl_resize_terminal(void) { assert(display_step == 2); resizes++; display_step = 0; }
 void rl_reset_screen_size(void) { size_resets++; }
 static void rl_forced_update_display(void) { forced_redraws++; }
 static void rl_redraw_prompt_last_line(void) { prompt_redraws++; }
-static void redisplay(int poll, int r, int ce) {
+static void redisplay(int poll, int r, char *ce) {
 /* REDISPLAY_SOURCE */
 }
 static char *control_environment;
@@ -97,16 +114,21 @@ int main(void) {
   assert(resizes == 0 && forced_redraws == 0 && prompt_redraws == 0);
   redisplay(1, 125, 0);
   assert(resizes == 1 && forced_redraws == 0 && prompt_redraws == 0);
+  assert(cap_lookups == 1 && tail_erases == 1 && output_chars == 10);
   redisplay(1, 126, 0);
   assert(size_resets == 1 && resizes == 1 && forced_redraws == 0 && prompt_redraws == 0);
   redisplay(1, 124, 0);
   assert(resizes == 1 && forced_redraws == 1 && prompt_redraws == 0);
-  redisplay(0, 125, 1); /* bind -x does not gain a new control status. */
+  redisplay(0, 125, "ce"); /* bind -x does not gain a new control status. */
   assert(resizes == 1 && forced_redraws == 1 && prompt_redraws == 1);
-  redisplay(0, 124, 1);
+  redisplay(0, 124, "ce");
   assert(resizes == 1 && forced_redraws == 2 && prompt_redraws == 1);
-  redisplay(0, 126, 1);
+  redisplay(0, 126, "ce");
   assert(size_resets == 1 && prompt_redraws == 2);
+  assert(cap_lookups == 1 && tail_erases == 1);
+  has_tail_capability = 0;
+  redisplay(1, 125, NULL);
+  assert(resizes == 2 && cap_lookups == 2 && tail_erases == 1);
 
   /* Only normal Bash-imported host control is made readonly and nonexported.
      An absent or invalid opt-in leaves all existing function state untouched. */

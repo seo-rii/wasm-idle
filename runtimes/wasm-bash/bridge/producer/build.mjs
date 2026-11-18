@@ -15,7 +15,7 @@ const REPOSITORY = path.resolve(HERE, '../../../..');
 const MAX_ARCHIVE_BYTES = 512 * 1024 * 1024;
 const STARTUP_CWD_LOCK_SHA256 = '6284bd03bb5702c641dbee8ca17afe1848f1b32363dbd28e76029d19f77716c5';
 const READLINE_CONTROL_LOCK_SHA256 =
-	'998fa8db5f16ae61b428e35188861251d9ae877c2c1b8a8500012dbe5387e7ff';
+	'b8c0dab2e82a03aa416d6f3500691ba45b54a85f82b49a23ceceb3620b4dbb47';
 const REDIRECT_HOSTS = new Set([
 	'github.com',
 	'codeload.github.com',

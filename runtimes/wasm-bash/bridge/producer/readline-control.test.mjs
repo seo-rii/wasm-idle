@@ -27,6 +27,7 @@ test('Readline control is an explicit opt-in and all producer patch bytes are pi
 	assert.equal(policy.redrawExitCode, 124);
 	assert.equal(policy.resizeExitCode, 125);
 	assert.equal(policy.silentResizeExitCode, 126);
+	assert.equal(policy.resizeTailCapability, 'cd');
 	assert.equal(policy.ignoreReturnFlag, 'SEVAL_IGNORE_RETURN');
 	assert.deepEqual(policy.importedFunctionInitialization, {
 		readonly: true,
