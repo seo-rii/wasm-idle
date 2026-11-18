@@ -36,7 +36,8 @@ const WORKSPACE_TEST_FILES = [
 	'src/routes/workspace-whitespace-paths.playwright.test.ts',
 	'src/routes/workspace-cpp.playwright.test.ts',
 	'src/routes/debugger-toolbar-layout.playwright.test.ts',
-	'src/routes/container-sidebar.playwright.test.ts'
+	'src/routes/container-sidebar.playwright.test.ts',
+	'src/routes/container-shell-eof.playwright.test.ts'
 ];
 const WORKSPACE_BROWSER_ENV = {
 	WASM_IDLE_RUN_REAL_BROWSER_WORKSPACE_ARCHIVE: '1',
