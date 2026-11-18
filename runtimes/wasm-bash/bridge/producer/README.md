@@ -252,12 +252,17 @@ and mark. The callback also restores the previous signal status and `$_`.
 Alias expansion is disabled only for the fixed readonly function invocation.
 The new internal `SEVAL_IGNORE_RETURN` flag applies Bash's actual
 `CMD_IGNORE_RETURN` conditional context to that invocation, so an intentional
-`124` cannot activate a user's `set -e` or `ERR` trap. Existing eval/bind callers
+`124` or `125` cannot activate a user's `set -e` or `ERR` trap. Existing eval/bind callers
 retain their original behavior.
 
 The function returns `0` for an unchanged state or `124` after a transition that
 requires a redraw. On `124`, Bash decodes the current `PS1` again and redraws the
-preserved editing line. The function must not read terminal input, replace the
+preserved editing line. For a terminal geometry change it returns `125`: after
+restoring the editing buffer, Bash calls Readline's public `rl_resize_terminal()`
+to read the current TTY dimensions and run its SIGWINCH redisplay path. This
+clears and redraws the previous wrapped line without decoding a new prompt or
+appending a second copy of the editing buffer. Ordinary `bind -x` retains its
+existing handling of all return codes. The function must not read terminal input, replace the
 editing variables, execute an unbounded command, or print terminal output.
 Mailbox handling, allowed cwd targets, and actual `builtin cd` belong to the
 trusted function and application. This cooperative hook is not an isolation
@@ -271,7 +276,8 @@ node runtimes/wasm-bash/bridge/producer/build.mjs \
 node --test runtimes/wasm-bash/bridge/producer/readline-control.test.mjs
 ```
 
-The native unit fixture exercises only the idle-boundary gate. Set
+The native unit fixture exercises the idle-boundary gate and exact resize/redraw
+dispatch with instrumented Readline calls. Set
 `WASM_IDLE_BASH_SOURCE_ARCHIVE` to a local pinned Bash archive to also exercise
 exact patch application. Neither fixture qualifies real Readline or browser
 behavior: primary/partial input, foreground input, continuation, cwd changes,

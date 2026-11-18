@@ -43,6 +43,13 @@ static char restored_lastarg[128];
 static int wasm_idle_readline_poll(void);
 static int (*rl_event_hook)(void);
 static int array_needs_making;
+static int resizes, forced_redraws, prompt_redraws;
+void rl_resize_terminal(void) { resizes++; }
+static void rl_forced_update_display(void) { forced_redraws++; }
+static void rl_redraw_prompt_last_line(void) { prompt_redraws++; }
+static void redisplay(int poll, int r, int ce) {
+/* REDISPLAY_SOURCE */
+}
 static char *control_environment;
 static char *control_getenv(const char *name) {
   assert(strcmp(name, "WASM_IDLE_SHELL_CONTROL") == 0);
@@ -83,6 +90,17 @@ static void initialize_control(void) {
 }
 
 int main(void) {
+  redisplay(1, 0, 0);
+  assert(resizes == 0 && forced_redraws == 0 && prompt_redraws == 0);
+  redisplay(1, 125, 0);
+  assert(resizes == 1 && forced_redraws == 0 && prompt_redraws == 0);
+  redisplay(1, 124, 0);
+  assert(resizes == 1 && forced_redraws == 1 && prompt_redraws == 0);
+  redisplay(0, 125, 1); /* bind -x does not gain a new control status. */
+  assert(resizes == 1 && forced_redraws == 1 && prompt_redraws == 1);
+  redisplay(0, 124, 1);
+  assert(resizes == 1 && forced_redraws == 2 && prompt_redraws == 1);
+
   /* Only normal Bash-imported host control is made readonly and nonexported.
      An absent or invalid opt-in leaves all existing function state untouched. */
   function_value.attributes = att_imported | att_exported;
