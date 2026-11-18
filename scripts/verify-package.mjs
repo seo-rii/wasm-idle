@@ -73,8 +73,8 @@ export const scenarios = [
 		// Owned Clang outputs and serialized workspace reconciliation add 3,590 bytes; measured install: 7,627,293 bytes.
 		// Round to the next KiB while retaining the existing file and package limits.
 		// Bash terminal capabilities and EOF handling add 2,377 installed bytes.
-		// The geometry owner and resize promise cleanup measure 7,639,246 installed bytes (865 files).
-		budget: { maxBytes: 7640064, maxFiles: 865, maxPackages: 6 },
+		// Cross-project saves and Readline resize handling measure 7,642,080 installed bytes (865 files).
+		budget: { maxBytes: 7642112, maxFiles: 865, maxPackages: 6 },
 		absentPackageNames: [
 			'@katana-project/asm',
 			'java-parser',
@@ -363,8 +363,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 	{
 		name: '@wasm-idle/terminal install',
 		packageNames: ['@wasm-idle/terminal', '@wasm-idle/core'],
-		// Existing 64 KiB headroom plus 832 KiB for core's shared loader and pinned fflate.
-		budget: { maxBytes: 17694720, maxFiles: 1370, maxPackages: 32 },
+		// With wrapped stdin editing, the terminal install measures 17,698,423 bytes (1,338 files).
+		budget: { maxBytes: 17698816, maxFiles: 1370, maxPackages: 32 },
 		absentPackageNames: [
 			'@wasm-idle/debug',
 			'@wasm-idle/lsp',
@@ -482,8 +482,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Current full verification measures 43,326,389 bytes after that fix; add 5 KiB
 		// to reach the next KiB while retaining the existing file and package limits.
 		// The full install with Bash terminal and copy fixes measures 43,330,188 bytes.
-		// With resize promise cleanup, the aggregate measures 43,348,083 bytes and 3,490 files.
-		budget: { maxBytes: 43348992, maxFiles: 3490, maxPackages: 70 },
+		// The workspace and terminal fixes measure 43,356,042 bytes; the line layout adds JS and declarations.
+		budget: { maxBytes: 43356160, maxFiles: 3492, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
