@@ -21,6 +21,7 @@
 	import '@xterm/xterm/css/xterm.css';
 	import type { Terminal as TerminalType } from '@xterm/xterm';
 	import { loadWebglPlugin, registerBasicPlugins } from './plugin/index.js';
+	import { InputLineLayout } from './input-line-layout.js';
 	import Theme from './theme.js';
 	import type {
 		BoundSandbox,
@@ -98,6 +99,8 @@
 	let preparedExecutionGeneration = 0;
 	let lastExecutionError: unknown;
 	let executionInputOwners = 0;
+	let inputStartColumn = 0;
+	let pendingScreenUpdates: Array<() => void> | undefined;
 	let reservedInput: { queued?: Array<() => void>; interrupt: () => void } | undefined;
 	let terminalDisposed = false;
 	let abortInitialization: (() => void) | undefined;
@@ -182,7 +185,7 @@
 				: (debugOutput + text).slice(-maxDebugOutputCharacters);
 		// Keep a bounded debug tail without starting in the middle of a surrogate pair.
 		debugOutput = /^[\uDC00-\uDFFF]/.test(tail) ? tail.slice(1) : tail;
-		term?.write(text);
+		writeScreen(text);
 	}
 
 	function reportShellError(error: unknown) {
@@ -425,28 +428,69 @@
 		await wait();
 		if (!term) return;
 		term.options.cursorBlink = blink;
-		term.write('\u001B[?25h');
+		writeScreen('\u001B[?25h');
 		term.focus();
 
-		if (!first) term?.write(`\r\n\x1b[0m`);
+		if (!first) writeScreen(`\r\n\x1b[0m`);
 		first = false;
+	}
+
+	function updateScreen(update: () => void) {
+		if (pendingScreenUpdates) pendingScreenUpdates.push(update);
+		else update();
+	}
+
+	function writeScreen(text: string) {
+		updateScreen(() => term?.write(text));
+	}
+
+	function captureInputStart() {
+		updateScreen(() => {
+			const current = term;
+			if (!current) return;
+			// xterm parses writes asynchronously. Read the position after any prompt
+			// has been parsed, keeping following echo and program output in order.
+			pendingScreenUpdates = [];
+			current.write('', () => {
+				if (terminalDisposed) {
+					pendingScreenUpdates = undefined;
+					return;
+				}
+				inputStartColumn = current.buffer.active.cursorX;
+				const updates = pendingScreenUpdates!;
+				pendingScreenUpdates = undefined;
+				for (const update of updates) updateScreen(update);
+			});
+		});
+	}
+
+	function inputLayout(characters: string[]) {
+		return new InputLineLayout(characters, term!.cols, inputStartColumn, getInputCellWidth);
+	}
+
+	function redrawInput(previous: string[], previousCursor: number, changed: number) {
+		const characters = getInputCharacters(input);
+		const cursor = inputCursor;
+		// A combining mark can change the grapheme just before the insertion.
+		if (changed && previous[changed - 1] !== characters[changed - 1]) changed--;
+		updateScreen(() => {
+			const old = inputLayout(previous);
+			term?.write(
+				inputLayout(characters).redraw(old.rowAt(previousCursor), old.end, changed, cursor)
+			);
+		});
 	}
 
 	function appendInputText(text: string) {
 		if (!text) return;
-		const inputCharacters = getInputCharacters(input);
-		const insertedCharacters = getInputCharacters(text);
-		const inputTail = inputCharacters.slice(inputCursor).join('');
-		inputCharacters.splice(inputCursor, 0, ...insertedCharacters);
-		input = inputCharacters.join('');
-		inputCursor += insertedCharacters.length;
-		let inputEcho = text;
-		if (inputTail && term) {
-			inputEcho += inputTail;
-			const inputTailCellWidth = getInputCellWidth(inputTail);
-			if (inputTailCellWidth > 0) inputEcho += `\x1b[${inputTailCellWidth}D`;
-		}
-		term?.write(inputEcho);
+		const characters = getInputCharacters(input);
+		const previousCursor = inputCursor;
+		if (!input) captureInputStart();
+		const prefix = characters.slice(0, previousCursor).join('') + text;
+		input = prefix + characters.slice(previousCursor).join('');
+		inputCursor = getInputCharacters(prefix).length;
+		if (previousCursor === characters.length) writeScreen(text);
+		else redrawInput(characters, previousCursor, previousCursor);
 	}
 
 	function getInputCharacters(text: string) {
@@ -466,13 +510,14 @@
 			: Array.from(text);
 	}
 
-	function getInputCellWidth(text: string) {
+	function getInputCellWidth(text: string, offset: number) {
 		if (!text) return 0;
-		// The public Unicode API selects a provider but does not expose its width functions.
-		const unicode = (
+		// xterm exposes neither Unicode cell widths nor the active VT tab stops publicly.
+		const core = (
 			term as
 				| (TerminalType & {
 						_core?: {
+							buffers?: { active: { nextStop(column: number): number } };
 							unicodeService?: {
 								getStringCellWidth?: (text: string) => number;
 								wcwidth?: (codepoint: number) => 0 | 1 | 2;
@@ -480,7 +525,17 @@
 						};
 				  })
 				| undefined
-		)?._core?.unicodeService;
+		)?._core;
+		if (text === '\t' && term) {
+			const column = offset % term.cols;
+			if (offset > 0 && column === 0) return 0;
+			const step = term.options.tabStopWidth || 8;
+			const next =
+				core?.buffers?.active.nextStop(column) ??
+				Math.min(term.cols - 1, column + step - (column % step));
+			return next - column;
+		}
+		const unicode = core?.unicodeService;
 		return (
 			unicode?.getStringCellWidth?.(text) ??
 			Array.from(text).reduce(
@@ -491,8 +546,51 @@
 		);
 	}
 
+	function moveInputCursor(characters: string[], position: number) {
+		if (inputCursor === position) return;
+		const previousCursor = inputCursor;
+		inputCursor = position;
+		updateScreen(() => {
+			const layout = inputLayout(characters);
+			term?.write(layout.moveTo(layout.rowAt(previousCursor), position));
+		});
+	}
+
+	function eraseInputCharacter(characters: string[], position: number) {
+		if (position < 0 || position >= characters.length) return;
+		const previousCursor = inputCursor;
+		input = characters
+			.slice(0, position)
+			.concat(characters.slice(position + 1))
+			.join('');
+		inputCursor = position;
+		redrawInput(characters, previousCursor, position);
+	}
+
+	function handleInputKey(key: string) {
+		const characters = getInputCharacters(input);
+		switch (key) {
+			case 'D':
+				return moveInputCursor(characters, Math.max(0, inputCursor - 1));
+			case 'C':
+				return moveInputCursor(characters, Math.min(characters.length, inputCursor + 1));
+			case 'H':
+			case '1~':
+			case '7~':
+				return moveInputCursor(characters, 0);
+			case 'F':
+			case '4~':
+			case '8~':
+				return moveInputCursor(characters, characters.length);
+			case '3~':
+				return eraseInputCharacter(characters, inputCursor);
+		}
+	}
+
 	function submitCurrentInput() {
-		term?.write('\r\n');
+		const characters = getInputCharacters(input);
+		moveInputCursor(characters, characters.length);
+		writeScreen('\r\n');
 		const submittedInput = input + '\n';
 		if (sandbox && sandboxAcceptingInput) sandbox.write?.(submittedInput);
 		else pendingSandboxInput.push(submittedInput);
@@ -540,8 +638,8 @@
 			lastExecutionError = undefined;
 			invalidatePreparedExecution();
 			discardPendingSandboxInput();
-			term?.reset();
-			term?.write(`\u001B[?25l\x1b[0m\x1b[?25h`);
+			updateScreen(() => term?.reset());
+			writeScreen(`\u001B[?25l\x1b[0m\x1b[?25h`);
 			if (term) term.options.cursorBlink = false;
 			debugOutput = '';
 			input = '';
@@ -970,29 +1068,15 @@
 					}
 					let pendingText = '';
 					for (let i = 0; i < data.length;) {
-						const escapeSequence = data
-							.slice(i)
-							.match(/^\x1b(?:\[[0-9;?]*[ABCD]|O[ABCD])/);
+						// Match a complete CSI or SS3 key, including modifiers and unsupported keys.
+						const escapeSequence =
+							data[i] === '\x1b' &&
+							/^\x1b(?:\[|O)([0-?]*)[ -/]*([@-~])/.exec(data.slice(i));
 						if (escapeSequence) {
-							if (pendingText) {
-								appendInputText(pendingText);
-								pendingText = '';
-							}
-							const direction = escapeSequence[0].at(-1);
-							const inputCharacters = getInputCharacters(input);
-							if (direction === 'D' && inputCursor > 0) {
-								const inputCharacter = inputCharacters[inputCursor - 1];
-								const inputCharacterCellWidth = getInputCellWidth(inputCharacter);
-								if (inputCharacterCellWidth > 0)
-									term.write(`\x1b[${inputCharacterCellWidth}D`);
-								inputCursor--;
-							} else if (direction === 'C' && inputCursor < inputCharacters.length) {
-								const inputCharacter = inputCharacters[inputCursor];
-								const inputCharacterCellWidth = getInputCellWidth(inputCharacter);
-								if (inputCharacterCellWidth > 0)
-									term.write(`\x1b[${inputCharacterCellWidth}C`);
-								inputCursor++;
-							}
+							appendInputText(pendingText);
+							pendingText = '';
+							const [, parameters, final] = escapeSequence;
+							handleInputKey(final === '~' ? parameters.split(';')[0] + '~' : final);
 							i += escapeSequence[0].length;
 							continue;
 						}
@@ -1013,31 +1097,10 @@
 								appendInputText(pendingText);
 								pendingText = '';
 							}
-							if (inputCursor > 0) {
-								const inputCharacters = getInputCharacters(input);
-								const removedInput = inputCharacters.splice(inputCursor - 1, 1)[0];
-								if (removedInput) {
-									inputCursor--;
-									const inputTail = inputCharacters.slice(inputCursor).join('');
-									const removedInputCellWidth = getInputCellWidth(removedInput);
-									const inputTailCellWidth = getInputCellWidth(inputTail);
-									let backspaceEcho = '';
-									if (removedInputCellWidth > 0)
-										backspaceEcho += `\x1b[${removedInputCellWidth}D`;
-									if (inputTail) backspaceEcho += inputTail;
-									if (removedInputCellWidth > 0)
-										backspaceEcho += ' '.repeat(removedInputCellWidth);
-									const cursorReturnCellWidth =
-										inputTailCellWidth + removedInputCellWidth;
-									if (cursorReturnCellWidth > 0)
-										backspaceEcho += `\x1b[${cursorReturnCellWidth}D`;
-									if (backspaceEcho) term.write(backspaceEcho);
-									input = inputCharacters.join('');
-								}
-							}
+							eraseInputCharacter(getInputCharacters(input), inputCursor - 1);
 							continue;
 						}
-						if ((chunk.codePointAt(0) || 0) >= 0x20) {
+						if (chunk === '\t' || codePoint >= 0x20) {
 							pendingText += chunk;
 						}
 					}
