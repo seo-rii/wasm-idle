@@ -412,13 +412,15 @@ export class ContainerRuntimeAdapter {
 				}
 			}
 		};
-		// A deleted project still needs to report its file deletions. Reading it
-		// must not recreate the directory (or a new watcher event).
+		// Projects can be removed or replaced by a shell file. Only the directory
+		// represents project contents; unrelated read failures must remain retryable.
+		let isDirectory = false;
 		try {
-			visit('');
+			isDirectory = this.fs.lstat(root).type === 'directory';
 		} catch (error) {
 			if ((error as { code?: string }).code !== 'ENOENT') throw error;
 		}
+		if (isDirectory) visit('');
 		const deleted = reset
 			? []
 			: [...previous!.versions.keys()].filter((path) => !versions.has(path));

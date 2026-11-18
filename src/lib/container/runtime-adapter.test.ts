@@ -381,6 +381,41 @@ describe('container shared editor input boundary', () => {
 		expect(reset.files).toHaveLength(2);
 		expect(reads).toHaveBeenCalledTimes(2);
 	});
+	it('reads the other projects when a shell file occupies a project directory name', () => {
+		const { adapter, container } = fixture();
+		const shellBytes = Uint8Array.of(0, 255, 9);
+		adapter.syncWorkspace('CPP', [f('main.cpp', 'editor')]);
+		container.fs.writeFile('/workspace/PYTHON', shellBytes);
+		const initial = adapter.readWorkspaceDelta('PYTHON');
+		expect(initial).toMatchObject({ files: [], deleted: [] });
+		expect(container.fs.readFile('/workspace/PYTHON')).toEqual(shellBytes);
+		container.fs.unlink('/workspace/PYTHON');
+		adapter.syncWorkspace('PYTHON', [f('main.py', 'previous project')]);
+		const active = adapter.readWorkspaceDelta('PYTHON', initial.revision);
+		expect(active.files.map(({ path }) => path)).toEqual(['main.py']);
+		container.fs.rename('/workspace/PYTHON', '/workspace/archived');
+		container.fs.writeFile('/workspace/PYTHON', shellBytes);
+		expect(adapter.readWorkspaceDelta('PYTHON', active.revision)).toMatchObject({
+			files: [],
+			deleted: ['main.py']
+		});
+		expect(container.fs.readFile('/workspace/PYTHON')).toEqual(shellBytes);
+		expect(adapter.readWorkspaceDelta('CPP').files.map(({ path }) => path)).toEqual([
+			'main.cpp'
+		]);
+	});
+	it('propagates read failures inside an existing project before committing its revision', () => {
+		const { adapter, container } = fixture();
+		adapter.syncWorkspace('CPP', [f('main.cpp', 'editor')]);
+		const missing = Object.assign(new Error('file disappeared during read'), {
+			code: 'ENOENT'
+		});
+		vi.spyOn(container.fs, 'readFile').mockImplementationOnce(() => {
+			throw missing;
+		});
+		expect(() => adapter.readWorkspaceDelta('CPP')).toThrow(missing);
+		expect(adapter.readWorkspaceDelta('CPP')).toMatchObject({ revision: 1, reset: true });
+	});
 	it('preserves unknown shell files while applying an explicit editor deletion', () => {
 		const { adapter, container } = fixture();
 		const before = [f('main.c', 'base'), f('old.txt', 'remove')];
