@@ -24,7 +24,7 @@ function fixture() {
   const sdk = {
     async init(options) { state.initialization = options; state.worker = new scope.Worker('https://app.test/sdk-worker.mjs'); },
     Runtime: class {
-      constructor(options) { assert.deepEqual(options, { registry: null }); }
+      constructor(options) { assert.deepEqual(options, { registry: null }); state.runtime = this; }
       registerHostCommand(path, handler) { state.commands.set(path, handler); }
       registerHostCommandDirectory(path, handler) { state.directoryHandler = handler; }
       free() { state.freed.push('runtime'); }
@@ -44,6 +44,67 @@ function fixture() {
   };
   return { scope, workers, state, exit, out, err, options, container };
 }
+
+function geometryFixture(f) {
+  const runs = [], entered = deferred();
+  runs.entered = entered.promise;
+  f.options.sdk.Wasmer.fromWasm = (bytes, runtime) => {
+    assert.equal(runtime, f.state.runtime, 'the helper and Bash share one runtime');
+    const dimensions = bytes.slice(-8), done = deferred();
+    const run = { done, dimensions };
+    return { free() { run.packageFreed = true; }, entrypoint: {
+      free() { run.commandFreed = true; }, async run() {
+        runs.push(run); entered.resolve();
+        const stream = bytes => new ReadableStream({ start(c) { c.enqueue(bytes); c.close(); } });
+        return { stdin: new WritableStream(), stdout: stream(dimensions), stderr: stream(new Uint8Array()), waitForExit: () => done.promise };
+      }
+    } };
+  };
+  return runs;
+}
+
+test('initial geometry precedes Bash startup and later helpers execute serially', async () => {
+  globalThis.crossOriginIsolated = true;
+  const f = fixture(), runs = geometryFixture(f);
+  f.options.columns = 97; f.options.rows = 33;
+  const pending = createWasixShellSession(f.options);
+  await runs.entered;
+  assert.equal(runs.length, 1); assert.equal(f.state.run, undefined);
+  runs[0].done.resolve({ code: 0 });
+  const session = await pending;
+  try {
+    const a = session.resize(44, 17), b = session.resize(106, 35);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(runs.length, 2, 'a second resize cannot overtake the first helper');
+    runs[1].done.resolve({ code: 0 }); await a;
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(runs.length, 3);
+    runs[2].done.resolve({ code: 0 }); await b;
+    assert(runs.every(run => run.packageFreed && run.commandFreed));
+  } finally { await session.dispose(); await f.container.dispose(); }
+});
+
+test('normal shell exit rejects an in-flight geometry update and its queued successor', async () => {
+  globalThis.crossOriginIsolated = true;
+  const f = fixture(), runs = geometryFixture(f), session = await createWasixShellSession(f.options);
+  let first, second;
+  const a = session.resize(44, 17).then(() => { first = 'resolved'; }, error => { first = error; });
+  const b = session.resize(106, 35).then(() => { second = 'resolved'; }, error => { second = error; });
+  try {
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(runs.length, 1);
+    f.exit.resolve({ code: 0 });
+    assert.deepEqual(await session.exited, { code: 0, reason: 'exited' });
+    await new Promise(resolve => setImmediate(resolve));
+    assert(first instanceof Error, 'the helper must not wait forever after its Worker group exits');
+    assert(second instanceof Error, 'a queued resize must not reuse a retired runtime');
+    assert.equal(runs.length, 1);
+  } finally {
+    for (const run of runs) run.done.resolve({ code: 0 });
+    await Promise.allSettled([a, b]);
+    await session.dispose(); await f.container.dispose();
+  }
+});
 
 test('worker group bounds allocation and tracks SDK scheduler-owned descendants', async () => {
   const scope = { Worker: TestWorker }, group = installWasixWorkerGroup({ scope, maxWorkers: 2 });

@@ -82,6 +82,7 @@ const equal = (left: string | Uint8Array, right: string | Uint8Array) => {
 /** Structurally compatible with terminal UIs without depending on their components. */
 export interface ContainerShellBinding {
 	connect(onOutput: (text: string) => void, onError?: (error: unknown) => void): Promise<void>;
+	resize(columns: number, rows: number): Promise<void>;
 	write(text: string): Promise<void>;
 	eof(): Promise<void>;
 	interrupt(): Promise<void>;
@@ -134,6 +135,9 @@ export function createContainerPlaygroundBinding(
 	let shellOutput: ((text: string) => void) | undefined;
 	let shellError: ((error: unknown) => void) | undefined;
 	let shellConnection: Promise<void> | undefined;
+	let shellSize: { columns: number; rows: number } | undefined;
+	let appliedShellSize: typeof shellSize;
+	let resizingShell: Promise<void> | undefined;
 	let requestedShellLanguage: string | undefined;
 	let terminalExecution = false;
 	const prewarmEnvironment = options.prewarmEnvironment ?? browserPrewarmEnvironment;
@@ -284,12 +288,40 @@ export function createContainerPlaygroundBinding(
 			return (shellConnection ??= (async () => {
 				const language = requestedShellLanguage ?? options.getLanguage?.() ?? 'CPP';
 				await queues.get(language)?.catch(() => {});
+				const initialSize = shellSize;
 				await connection().call('shellStart', [
 					{
 						cwd: `/workspace/${language}`,
-						env: shellEnvironment
+						env: shellEnvironment,
+						...initialSize
 					}
 				]);
+				appliedShellSize = initialSize;
+			})());
+		},
+		async resize(columns, rows) {
+			if (![columns, rows].every((n) => Number.isInteger(n) && n > 0 && n <= 65535))
+				throw new RangeError('Shell dimensions must be integers from 1 to 65535');
+			if (shellSize?.columns !== columns || shellSize.rows !== rows)
+				shellSize = { columns, rows };
+			if (!shellConnection || shellSize === appliedShellSize) return;
+			return (resizingShell ??= (async () => {
+				try {
+					// connect() already reports startup failures, including unsupported shells.
+					try {
+						await shellConnection;
+					} catch {
+						return;
+					}
+					while (!disposed && shellSize && shellSize !== appliedShellSize) {
+						const next = shellSize;
+						await connection().call('shellResize', [next.columns, next.rows]);
+						appliedShellSize = next;
+					}
+				} finally {
+					// Release before promise observers can enqueue the next size.
+					resizingShell = undefined;
+				}
 			})());
 		},
 		async write(text) {

@@ -28,7 +28,8 @@ const workspaceFiles = [
 	'src/routes/workspace-whitespace-paths.playwright.test.ts',
 	'src/routes/workspace-cpp.playwright.test.ts',
 	'src/routes/debugger-toolbar-layout.playwright.test.ts',
-	'src/routes/container-sidebar.playwright.test.ts'
+	'src/routes/container-sidebar.playwright.test.ts',
+	'src/routes/container-shell-eof.playwright.test.ts'
 ];
 
 describe('all-language browser test runner', () => {
@@ -73,6 +74,7 @@ describe('all-language browser test runner', () => {
 		const plan = createAllLanguageBrowserTestPlan(options);
 		const child = createVitestChildInvocation(plan, 'http://127.0.0.1:4573/wasm-idle/');
 		expect(child.args).toContain('src/routes/container-sidebar.playwright.test.ts');
+		expect(child.args).toContain('src/routes/container-shell-eof.playwright.test.ts');
 		expect(child.env.WASM_IDLE_RUN_CONTAINER_WEBSITE_BROWSER).toBe('1');
 		expect(child.env.WASM_IDLE_REQUIRE_BROWSER_TESTS).toBe('1');
 		expect(browserTestAssetGroups(plan)).toContain('container');

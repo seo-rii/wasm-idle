@@ -91,6 +91,8 @@ export interface PlaygroundBinding extends Pick<CorePlaygroundBinding, 'runtimeA
 /** A host-owned real shell. Input and output are text transport, not shell syntax. */
 export interface TerminalShellBinding {
 	connect(onOutput: (text: string) => void, onError?: (error: unknown) => void): Promise<void>;
+	/** Fitted terminal dimensions in character cells, including the initial size. */
+	resize?(columns: number, rows: number): Promise<void>;
 	write(text: string): Promise<void>;
 	eof(): Promise<void>;
 	interrupt(): Promise<void>;

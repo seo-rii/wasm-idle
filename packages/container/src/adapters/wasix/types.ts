@@ -31,7 +31,10 @@ export interface WasixSdk {
   init(options: { module: WebAssembly.Module; memory: WebAssembly.Memory; sdkUrl: string; workerUrl: string }): Promise<unknown>;
   Runtime: new (options: { registry: null }) => WasixRuntime;
   Directory: { fromHostFileSystem(delegate: ShellFilesystem): WasixDirectory };
-  Wasmer: { fromFile(bytes: Uint8Array, runtime: WasixRuntime): Promise<{ readonly entrypoint?: WasixCommand; free?(): void }> };
+  Wasmer: {
+    fromFile(bytes: Uint8Array, runtime: WasixRuntime): Promise<{ readonly entrypoint?: WasixCommand; free?(): void }>;
+    fromWasm?(bytes: Uint8Array, runtime: WasixRuntime): { readonly entrypoint?: WasixCommand; free?(): void };
+  };
 }
 export interface WasixAssetReference { readonly packageId: string; readonly assetId: string; }
 export interface WasixShellOptions extends Pick<HostCommandHandlerOptions, 'routes' | 'moduleDirectories' | 'timeoutMs'> {
@@ -51,6 +54,9 @@ export interface WasixShellOptions extends Pick<HostCommandHandlerOptions, 'rout
   readonly args?: readonly string[];
   readonly cwd?: string;
   readonly env?: Readonly<Record<string, string>>;
+  /** Initial terminal geometry; both dimensions are required when provided. */
+  readonly columns?: number;
+  readonly rows?: number;
   /** Common filesystem directories mounted at their same absolute paths. */
   readonly mounts?: readonly string[];
   readonly signal?: AbortSignal;
@@ -59,6 +65,8 @@ export interface WasixShellOptions extends Pick<HostCommandHandlerOptions, 'rout
   readonly prepareCommand?: (invocation: HostCommandInvocation, signal: AbortSignal) => Promise<void>;
 }
 export interface WasixShellSession extends ContainerProcess {
+  /** Update the shared WASIX TTY; the application asks its real shell to redraw. */
+  resize(columns: number, rows: number): Promise<void>;
   /** Stops routed external commands, preserving Bash. Builtin loops require terminate(). */
   interrupt(): number;
   /** Release the dedicated SDK group; idempotent. User workspace is retained. */

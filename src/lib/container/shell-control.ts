@@ -11,6 +11,7 @@ export const SHELL_CONTROL_ROUTE = `/usr/local/bin/${SHELL_CONTROL_COMMAND}`;
 export const SHELL_CONTROL_MOUNT = '/usr/share/wasm-idle-shell-control';
 export const SHELL_CONTROL_RCFILE = `${SHELL_CONTROL_MOUNT}/rcfile`;
 export const SHELL_CONTROL_REQUEST = '/tmp/.wasm-idle-shell-control-request';
+export const SHELL_RESIZE_REQUEST = '/tmp/.wasm-idle-shell-resize-request';
 const SHELL_INPUTRC = '/tmp/.wasm-idle-shell-inputrc';
 const ADAPTER = 'website-shell-control-v1';
 const MAX_GENERATION = 2147483647;
@@ -25,6 +26,8 @@ export interface ShellControlInspection {
 	readonly generation: number;
 	readonly appliedGeneration: number;
 	readonly error: string | null;
+	readonly resizeGeneration: number;
+	readonly appliedResizeGeneration: number;
 }
 
 export interface ShellControlOptions {
@@ -36,7 +39,7 @@ export interface ShellControlOptions {
 }
 
 interface PendingControl {
-	version: '1' | '2';
+	version: '1' | '2' | '4';
 	target: string;
 	cwd?: string;
 	promise: Promise<void>;
@@ -62,6 +65,20 @@ function rcfile(session: string, languages: readonly string[]) {
 		'__wasm_idle_poll() {',
 		'  local __wic_exit_status=$? __wic_version __wic_session __wic_generation __wic_language __wic_extra __wic_oldpwd __wic_fd',
 		`  local __wic_expected_session='${session}'`,
+		// Resize has its own mailbox so it cannot supersede directory/Run/EOF requests.
+		`  if [[ -f '${SHELL_RESIZE_REQUEST}' && -r '${SHELL_RESIZE_REQUEST}' ]] && builtin exec {__wic_fd}< '${SHELL_RESIZE_REQUEST}'; then`,
+		'    IFS=\' \' builtin read -r -n 160 -u "$__wic_fd" __wic_version __wic_session __wic_generation __wic_language __wic_extra || :',
+		'    builtin exec {__wic_fd}<&-',
+		'    if [[ "$__wic_version" == 4 && "$__wic_session" == "$__wic_expected_session" && "$__wic_language" == resize && -z "$__wic_extra" && "$__wic_generation" =~ ^[1-9][0-9]{0,9}$ ]] &&',
+		`       (( __wic_generation <= ${MAX_GENERATION} && __wic_generation > \${__wasm_idle_resize_generation:-0} )); then`,
+		'      __wasm_idle_resize_generation=$__wic_generation',
+		// Native resize preserves TERM, including an unset or readonly user value.
+		// Silent refresh keeps Run output intact until the ordinary resume redraw.
+		`      if '${SHELL_CONTROL_ROUTE}' 4 "$__wic_session" "$__wic_generation" resize ok; then :; else :; fi`,
+		'      [[ ${__wasm_idle_terminal_suspended:-0} == 0 ]] && return 125',
+		'      return 126',
+		'    fi',
+		'  fi',
 		// WASIX dup2 restoration loses stdin's polling rights. Read through a fresh
 		// descriptor instead of temporarily replacing the live terminal's fd 0.
 		`  [[ -f '${SHELL_CONTROL_REQUEST}' && -r '${SHELL_CONTROL_REQUEST}' ]] || return 0`,
@@ -86,6 +103,7 @@ function rcfile(session: string, languages: readonly string[]) {
 		'    case "$__wic_language" in suspend|resume) ;; *) return 0 ;; esac',
 		'    __wasm_idle_control_generation=$__wic_generation',
 		// Output belongs to the actual shell, while its editing buffer remains untouched.
+		'    if [[ "$__wic_language" == suspend ]]; then __wasm_idle_terminal_suspended=1; else __wasm_idle_terminal_suspended=0; fi',
 		'    builtin printf "\\r\\n"',
 		`    if '${SHELL_CONTROL_ROUTE}' 2 "$__wic_session" "$__wic_generation" "$__wic_language" ok; then :; else :; fi`,
 		// The pinned native hook decodes PS1 and redraws the preserved Readline buffer.
@@ -136,6 +154,9 @@ export function createShellControl(options: ShellControlOptions) {
 		appliedGeneration = 0;
 	let pending: PendingControl | undefined,
 		error: string | null = null;
+	let resizeGeneration = 0,
+		appliedResizeGeneration = 0;
+	let pendingResize: PendingControl | undefined;
 	let lastAcknowledgement:
 		| { version: string; generation: number; target: string; cwd: string; verdict: string }
 		| undefined;
@@ -147,7 +168,9 @@ export function createShellControl(options: ShellControlOptions) {
 			pendingCwd: pending?.cwd ?? null,
 			generation,
 			appliedGeneration,
-			error
+			error,
+			resizeGeneration,
+			appliedResizeGeneration
 		});
 	const changed = () => {
 		try {
@@ -175,18 +198,45 @@ export function createShellControl(options: ShellControlOptions) {
 			fs.mkdir(path);
 		}
 	};
-	const writeRequest = (fs: MemoryFileSystem, value: string) => {
+	const writeRequest = (fs: MemoryFileSystem, value: string, path = SHELL_CONTROL_REQUEST) => {
 		if (fs.lstat('/tmp').type !== 'directory' || fs.realpath('/tmp') !== '/tmp')
 			throw new Error('Shell control needs the private temporary mount');
 		try {
-			if (fs.lstat(SHELL_CONTROL_REQUEST).type !== 'file')
+			if (fs.lstat(path).type !== 'file')
 				throw new Error('Shell control mailbox must be a regular file');
 		} catch (reason) {
 			if ((reason as { code?: string }).code !== 'ENOENT') throw reason;
 		}
-		fs.writeFile(SHELL_CONTROL_REQUEST, encoder.encode(value), { mode: 0o600 });
+		fs.writeFile(path, encoder.encode(value), { mode: 0o600 });
 	};
 	const acknowledge = (args: readonly string[], actualCwd: string) => {
+		if (args[0] === '4') {
+			if (
+				disposed ||
+				!filesystem ||
+				args.length !== 5 ||
+				args[1] !== session ||
+				!/^[1-9][0-9]{0,9}$/.test(args[2]) ||
+				args[3] !== 'resize' ||
+				!['ok', 'failed'].includes(args[4]) ||
+				!canonicalDirectory(actualCwd)
+			)
+				return 126;
+			const received = Number(args[2]);
+			if (received > resizeGeneration) return 126;
+			if (received < resizeGeneration) return 0;
+			if (!pendingResize)
+				return received === appliedResizeGeneration && args[4] === 'ok' ? 0 : 126;
+			const completed = pendingResize;
+			pendingResize = undefined;
+			completed.removeAbort?.();
+			if (args[4] === 'ok') {
+				appliedResizeGeneration = received;
+				completed.resolve();
+			} else completed.reject(new Error('Bash could not refresh its terminal size'));
+			changed();
+			return 0;
+		}
 		if (
 			disposed ||
 			!filesystem ||
@@ -386,6 +436,53 @@ export function createShellControl(options: ShellControlOptions) {
 		requestPrompt(action: 'suspend' | 'resume', signal?: AbortSignal): Promise<void> {
 			return request('2', action, signal);
 		},
+		requestResize(signal?: AbortSignal): Promise<void> {
+			try {
+				const fs = currentFilesystem();
+				if (inputClosed) throw new Error('Shell input is closed');
+				signal?.throwIfAborted();
+				if (pendingResize) return pendingResize.promise;
+				if (resizeGeneration === MAX_GENERATION)
+					throw new Error('Shell resize generation exhausted');
+				writeRequest(
+					fs,
+					`4 ${session} ${resizeGeneration + 1} resize\n`,
+					SHELL_RESIZE_REQUEST
+				);
+				let resolve!: () => void, reject!: (reason: Error) => void;
+				const promise = new Promise<void>((yes, no) => {
+					resolve = yes;
+					reject = no;
+				});
+				const next: PendingControl = {
+					version: '4',
+					target: 'resize',
+					promise,
+					resolve,
+					reject
+				};
+				pendingResize = next;
+				resizeGeneration += 1;
+				if (signal) {
+					const abort = () => {
+						if (pendingResize !== next) return;
+						pendingResize = undefined;
+						next.removeAbort?.();
+						try {
+							writeRequest(fs, `4 ${session} 0 resize\n`, SHELL_RESIZE_REQUEST);
+						} catch {}
+						reject(signal.reason ?? abortError('Shell resize was cancelled'));
+						changed();
+					};
+					signal.addEventListener('abort', abort, { once: true });
+					next.removeAbort = () => signal.removeEventListener('abort', abort);
+				}
+				changed();
+				return promise;
+			} catch (reason) {
+				return Promise.reject(reason);
+			}
+		},
 		/** Finish at the next primary prompt after the owner closes real stdin. */
 		closeInput() {
 			const fs = currentFilesystem();
@@ -398,6 +495,12 @@ export function createShellControl(options: ShellControlOptions) {
 			pending?.removeAbort?.();
 			pending?.reject(abortError('Shell input is closed'));
 			pending = undefined;
+			pendingResize?.removeAbort?.();
+			pendingResize?.reject(abortError('Shell input is closed'));
+			pendingResize = undefined;
+			try {
+				writeRequest(fs, `4 ${session} 0 resize\n`, SHELL_RESIZE_REQUEST);
+			} catch {}
 			changed();
 		},
 		onInvocation(invocation: HostCommandInvocation): number | undefined {
@@ -412,6 +515,20 @@ export function createShellControl(options: ShellControlOptions) {
 			pending?.removeAbort?.();
 			pending?.reject(abortError('Shell directory control was disposed'));
 			pending = undefined;
+			pendingResize?.removeAbort?.();
+			pendingResize?.reject(abortError('Shell directory control was disposed'));
+			pendingResize = undefined;
+			if (filesystem) {
+				try {
+					if (
+						filesystem.lstat(SHELL_RESIZE_REQUEST).type === 'file' &&
+						new TextDecoder()
+							.decode(filesystem.readFile(SHELL_RESIZE_REQUEST))
+							.startsWith(`4 ${session} `)
+					)
+						filesystem.unlink(SHELL_RESIZE_REQUEST);
+				} catch {}
+			}
 			if (filesystem) {
 				try {
 					if (

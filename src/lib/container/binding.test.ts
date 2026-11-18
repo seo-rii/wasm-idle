@@ -486,6 +486,100 @@ describe('existing playground container binding', () => {
 		]);
 	});
 
+	it('starts at the measured size and applies the newest resize after pending work', async () => {
+		const { binding, call } = fixture();
+		let start!: () => void, finishResize!: () => void;
+		call.mockImplementationOnce(
+			() =>
+				new Promise<void>((resolve) => {
+					start = resolve;
+				})
+		);
+		call.mockImplementationOnce(
+			() =>
+				new Promise<void>((resolve) => {
+					finishResize = resolve;
+				})
+		);
+		await binding.shell.resize(53, 25);
+		expect(call).not.toHaveBeenCalled();
+		const connected = binding.shell.connect(() => {});
+		await vi.waitFor(() =>
+			expect(call).toHaveBeenCalledWith('shellStart', [
+				expect.objectContaining({ columns: 53, rows: 25 })
+			])
+		);
+		const first = binding.shell.resize(64, 26);
+		const second = binding.shell.resize(80, 28);
+		start();
+		await connected;
+		await vi.waitFor(() => expect(call).toHaveBeenCalledWith('shellResize', [80, 28]));
+		const third = binding.shell.resize(90, 29);
+		const last = binding.shell.resize(106, 30);
+		finishResize();
+		await Promise.all([first, second, third, last]);
+		await binding.shell.resize(106, 30);
+		expect(call.mock.calls.filter(([method]) => method === 'shellResize')).toEqual([
+			['shellResize', [80, 28]],
+			['shellResize', [106, 30]]
+		]);
+	});
+
+	it('does not drop a resize queued while the prior RPC is settling', async () => {
+		const { binding, call } = fixture();
+		let finishResize!: () => void;
+		const completed = new Promise<void>((resolve) => {
+			finishResize = resolve;
+		});
+		call.mockImplementation((method) =>
+			method === 'shellResize' ? completed : Promise.resolve(undefined)
+		);
+		await binding.shell.resize(53, 25);
+		await binding.shell.connect(() => {});
+		const first = binding.shell.resize(64, 26);
+		await vi.waitFor(() => expect(call).toHaveBeenCalledWith('shellResize', [64, 26]));
+		let latest: Promise<void> | undefined;
+		// The drain's await resumes first; this callback runs before an outer
+		// Promise.finally could clear its lock. No additional fit event follows.
+		void completed.then(() => {
+			latest = binding.shell.resize(106, 30);
+		});
+		finishResize();
+		await first;
+		expect(latest).toBeDefined();
+		await latest;
+		expect(call.mock.calls.filter(([method]) => method === 'shellResize')).toEqual([
+			['shellResize', [64, 26]],
+			['shellResize', [106, 30]]
+		]);
+		await binding.dispose();
+	});
+
+	it('retries a failed resize without admitting more work after disposal', async () => {
+		const { binding, call } = fixture();
+		const failure = new Error('resize failed');
+		let rejectResize = true;
+		call.mockImplementation((method) => {
+			if (method === 'shellResize' && rejectResize) {
+				rejectResize = false;
+				return Promise.reject(failure);
+			}
+			return Promise.resolve(undefined);
+		});
+		await binding.shell.resize(53, 25);
+		await binding.shell.connect(() => {});
+		await expect(binding.shell.resize(64, 26)).rejects.toBe(failure);
+		await binding.shell.resize(64, 26);
+		expect(call.mock.calls.filter(([method]) => method === 'shellResize')).toEqual([
+			['shellResize', [64, 26]],
+			['shellResize', [64, 26]]
+		]);
+		await binding.dispose();
+		const calls = call.mock.calls.length;
+		await binding.shell.resize(106, 30);
+		expect(call).toHaveBeenCalledTimes(calls);
+	});
+
 	it('requests a directory change through the control channel after shell startup', async () => {
 		const { binding, call } = fixture();
 		let started!: () => void;

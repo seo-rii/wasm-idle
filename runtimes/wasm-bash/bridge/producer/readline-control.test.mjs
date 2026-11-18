@@ -25,6 +25,9 @@ test('Readline control is an explicit opt-in and all producer patch bytes are pi
 	assert.equal(policy.function, '__wasm_idle_poll');
 	assert.equal(policy.readonlyFunctionRequired, true);
 	assert.equal(policy.redrawExitCode, 124);
+	assert.equal(policy.resizeExitCode, 125);
+	assert.equal(policy.silentResizeExitCode, 126);
+	assert.equal(policy.resizeTailCapability, 'cd');
 	assert.equal(policy.ignoreReturnFlag, 'SEVAL_IGNORE_RETURN');
 	assert.deepEqual(policy.importedFunctionInitialization, {
 		readonly: true,
@@ -38,7 +41,7 @@ test('Readline control is an explicit opt-in and all producer patch bytes are pi
 	);
 });
 
-test('actual Bash conditional command semantics retain 124 without errexit or ERR', () => {
+test('actual Bash conditional command semantics retain control statuses without errexit or ERR', () => {
 	// This checks the Bash semantics selected by CMD_IGNORE_RETURN, rather than
 	// claiming that the host Bash binary contains our producer patch.
 	const result = execFileSync(
@@ -50,9 +53,11 @@ test('actual Bash conditional command semantics retain 124 without errexit or ER
 			`
 set -eE
 trap 'printf unexpected-ERR; exit 99' ERR
-__wasm_idle_poll() { return 124; }
-if __wasm_idle_poll; then result=0; else result=$?; fi
-test "$result" -eq 124
+__wasm_idle_poll() { return "$1"; }
+for expected in 124 125 126; do
+if __wasm_idle_poll "$expected"; then result=0; else result=$?; fi
+test "$result" -eq "$expected"
+done
 printf alive
 `
 		],
@@ -110,6 +115,14 @@ test('exact C initialization protects only imported control, and the hook defers
 		.split('\n')
 		.map((line) => line.slice(1))
 		.join('\n');
+	const redisplay = patch.match(
+		/\+  if \(poll\)\n\+    \{[\s\S]*?\n   else\n     rl_forced_update_display \(\);/
+	);
+	assert(redisplay, 'compile the actual control-specific redisplay branch');
+	const display = redisplay[0]
+		.split('\n')
+		.map((line) => line.slice(1))
+		.join('\n');
 	const fixture = await readFile(new URL('readline-control.fixture.c', here), 'utf8');
 	const directory = await mkdtemp(path.join(tmpdir(), 'bash-readline-control-'));
 	try {
@@ -117,7 +130,10 @@ test('exact C initialization protects only imported control, and the hook defers
 		const binary = path.join(directory, 'hook');
 		await writeFile(
 			source,
-			fixture.replace('/* POLL_SOURCE */', hook).replace('/* INIT_SOURCE */', initialize)
+			fixture
+				.replace('/* POLL_SOURCE */', hook)
+				.replace('/* INIT_SOURCE */', initialize)
+				.replace('/* REDISPLAY_SOURCE */', display)
 		);
 		execFileSync('cc', ['-std=c11', '-Wall', '-Wextra', '-Werror', source, '-o', binary]);
 		execFileSync(binary);

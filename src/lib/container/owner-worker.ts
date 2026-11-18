@@ -58,6 +58,7 @@ export function serveContainerWorker(options: ContainerWorkerOptions): {
 		shellClosed = false;
 	let shellWriter: WritableStreamDefaultWriter<Uint8Array> | undefined;
 	let shellWrites = Promise.resolve();
+	let shellResizes = Promise.resolve();
 	let shellClosingInput: Promise<void> | undefined;
 	let shellInputClosed = false;
 	let watcher: ReadableStreamDefaultReader | undefined;
@@ -188,8 +189,16 @@ export function serveContainerWorker(options: ContainerWorkerOptions): {
 		})();
 	}
 	async function startShell(
-		options: { cwd?: string; env?: Record<string, string>; args?: string[] } = {}
+		options: {
+			cwd?: string;
+			env?: Record<string, string>;
+			args?: string[];
+			columns?: number;
+			rows?: number;
+		} = {}
 	) {
+		if (options.columns !== undefined || options.rows !== undefined)
+			checkTerminalSize(options.columns, options.rows);
 		if (!profile)
 			throw new Error(
 				'Interactive shell requires cross-origin isolation. Batch Run is still available.'
@@ -213,9 +222,13 @@ export function serveContainerWorker(options: ContainerWorkerOptions): {
 				shell = await profile!.startShell(
 					{
 						cwd,
+						columns: options.columns,
+						rows: options.rows,
 						args: [...control.args],
 						mounts: ['/workspace', '/tmp', '/home/user', control.mountPath],
-						env: { ...options.env, ...control.env }
+						// Bash validates this canonical cwd before caching it. The pinned
+						// libc's initial getcwd can otherwise retain trailing heap bytes.
+						env: { ...options.env, PWD: cwd, ...control.env }
 					},
 					lifetime.signal
 				);
@@ -342,6 +355,18 @@ export function serveContainerWorker(options: ContainerWorkerOptions): {
 		'debugDataBreakpointInfo',
 		'debugSetDataBreakpoints'
 	]);
+	function checkTerminalSize(columns: unknown, rows: unknown) {
+		if (
+			![columns, rows].every(
+				(value) =>
+					typeof value === 'number' &&
+					Number.isSafeInteger(value) &&
+					value >= 1 &&
+					value <= 65535
+			)
+		)
+			throw new TypeError('Terminal columns and rows must be integers from 1 to 65535');
+	}
 	async function call(
 		method: string,
 		args: unknown[],
@@ -458,6 +483,34 @@ export function serveContainerWorker(options: ContainerWorkerOptions): {
 				ownedWorkers: children.size
 			};
 		if (method === 'shellStart') return await startShell(args[0] as never);
+		if (method === 'shellResize') {
+			checkTerminalSize(args[0], args[1]);
+			const resize = shellResizes
+				.catch(() => {})
+				.then(async () => {
+					await shellStarting;
+					if (shellInputClosed) return;
+					const current = shell;
+					if (!current || shellClosed || !shellControl)
+						throw new Error('Shell is not running');
+					signal.throwIfAborted();
+					await current.resize(args[0] as number, args[1] as number);
+					if (shellInputClosed) return;
+					if (shell !== current || shellClosed) throw new Error('Shell has exited');
+					try {
+						await shellControl.requestResize(
+							AbortSignal.any([signal, lifetime.signal])
+						);
+					} catch (error) {
+						// EOF retires the primary prompt, including an automatic resize
+						// waiting behind foreground stdin. It needs no further redraw.
+						if (!shellInputClosed || (error as Error)?.name !== 'AbortError')
+							throw error;
+					}
+				});
+			shellResizes = resize;
+			return await resize;
+		}
 		if (method === 'shellSetDirectory') {
 			await shellStarting;
 			if (!shell || shellClosed || !shellControl) throw new Error('Shell is not running');

@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PlaygroundBinding } from '../playground/sandbox.js';
 import type { ContainerWorkerRequest, ContainerWorkerResponse } from './protocol.js';
 import type { ContainerWorkerOptions } from './owner-worker.js';
+import type { BashProfileOptions } from './bash-profile.js';
+import { SHELL_CONTROL_ROUTE, SHELL_RESIZE_REQUEST } from './shell-control.js';
 
 beforeEach(() => vi.resetModules());
 afterEach(() => {
@@ -69,6 +71,8 @@ async function shellInputFixture() {
 		await blocked;
 	});
 	const close = vi.fn();
+	const resize = vi.fn(async () => {});
+	let onInvocation: BashProfileOptions['onInvocation'];
 	let finish!: (value: { code: number; reason: 'exited' }) => void;
 	const empty = () =>
 		new ReadableStream<Uint8Array>({
@@ -77,6 +81,7 @@ async function shellInputFixture() {
 			}
 		});
 	const shell = {
+		resize,
 		stdin: new WritableStream<Uint8Array>({ write, close }),
 		stdout: empty(),
 		stderr: empty(),
@@ -87,12 +92,12 @@ async function shellInputFixture() {
 			finish({ code: 0, reason: 'exited' });
 		}
 	};
+	const startShell = vi.fn(async () => shell);
 	vi.doMock('./bash-profile.js', () => ({
-		createBashProfile: async () => ({
-			container,
-			startShell: async () => shell,
-			dispose: () => container.dispose()
-		})
+		createBashProfile: async (options: BashProfileOptions) => {
+			onInvocation = options.onInvocation;
+			return { container, startShell, dispose: () => container.dispose() };
+		}
 	}));
 	const { owner, initialize, postMessage } = await retirementFixture(
 		async () =>
@@ -128,6 +133,24 @@ async function shellInputFixture() {
 		bytes,
 		write,
 		close,
+		resize,
+		startShell,
+		acknowledgeResize() {
+			const path = SHELL_CONTROL_ROUTE;
+			const fields = new TextDecoder()
+				.decode(container.fs.readFile(SHELL_RESIZE_REQUEST))
+				.trim()
+				.split(' ');
+			onInvocation?.({
+				path,
+				argv: [path, ...fields, 'ok'],
+				cwd: '/workspace',
+				env: [],
+				stdin: null,
+				stdout: null,
+				stderr: null
+			});
+		},
 		releaseWrite,
 		finish,
 		send,
@@ -136,6 +159,134 @@ async function shellInputFixture() {
 }
 
 describe('application-owned container worker', () => {
+	it('passes initial geometry and keeps input independent of serialized resize acknowledgements', async () => {
+		const f = await shellInputFixture();
+		try {
+			f.initialize();
+			expect(await f.response(0)).toMatchObject({ type: 'result' });
+			f.send(1, 'shellStart', [{ columns: 106, rows: 35 }]);
+			expect(await f.response(1)).toMatchObject({ type: 'result' });
+			expect(f.startShell).toHaveBeenCalledWith(
+				expect.objectContaining({
+					columns: 106,
+					rows: 35,
+					env: expect.objectContaining({ PWD: '/workspace' })
+				}),
+				expect.any(AbortSignal)
+			);
+			f.send(2, 'shellResize', [53, 31]);
+			await vi.waitFor(() => expect(f.resize).toHaveBeenCalledWith(53, 31));
+			f.send(3, 'shellResize', [99, 29]);
+			f.send(4, 'shellWrite', ['foreground input\n']);
+			await vi.waitFor(() => expect(f.write).toHaveBeenCalledOnce());
+			expect(f.resize).toHaveBeenCalledOnce();
+			f.releaseWrite();
+			expect(await f.response(4)).toMatchObject({ type: 'result' });
+			f.acknowledgeResize();
+			expect(await f.response(2)).toMatchObject({ type: 'result' });
+			await vi.waitFor(() => expect(f.resize).toHaveBeenLastCalledWith(99, 29));
+			f.acknowledgeResize();
+			expect(await f.response(3)).toMatchObject({ type: 'result' });
+		} finally {
+			f.releaseWrite();
+			await f.owner.dispose();
+		}
+	});
+
+	it('rejects invalid geometry before starting or resizing and cancels a pending resize on exit', async () => {
+		const f = await shellInputFixture();
+		try {
+			f.initialize();
+			expect(await f.response(0)).toMatchObject({ type: 'result' });
+			f.send(1, 'shellStart', [{ columns: 80 }]);
+			expect(await f.response(1)).toMatchObject({ type: 'error' });
+			expect(f.startShell).not.toHaveBeenCalled();
+			f.send(2, 'shellStart');
+			expect(await f.response(2)).toMatchObject({ type: 'result' });
+			f.send(3, 'shellResize', [65536, 25]);
+			expect(await f.response(3)).toMatchObject({ type: 'error' });
+			expect(f.resize).not.toHaveBeenCalled();
+			f.send(4, 'shellResize', [90, 30]);
+			await vi.waitFor(() => expect(f.resize).toHaveBeenCalledOnce());
+			f.finish({ code: 0, reason: 'exited' });
+			expect(await f.response(4)).toMatchObject({ type: 'error' });
+		} finally {
+			await f.owner.dispose();
+		}
+	});
+
+	it('settles pending, queued and later automatic resizes quietly when EOF closes shell input', async () => {
+		const f = await shellInputFixture();
+		try {
+			f.initialize();
+			await f.response(0);
+			f.send(1, 'shellStart');
+			await f.response(1);
+			f.send(2, 'shellResize', [106, 35]);
+			await vi.waitFor(() =>
+				expect(
+					new TextDecoder().decode(f.container.fs.readFile(SHELL_RESIZE_REQUEST))
+				).toMatch(/^4 [a-f0-9]{32} 1 resize\n$/)
+			);
+			f.send(3, 'shellResize', [53, 35]);
+			f.send(4, 'shellEof');
+			expect(await f.response(4)).toMatchObject({ type: 'result' });
+			expect(await f.response(2)).toMatchObject({ type: 'result' });
+			expect(await f.response(3)).toMatchObject({ type: 'result' });
+			f.send(5, 'shellResize', [80, 25]);
+			expect(await f.response(5)).toMatchObject({ type: 'result' });
+			expect(f.resize).toHaveBeenCalledExactlyOnceWith(106, 35);
+			expect(f.close).toHaveBeenCalledOnce();
+			expect(new TextDecoder().decode(f.container.fs.readFile(SHELL_RESIZE_REQUEST))).toMatch(
+				/^4 [a-f0-9]{32} 0 resize\n$/
+			);
+			f.send(6, 'shellWrite', ['still closed']);
+			expect(await f.response(6)).toMatchObject({
+				type: 'error',
+				error: { message: 'Shell input is closed' }
+			});
+		} finally {
+			await f.owner.dispose();
+		}
+	});
+
+	it.each([false, true])(
+		'does not request a redraw after EOF during the size helper (fails: %s)',
+		async (fails) => {
+			const f = await shellInputFixture();
+			let finishResize!: () => void;
+			f.resize.mockImplementationOnce(
+				() =>
+					new Promise<void>((resolve, reject) => {
+						finishResize = () =>
+							fails ? reject(new Error('TTY helper failed')) : resolve();
+					})
+			);
+			try {
+				f.initialize();
+				await f.response(0);
+				f.send(1, 'shellStart');
+				await f.response(1);
+				f.send(2, 'shellResize', [106, 35]);
+				await vi.waitFor(() => expect(f.resize).toHaveBeenCalledOnce());
+				f.send(3, 'shellEof');
+				expect(await f.response(3)).toMatchObject({ type: 'result' });
+				finishResize();
+				expect(await f.response(2)).toMatchObject(
+					fails
+						? { type: 'error', error: { message: 'TTY helper failed' } }
+						: { type: 'result' }
+				);
+				expect(
+					new TextDecoder().decode(f.container.fs.readFile(SHELL_RESIZE_REQUEST))
+				).toMatch(/^4 [a-f0-9]{32} 0 resize\n$/);
+			} finally {
+				finishResize?.();
+				await f.owner.dispose();
+			}
+		}
+	);
+
 	it('still delivers real EOF if the control mailbox fails and can retry that control request', async () => {
 		const { owner, initialize, container, close, send, response } = await shellInputFixture();
 		const mailbox = '/tmp/.wasm-idle-shell-control-request';
