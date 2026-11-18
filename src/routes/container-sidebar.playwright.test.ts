@@ -512,14 +512,16 @@ async function expectResizeSettled(page: Page, minimumGeneration = 1) {
 }
 
 it.each([
-	['read -e', false],
-	['read -e', true],
-	['continuation', false],
-	['continuation', true]
+	['read -e', false, false],
+	['read -e', true, false],
+	['read -e', true, true],
+	['continuation', false, false],
+	['continuation', true, false],
+	['continuation', true, true]
 ] as const)(
-	'redraws one editable %s line across resize (queued cursor input = %s)',
+	'redraws one editable %s line across resize (queued cursor input = %s, Ctrl+L = %s)',
 	{ skip: !enabled, timeout: 150_000, meta: { browser: true, requiredBrowser: enabled } },
-	async (mode, queued) => {
+	async (mode, queued, clearScreen) => {
 		await withShellBrowser(async (browser, url) => {
 			const errors: string[] = [];
 			const { context, page } = await openShellPage(browser, url, 106, errors);
@@ -542,6 +544,20 @@ it.each([
 					.toBe(prompt.trimEnd());
 				const prefix = (await readShellScreen(page)).text + ' ';
 				await page.keyboard.type(input);
+				if (clearScreen) {
+					await page.keyboard.press('Control+l');
+					await expect
+						.poll(async () => {
+							const { rows, text } = await readShellScreen(page);
+							return { firstRowIsPrompt: rows[0].startsWith(prompt), text };
+						})
+						.toEqual({ firstRowIsPrompt: true, text: prompt + input });
+				}
+				const visibleEdit = async () => {
+					const { rows } = await readShellScreen(page);
+					const first = clearScreen ? 0 : rows.findIndex((row) => row.startsWith(prompt));
+					return rows.slice(first).join('');
+				};
 				for (let index = 0; index < input.length - 68; index++)
 					await page.keyboard.press('ArrowLeft');
 				if (!queued) {
@@ -563,24 +579,14 @@ it.each([
 				await expectResizeSettled(page);
 				await page.keyboard.press('Control+a');
 				await page.keyboard.type('HEAD_');
-				await expect
-					.poll(async () => {
-						const { rows } = await readShellScreen(page);
-						return rows.slice(rows.findIndex((row) => row.startsWith(prompt))).join('');
-					})
-					.toBe(prompt + 'HEAD_' + input);
+				await expect.poll(visibleEdit).toBe(prompt + 'HEAD_' + input);
 				// Expand again with real keypresses still in flight at the narrow width.
 				for (let index = 0; index < 70; index++) await page.keyboard.press('ArrowRight');
 				await page.setViewportSize(shellViewport(106));
 				await expectResizeSettled(page, 2);
 				await page.keyboard.press('Control+a');
 				await page.keyboard.type('BACK_');
-				await expect
-					.poll(async () => {
-						const { rows } = await readShellScreen(page);
-						return rows.slice(rows.findIndex((row) => row.startsWith(prompt))).join('');
-					})
-					.toBe(prompt + 'BACK_HEAD_' + input);
+				await expect.poll(visibleEdit).toBe(prompt + 'BACK_HEAD_' + input);
 				await page.keyboard.press('Control+e');
 				if (!nested) await page.keyboard.type("'");
 				await page.keyboard.press('Enter');
@@ -601,7 +607,9 @@ it.each([
 						{ timeout: 15_000 }
 					)
 					.toBe((nested ? '' : 'open\n') + 'BACK_HEAD_' + input);
-				expect((await readShellScreen(page)).rows).toContain('HISTORY_BEFORE_EDIT');
+				expect((await readShellScreen(page)).rows.includes('HISTORY_BEFORE_EDIT')).toBe(
+					!clearScreen
+				);
 				expect(errors).toEqual([]);
 			} finally {
 				await context.close();
