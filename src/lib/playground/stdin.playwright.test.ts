@@ -633,28 +633,30 @@ describe('wasm-idle browser stdin connection', () => {
 		}
 	);
 
+	const csharpOutputStart = '[wasm-idle-csharp-output]';
+	const csharpOutputEnd = '[/wasm-idle-csharp-output]';
 	it.each([
 		{
 			name: 'Array.ConvertAll method-group delegates without a final input newline',
-			source: 'using System; class MainClass { static void Main() { var values = Array.ConvertAll(Console.ReadLine()!.Split(), int.Parse); Console.WriteLine(values[0] + values[1]); } }',
+			source: `using System; class MainClass { static void Main() { Console.Write("${csharpOutputStart}"); var values = Array.ConvertAll(Console.ReadLine()!.Split(), int.Parse); Console.WriteLine(values[0] + values[1]); Console.Write("${csharpOutputEnd}"); } }`,
 			stdinText: '19 23',
 			expectedOutput: '42\n'
 		},
 		{
 			name: 'top-level Array and Console with implicit System and no output newline',
-			source: 'var values = Array.ConvertAll(Console.ReadLine()!.Split(), int.Parse); Console.Write(values[0] + values[1]);',
+			source: `Console.Write("${csharpOutputStart}"); var values = Array.ConvertAll(Console.ReadLine()!.Split(), int.Parse); Console.Write(values[0] + values[1]); Console.Write("${csharpOutputEnd}");`,
 			stdinText: '19 23\n',
 			expectedOutput: '42'
 		},
 		{
 			name: 'class entry points and Array methods with implicit System',
-			source: 'class MainClass { static void Main() { var values = new[] { 20, 2, 10 }; Array.Sort(values); Array.Reverse(values); Console.WriteLine(string.Join(",", values)); } }',
+			source: `class MainClass { static void Main() { Console.Write("${csharpOutputStart}"); var values = new[] { 20, 2, 10 }; Array.Sort(values); Array.Reverse(values); Console.WriteLine(string.Join(",", values)); Console.Write("${csharpOutputEnd}"); } }`,
 			stdinText: '',
 			expectedOutput: '20,10,2\n'
 		},
 		{
 			name: 'repeated EOF after the final line without an input newline',
-			source: 'Console.Write(Console.ReadLine() + ";" + (Console.ReadLine() is null) + ";" + (Console.ReadLine() is null) + ";" + Console.In.Read() + ";" + Console.In.Peek());',
+			source: `Console.Write("${csharpOutputStart}"); Console.Write(Console.ReadLine() + ";" + (Console.ReadLine() is null) + ";" + (Console.ReadLine() is null) + ";" + Console.In.Read() + ";" + Console.In.Peek()); Console.Write("${csharpOutputEnd}");`,
 			stdinText: '73',
 			expectedOutput: '73;True;True;-1;-1'
 		}
@@ -673,7 +675,7 @@ describe('wasm-idle browser stdin connection', () => {
 			await withBrowserPreview(async (browserUrl) => {
 				const summary = await runStdinBrowserProbe({
 					browserUrl,
-					expectedOutput: expectedOutput.replaceAll('\n', '\r\n'),
+					expectedOutput: `${csharpOutputStart}${expectedOutput.replaceAll('\n', '\r\n')}${csharpOutputEnd}`,
 					language: 'CSHARP',
 					preloadStdin: true,
 					runTimeoutMs: Number(process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || '600000'),
@@ -688,13 +690,13 @@ describe('wasm-idle browser stdin connection', () => {
 				expect(summary.execution?.state.events).not.toContainEqual(
 					expect.objectContaining({ kind: 'stdin-request' })
 				);
-				// Remove only the terminal's cursor framing and completion banner so
-				// Console.Write and Console.WriteLine retain distinct newline contracts.
-				const output = summary.transcript.match(
-					/^(?:\r\n\u001b\[\?25h)?([\s\S]*?)\r\nProcess finished after [\d.]+ms\u001b\[\?25l(?:\r\n\u001b\[\?25h)?$/
-				);
-				expect(output, summary.transcript).not.toBeNull();
-				expect(output?.[1].replaceAll('\r\n', '\n')).toBe(expectedOutput);
+				// Program-owned boundaries exclude Bash prompt/redraw traffic while
+				// retaining the exact Console.Write versus Console.WriteLine bytes.
+				const started = summary.transcript.split(csharpOutputStart);
+				expect(started, summary.transcript).toHaveLength(2);
+				const output = started[1].split(csharpOutputEnd);
+				expect(output, summary.transcript).toHaveLength(2);
+				expect(output[0].replaceAll('\r\n', '\n')).toBe(expectedOutput);
 				expectOnlySelectedDotnetRuntime(summary.runtimeRequests, 'csharp');
 			});
 		}
