@@ -388,6 +388,17 @@ it(
 						)
 					)
 					.toBe(updatedPython['main.py']);
+				await choose('CPP');
+				await shell('rm /workspace/PYTHON/main.py /workspace/PYTHON/new.py');
+				await expect.poll(remote, { timeout: 20_000 }).toEqual({});
+				await page.getByRole('button', { name: 'Save', exact: true }).click();
+				await expect.poll(saved).toEqual({});
+				await page.locator('[data-workspace-save-state="saved"]').waitFor();
+				await page.reload({ waitUntil: 'domcontentloaded' });
+				await page.locator('#language-select[data-workspace-ready="true"]').waitFor();
+				await choose('PYTHON');
+				await expect.poll(() => page.locator('.workspace-files button').count()).toBe(0);
+				expect(await saved()).toEqual({});
 				expect(errors).toEqual([]);
 			} finally {
 				await browser?.close();

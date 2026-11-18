@@ -14,7 +14,10 @@
 	} from '$lib/playground/container/workspace';
 	import ContainerExplorer from '$lib/playground/container/ContainerExplorer.svelte';
 	import { resolveInitialWorkspace } from './initialWorkspace';
-	import type { ContainerWorkspaceEntry } from '$lib/playground/container/protocol';
+	import type {
+		ContainerWorkspaceEntry,
+		ContainerWorkspaceFile
+	} from '$lib/playground/container/protocol';
 	import {
 		createDebugSessionController,
 		cppDebugLanguageAdapter,
@@ -1348,20 +1351,22 @@
 			for (const [original, next] of renamed)
 				recovered.push(`${nextLanguage}/${original} → ${next}`);
 		}
-		const files = (nextFiles.length ? nextFiles : fallback.files).map((file) =>
-			migrateLegacyWorkspaceFile(file, {
-				version: snapshotVersion,
-				language: nextLanguage,
-				entryPath: defaultPathForLanguage(nextLanguage),
-				defaultSource: defaultSourceForLanguage(nextLanguage)
-			})
+		const intentionallyEmpty = value?.activePath === '' && value.files?.length === 0;
+		const files = (nextFiles.length || intentionallyEmpty ? nextFiles : fallback.files).map(
+			(file) =>
+				migrateLegacyWorkspaceFile(file, {
+					version: snapshotVersion,
+					language: nextLanguage,
+					entryPath: defaultPathForLanguage(nextLanguage),
+					defaultSource: defaultSourceForLanguage(nextLanguage)
+				})
 		);
 		const requestedActivePath =
 			typeof value?.activePath === 'string' ? normalizePath(value.activePath) : '';
 		const restoredPath = renamed?.get(requestedActivePath) ?? requestedActivePath;
 		const activePath = files.some((file) => file.path === restoredPath)
 			? restoredPath
-			: files[0].path;
+			: (files[0]?.path ?? '');
 		const openTabs = normalizeWorkspaceTabs(
 			Array.isArray(value?.openTabs)
 				? value.openTabs.map((tab) => renamed?.get(tab) ?? tab)
@@ -1434,119 +1439,152 @@
 			containerRefreshPending = true;
 			return containerRefresh;
 		}
-		const binding = playground;
 		containerRefresh = (async () => {
-			do {
-				containerRefreshPending = false;
-				const selectedLanguage = language;
-				const confirmActive = containerRefreshForcePending;
-				const rescan = containerRescanPending;
-				const revision = containerChangeRevision;
-				const changed = new Set(changedContainerProjects);
-				containerRefreshForcePending = containerRescanPending = false;
-				changedContainerProjects.clear();
-				const metadata = await binding.listWorkspaceFiles();
-				if (playground !== binding) return;
-				containerReady = true;
-				if (rescan) {
-					// Include removed projects as well as additions when the watcher overflows.
-					for (const { path } of [...sharedWorkspaceFiles, ...metadata]) {
-						const project = path.split('/')[0] as PlaygroundLanguage;
-						if (playgroundLanguages.includes(project)) changed.add(project);
-					}
-				}
-				sharedWorkspaceFiles = metadata.sort((a, b) => a.path.localeCompare(b.path));
-				if (runningMode) {
-					for (const project of changed) changedContainerProjects.add(project);
-					containerEditorRefreshDeferred = true;
-					return;
-				}
-				containerEditorRefreshDeferred = false;
-				changed.add(selectedLanguage);
-				for (const project of changed) {
-					const reconciled = await binding.reconcileWorkspace(
-						project,
-						(baseline, remote) => {
-							if (playground !== binding) return false;
-							if (runningMode || language !== selectedLanguage) {
-								changedContainerProjects.add(project);
-								containerEditorRefreshDeferred = true;
-								return false;
-							}
-							const active = project === selectedLanguage;
-							const local = active
-								? { files, activePath, openTabs }
-								: languageWorkspaces[project];
-							const before = editorFiles(baseline),
-								remoteFiles = editorFiles(remote);
-							const defaultFile = createDefaultWorkspace(project).files[0];
-							const result = mergeContainerWorkspace(
-								local.files,
-								before,
-								remoteFiles,
-								{ defaultFile }
-							);
-							if (
-								result.conflicts.length &&
-								(!active ||
-									!confirmActive ||
-									!confirm(
-										`Replace editor buffers changed in both the editor and terminal? ${result.conflicts.join(', ')}`
-									))
-							) {
-								containerWorkspaceConflicts.add(project);
-								saveStatus = `Editor buffer preserved: terminal also changed ${project}/${result.conflicts.join(', ')}. Refresh files to resolve.`;
-								return false;
-							}
-							containerWorkspaceConflicts.delete(project);
-							const nextFiles = result.conflicts.length
-								? mergeContainerWorkspace(local.files, before, remoteFiles, {
-										defaultFile,
-										acceptRemoteConflicts: true
-									}).files
-								: result.files;
-							if (sameWorkspaceFiles(local.files, nextFiles)) return true;
-							const nextPath = nextFiles.some((f) => f.path === local.activePath)
-								? local.activePath
-								: (nextFiles[0]?.path ?? '');
-							const nextTabs = normalizeWorkspaceTabs(
-								local.openTabs,
-								nextFiles,
-								nextPath
-							);
-							if (active) {
-								const activeBefore = activeFile?.content;
-								files = nextFiles;
-								activePath = nextPath;
-								openTabs = nextTabs;
-								if (debug.active && activeBefore !== activeFile?.content)
-									debug.markSourceRevisionStale(`/workspace/${activePath}`);
-								saveStatus = 'Workspace updated from terminal';
-							} else {
-								languageWorkspaces[project] = {
-									files: nextFiles,
-									activePath: nextPath,
-									openTabs: nextTabs
-								};
-							}
-							return true;
+			// Each pass captures one owner. A context switch may queue a pass for its successor.
+			try {
+				do {
+					const binding = playground;
+					containerRefreshPending = false;
+					const selectedLanguage = language;
+					const confirmActive = containerRefreshForcePending;
+					const rescan = containerRescanPending;
+					const revision = containerChangeRevision;
+					const changed = new Set(changedContainerProjects);
+					containerRefreshForcePending = containerRescanPending = false;
+					changedContainerProjects.clear();
+					try {
+						const metadata = await binding.listWorkspaceFiles();
+						if (playground !== binding) {
+							containerRefreshPending = true;
+							continue;
 						}
-					);
-					if (!reconciled) {
-						changedContainerProjects.add(project);
-						containerRefreshPending = true;
+						containerReady = true;
+						if (rescan) {
+							// Include removed projects as well as additions when the watcher overflows.
+							for (const { path } of [...sharedWorkspaceFiles, ...metadata]) {
+								const project = path.split('/')[0] as PlaygroundLanguage;
+								if (playgroundLanguages.includes(project)) changed.add(project);
+							}
+						}
+						sharedWorkspaceFiles = metadata.sort((a, b) =>
+							a.path.localeCompare(b.path)
+						);
+						if (runningMode) {
+							for (const project of changed) changedContainerProjects.add(project);
+							containerEditorRefreshDeferred = true;
+							return;
+						}
+						containerEditorRefreshDeferred = false;
+						changed.add(selectedLanguage);
+						for (const project of changed) {
+							const reconciled = await binding.reconcileWorkspace(
+								project,
+								(baseline, remote) => {
+									if (playground !== binding) return false;
+									if (runningMode || language !== selectedLanguage) {
+										changedContainerProjects.add(project);
+										containerEditorRefreshDeferred = true;
+										return false;
+									}
+									return applyContainerProjectChanges(
+										project,
+										confirmActive,
+										baseline,
+										remote
+									);
+								}
+							);
+							if (!reconciled) {
+								changedContainerProjects.add(project);
+								containerRefreshPending = true;
+								containerRefreshForcePending ||= confirmActive;
+							}
+						}
+						if (binding !== playground) {
+							containerRefreshPending = true;
+							continue;
+						}
+						if (
+							!containerRefreshPending &&
+							!containerEditorRefreshDeferred &&
+							containerReadRevision !== revision
+						) {
+							containerReadRevision = revision;
+							scheduleWorkspaceSave();
+						}
+					} catch (error) {
+						if (binding !== playground) {
+							containerRefreshPending = true;
+							continue;
+						}
+						// An earlier project may already have updated the sidebar. Retain even
+						// removed directories, which a subsequent enumeration can no longer find.
+						for (const project of changed) changedContainerProjects.add(project);
+						containerRescanPending = true;
 						containerRefreshForcePending ||= confirmActive;
+						throw error;
 					}
-				}
-				if (!containerEditorRefreshDeferred && containerReadRevision !== revision) {
-					containerReadRevision = revision;
-					scheduleWorkspaceSave();
-				}
-			} while (containerRefreshPending && binding === playground);
-		})().finally(() => {
-			containerRefresh = undefined;
-		});
+				} while (containerRefreshPending);
+			} finally {
+				// Clear the owner in the same continuation as the last queue check.
+				containerRefresh = undefined;
+			}
+		})();
 		return containerRefresh;
+	}
+
+	function applyContainerProjectChanges(
+		project: PlaygroundLanguage,
+		confirmActive: boolean,
+		baseline: ContainerWorkspaceFile[],
+		remote: ContainerWorkspaceFile[]
+	) {
+		const active = project === language;
+		const local = active ? { files, activePath, openTabs } : languageWorkspaces[project];
+		const before = editorFiles(baseline),
+			remoteFiles = editorFiles(remote);
+		const defaultFile = createDefaultWorkspace(project).files[0];
+		const result = mergeContainerWorkspace(local.files, before, remoteFiles, { defaultFile });
+		if (
+			result.conflicts.length &&
+			(!active ||
+				!confirmActive ||
+				!confirm(
+					`Replace editor buffers changed in both the editor and terminal? ${result.conflicts.join(', ')}`
+				))
+		) {
+			containerWorkspaceConflicts.add(project);
+			saveStatus = `Editor buffer preserved: terminal also changed ${project}/${result.conflicts.join(', ')}. Refresh files to resolve.`;
+			return false;
+		}
+		containerWorkspaceConflicts.delete(project);
+		const nextFiles = result.conflicts.length
+			? mergeContainerWorkspace(local.files, before, remoteFiles, {
+					defaultFile,
+					acceptRemoteConflicts: true
+				}).files
+			: result.files;
+		if (sameWorkspaceFiles(local.files, nextFiles)) return true;
+		const nextPath = nextFiles.some((f) => f.path === local.activePath)
+			? local.activePath
+			: (nextFiles[0]?.path ?? '');
+		const nextTabs = normalizeWorkspaceTabs(local.openTabs, nextFiles, nextPath);
+		if (active) {
+			const activeBefore = activeFile?.content;
+			files = nextFiles;
+			activePath = nextPath;
+			openTabs = nextTabs;
+			if (debug.active && activeBefore !== activeFile?.content)
+				debug.markSourceRevisionStale(`/workspace/${activePath}`);
+			saveStatus = 'Workspace updated from terminal';
+		} else {
+			languageWorkspaces[project] = {
+				files: nextFiles,
+				activePath: nextPath,
+				openTabs: nextTabs
+			};
+		}
+		return true;
 	}
 
 	function sharedFileProject(entry: ContainerWorkspaceEntry) {
@@ -1977,7 +2015,12 @@
 	async function saveWorkspace(showStatus = false) {
 		if (!browser || !workspaceEditorInitialized || unrestoredWorkspace !== null) return false;
 		const identity = currentWorkspaceStorageKey;
-		if ((showStatus && containerReady) || containerReadRevision !== containerChangeRevision) {
+		if (
+			(showStatus && containerReady) ||
+			containerRescanPending ||
+			changedContainerProjects.size ||
+			containerReadRevision !== containerChangeRevision
+		) {
 			try {
 				await refreshContainerWorkspace(false, showStatus);
 			} catch (error) {
@@ -2060,6 +2103,8 @@
 			state.phase === 'saved' &&
 			state.revision === state.savedRevision &&
 			containerReadRevision === containerChangeRevision &&
+			!containerRescanPending &&
+			!changedContainerProjects.size &&
 			!containerWorkspaceConflicts.size
 		)
 			return;

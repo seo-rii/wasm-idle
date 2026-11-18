@@ -167,6 +167,30 @@ describe('shared workspace refresh scheduling', () => {
 		expect(context.activePath).toBe('main.c');
 	});
 
+	it('retries a failed inactive read even when the project disappeared from the latest listing', async () => {
+		const { context, binding, refresh } = fixture();
+		context.runningMode = null;
+		context.changedContainerProjects.add('PYTHON');
+		context.containerChangeRevision = 8;
+		const removed = context.languageWorkspaces.PYTHON.files;
+		const active = context.files;
+		binding.publishedWorkspace = (project) => (project === 'PYTHON' ? removed : active);
+		vi.spyOn(binding, 'reconcileWorkspace')
+			.mockResolvedValueOnce(false) // The inactive read was superseded by a queued publish.
+			.mockResolvedValueOnce(true) // Active project completed on that pass.
+			.mockRejectedValueOnce(new Error('interrupted read'));
+		await expect(refresh()).rejects.toThrow('interrupted read');
+		expect(context.containerReadRevision).toBe(0);
+		expect(context.containerRefresh).toBeUndefined();
+		expect(context.changedContainerProjects.has('PYTHON')).toBe(true);
+		binding.readWorkspace.mockImplementation(async (project) =>
+			project === 'PYTHON' ? [] : active
+		);
+		await refresh();
+		expect(context.languageWorkspaces.PYTHON.files).toEqual([]);
+		expect(context.containerReadRevision).toBe(8);
+	});
+
 	it('publishes guest-created file metadata during Run and replays editor reconciliation on Stop', async () => {
 		const { context, binding, refresh } = fixture();
 		await refresh();
