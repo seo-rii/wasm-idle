@@ -235,9 +235,25 @@ describe('browser test asset preparation', () => {
 		const hash = (bytes: string | Uint8Array) =>
 			createHash('sha256').update(bytes).digest('hex');
 		const json = (value: unknown) => Buffer.from(JSON.stringify(value, null, 2) + '\n');
-		expect(manifest.groupBaseUrls.container).toMatch(
-			/^https:\/\/raw\.githubusercontent\.com\/seo-rii\/wasm-idle\/[a-f0-9]{40}\/$/u
+		expect(manifest.groupBaseUrls.container).toBe(
+			'https://raw.githubusercontent.com/seo-rii/wasm-idle/'
 		);
+		const sourcePaths = new Map<string, string>();
+		for (const asset of assets) {
+			const match =
+				/^([a-f0-9]{40})\/((?:container-app|artifacts\/container-bash\/readline-control)\/[a-zA-Z0-9./-]+)$/u.exec(
+					asset.source
+				);
+			expect(match).toBeTruthy();
+			const sourcePath = match![2];
+			expect(sourcePath.split('/')).not.toContain('..');
+			sourcePaths.set(asset.target, sourcePath);
+			if (sourcePath.startsWith('artifacts/')) {
+				const bundled = await readFile(sourcePath);
+				expect(bundled.length).toBe(asset.size);
+				expect(hash(bundled)).toBe(asset.sha256);
+			}
+		}
 
 		const objects = release.distribution.packages.flatMap(
 			(pkg: {
@@ -266,8 +282,12 @@ describe('browser test asset preparation', () => {
 			);
 			const target = `container-app/${relative}`;
 			expectedTargets.push(target);
+			expect(sourcePaths.get(target)).toBe(
+				object.id === 'bash'
+					? 'artifacts/container-bash/readline-control/bash.webc.bin'
+					: target
+			);
 			expect(byTarget.get(target)).toMatchObject({
-				source: target,
 				size: object.delivery.bytes,
 				sha256: object.delivery.sha256
 			});
@@ -281,7 +301,9 @@ describe('browser test asset preparation', () => {
 			const target = `container-app/host/${release.hostHash}/${relative.slice(2)}`;
 			expectedTargets.push(target);
 			const asset = byTarget.get(target);
-			expect(asset?.source).toBe(target);
+			expect(
+				sourcePaths.get(target)?.replace(/^container-app\/host\/[0-9a-f]{64}\//u, '')
+			).toBe(relative.slice(2));
 			expect(Number.isSafeInteger(asset?.size)).toBe(true);
 			expect(asset?.size).toBeGreaterThan(0);
 			expect(asset?.sha256).toMatch(/^[a-f0-9]{64}$/u);
@@ -318,8 +340,10 @@ describe('browser test asset preparation', () => {
 		] as const) {
 			const target = `container-app/${name}`;
 			expectedTargets.push(target);
+			expect(sourcePaths.get(target)).toBe(
+				`artifacts/container-bash/readline-control/${name}`
+			);
 			expect(byTarget.get(target)).toMatchObject({
-				source: target,
 				size: bytes.length,
 				sha256: hash(bytes)
 			});
