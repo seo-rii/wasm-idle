@@ -28,8 +28,20 @@ export function mergeContainerWorkspace(
 	const localByPath = new Map(local.map((file) => [file.path, file]));
 	const baseByPath = new Map(baseline.map((file) => [file.path, file]));
 	const remoteByPath = new Map(remote.map((file) => [file.path, file]));
-	const conflicts: string[] = [];
-	const files: WorkspaceFile[] = [];
+	const starter = options.defaultFile;
+	// An unpublished example yields to a shell file that needs its path as either a file or a directory.
+	const shadowedStarter =
+		starter &&
+		!baseByPath.has(starter.path) &&
+		same(localByPath.get(starter.path), starter) &&
+		remote.some(
+			({ path }) =>
+				path === starter.path ||
+				path.startsWith(starter.path + '/') ||
+				starter.path.startsWith(path + '/')
+		);
+	const conflicts = new Set<string>();
+	const files = new Map<string, WorkspaceFile>();
 	for (const path of new Set([
 		...localByPath.keys(),
 		...baseByPath.keys(),
@@ -37,21 +49,31 @@ export function mergeContainerWorkspace(
 	])) {
 		const here = localByPath.get(path),
 			there = remoteByPath.get(path);
-		// An unmaterialized starter is a placeholder. A shell file with that name
-		// wins over the unchanged example, while genuine editor changes still conflict.
 		const before =
 			baseByPath.get(path) ??
-			(there && options.defaultFile?.path === path && same(here, options.defaultFile)
-				? options.defaultFile
-				: undefined);
+			(shadowedStarter && path === starter.path ? starter : undefined);
 		let selected: WorkspaceFile | undefined;
 		if (same(here, before)) selected = there;
 		else if (same(there, before) || same(here, there)) selected = here;
 		else {
-			conflicts.push(path);
+			conflicts.add(path);
 			selected = options.acceptRemoteConflicts ? there : here;
 		}
-		if (selected) files.push({ ...selected });
+		if (selected) files.set(path, { ...selected });
 	}
-	return { files, conflicts };
+	// Independently valid editor and shell snapshots can introduce a file and its descendants.
+	// Resolve the entire collision on the selected side, keeping unrelated edits from both.
+	const preferred = options.acceptRemoteConflicts ? remoteByPath : localByPath;
+	const omit = new Set<string>();
+	for (const path of files.keys()) {
+		for (let slash = path.indexOf('/'); slash !== -1; slash = path.indexOf('/', slash + 1)) {
+			const parent = path.slice(0, slash);
+			if (!files.has(parent)) continue;
+			conflicts.add(parent);
+			conflicts.add(path);
+			omit.add(preferred.has(parent) ? path : parent);
+		}
+	}
+	for (const path of omit) files.delete(path);
+	return { files: [...files.values()], conflicts: [...conflicts] };
 }

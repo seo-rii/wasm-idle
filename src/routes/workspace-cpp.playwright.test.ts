@@ -294,11 +294,15 @@ it(
 					'include-3'
 				);
 				expect(await page.locator('.file-tab[title="main.cpp"]').count()).toBe(1);
-				for (const [action, path] of [
+				for (const [action, path, source] of [
 					['New file', 'include'],
 					['New file', 'include-2/child'],
-					['Rename', 'include']
+					['Rename', 'include'],
+					['Rename', 'include-3/child'],
+					['Rename', 'include', 'include/numbers.h']
 				]) {
+					if (source)
+						await page.locator(`.workspace-files button[title="${source}"]`).click();
 					const oldFiles = await page
 						.locator('.workspace-files button')
 						.allTextContents();

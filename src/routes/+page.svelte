@@ -1843,7 +1843,7 @@
 			if (!nextPath || nextPath === file.path) return;
 			workspaceFilePath(
 				nextPath,
-				files.filter((item) => item !== file).map((item) => item.path)
+				files.map((item) => item.path)
 			);
 		} catch (error) {
 			saveStatus = error instanceof Error ? error.message : String(error);
