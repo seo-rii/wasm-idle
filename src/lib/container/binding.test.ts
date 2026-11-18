@@ -486,6 +486,45 @@ describe('existing playground container binding', () => {
 		]);
 	});
 
+	it('starts at the measured size and applies the newest resize after pending work', async () => {
+		const { binding, call } = fixture();
+		let start!: () => void, finishResize!: () => void;
+		call.mockImplementationOnce(
+			() =>
+				new Promise<void>((resolve) => {
+					start = resolve;
+				})
+		);
+		call.mockImplementationOnce(
+			() =>
+				new Promise<void>((resolve) => {
+					finishResize = resolve;
+				})
+		);
+		await binding.shell.resize(53, 25);
+		expect(call).not.toHaveBeenCalled();
+		const connected = binding.shell.connect(() => {});
+		await vi.waitFor(() =>
+			expect(call).toHaveBeenCalledWith('shellStart', [
+				expect.objectContaining({ columns: 53, rows: 25 })
+			])
+		);
+		const first = binding.shell.resize(64, 26);
+		const second = binding.shell.resize(80, 28);
+		start();
+		await connected;
+		await vi.waitFor(() => expect(call).toHaveBeenCalledWith('shellResize', [80, 28]));
+		const third = binding.shell.resize(90, 29);
+		const last = binding.shell.resize(106, 30);
+		finishResize();
+		await Promise.all([first, second, third, last]);
+		await binding.shell.resize(106, 30);
+		expect(call.mock.calls.filter(([method]) => method === 'shellResize')).toEqual([
+			['shellResize', [80, 28]],
+			['shellResize', [106, 30]]
+		]);
+	});
+
 	it('requests a directory change through the control channel after shell startup', async () => {
 		const { binding, call } = fixture();
 		let started!: () => void;

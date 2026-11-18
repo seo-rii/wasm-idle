@@ -81,7 +81,7 @@
 		sandboxAcceptingInput = false,
 		first = true,
 		tc = 0,
-		plugin = $state(),
+		plugin = $state<Awaited<ReturnType<typeof registerBasicPlugins>>>(),
 		ll: string | null = null,
 		loadedRuntimeAssetsKey: string | undefined = undefined,
 		loadedPlayground: PlaygroundBinding | undefined = undefined,
@@ -865,15 +865,19 @@
 
 	$effect(() => {
 		let _ = clientWidth + clientHeight;
-		(plugin as any)?.fit?.fit?.();
+		if (!plugin || !term || terminalDisposed) return;
+		plugin.fit?.fit();
+		const binding = shell;
+		if (binding) {
+			void binding.resize?.(term.cols, term.rows).catch((error) => {
+				if (connectedShell === binding) reportShellError(error);
+			});
+			void connectShell(binding).catch(() => {});
+		}
 	});
 
 	$effect(() => {
 		terminal = terminalControl;
-	});
-
-	$effect(() => {
-		if (term && shell && !terminalDisposed) void connectShell(shell).catch(() => {});
 	});
 
 	onMount(() => {
