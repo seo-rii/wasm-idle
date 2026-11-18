@@ -3018,6 +3018,7 @@
 						: stdinInput;
 				const result = await executeTerminalRun({
 					terminal,
+					playground,
 					language,
 					code: codeToRun,
 					log,
