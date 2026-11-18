@@ -1,6 +1,17 @@
 --- a/bashline.c
 +++ b/bashline.c
-@@ -112,6 +112,7 @@
+@@ -24,6 +24,10 @@
+ 
+ #include "bashtypes.h"
+ #include "posixstat.h"
++#include "filecntl.h"
++#include <errno.h>
++
++#define WASM_IDLE_RESIZE_REQUEST "/tmp/.wasm-idle-shell-resize-request"
+ 
+ #if defined (HAVE_UNISTD_H)
+ #  include <unistd.h>
+@@ -112,6 +116,7 @@
  #else
  extern int tputs PARAMS((const char *string, int nlines, int (*outx)(int)));
  #endif
@@ -8,7 +19,7 @@
  
  /* Forward declarations */
  
-@@ -213,6 +214,8 @@
+@@ -213,6 +218,8 @@
  #endif
  
  static int bash_event_hook PARAMS((void));
@@ -17,11 +28,10 @@
  
  #if defined (PROGRAMMABLE_COMPLETION)
  static int find_cmd_start PARAMS((int));
-@@ -634,6 +637,25 @@
-   if (posixly_correct)
+@@ -635,6 +642,25 @@
      posix_readline_initialize (1);
  #endif
-+
+ 
 +  /* Only the explicit website control profile installs this idle callback. */
 +  if (getenv ("WASM_IDLE_SHELL_CONTROL") &&
 +      strcmp (getenv ("WASM_IDLE_SHELL_CONTROL"), "1") == 0 &&
@@ -40,10 +50,11 @@
 +        }
 +      rl_event_hook = wasm_idle_readline_poll;
 +    }
- 
++
    bash_readline_initialized = 1;
  }
-@@ -4419,12 +4441,7 @@
+ 
+@@ -4419,12 +4445,7 @@
  )
  {
    int type;
@@ -57,13 +68,71 @@
    Keymap cmd_xmap;
  
    /* First, we need to find the right command to execute.  This is tricky,
-@@ -4444,13 +4461,29 @@
+@@ -4444,13 +4465,87 @@
        return 1;
      }
  
 -  ce = rl_get_termcap ("ce");
 +  bash_execute_readline_command (cmd, 0);
 +  return 0;
++}
++
++/* xterm has already reflowed. Erase the old edit before Readline adopts the
++   new dimensions, leaving the output above the edit in place. */
++static void
++wasm_idle_resize_readline (void)
++{
++  char *cd;
++
++  rl_clear_visible_line ();
++  rl_on_new_line ();
++  cd = tgetstr ("cd", (char **)NULL);
++  if (cd)
++    {
++      tputs (cd, 1, putx);
++      FREE (cd);
++    }
++  rl_resize_terminal ();
++}
++
++/* At a secondary prompt or inside read -e, do not enter the Bash parser or
++   a shell builtin. Acknowledge this exact request through its original open
++   file. A later host request has a different inode, even after cancellation. */
++static void
++wasm_idle_nested_resize (const char *path)
++{
++  char record[64], session[33], generation[11];
++  char *suspended;
++  struct stat st;
++  ssize_t size;
++  int fd, end, saved_errno;
++
++  saved_errno = errno;
++  fd = open (path, O_RDWR | O_NOFOLLOW | O_NONBLOCK);
++  if (fd >= 0)
++    {
++      end = 0;
++      if (fstat (fd, &st) == 0 && S_ISREG (st.st_mode) &&
++          st.st_size > 0 && st.st_size < (off_t)sizeof (record) &&
++          (size = read (fd, record, st.st_size)) == st.st_size)
++        {
++          record[size] = 0;
++          if (sscanf (record, "4 %32[0123456789abcdef] %10[0123456789] resize%n",
++                      session, generation, &end) == 2 && strlen (session) == 32 &&
++              generation[0] != '0' && end + 1 == size && record[end] == '\n')
++            {
++              suspended = get_string_value ("__wasm_idle_terminal_suspended");
++              if (suspended && *suspended && strcmp (suspended, "0") != 0)
++                rl_reset_screen_size ();
++              else
++                wasm_idle_resize_readline ();
++              if (lseek (fd, 0, SEEK_SET) == 0)
++                (void)write (fd, "5", 1);
++            }
++        }
++      close (fd);
++    }
++  errno = saved_errno;
 +}
 +
 +/* Share bind -x's parser and editing-buffer preservation with the opt-in
@@ -89,7 +158,7 @@
      rl_crlf ();	/* move to a new line */
  
    v = bind_variable ("READLINE_LINE", rl_line_buffer, 0);
-@@ -4471,9 +4504,19 @@
+@@ -4471,9 +4566,19 @@
    array_needs_making = 1;
  
    save_parser_state (&ps);
@@ -110,7 +179,7 @@
    restore_parser_state (&ps);
  
    v = find_variable ("READLINE_LINE");
-@@ -4496,11 +4539,69 @@
+@@ -4496,11 +4601,64 @@
    /* If we clear the last line of the prompt above, redraw only that last
       line.  If the command returns 124, we redraw unconditionally as in
       previous versions. */
@@ -118,17 +187,7 @@
 +  if (poll)
 +    {
 +      if (r == 125)
-+        {
-+          rl_clear_visible_line ();
-+          rl_on_new_line ();
-+          ce = tgetstr ("cd", (char **)NULL);
-+          if (ce)
-+            {
-+              tputs (ce, 1, putx);
-+              FREE (ce);
-+            }
-+          rl_resize_terminal ();
-+        }
++        wasm_idle_resize_readline ();
 +      else if (r == 126)
 +        rl_reset_screen_size ();
 +      else if (r == 124)
@@ -153,8 +212,7 @@
 +  char *lastarg;
 +  int lastsignal;
 +
-+  if (active || executing || interactive_shell == 0 ||
-+      get_current_prompt_level () != 1 || rl_done ||
++  if (active || interactive_shell == 0 || rl_done ||
 +      RL_ISSTATE (RL_STATE_READCMD) == 0 ||
 +      RL_ISSTATE (RL_STATE_METANEXT | RL_STATE_DISPATCHING | RL_STATE_MOREINPUT |
 +                  RL_STATE_ISEARCH | RL_STATE_NSEARCH | RL_STATE_SEARCH |
@@ -167,6 +225,12 @@
 +  function = find_function ("__wasm_idle_poll");
 +  if (function == 0 || readonly_p (function) == 0)
 +    return 0;
++
++  if (executing || get_current_prompt_level () != 1)
++    {
++      wasm_idle_nested_resize (WASM_IDLE_RESIZE_REQUEST);
++      return 0;
++    }
 +
 +  active = 1;
 +  lastsignal = last_command_exit_signal;

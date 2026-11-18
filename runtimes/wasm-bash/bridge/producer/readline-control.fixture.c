@@ -3,6 +3,11 @@
 #define _POSIX_C_SOURCE 200809L
 #include <assert.h>
 #include <stdio.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#define WASM_IDLE_RESIZE_REQUEST "resize"
 #include <stdlib.h>
 #include <string.h>
 
@@ -38,6 +43,7 @@ static int executing, interactive_shell = 1, prompt_level = 1, rl_done;
 static int rl_readline_state = RL_STATE_READCMD;
 static int last_command_exit_signal = 9, calls, function_present = 1;
 static SHELL_VAR function_value = { 1 };
+static char *suspended;
 static char *lastarg_value = "previous argument";
 static char restored_lastarg[128];
 static int wasm_idle_readline_poll(void);
@@ -67,6 +73,8 @@ void rl_resize_terminal(void) { assert(display_step == 2); resizes++; display_st
 void rl_reset_screen_size(void) { size_resets++; }
 static void rl_forced_update_display(void) { forced_redraws++; }
 static void rl_redraw_prompt_last_line(void) { prompt_redraws++; }
+static char *get_string_value(const char *name);
+/* RESIZE_SOURCE */
 static void redisplay(int poll, int r, char *ce) {
 /* REDISPLAY_SOURCE */
 }
@@ -82,6 +90,7 @@ static SHELL_VAR *find_function(const char *name) {
   return function_present ? &function_value : NULL;
 }
 static char *get_string_value(const char *name) {
+  if (strcmp(name, "__wasm_idle_terminal_suspended") == 0) return suspended;
   assert(strcmp(name, "_") == 0);
   return lastarg_value;
 }
@@ -173,7 +182,22 @@ int main(void) {
     RL_STATE_COMPLETING, RL_STATE_SIGHANDLER, RL_STATE_UNDOING,
     RL_STATE_INPUTPENDING, RL_STATE_VIMOTION, RL_STATE_MULTIKEY,
     RL_STATE_CHARSEARCH, RL_STATE_REDISPLAYING, RL_STATE_DONE };
-  executing = 1; wasm_idle_readline_poll(); assert(calls == 0); executing = 0;
+  FILE *mailbox = fopen(WASM_IDLE_RESIZE_REQUEST, "w+");
+  assert(mailbox);
+  const char *packet = "4 0123456789abcdef0123456789abcdef 7 resize\n";
+  fputs(packet, mailbox); fflush(mailbox);
+  executing = 1; errno = EINTR;
+  wasm_idle_readline_poll(); assert(calls == 0 && resizes == 3 && errno == EINTR);
+  rewind(mailbox); assert(fgetc(mailbox) == '5');
+  wasm_idle_readline_poll(); assert(calls == 0 && resizes == 3);
+  rewind(mailbox); fputs(packet, mailbox); fflush(mailbox);
+  executing = 0; prompt_level = 2; suspended = "1";
+  wasm_idle_readline_poll(); assert(calls == 0 && resizes == 3 && size_resets == 2);
+  rewind(mailbox); assert(fgetc(mailbox) == '5');
+  rewind(mailbox); fputs("4 malformed", mailbox); fflush(mailbox);
+  wasm_idle_readline_poll(); assert(calls == 0 && size_resets == 2);
+  fclose(mailbox); unlink(WASM_IDLE_RESIZE_REQUEST);
+  suspended = NULL; prompt_level = 1;
   interactive_shell = 0; wasm_idle_readline_poll(); assert(calls == 0); interactive_shell = 1;
   prompt_level = 2; wasm_idle_readline_poll(); assert(calls == 0); prompt_level = 1;
   rl_done = 1; wasm_idle_readline_poll(); assert(calls == 0); rl_done = 0;

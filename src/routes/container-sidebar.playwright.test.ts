@@ -511,6 +511,64 @@ async function expectResizeSettled(page: Page) {
 		.toEqual({ applied: true, settled: true });
 }
 
+it.each(['read -e', 'continuation'])(
+	'redraws one editable %s line and acknowledges resize before submission',
+	{ skip: !enabled, timeout: 150_000, meta: { browser: true, requiredBrowser: enabled } },
+	async (mode) => {
+		await withShellBrowser(async (browser, url) => {
+			const errors: string[] = [];
+			const { context, page } = await openShellPage(browser, url, 106, errors);
+			try {
+				const nested = mode === 'read -e';
+				const prompt = nested ? 'READ> ' : '> ';
+				const command = nested
+					? "IFS= read -e -r -t 30 -p 'READ> ' answer; printf '%s' \"$answer\" > result.txt"
+					: "printf '%s' > result.txt 'open";
+				const input = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'.repeat(4);
+				await page.keyboard.type(command);
+				await page.keyboard.press('Enter');
+				await page.keyboard.type(input);
+				for (let index = 0; index < input.length - 68; index++)
+					await page.keyboard.press('ArrowLeft');
+				await page.setViewportSize(shellViewport(53));
+				await expect.poll(async () => (await readShellScreen(page)).columns).toBe(53);
+				await expectResizeSettled(page);
+				await page.keyboard.press('Control+a');
+				await page.keyboard.type('HEAD_');
+				await expect
+					.poll(async () => {
+						const { rows } = await readShellScreen(page);
+						return rows.slice(rows.findIndex((row) => row.startsWith(prompt))).join('');
+					})
+					.toBe(prompt + 'HEAD_' + input);
+				await page.keyboard.press('Control+e');
+				if (!nested) await page.keyboard.type("'");
+				await page.keyboard.press('Enter');
+				await expect
+					.poll(
+						() =>
+							page.evaluate(async () => {
+								const files = await (
+									globalThis as SiteWindow
+								).__wasmIdleContainer!.readWorkspace('BASH');
+								const bytes = files.find(
+									(file) => file.path === 'result.txt'
+								)?.content;
+								return typeof bytes === 'string'
+									? bytes
+									: bytes && new TextDecoder().decode(bytes);
+							}),
+						{ timeout: 15_000 }
+					)
+					.toBe((nested ? '' : 'open\n') + 'HEAD_' + input);
+				expect(errors).toEqual([]);
+			} finally {
+				await context.close();
+			}
+		});
+	}
+);
+
 it.each([53, 106])(
 	'keeps long shell input and its cursor intact while editing and resizing from %i columns',
 	{ skip: !enabled, timeout: 240_000, meta: { browser: true, requiredBrowser: enabled } },
