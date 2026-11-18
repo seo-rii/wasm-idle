@@ -12,7 +12,7 @@ describe('Terminal source', () => {
 				generate: 'client'
 			})
 		).not.toThrow();
-		expect(source).toMatch(/term\.write\('\\u001B\[\?25h'\);/);
+		expect(source).toMatch(/writeScreen\('\\u001B\[\?25h'\);/);
 		expect(source).toMatch(
 			/const isCopyShortcut =\s+\(ev\.ctrlKey \|\| ev\.metaKey\) && ev\.key\.toLowerCase\(\) === 'c';/
 		);

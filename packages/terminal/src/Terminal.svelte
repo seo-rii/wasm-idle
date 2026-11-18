@@ -21,6 +21,7 @@
 	import '@xterm/xterm/css/xterm.css';
 	import type { Terminal as TerminalType } from '@xterm/xterm';
 	import { loadWebglPlugin, registerBasicPlugins } from './plugin/index.js';
+	import { InputLineLayout } from './input-line-layout.js';
 	import Theme from './theme.js';
 	import type {
 		BoundSandbox,
@@ -98,6 +99,8 @@
 	let preparedExecutionGeneration = 0;
 	let lastExecutionError: unknown;
 	let executionInputOwners = 0;
+	let inputStartColumn = 0;
+	let pendingScreenUpdates: Array<() => void> | undefined;
 	let terminalDisposed = false;
 	let abortInitialization: (() => void) | undefined;
 	let terminalDisposal: Promise<void> | undefined;
@@ -181,7 +184,7 @@
 				: (debugOutput + text).slice(-maxDebugOutputCharacters);
 		// Keep a bounded debug tail without starting in the middle of a surrogate pair.
 		debugOutput = /^[\uDC00-\uDFFF]/.test(tail) ? tail.slice(1) : tail;
-		term?.write(text);
+		writeScreen(text);
 	}
 
 	function reportShellError(error: unknown) {
@@ -424,28 +427,69 @@
 		await wait();
 		if (!term) return;
 		term.options.cursorBlink = blink;
-		term.write('\u001B[?25h');
+		writeScreen('\u001B[?25h');
 		term.focus();
 
-		if (!first) term?.write(`\r\n\x1b[0m`);
+		if (!first) writeScreen(`\r\n\x1b[0m`);
 		first = false;
+	}
+
+	function updateScreen(update: () => void) {
+		if (pendingScreenUpdates) pendingScreenUpdates.push(update);
+		else update();
+	}
+
+	function writeScreen(text: string) {
+		updateScreen(() => term?.write(text));
+	}
+
+	function captureInputStart() {
+		updateScreen(() => {
+			const current = term;
+			if (!current) return;
+			// xterm parses writes asynchronously. Read the position after any prompt
+			// has been parsed, keeping following echo and program output in order.
+			pendingScreenUpdates = [];
+			current.write('', () => {
+				if (terminalDisposed) {
+					pendingScreenUpdates = undefined;
+					return;
+				}
+				inputStartColumn = current.buffer.active.cursorX % current.cols;
+				const updates = pendingScreenUpdates!;
+				pendingScreenUpdates = undefined;
+				for (const update of updates) updateScreen(update);
+			});
+		});
+	}
+
+	function inputLayout(characters: string[]) {
+		return new InputLineLayout(characters, term!.cols, inputStartColumn, getInputCellWidth);
+	}
+
+	function redrawInput(previous: string[], previousCursor: number, changed: number) {
+		const characters = getInputCharacters(input);
+		const cursor = inputCursor;
+		// A combining mark can change the grapheme just before the insertion.
+		if (changed && previous[changed - 1] !== characters[changed - 1]) changed--;
+		updateScreen(() => {
+			const old = inputLayout(previous);
+			term?.write(
+				inputLayout(characters).redraw(old.rowAt(previousCursor), old.end, changed, cursor)
+			);
+		});
 	}
 
 	function appendInputText(text: string) {
 		if (!text) return;
-		const inputCharacters = getInputCharacters(input);
-		const insertedCharacters = getInputCharacters(text);
-		const inputTail = inputCharacters.slice(inputCursor).join('');
-		inputCharacters.splice(inputCursor, 0, ...insertedCharacters);
-		input = inputCharacters.join('');
-		inputCursor += insertedCharacters.length;
-		let inputEcho = text;
-		if (inputTail && term) {
-			inputEcho += inputTail;
-			const inputTailCellWidth = getInputCellWidth(inputTail);
-			if (inputTailCellWidth > 0) inputEcho += `\x1b[${inputTailCellWidth}D`;
-		}
-		term?.write(inputEcho);
+		const characters = getInputCharacters(input);
+		const previousCursor = inputCursor;
+		if (!input) captureInputStart();
+		const prefix = characters.slice(0, previousCursor).join('') + text;
+		input = prefix + characters.slice(previousCursor).join('');
+		inputCursor = getInputCharacters(prefix).length;
+		if (previousCursor === characters.length) writeScreen(text);
+		else redrawInput(characters, previousCursor, previousCursor);
 	}
 
 	function getInputCharacters(text: string) {
@@ -491,25 +535,24 @@
 	}
 
 	function moveInputCursor(characters: string[], position: number) {
-		const forward = position > inputCursor;
-		const moved = forward
-			? characters.slice(inputCursor, position)
-			: characters.slice(position, inputCursor);
-		const width = getInputCellWidth(moved.join(''));
-		if (width) term?.write(`\x1b[${width}${forward ? 'C' : 'D'}`);
+		if (inputCursor === position) return;
+		const previousCursor = inputCursor;
 		inputCursor = position;
+		updateScreen(() => {
+			const layout = inputLayout(characters);
+			term?.write(layout.moveTo(layout.rowAt(previousCursor), position));
+		});
 	}
 
 	function eraseInputCharacter(characters: string[], position: number) {
 		if (position < 0 || position >= characters.length) return;
-		moveInputCursor(characters, position);
-		const [removed] = characters.splice(position, 1);
-		const tail = characters.slice(position).join('');
-		const removedWidth = getInputCellWidth(removed);
-		const width = getInputCellWidth(tail) + removedWidth;
-		const rewind = width ? `\x1b[${width}D` : '';
-		term?.write(tail + ' '.repeat(removedWidth) + rewind);
-		input = characters.join('');
+		const previousCursor = inputCursor;
+		input = characters
+			.slice(0, position)
+			.concat(characters.slice(position + 1))
+			.join('');
+		inputCursor = position;
+		redrawInput(characters, previousCursor, position);
 	}
 
 	function handleInputKey(key: string) {
@@ -533,7 +576,9 @@
 	}
 
 	function submitCurrentInput() {
-		term?.write('\r\n');
+		const characters = getInputCharacters(input);
+		moveInputCursor(characters, characters.length);
+		writeScreen('\r\n');
 		const submittedInput = input + '\n';
 		if (sandbox && sandboxAcceptingInput) sandbox.write?.(submittedInput);
 		else pendingSandboxInput.push(submittedInput);
@@ -561,8 +606,8 @@
 			lastExecutionError = undefined;
 			invalidatePreparedExecution();
 			discardPendingSandboxInput();
-			term?.reset();
-			term?.write(`\u001B[?25l\x1b[0m\x1b[?25h`);
+			updateScreen(() => term?.reset());
+			writeScreen(`\u001B[?25l\x1b[0m\x1b[?25h`);
 			if (term) term.options.cursorBlink = false;
 			debugOutput = '';
 			input = '';

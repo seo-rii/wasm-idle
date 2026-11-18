@@ -31,7 +31,12 @@ vi.mock('@xterm/xterm', async (importOriginal) => {
 	};
 });
 vi.mock('../src/plugin/index.js', () => ({
-	registerBasicPlugins: vi.fn(async () => ({})),
+	registerBasicPlugins: vi.fn(async (term: XtermTerminal) => {
+		const { Unicode11Addon } = await import('@xterm/addon-unicode11');
+		term.loadAddon(new Unicode11Addon());
+		term.unicode.activeVersion = '11';
+		return {};
+	}),
 	loadWebglPlugin: vi.fn()
 }));
 
@@ -43,10 +48,16 @@ afterEach(async () => {
 	document.body.replaceChildren();
 });
 
+function deferred<T>() {
+	let resolve!: (value: T) => void;
+	const promise = new Promise<T>((done) => (resolve = done));
+	return { promise, resolve };
+}
+
 async function runningTerminal() {
-	const started = Promise.withResolvers<void>();
-	const completed = Promise.withResolvers<boolean>();
-	const loaded = Promise.withResolvers<TerminalControl>();
+	const started = deferred<void>();
+	const completed = deferred<boolean>();
+	const loaded = deferred<TerminalControl>();
 	endRun = () => completed.resolve(true);
 	const write = vi.fn<(text: string) => void>();
 	const sandbox = {
@@ -95,4 +106,84 @@ it('edits foreground stdin with navigation and Delete and consumes unsupported k
 		'abc\n',
 		'ac\n'
 	]);
+});
+
+async function screen(term: XtermTerminal) {
+	await new Promise<void>((resolve) => term.write('', resolve));
+	const buffer = term.buffer.active;
+	const rows = Array.from({ length: buffer.length }, (_, row) =>
+		buffer.getLine(row)!.translateToString(true)
+	);
+	return { rows, row: buffer.baseY + buffer.cursorY, col: buffer.cursorX };
+}
+
+it('keeps the visual cursor, wrapped text, and submitted line together after editing', async () => {
+	const { term, sandbox, write } = await runningTerminal();
+	term.resize(8, 6);
+	sandbox.output!('> ');
+	term.input('abcdefghijk');
+	expect(await screen(term)).toMatchObject({
+		rows: ['> abcdef', 'ghijk', '', '', '', ''],
+		row: 1,
+		col: 5
+	});
+
+	term.input('\x1b[D'.repeat(6));
+	expect(await screen(term)).toMatchObject({ row: 0, col: 7 });
+	term.input('X');
+	expect(await screen(term)).toMatchObject({
+		rows: ['> abcdeX', 'fghijk', '', '', '', ''],
+		row: 1,
+		col: 0
+	});
+	term.input('\x7f\x1b[3~');
+	expect(await screen(term)).toMatchObject({
+		rows: ['> abcdeg', 'hijk', '', '', '', ''],
+		row: 0,
+		col: 7
+	});
+	term.input('\x1b[H\r');
+	expect(write).toHaveBeenCalledWith('abcdeghijk\n');
+	expect(await screen(term)).toMatchObject({ row: 2, col: 0 });
+});
+
+it('handles delayed wrapping and wide characters at the right margin', async () => {
+	const { term, sandbox, write } = await runningTerminal();
+	term.resize(8, 6);
+	sandbox.output!('> ');
+	term.input('abcde한글');
+	expect(await screen(term)).toMatchObject({
+		rows: ['> abcde', '한글', '', '', '', ''],
+		row: 1,
+		col: 4
+	});
+	term.input('\x1b[D\x1b[D');
+	term.input('X');
+	expect(await screen(term)).toMatchObject({
+		rows: ['> abcdeX', '한글', '', '', '', ''],
+		row: 1,
+		col: 0
+	});
+	term.input('\x1b[3~\x1b[F\x7f');
+	expect(await screen(term)).toMatchObject({ rows: ['> abcdeX', '', '', '', '', ''] });
+	term.input('!\r');
+	expect(write).toHaveBeenCalledWith('abcdeX!\n');
+	expect(await screen(term)).toMatchObject({
+		rows: ['> abcdeX', '!', '', '', '', ''],
+		row: 2,
+		col: 0
+	});
+});
+
+it('moves over a grapheme whose xterm cells span two rows', async () => {
+	const { term, sandbox, write } = await runningTerminal();
+	term.resize(8, 5);
+	sandbox.output!('> ');
+	const emoji = '😀\u200d😀';
+	term.input('abcd' + emoji + 'z');
+	term.input('\x1b[D\x1b[D');
+	expect(await screen(term)).toMatchObject({ row: 0, col: 6 });
+	term.input('\x1b[3~\r');
+	expect(write).toHaveBeenCalledWith('abcdz\n');
+	expect((await screen(term)).rows).toEqual(['> abcdz', '', '', '', '']);
 });
