@@ -489,14 +489,24 @@ export function serveContainerWorker(options: ContainerWorkerOptions): {
 				.catch(() => {})
 				.then(async () => {
 					await shellStarting;
+					if (shellInputClosed) return;
 					const current = shell;
-					if (!current || shellClosed || shellInputClosed || !shellControl)
+					if (!current || shellClosed || !shellControl)
 						throw new Error('Shell is not running');
 					signal.throwIfAborted();
 					await current.resize(args[0] as number, args[1] as number);
-					if (shell !== current || shellClosed || shellInputClosed)
-						throw new Error('Shell has exited');
-					await shellControl.requestResize(AbortSignal.any([signal, lifetime.signal]));
+					if (shellInputClosed) return;
+					if (shell !== current || shellClosed) throw new Error('Shell has exited');
+					try {
+						await shellControl.requestResize(
+							AbortSignal.any([signal, lifetime.signal])
+						);
+					} catch (error) {
+						// EOF retires the primary prompt, including an automatic resize
+						// waiting behind foreground stdin. It needs no further redraw.
+						if (!shellInputClosed || (error as Error)?.name !== 'AbortError')
+							throw error;
+					}
 				});
 			shellResizes = resize;
 			return await resize;

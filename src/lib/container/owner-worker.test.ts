@@ -215,6 +215,78 @@ describe('application-owned container worker', () => {
 		}
 	});
 
+	it('settles pending, queued and later automatic resizes quietly when EOF closes shell input', async () => {
+		const f = await shellInputFixture();
+		try {
+			f.initialize();
+			await f.response(0);
+			f.send(1, 'shellStart');
+			await f.response(1);
+			f.send(2, 'shellResize', [106, 35]);
+			await vi.waitFor(() =>
+				expect(
+					new TextDecoder().decode(f.container.fs.readFile(SHELL_RESIZE_REQUEST))
+				).toMatch(/^4 [a-f0-9]{32} 1 resize\n$/)
+			);
+			f.send(3, 'shellResize', [53, 35]);
+			f.send(4, 'shellEof');
+			expect(await f.response(4)).toMatchObject({ type: 'result' });
+			expect(await f.response(2)).toMatchObject({ type: 'result' });
+			expect(await f.response(3)).toMatchObject({ type: 'result' });
+			f.send(5, 'shellResize', [80, 25]);
+			expect(await f.response(5)).toMatchObject({ type: 'result' });
+			expect(f.resize).toHaveBeenCalledExactlyOnceWith(106, 35);
+			expect(f.close).toHaveBeenCalledOnce();
+			expect(new TextDecoder().decode(f.container.fs.readFile(SHELL_RESIZE_REQUEST))).toMatch(
+				/^4 [a-f0-9]{32} 0 resize\n$/
+			);
+			f.send(6, 'shellWrite', ['still closed']);
+			expect(await f.response(6)).toMatchObject({
+				type: 'error',
+				error: { message: 'Shell input is closed' }
+			});
+		} finally {
+			await f.owner.dispose();
+		}
+	});
+
+	it.each([false, true])(
+		'does not request a redraw after EOF during the size helper (fails: %s)',
+		async (fails) => {
+			const f = await shellInputFixture();
+			let finishResize!: () => void;
+			f.resize.mockImplementationOnce(
+				() =>
+					new Promise<void>((resolve, reject) => {
+						finishResize = () =>
+							fails ? reject(new Error('TTY helper failed')) : resolve();
+					})
+			);
+			try {
+				f.initialize();
+				await f.response(0);
+				f.send(1, 'shellStart');
+				await f.response(1);
+				f.send(2, 'shellResize', [106, 35]);
+				await vi.waitFor(() => expect(f.resize).toHaveBeenCalledOnce());
+				f.send(3, 'shellEof');
+				expect(await f.response(3)).toMatchObject({ type: 'result' });
+				finishResize();
+				expect(await f.response(2)).toMatchObject(
+					fails
+						? { type: 'error', error: { message: 'TTY helper failed' } }
+						: { type: 'result' }
+				);
+				expect(
+					new TextDecoder().decode(f.container.fs.readFile(SHELL_RESIZE_REQUEST))
+				).toMatch(/^4 [a-f0-9]{32} 0 resize\n$/);
+			} finally {
+				finishResize?.();
+				await f.owner.dispose();
+			}
+		}
+	);
+
 	it('still delivers real EOF if the control mailbox fails and can retry that control request', async () => {
 		const { owner, initialize, container, close, send, response } = await shellInputFixture();
 		const mailbox = '/tmp/.wasm-idle-shell-control-request';
