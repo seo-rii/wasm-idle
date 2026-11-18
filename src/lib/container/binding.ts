@@ -306,20 +306,23 @@ export function createContainerPlaygroundBinding(
 				shellSize = { columns, rows };
 			if (!shellConnection || shellSize === appliedShellSize) return;
 			return (resizingShell ??= (async () => {
-				// connect() already reports startup failures, including unsupported shells.
 				try {
-					await shellConnection;
-				} catch {
-					return;
+					// connect() already reports startup failures, including unsupported shells.
+					try {
+						await shellConnection;
+					} catch {
+						return;
+					}
+					while (!disposed && shellSize && shellSize !== appliedShellSize) {
+						const next = shellSize;
+						await connection().call('shellResize', [next.columns, next.rows]);
+						appliedShellSize = next;
+					}
+				} finally {
+					// Release before promise observers can enqueue the next size.
+					resizingShell = undefined;
 				}
-				while (!disposed && shellSize && shellSize !== appliedShellSize) {
-					const next = shellSize;
-					await connection().call('shellResize', [next.columns, next.rows]);
-					appliedShellSize = next;
-				}
-			})().finally(() => {
-				resizingShell = undefined;
-			}));
+			})());
 		},
 		async write(text) {
 			await shellConnection;
