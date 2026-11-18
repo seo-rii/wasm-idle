@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { chromium, type Browser } from 'playwright-core';
+import { chromium, type Browser, type Page } from 'playwright-core';
 import { expect, it } from 'vitest';
 import { addBrowserTestCookies } from '../../scripts/browser-test-cookies.mjs';
 import { disableBrowserPrewarm } from '../../scripts/browser-test-prewarm.mjs';
@@ -15,7 +15,16 @@ type SiteWindow = typeof globalThis & {
 	__sidebarInitialEditor?: { language: string; source: string };
 	__wasmIdleContainer?: {
 		inspect(): Promise<{
-			shell?: { running: boolean; control?: { cwd: string; pendingCwd: string | null } };
+			ownedWorkers?: number;
+			shell?: {
+				running: boolean;
+				control?: {
+					cwd: string;
+					pendingCwd: string | null;
+					resizeGeneration?: number;
+					appliedResizeGeneration?: number;
+				};
+			};
 		}>;
 	};
 	__wasmIdleDebug?: {
@@ -316,6 +325,257 @@ it(
 					})}`,
 					{ cause: error }
 				);
+			} finally {
+				await browser?.close();
+				await server.close();
+			}
+		});
+	}
+);
+
+it.each([53, 106])(
+	'keeps long shell input and its cursor intact while editing and resizing from %i columns',
+	{ skip: !enabled, timeout: 240_000, meta: { browser: true, requiredBrowser: enabled } },
+	async (initialColumns) => {
+		await runWithBrowserProbeSessionLock(async () => {
+			const provided = process.env.WASM_IDLE_BROWSER_URL;
+			const server =
+				provided && shouldReuseProvidedBrowserUrl(provided)
+					? { browserUrl: provided, close: async () => {} }
+					: await startBrowserPreviewServer({
+							origin: 'http://127.0.0.1:4678',
+							serverMode: 'preview'
+						});
+			let browser: Browser | undefined;
+			const pageErrors: string[] = [];
+			const viewport = (columns: number) => ({
+				width: columns === 53 ? 1560 : 2700,
+				height: 1100
+			});
+			const screen = (page: Page) =>
+				page.evaluate(() => {
+					const terminal = document.querySelector('.terminal-shell .xterm-screen');
+					const measure = document.querySelector(
+						'.terminal-shell .xterm-char-measure-element'
+					);
+					const cellWidth =
+						(measure?.getBoundingClientRect().width ?? 0) /
+						(measure?.textContent?.length || 1);
+					const nodes = Array.from(
+						document.querySelectorAll('.terminal-shell .xterm-rows > div')
+					);
+					const rows = nodes.map((node) =>
+						(node.textContent ?? '').replaceAll('\u00a0', ' ').trimEnd()
+					);
+					const cursor = document.querySelector('.terminal-shell .xterm-cursor');
+					const cursorRow = nodes.findIndex((node) => cursor && node.contains(cursor));
+					let cursorOffset: number | null = null;
+					if (cursor && cursorRow >= 0) {
+						const beforeCursor = document.createRange();
+						beforeCursor.selectNodeContents(nodes[cursorRow]);
+						beforeCursor.setEndBefore(cursor);
+						cursorOffset =
+							rows.slice(0, cursorRow).join('').length +
+							beforeCursor.toString().length;
+					}
+					return {
+						columns:
+							terminal && cellWidth > 0
+								? Math.round(terminal.getBoundingClientRect().width / cellWidth)
+								: null,
+						rows,
+						text: rows.join(''),
+						cursorOffset
+					};
+				});
+			try {
+				browser = await chromium.launch({
+					executablePath: await resolveChromiumExecutable(
+						process.env.WASM_IDLE_CHROMIUM_EXECUTABLE
+					),
+					headless: true,
+					args: ['--no-sandbox']
+				});
+				for (const scenario of ['editing', 'resizing'] as const) {
+					const context = await browser.newContext({
+						serviceWorkers: 'allow',
+						viewport: viewport(initialColumns)
+					});
+					await addBrowserTestCookies(context, server.browserUrl);
+					await disableBrowserPrewarm(context);
+					await context.addInitScript(() => {
+						localStorage.setItem(
+							'wasm-idle:example-workspace:v3',
+							JSON.stringify({
+								version: 6,
+								language: 'BASH',
+								activePath: 'main.sh',
+								files: [{ path: 'main.sh', content: 'echo unused\n' }],
+								lspEnabled: false
+							})
+						);
+					});
+					const page = await context.newPage();
+					page.on('pageerror', (error) => pageErrors.push(error.message));
+					page.setDefaultTimeout(30_000);
+					try {
+						const url = new URL(server.browserUrl);
+						url.searchParams.set('lsp-test', '1');
+						await page.goto(url.href, { waitUntil: 'domcontentloaded' });
+						await page.waitForFunction(
+							async () =>
+								crossOriginIsolated &&
+								(await (globalThis as SiteWindow).__wasmIdleContainer?.inspect())
+									?.shell?.running === true,
+							undefined,
+							{ timeout: 90_000 }
+						);
+						await expect
+							.poll(async () => (await screen(page)).columns, { timeout: 30_000 })
+							.toBe(initialColumns);
+						await expect
+							.poll(async () => (await screen(page)).text, { timeout: 30_000 })
+							.toBe('~/BASH $');
+						await page.locator('.terminal-shell .xterm-helper-textarea').focus();
+						// Keep the end away from an exact cell boundary: xterm may legitimately
+						// leave an end cursor in its last column while autowrap is pending.
+						const payload = '0123456789abcdefghijklmnopqrstuvwxyz'
+							.repeat(4)
+							.slice(0, 109);
+						const model = {
+							text: `printf 'EDITED=<%s>\\n' 'FIRST_${payload}_WRONG_LAST'`,
+							cursor: 0
+						};
+						const prompt = '~/BASH $ ';
+						expect(model.text.length).toBe(151);
+						const assertInput = async (step: string, columns = initialColumns) => {
+							await expect
+								.poll(
+									async () => {
+										const state = await screen(page);
+										return {
+											columns: state.columns,
+											text: state.text,
+											cursorOffset: state.cursorOffset
+										};
+									},
+									{
+										timeout: 10_000,
+										message: `${scenario}, ${initialColumns} columns: ${step}`
+									}
+								)
+								.toEqual({
+									columns,
+									text: prompt + model.text,
+									cursorOffset: prompt.length + model.cursor
+								});
+						};
+						const moveLeft = async (count: number) => {
+							for (let index = 0; index < count; index++)
+								await page.keyboard.press('ArrowLeft');
+							model.cursor -= count;
+						};
+						const insert = async (text: string) => {
+							await page.keyboard.type(text, { delay: 5 });
+							model.text =
+								model.text.slice(0, model.cursor) +
+								text +
+								model.text.slice(model.cursor);
+							model.cursor += text.length;
+						};
+						const moveToEnd = async () => {
+							await page.keyboard.press('Control+e');
+							model.cursor = model.text.length;
+						};
+						const recordResizeResources = async (step: string) => {
+							const state = await page.evaluate(async () => {
+								const current = await (
+									globalThis as SiteWindow
+								).__wasmIdleContainer!.inspect();
+								return {
+									ownedWorkers: current.ownedWorkers,
+									resizeGeneration: current.shell?.control?.resizeGeneration,
+									appliedResizeGeneration:
+										current.shell?.control?.appliedResizeGeneration
+								};
+							});
+							console.info(
+								'Shell resize resources:',
+								JSON.stringify({ initialColumns, step, ...state })
+							);
+						};
+						await page.keyboard.type(model.text, { delay: 5 });
+						model.cursor = model.text.length;
+						await assertInput('151-character input');
+						if (scenario === 'editing') {
+							await page.keyboard.press('Control+a');
+							model.cursor = 0;
+							await assertInput('Ctrl+A');
+							await insert(':; ');
+							await assertInput('insert at beginning');
+							await moveToEnd();
+							await assertInput('Ctrl+E');
+							await moveLeft(1);
+							await insert('_TAIL');
+							await moveToEnd();
+							await assertInput('insert at end');
+							// Cross both the old 80-column Readline boundary and the actual
+							// 53-column boundary, then edit the argument in the middle.
+							for (const [before, after, replacement] of [
+								[74, 68, 'MID'],
+								[47, 41, 'CUT']
+							] as const) {
+								await moveLeft(model.cursor - before);
+								await assertInput(`before boundary at ${before}`);
+								await moveLeft(before - after);
+								await assertInput(`cross boundary to ${after}`);
+								for (let index = 0; index < 3; index++)
+									await page.keyboard.press('Backspace');
+								model.text =
+									model.text.slice(0, model.cursor - 3) +
+									model.text.slice(model.cursor);
+								model.cursor -= 3;
+								await insert(replacement);
+								await assertInput(`delete and replace at ${after}`);
+							}
+						} else {
+							await moveLeft(model.cursor - 68);
+							await assertInput('cursor inside unsubmitted input');
+							await recordResizeResources('before resize');
+							const otherColumns = initialColumns === 53 ? 106 : 53;
+							await page.setViewportSize(viewport(otherColumns));
+							await assertInput('resize with pending input', otherColumns);
+							await recordResizeResources('resized away');
+							await insert('AWAY');
+							await assertInput('insert after resize', otherColumns);
+							await page.setViewportSize(viewport(initialColumns));
+							await assertInput('resize back with pending input');
+							await recordResizeResources('resized back');
+							await insert('BACK');
+							await assertInput('insert after resizing back');
+						}
+						await moveToEnd();
+						await assertInput('final input');
+						const argument = model.text.match(/'([^']*)'$/u)![1];
+						await page.keyboard.press('Enter');
+						await expect
+							.poll(async () => (await screen(page)).text, { timeout: 30_000 })
+							.toBe(`${prompt}${model.text}EDITED=<${argument}>${prompt.trimEnd()}`);
+					} catch (error) {
+						throw new Error(
+							`${String(error)}\nShell geometry failure: ${JSON.stringify({
+								scenario,
+								initialColumns,
+								pageErrors,
+								screen: await screen(page).catch(() => null)
+							})}`,
+							{ cause: error }
+						);
+					} finally {
+						await context.close();
+					}
+				}
+				expect(pageErrors).toEqual([]);
 			} finally {
 				await browser?.close();
 				await server.close();
