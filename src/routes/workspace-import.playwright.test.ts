@@ -67,8 +67,10 @@ describe('workspace import browser integration', () => {
 				const value = () =>
 					page.evaluate(() =>
 						(
-							window as Window & { __wasmIdleDebug: { getEditorValue(): string } }
-						).__wasmIdleDebug.getEditorValue()
+							window as typeof window & {
+								__wasmIdleDebug?: { getEditorValue(): string };
+							}
+						).__wasmIdleDebug?.getEditorValue()
 					);
 				const select = (name: string) =>
 					page.locator(`.workspace-files button[title="${name}"]`).click();
