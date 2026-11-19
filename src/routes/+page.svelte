@@ -944,9 +944,7 @@
 		} | null>;
 		setPreloadedStdin: (text: string) => void;
 	};
-	let programOutputObserver = $state<((text: string) => void) | undefined>();
 	type WasmIdleDebugTestApi = WasmIdleDebugApi & {
-		observeProgramOutput: (listener: (id: number, text: string) => void) => () => void;
 		getExecutionState: () => ExecutionObservation;
 		getBuildIdentity: () => typeof __WASM_IDLE_BUILD__ & { serviceWorkerUrl: string | null };
 		writeDebugMemory: (
@@ -3520,13 +3518,6 @@
 			typeof globalThis & { __wasmIdleDebug?: WasmIdleDebugTestApi };
 		const debugHookVersion = ++browserDebugHookVersion;
 		const debugApi: WasmIdleDebugTestApi = {
-			observeProgramOutput(listener) {
-				const observe = (text: string) => listener(executionGeneration, text);
-				programOutputObserver = observe;
-				return () => {
-					if (programOutputObserver === observe) programOutputObserver = undefined;
-				};
-			},
 			getExecutionState() {
 				return executionObserver.snapshot();
 			},
@@ -4646,7 +4637,6 @@
 				dark={darkMode}
 				ondebug={onDebugEvent}
 				oncompilediagnostic={onCompileDiagnostic}
-				onprogramoutput={programOutputObserver}
 			/>
 		</div>
 	{/snippet}

@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
 	classifyTerminalRun,
+	installProgramOutputTransport,
 	isExecutionRuntimeAssetPath,
 	isStdinEditorReady,
 	observeProgramOutput,
@@ -88,62 +89,136 @@ describe('program output observation', () => {
 	afterEach(() => vi.unstubAllGlobals());
 
 	function fixture() {
-		let previous = 1;
-		let write: (id: number, chunk: string) => void = () => {};
-		const stop = vi.fn();
+		let execution = 1;
+		const post = vi.fn();
+		class Owner extends EventTarget {
+			postMessage(message: unknown, options?: unknown) {
+				return post(message, options);
+			}
+			respond(id: number, response: Record<string, unknown>) {
+				this.dispatchEvent(
+					new MessageEvent('message', {
+						data: { version: 1, channel: 'owner', id, ...response }
+					})
+				);
+			}
+			output(id: number, data: string | Uint8Array, event = {}) {
+				this.respond(id, {
+					type: 'event',
+					event: { name: 'output', language: 'CPP', requestId: id, data, ...event }
+				});
+			}
+			run(id: number, language = 'CPP') {
+				this.postMessage({
+					version: 1,
+					channel: 'owner',
+					id,
+					type: 'call',
+					method: 'run',
+					args: [language]
+				});
+			}
+		}
 		const target = {
-			__wasmIdleDebug: {
-				getExecutionState: () => ({ id: previous }),
-				observeProgramOutput(listener: typeof write) {
-					write = listener;
-					return stop;
-				}
-			},
+			__wasmIdleDebug: { getExecutionState: () => ({ id: execution, language: 'CPP' }) },
 			__wasmIdleOutputProbe: undefined as
-				{ matched(id: number, marker: string): boolean; stop(): void } | undefined
+				| { matched(id: number, marker: string): boolean | undefined; stop(): void }
+				| undefined
 		};
 		vi.stubGlobal('window', target);
+		vi.stubGlobal('Worker', Owner);
+		installProgramOutputTransport();
+		const owner = new Owner();
+		const init = {
+			version: 1,
+			channel: 'owner',
+			type: 'init',
+			id: 0,
+			settings: { workspaceId: 'test' }
+		};
 		return {
+			owner,
+			post,
+			init,
 			target,
-			stop,
+			Owner,
 			start: (id: number) => {
-				previous = id;
+				execution = id;
 			},
-			write: (id: number, chunk: string) => write(id, chunk),
 			matched: (id: number, marker: string) =>
 				target.__wasmIdleOutputProbe?.matched(id, marker)
 		};
 	}
 
-	it('keeps markers split between chunks after the terminal rolls over', () => {
-		const { write, matched } = fixture();
-		expect(observeProgramOutput(['one', 'two'])).toBe(1);
-		write(1, 'one two');
-		expect(matched(1, 'one')).toBe(false);
-		write(2, 'on');
-		write(2, 'e and t');
-		write(2, 'wo' + 'x'.repeat(70_000));
-		expect(matched(2, 'one')).toBe(true);
-		expect(matched(2, 'two')).toBe(true);
-		write(3, 'one');
-		write(2, 'late two');
-		expect(matched(3, 'one')).toBe(true);
-		expect(matched(3, 'two')).toBe(false);
+	it('captures split and early markers for the dispatched execution only', () => {
+		const { owner, init, start, matched, Owner } = fixture();
+		owner.postMessage(init);
+		expect(observeProgramOutput(['yes', '연\r\n끝', 'other'])).toBe(1);
+		start(2);
+		owner.run(7);
+		owner.output(7, 'y');
+		owner.output(7, 'es' + 'x'.repeat(70_000));
+		const bytes = new TextEncoder().encode('연\n끝');
+		owner.output(7, bytes.slice(0, 1));
+		owner.output(7, bytes.slice(1));
+		owner.output(8, 'other');
+		owner.output(7, 'other', { requestId: 8 });
+		owner.output(7, 'other', { language: 'C' });
+		owner.output(7, 'other', { name: 'shell-output' });
+		const event = { name: 'output', language: 'CPP', requestId: 7, data: 'other' };
+		owner.respond(7, { type: 'event', event, channel: 'foreign' });
+		new Owner().output(7, 'other');
+		owner.respond(7, { type: 'result', value: true });
+		owner.output(7, 'other');
+		expect(matched(2, 'yes')).toBe(true);
+		expect(matched(2, '연\r\n끝')).toBe(true);
+		expect(matched(2, 'other')).toBe(false);
+		expect(matched(1, 'yes')).toBe(false);
 	});
 
-	it('disconnects a replaced observer and accepts empty expectations only for a new run', () => {
-		const { target, stop, start, write, matched } = fixture();
+	it('uses the terminal fallback without a container and detaches replaced and stopped observations', () => {
+		const { target, owner, init, start, matched } = fixture();
 		observeProgramOutput(['old']);
-		write(2, 'old');
 		start(2);
-		expect(observeProgramOutput(['', 'new'])).toBe(2);
-		expect(stop).toHaveBeenCalledOnce();
+		owner.run(7);
+		expect(matched(2, 'old')).toBeUndefined();
+		owner.postMessage(init);
+		owner.run(8);
+		owner.output(8, 'old');
+		expect(matched(2, 'old')).toBe(true);
+		const remove = vi.spyOn(owner, 'removeEventListener');
+		expect(observeProgramOutput(['', 'old'])).toBe(2);
+		expect(remove).toHaveBeenCalledOnce();
+		start(3);
+		owner.run(9, 'C');
+		expect(matched(3, '')).toBe(false);
+		owner.run(10);
+		owner.output(8, 'old');
 		expect(matched(2, '')).toBe(false);
 		expect(matched(3, '')).toBe(true);
-		expect(matched(3, 'new')).toBe(false);
+		expect(matched(3, 'old')).toBe(false);
 		target.__wasmIdleOutputProbe?.stop();
-		expect(stop).toHaveBeenCalledTimes(2);
+		expect(remove).toHaveBeenCalledTimes(2);
 		expect(target.__wasmIdleOutputProbe).toBeUndefined();
+	});
+
+	it('forwards original Worker arguments, return values, errors and ordinary message events', () => {
+		const { owner, init, post, start } = fixture();
+		const transfers = [new ArrayBuffer(1)];
+		post.mockReturnValueOnce('sent');
+		expect(owner.postMessage(init, transfers)).toBe('sent');
+		expect(post).toHaveBeenCalledWith(init, transfers);
+		post.mockImplementationOnce(() => {
+			throw new Error('worker post failed');
+		});
+		expect(() => owner.run(6)).toThrow('worker post failed');
+		const received = vi.fn();
+		owner.addEventListener('message', received);
+		observeProgramOutput(['value']);
+		start(2);
+		owner.run(7);
+		owner.output(7, 'value');
+		expect(received).toHaveBeenCalledOnce();
 	});
 
 	it('uses the streamed match, execution identity and exit status together', () => {

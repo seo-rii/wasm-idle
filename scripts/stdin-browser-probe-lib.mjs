@@ -81,8 +81,42 @@ export function classifyTerminalRun(
 }
 
 /**
- * Runs in the browser before clicking Run. Track only the requested markers and their possible
- * cross-chunk suffix. The visible terminal and its bounded diagnostic tail remain independent.
+ * Installed before page scripts, across reloads. A container owner announces its channel
+ * during initialization. Older sites without that protocol keep the terminal fallback.
+ */
+export function installProgramOutputTransport() {
+	const target = /** @type {any} */ (window);
+	const channels = new WeakMap();
+	const transport = (target.__wasmIdleOutputTransport = {
+		available: false,
+		onRun: /** @type {((worker: Worker, request: any) => void) | undefined} */ (undefined)
+	});
+	const original = Worker.prototype.postMessage;
+	Worker.prototype.postMessage = function (message, ...args) {
+		const result = Reflect.apply(original, this, [message, ...args]);
+		if (message?.version === 1 && typeof message.channel === 'string') {
+			if (
+				message.type === 'init' &&
+				message.id === 0 &&
+				typeof message.settings?.workspaceId === 'string'
+			) {
+				channels.set(this, message.channel);
+				transport.available = true;
+			} else if (
+				message.type === 'call' &&
+				message.method === 'run' &&
+				channels.get(this) === message.channel
+			) {
+				transport.onRun?.(this, message);
+			}
+		}
+		return result;
+	};
+}
+
+/**
+ * Start observing before clicking Run, including runs that finish between browser polls.
+ * Retain only marker matches and enough text to recognize a marker split between writes.
  * @param {string[]} markers
  */
 export function observeProgramOutput(markers) {
@@ -90,33 +124,61 @@ export function observeProgramOutput(markers) {
 	target.__wasmIdleOutputProbe?.stop();
 	const debug = target.__wasmIdleDebug;
 	const before = debug.getExecutionState().id;
-	if (typeof debug.observeProgramOutput !== 'function') return before;
+	const transport = target.__wasmIdleOutputTransport;
+	if (!transport) return before;
 	const wanted = [...new Set(markers.filter(Boolean))];
 	const overlap = Math.max(0, ...wanted.map((marker) => marker.length - 1));
 	const found = new Set();
 	let id = before;
-	let suffix = '';
-	const stop = debug.observeProgramOutput(
-		(/** @type {number} */ runId, /** @type {string} */ chunk) => {
-			if (runId <= before || runId < id) return;
-			if (runId !== id) {
-				id = runId;
-				suffix = '';
-				found.clear();
+	let detach = () => {};
+	transport.onRun = (/** @type {Worker} */ worker, /** @type {any} */ request) => {
+		const { channel, id: requestId, version } = request;
+		const state = debug.getExecutionState();
+		if (state.id <= id || state.language !== request.args?.[0]) return;
+		detach();
+		id = state.id;
+		found.clear();
+		let suffix = '';
+		const decoder = new TextDecoder();
+		/** @param {MessageEvent} message */
+		function onMessage({ data }) {
+			if (data?.version !== version || data.channel !== channel || data.id !== requestId)
+				return;
+			if (data.type === 'result' || data.type === 'error') {
+				detach();
+				return;
 			}
-			if (found.size === wanted.length) return;
-			const text = suffix + chunk;
+			const event = data.event;
+			if (
+				data.type !== 'event' ||
+				event?.name !== 'output' ||
+				event.language !== state.language ||
+				event.requestId !== requestId ||
+				found.size === wanted.length
+			)
+				return;
+			if (typeof event.data !== 'string' && !(event.data instanceof Uint8Array)) return;
+			const chunk =
+				typeof event.data === 'string'
+					? event.data
+					: decoder.decode(event.data, { stream: true });
+			const text = suffix + chunk.replaceAll('\n', '\r\n');
 			for (const marker of wanted) {
 				if (!found.has(marker) && text.includes(marker)) found.add(marker);
 			}
 			suffix = overlap && found.size < wanted.length ? text.slice(-overlap) : '';
 		}
-	);
+		worker.addEventListener('message', onMessage);
+		detach = () => worker.removeEventListener('message', onMessage);
+	};
 	target.__wasmIdleOutputProbe = {
 		matched: (/** @type {number} */ runId, /** @type {string} */ marker) =>
-			runId > before && (!marker || (id === runId && found.has(marker))),
+			transport.available
+				? runId > before && id === runId && (!marker || found.has(marker))
+				: undefined,
 		stop() {
-			stop();
+			detach();
+			transport.onRun = undefined;
 			delete target.__wasmIdleOutputProbe;
 		}
 	};
@@ -389,6 +451,7 @@ export async function runStdinBrowserProbe(options) {
 	const context = await browser.newContext();
 	await addBrowserTestCookies(context, browserUrl);
 	await disableBrowserPrewarm(context);
+	await context.addInitScript(installProgramOutputTransport);
 	// These probes measure execution assets, independently of the default editor LSP.
 	await context.addInitScript(
 		({ argsInput, language }) => {
@@ -675,11 +738,11 @@ export async function runStdinBrowserProbe(options) {
 					await page.waitForFunction(
 						({ initial, marker }) => {
 							const target = /** @type {any} */ (window);
-							if (target.__wasmIdleOutputProbe)
-								return target.__wasmIdleOutputProbe.matched(
-									target.__wasmIdleDebug.getExecutionState().id,
-									marker
-								);
+							const observed = target.__wasmIdleOutputProbe?.matched(
+								target.__wasmIdleDebug.getExecutionState().id,
+								marker
+							);
+							if (observed !== undefined) return observed;
 							const transcript =
 								document.querySelector('[data-testid="terminal-debug-output"]')
 									?.textContent || '';
