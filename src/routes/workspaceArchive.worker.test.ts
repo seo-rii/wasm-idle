@@ -83,6 +83,31 @@ describe('workspace archive worker', () => {
 		}
 	);
 
+	it.each(['original', 'reversed'])(
+		'keeps legacy and Unicode names distinct in %s order',
+		(order) => {
+			const entries = [
+				{ stored: 'resume.txt', path: 'résumé.txt', content: 'accented' },
+				{ stored: 'resume-2.txt', path: 'resume.txt', content: 'unaccented' }
+			];
+			if (order === 'reversed') entries.reverse();
+			const archive = zipSync(
+				Object.fromEntries(
+					entries.map(({ stored, path, content }) => [
+						stored,
+						[
+							strToU8(content),
+							{ extra: { 0x7075: unicodePathField(strToU8(stored), path) } }
+						]
+					])
+				)
+			);
+			expect(extractWorkspaceArchive(archive)).toEqual(
+				entries.map(({ path, content }) => ({ path, content, encoding: 'utf-8' }))
+			);
+		}
+	);
+
 	it('ignores outdated Unicode path metadata and checks the decoded filenames for conflicts', () => {
 		const name = 'legacy.txt';
 		const raw = strToU8(name);
@@ -95,7 +120,9 @@ describe('workspace archive worker', () => {
 			],
 			'data/notes.txt': strToU8('two')
 		});
-		expect(() => extractWorkspaceArchive(archive)).toThrow(/duplicate entry path/u);
+		expect(() => extractWorkspaceArchive(archive)).toThrow(
+			'ZIP contains duplicate entry path: data/notes.txt'
+		);
 		const alias = 'data/./notes.txt';
 		const rawCollision = zipSync({
 			[alias]: [
@@ -104,7 +131,9 @@ describe('workspace archive worker', () => {
 			],
 			'data/notes.txt': strToU8('two')
 		});
-		expect(() => extractWorkspaceArchive(rawCollision)).toThrow(/duplicate entry path/u);
+		expect(() => extractWorkspaceArchive(rawCollision)).toThrow(
+			'ZIP contains duplicate entry path: data/notes.txt'
+		);
 	});
 
 	it('rejects conflicting Unicode paths in the local and central headers', () => {

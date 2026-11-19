@@ -195,7 +195,8 @@ function readArchiveEntries(source: Uint8Array): ArchiveEntry[] {
 	}
 	if (directory + directorySize !== end) throw new Error('Invalid ZIP directory bounds');
 	const entries: ArchiveEntry[] = [];
-	const paths = new Set<string>();
+	const rawPaths = new Set<string>();
+	const resolvedPaths = new Set<string>();
 	let offset = directory;
 	let fileCount = 0;
 	let totalBytes = 0;
@@ -249,10 +250,10 @@ function readArchiveEntries(source: Uint8Array): ArchiveEntry[] {
 			source.subarray(localNameEnd, payload),
 			source.subarray(nameEnd, extraEnd)
 		);
-		for (const alias of new Set([rawPath, path])) {
-			if (paths.has(alias)) throw new Error(`ZIP contains duplicate entry path: ${alias}`);
-			paths.add(alias);
-		}
+		if (rawPaths.has(rawPath)) throw new Error(`ZIP contains duplicate entry path: ${rawPath}`);
+		if (resolvedPaths.has(path)) throw new Error(`ZIP contains duplicate entry path: ${path}`);
+		rawPaths.add(rawPath);
+		resolvedPaths.add(path);
 		if (!isDirectory && ++fileCount > MAX_FILES) {
 			throw new Error(`ZIP cannot contain more than ${MAX_FILES} files`);
 		}
