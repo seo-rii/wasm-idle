@@ -17,6 +17,7 @@ import {
 } from '@wasm-idle/core';
 import {
 	CLANG_WASI_DRIVER_TARGET,
+	isClangWorkspaceTranslationUnit,
 	resolveClangLanguageArgs
 } from '@wasm-idle/llvm-core/core/clang-profile';
 import { CLANG_SIMD_INCLUDE_PATH } from '@wasm-idle/llvm-core/core/clang-simd';
@@ -373,10 +374,20 @@ export class ContainerClangRuntime {
 				label: 'Preparing the Clang toolchain'
 			});
 			const { compileArgs } = resolveSandboxExecutionArgs(language, args, options);
+			const activePath = input.options.activePath!;
+			const sources = [
+				...new Set([
+					activePath,
+					...(input.options.workspaceFiles ?? [])
+						.map((file) => file.path)
+						.filter(isClangWorkspaceTranslationUnit)
+				])
+			].sort();
 			const sysrootProfile =
 				this.profile.sysrootProfile === 'c-base-v1' &&
 				language === 'C' &&
-				input.options.activePath?.endsWith('.c') &&
+				activePath.endsWith('.c') &&
+				sources.every((path) => path.endsWith('.c')) &&
 				!compileArgs.length &&
 				!Object.keys(options.env ?? {}).length
 					? 'c'
@@ -424,10 +435,16 @@ export class ContainerClangRuntime {
 			} catch {
 				/* No previous output. */
 			}
-			const filenameCpp = /\.(?:cc|cpp|cxx|C)$/.test(input.options.activePath ?? '');
+			const filenameCpp = /\.(?:cc|cpp|cxx|C)$/.test(activePath);
 			const filenameLanguage = language === 'CPP' || filenameCpp ? 'CPP' : 'C';
 			let sourceLanguage: 'C' | 'CPP' | undefined = filenameLanguage;
 			let omitBuiltinIncludes = false;
+			let filenameModes = true;
+			let responseFile = false;
+			const inputArguments = new Set<number>();
+			const explicitSources = new Map<number, string>();
+			const standards = new Map<number, 'C' | 'CPP'>();
+			const projectSources = new Set(sources);
 			for (let index = 0; index < compileArgs.length; index++) {
 				const argument = compileArgs[index];
 				// Paths and forwarded arguments can themselves start with -x or @.
@@ -458,7 +475,18 @@ export class ContainerClangRuntime {
 						'-mllvm',
 						'-MF',
 						'-MT',
-						'-MQ'
+						'-MQ',
+						'-u',
+						'-T',
+						'-z',
+						'-framework',
+						'-F',
+						'-iframework',
+						'-isystem-after',
+						'-include-pth',
+						'-gcc-toolchain',
+						'--gcc-toolchain',
+						'-arch'
 					].includes(argument)
 				) {
 					index++;
@@ -466,9 +494,13 @@ export class ContainerClangRuntime {
 				}
 				if (argument === '-nostdinc' || argument === '-nobuiltininc')
 					omitBuiltinIncludes = true;
-				if (argument.startsWith('@')) sourceLanguage = undefined;
-				else if (argument.startsWith('-x')) {
+				if (argument.startsWith('@')) {
+					// A response file may name inputs or change -x. Preserve that driver invocation.
+					responseFile = true;
+					sourceLanguage = undefined;
+				} else if (argument.startsWith('-x')) {
 					const value = argument === '-x' ? compileArgs[++index] : argument.slice(2);
+					filenameModes = value === 'none';
 					if (value === 'none') sourceLanguage = filenameLanguage;
 					else if (value === 'c' || value === 'c-header' || value === 'cpp-output')
 						sourceLanguage = 'C';
@@ -479,13 +511,29 @@ export class ContainerClangRuntime {
 					)
 						sourceLanguage = 'CPP';
 					else sourceLanguage = undefined;
+				} else if (/^--?std=/.test(argument)) {
+					standards.set(index, argument.includes('++') ? 'CPP' : 'C');
+				} else if (!argument.startsWith('-')) {
+					inputArguments.add(index);
+					try {
+						const absolute = this.profile.container.fs.realpath(argument, { cwd });
+						const path = absolute.slice(cwd.length + 1);
+						if (absolute.startsWith(cwd + '/') && projectSources.has(path))
+							explicitSources.set(index, path);
+					} catch {
+						// Clang reports missing or external inputs with its normal diagnostics.
+					}
 				}
 			}
+			const units = responseFile ? [activePath] : sources;
+			const cUnits = units.filter((path) =>
+				path === activePath ? filenameLanguage === 'C' : path.endsWith('.c')
+			);
+			const mixed = filenameModes && cUnits.length > 0 && cUnits.length < units.length;
+			const finalLanguage = mixed ? 'CPP' : sourceLanguage;
 			// Opaque response files choose their own source mode and standard.
-			const standard = sourceLanguage
-				? resolveClangLanguageArgs(sourceLanguage, options).standardArg.slice(
-						'-std='.length
-					)
+			const standard = finalLanguage
+				? resolveClangLanguageArgs(finalLanguage, options).standardArg.slice('-std='.length)
 				: undefined;
 			// An opaque response file or -x override can select C++ for a C editor.
 			// Keep its default source mode C while enabling the C++ driver's link libraries.
@@ -504,15 +552,33 @@ export class ContainerClangRuntime {
 				}
 				profileArgs.push(sysrootArgs[index]);
 			}
+			// The driver accepts one -std for all its inputs. In a mixed project, compile the
+			// C units to private objects first, then link those alongside the C++ sources.
+			const cObjects = new Map(
+				(mixed ? cUnits : []).map((path) => [
+					path,
+					artifact + '.' + crypto.randomUUID() + '.o'
+				])
+			);
+			const named = new Set(explicitSources.values());
+			const userArgs = compileArgs.flatMap((arg, index) => {
+				if (mixed && standards.get(index) === 'C') return [];
+				const source = explicitSources.get(index);
+				return [source ? (cObjects.get(source) ?? arg) : arg];
+			});
+			const inputPath = (path: string) => (/^[-@]/.test(path) ? './' + path : path);
+			const autoInputs = units
+				.filter((path) => !named.has(path))
+				.map((path) => cObjects.get(path) ?? inputPath(path));
 			const common = [
 				...profileArgs,
 				`--target=${CLANG_WASI_DRIVER_TARGET}`,
-				...(sourceLanguage !== 'C' ? ['--driver-mode=g++'] : []),
-				...(language === 'C' && override && !filenameCpp ? ['-x', 'c'] : []),
+				...(finalLanguage !== 'C' ? ['--driver-mode=g++'] : []),
+				...(!mixed && language === 'C' && override && !filenameCpp ? ['-x', 'c'] : []),
 				...(standard ? [`-std=${standard}`] : []),
 				'-fcolor-diagnostics',
 				'-fno-exceptions',
-				...compileArgs
+				...userArgs
 			];
 			const compile = async (argv: string[], quiet = false, sink = emit) => {
 				job.process = await this.spawn(job, 'clang', argv, {
@@ -525,14 +591,17 @@ export class ContainerClangRuntime {
 				const result = await drained;
 				return this.success(result, job.signal);
 			};
-			const headerKey = this.headerKey(
-				language,
-				input.code,
-				compileArgs,
-				input.options,
-				cwd,
-				standard
-			);
+			const headerKey =
+				units.length > 1
+					? undefined
+					: this.headerKey(
+							language,
+							input.code,
+							compileArgs,
+							input.options,
+							cwd,
+							standard
+						);
 			// A Run started during the background header build waits for that build rather
 			// than parsing the header itself; a different header supersedes it.
 			const building = this.#headerBuild;
@@ -598,15 +667,48 @@ export class ContainerClangRuntime {
 					header = undefined;
 				}
 			}
-			const textual = [
-				...common,
-				input.options.activePath!,
-				'-lc-printscan-long-double',
-				'-o',
-				artifact
-			];
+			const textual = [...common, ...autoInputs, '-lc-printscan-long-double', '-o', artifact];
 			let okay: boolean;
-			if (header) {
+			if (mixed) {
+				const cArgs = compileArgs.filter(
+					(_, index) => !inputArguments.has(index) && standards.get(index) !== 'CPP'
+				);
+				try {
+					for (const [path, object] of cObjects) {
+						if (
+							!(await compile([
+								...profileArgs,
+								`--target=${CLANG_WASI_DRIVER_TARGET}`,
+								resolveClangLanguageArgs('C', options).standardArg,
+								'-fcolor-diagnostics',
+								'-fno-exceptions',
+								'-Qunused-arguments',
+								...cArgs,
+								'-x',
+								'c',
+								'-c',
+								inputPath(path),
+								'-o',
+								object
+							]))
+						)
+							return false;
+					}
+					okay = await compile(textual);
+				} finally {
+					// Clean before capturing the reusable executable's filesystem generation.
+					const fs = this.profile.container.fs;
+					fs.withMutationSource(job, () => {
+						for (const object of cObjects.values()) {
+							try {
+								fs.unlink(object);
+							} catch (error) {
+								if ((error as { code?: string }).code !== 'ENOENT') throw error;
+							}
+						}
+					});
+				}
+			} else if (header) {
 				// Hold output until Clang accepts the header, as the worker runtime does, so a
 				// rejected header never shows its errors next to the textual compile's.
 				const buffered: ContainerWorkerEvent[] = [];
