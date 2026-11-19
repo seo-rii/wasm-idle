@@ -56,6 +56,7 @@ export function isStdinEditorReady(expectedLanguage = '') {
  * @param {{ id: number; status: string; exitCode: number | null; language?: string } | null} state
  * @param {number} previousRunId
  * @param {string} [expectedLanguage]
+ * @param {boolean} [outputObserved] A current-run match from the program output stream.
  * @returns {'running' | 'success' | 'failure'}
  */
 export function classifyTerminalRun(
@@ -64,7 +65,8 @@ export function classifyTerminalRun(
 	expectedOutput,
 	state,
 	previousRunId = 0,
-	expectedLanguage = ''
+	expectedLanguage = '',
+	outputObserved
 ) {
 	if (!state || state.id <= previousRunId) return 'running';
 	if (expectedLanguage && state.language !== expectedLanguage) return 'failure';
@@ -73,7 +75,130 @@ export function classifyTerminalRun(
 	const delta = transcript.startsWith(previousTranscript)
 		? transcript.slice(previousTranscript.length)
 		: transcript;
-	return state.exitCode === 0 && delta.includes(expectedOutput) ? 'success' : 'failure';
+	return state.exitCode === 0 && (outputObserved ?? delta.includes(expectedOutput))
+		? 'success'
+		: 'failure';
+}
+
+/**
+ * Installed before page scripts, across reloads. A container owner announces its channel
+ * during initialization. Older sites without that protocol keep the terminal fallback.
+ */
+export function installProgramOutputTransport() {
+	const target = /** @type {any} */ (window);
+	const channels = new WeakMap();
+	const transport = (target.__wasmIdleOutputTransport = {
+		available: false,
+		onRun: /** @type {((worker: Worker, request: any) => void) | undefined} */ (undefined)
+	});
+	const original = Worker.prototype.postMessage;
+	/**
+	 * @param {any} message
+	 * @param {...any} args
+	 */
+	Worker.prototype.postMessage = function (message, ...args) {
+		const result = Reflect.apply(original, this, [message, ...args]);
+		if (message?.version === 1 && typeof message.channel === 'string') {
+			if (
+				message.type === 'init' &&
+				message.id === 0 &&
+				typeof message.settings?.workspaceId === 'string'
+			) {
+				channels.set(this, message.channel);
+				transport.available = true;
+			} else if (
+				message.type === 'call' &&
+				message.method === 'run' &&
+				channels.get(this) === message.channel
+			) {
+				transport.onRun?.(this, message);
+			}
+		}
+		return result;
+	};
+}
+
+/**
+ * Start observing before clicking Run, including runs that finish between browser polls.
+ * Retain only marker matches and enough text to recognize a marker split between writes.
+ * @param {string[]} markers
+ */
+export function observeProgramOutput(markers) {
+	const target = /** @type {any} */ (window);
+	target.__wasmIdleOutputProbe?.stop();
+	const debug = target.__wasmIdleDebug;
+	const before = debug.getExecutionState().id;
+	const transport = target.__wasmIdleOutputTransport;
+	if (!transport) return before;
+	const wanted = [...new Set(markers.filter(Boolean))];
+	const overlap = Math.max(0, ...wanted.map((marker) => marker.length - 1));
+	const found = new Set();
+	let id = before;
+	let detach = () => {};
+	transport.onRun = (/** @type {Worker} */ worker, /** @type {any} */ request) => {
+		const { channel, id: requestId, version } = request;
+		const state = debug.getExecutionState();
+		if (state.id <= id || state.language !== request.args?.[0]) return;
+		detach();
+		id = state.id;
+		found.clear();
+		let suffix = '';
+		const decoder = new TextDecoder();
+		/** @param {MessageEvent} message */
+		function onMessage({ data }) {
+			if (data?.version !== version || data.channel !== channel || data.id !== requestId)
+				return;
+			if (data.type === 'result' || data.type === 'error') {
+				detach();
+				return;
+			}
+			const event = data.event;
+			if (
+				data.type !== 'event' ||
+				event?.name !== 'output' ||
+				event.language !== state.language ||
+				event.requestId !== requestId ||
+				found.size === wanted.length
+			)
+				return;
+			if (typeof event.data !== 'string' && !ArrayBuffer.isView(event.data)) return;
+			const chunk =
+				typeof event.data === 'string'
+					? event.data
+					: decoder.decode(event.data, { stream: true });
+			const text = suffix + chunk.replaceAll('\n', '\r\n');
+			for (const marker of wanted) {
+				if (!found.has(marker) && text.includes(marker)) found.add(marker);
+			}
+			suffix = overlap && found.size < wanted.length ? text.slice(-overlap) : '';
+		}
+		worker.addEventListener('message', onMessage);
+		detach = () => worker.removeEventListener('message', onMessage);
+	};
+	target.__wasmIdleOutputProbe = {
+		matched: (/** @type {number} */ runId, /** @type {string} */ marker) =>
+			transport.available
+				? runId > before && id === runId && (!marker || found.has(marker))
+				: undefined,
+		stop() {
+			detach();
+			transport.onRun = undefined;
+			delete target.__wasmIdleOutputProbe;
+		}
+	};
+	return before;
+}
+
+/** @param {string} marker */
+function readRunOutput(marker) {
+	const target = /** @type {any} */ (window);
+	const state = target.__wasmIdleDebug?.getExecutionState?.() ?? null;
+	return {
+		state,
+		transcript:
+			document.querySelector('[data-testid="terminal-debug-output"]')?.textContent || '',
+		outputObserved: target.__wasmIdleOutputProbe?.matched(state?.id, marker)
+	};
 }
 
 /**
@@ -217,9 +342,7 @@ async function runFollowUp(page, run, runTimeoutMs, language) {
 	);
 	const initialTranscript =
 		(await page.locator('[data-testid="terminal-debug-output"]').textContent()) || '';
-	const previousRunId = await page.evaluate(
-		() => /** @type {any} */ (window).__wasmIdleDebug.getExecutionState().id
-	);
+	const previousRunId = await page.evaluate(observeProgramOutput, [run.expectedOutput]);
 	await installLoadingProgressProbe(page);
 	await page.locator('button.action-button--run').first().click();
 	await page.waitForFunction(
@@ -241,12 +364,10 @@ async function runFollowUp(page, run, runTimeoutMs, language) {
 	const deadline = Date.now() + runTimeoutMs;
 	let status = 'running';
 	let transcript = initialTranscript;
+	let outputObserved;
 	while (status === 'running' && Date.now() < deadline) {
-		const snapshot = await page.evaluate(() => ({
-			transcript:
-				document.querySelector('[data-testid="terminal-debug-output"]')?.textContent || '',
-			state: /** @type {any} */ (window).__wasmIdleDebug?.getExecutionState?.() ?? null
-		}));
+		const snapshot = await page.evaluate(readRunOutput, run.expectedOutput);
+		outputObserved = snapshot.outputObserved;
 		transcript = snapshot.transcript;
 		status = classifyTerminalRun(
 			initialTranscript,
@@ -254,15 +375,17 @@ async function runFollowUp(page, run, runTimeoutMs, language) {
 			run.expectedOutput,
 			snapshot.state,
 			previousRunId,
-			language
+			language,
+			outputObserved
 		);
 		if (status === 'running') await page.waitForTimeout(250);
 	}
 	const progressTrace = await readLoadingProgressTrace(page);
 	await stopLoadingProgressProbe(page);
-	const output = transcript.startsWith(initialTranscript)
-		? transcript.slice(initialTranscript.length)
-		: transcript;
+	const output =
+		outputObserved || !transcript.startsWith(initialTranscript)
+			? transcript
+			: transcript.slice(initialTranscript.length);
 	if (status !== 'success') {
 		throw new Error(
 			`follow-up run ${status === 'running' ? 'timed out' : 'failed'} waiting for ${JSON.stringify(run.expectedOutput)}\n${output}`
@@ -270,6 +393,7 @@ async function runFollowUp(page, run, runTimeoutMs, language) {
 	}
 	return {
 		output,
+		expectedOutputObserved: true,
 		progressTrace,
 		progressLabels: [
 			...new Set(progressTrace.map((/** @type {any} */ entry) => entry.label).filter(Boolean))
@@ -331,6 +455,7 @@ export async function runStdinBrowserProbe(options) {
 	const context = await browser.newContext();
 	await addBrowserTestCookies(context, browserUrl);
 	await disableBrowserPrewarm(context);
+	await context.addInitScript(installProgramOutputTransport);
 	// These probes measure execution assets, independently of the default editor LSP.
 	await context.addInitScript(
 		({ argsInput, language }) => {
@@ -582,11 +707,10 @@ export async function runStdinBrowserProbe(options) {
 				);
 			}
 		}
-		const previousRunId = await page.evaluate(() => {
-			const state = /** @type {any} */ (window).__wasmIdleDebug?.getExecutionState?.();
-			if (!state) throw new Error('Structured execution state API is unavailable');
-			return state.id;
-		});
+		const previousRunId = await page.evaluate(observeProgramOutput, [
+			expectedOutput,
+			waitForOutputBeforeStdin
+		]);
 		await page.locator('button.action-button--run').first().click();
 		/** @type {unknown} */
 		let stdinDeliveryError = null;
@@ -617,6 +741,12 @@ export async function runStdinBrowserProbe(options) {
 				if (waitForOutputBeforeStdin) {
 					await page.waitForFunction(
 						({ initial, marker }) => {
+							const target = /** @type {any} */ (window);
+							const observed = target.__wasmIdleOutputProbe?.matched(
+								target.__wasmIdleDebug.getExecutionState().id,
+								marker
+							);
+							if (observed !== undefined) return observed;
 							const transcript =
 								document.querySelector('[data-testid="terminal-debug-output"]')
 									?.textContent || '';
@@ -654,28 +784,25 @@ export async function runStdinBrowserProbe(options) {
 
 		const runDeadline = Date.now() + runTimeoutMs;
 		let terminalRunStatus = 'running';
+		let outputObserved;
 		while (terminalRunStatus === 'running' && !stdinDeliveryError && Date.now() < runDeadline) {
 			const pollTimeoutMs = Math.max(1, Math.min(1_000, runDeadline - Date.now()));
 			// A run can finish between two browser calls. Read the output and state
 			// together so a completed state is never paired with an earlier transcript.
 			const snapshot = await withWallClockTimeout(
-				page.evaluate(() => ({
-					transcript:
-						document.querySelector('[data-testid="terminal-debug-output"]')
-							?.textContent || '',
-					state:
-						/** @type {any} */ (window).__wasmIdleDebug?.getExecutionState?.() ?? null
-				})),
+				page.evaluate(readRunOutput, expectedOutput),
 				pollTimeoutMs + 250,
 				'terminal execution poll'
 			).catch(() => null);
+			outputObserved = snapshot?.outputObserved;
 			terminalRunStatus = classifyTerminalRun(
 				initialTranscript,
 				snapshot?.transcript ?? '',
 				expectedOutput,
 				snapshot?.state ?? null,
 				previousRunId,
-				language
+				language,
+				outputObserved
 			);
 			if (terminalRunStatus === 'running') {
 				await withWallClockTimeout(
@@ -730,6 +857,7 @@ export async function runStdinBrowserProbe(options) {
 		const summary = {
 			...(await readProbeSummary(page, activeState, pageErrors, consoleMessages)),
 			progressReadiness,
+			expectedOutputObserved: true,
 			runtimeRequests: [...new Set(selectedRuntimeRequests)]
 		};
 		const relevantPageErrors = summary.pageErrors;
@@ -741,7 +869,7 @@ export async function runStdinBrowserProbe(options) {
 				`language selector did not retain ${language}\n${JSON.stringify(summary, null, 2)}`
 			);
 		}
-		if (!summary.transcript.includes(expectedOutput)) {
+		if (!outputObserved && !summary.transcript.includes(expectedOutput)) {
 			throw new Error(
 				`terminal transcript did not contain ${JSON.stringify(expectedOutput)}\n${JSON.stringify(
 					summary,
@@ -786,6 +914,11 @@ export async function runStdinBrowserProbe(options) {
 		}
 		return { ...summary, followUpRuns: followUps };
 	} finally {
+		await withWallClockTimeout(
+			page.evaluate(() => /** @type {any} */ (window).__wasmIdleOutputProbe?.stop()),
+			1_000,
+			'program output observer cleanup'
+		).catch(() => {});
 		await withWallClockTimeout(page.close(), 2_000, 'page close').catch(() => {});
 		await withWallClockTimeout(context.close(), 2_000, 'browser context close').catch(() => {});
 		await withWallClockTimeout(browser.close(), 5_000, 'browser close').catch(() => {});

@@ -828,6 +828,58 @@ int main() {
 	);
 
 	it(
+		'remembers early C++ output after each run fills the terminal history',
+		{
+			skip:
+				!runAllStdinBrowserCases &&
+				process.env.WASM_IDLE_RUN_REAL_BROWSER_CLANG_STDIN !== '1',
+			meta: {
+				browser: true,
+				requiredBrowser:
+					runAllStdinBrowserCases ||
+					process.env.WASM_IDLE_RUN_REAL_BROWSER_CLANG_STDIN === '1'
+			},
+			timeout: browserStdinTestTimeoutMs
+		},
+		async () => {
+			await withBrowserPreview(async (browserUrl) => {
+				const source = (marker: string) => `#include <stdio.h>
+int main() {
+	puts("${marker}");
+	fflush(stdout);
+	char input[8];
+	if (!fgets(input, sizeof(input), stdin)) return 1;
+	for (int i = 0; i < 1100; ++i)
+		puts("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
+	puts("output complete");
+}`;
+				const result = await runStdinBrowserProbe({
+					browserUrl,
+					language: 'CPP',
+					source: source('first marker'),
+					expectedOutput: 'first marker',
+					waitForOutputBeforeStdin: 'first marker',
+					stdinText: 'go\n',
+					followUpRuns: [
+						{
+							source: source('second marker'),
+							expectedOutput: 'second marker',
+							stdinText: 'go\n'
+						}
+					]
+				});
+				expect(result.expectedOutputObserved).toBe(true);
+				expect(result.followUpRuns[0].expectedOutputObserved).toBe(true);
+				for (const tail of [result.transcript, result.followUpRuns[0].output]) {
+					expect(tail).toHaveLength(64 * 1024);
+					expect(tail).toContain('output complete');
+					expect(tail).not.toContain('marker');
+				}
+			});
+		}
+	);
+
+	it(
 		'reports the failing C++ edit and its compiler diagnostics',
 		{
 			skip:
