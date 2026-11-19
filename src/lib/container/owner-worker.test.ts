@@ -159,6 +159,38 @@ async function shellInputFixture() {
 }
 
 describe('application-owned container worker', () => {
+	it('allows cold prompt control to settle and promptly refuses a busy shell after input', async () => {
+		const f = await shellInputFixture();
+		try {
+			f.initialize();
+			await f.response(0);
+			f.send(1, 'shellStart');
+			await f.response(1);
+			const deadline = new AbortController();
+			const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValueOnce(deadline.signal);
+			f.send(2, 'shellSuspend');
+			await vi.waitFor(() => expect(timeout).toHaveBeenCalledWith(10_000));
+			deadline.abort(new DOMException('Cold shell timed out', 'TimeoutError'));
+			expect(await f.response(2)).toMatchObject({ type: 'error' });
+
+			f.send(3, 'shellWrite', ['read value\n']);
+			await vi.waitFor(() => expect(f.write).toHaveBeenCalledOnce());
+			const busy = new AbortController();
+			timeout.mockReturnValueOnce(busy.signal);
+			f.send(4, 'shellSuspend');
+			await vi.waitFor(() => expect(timeout).toHaveBeenCalledWith(2_000));
+			busy.abort(new DOMException('Busy shell timed out', 'TimeoutError'));
+			expect(await f.response(4)).toMatchObject({
+				type: 'error',
+				error: { message: 'Finish the current shell command before running a program.' }
+			});
+		} finally {
+			f.releaseWrite();
+			vi.restoreAllMocks();
+			await f.owner.dispose();
+		}
+	});
+
 	it('passes initial geometry and keeps input independent of serialized resize acknowledgements', async () => {
 		const f = await shellInputFixture();
 		try {
