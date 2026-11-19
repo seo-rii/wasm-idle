@@ -209,7 +209,9 @@ describe('workspace import browser integration', () => {
 						})
 					)
 				});
-				await page.waitForURL((url) => url.searchParams.has('workspace'));
+				await page.waitForURL((url) => url.searchParams.has('workspace'), {
+					waitUntil: 'commit'
+				});
 				expect(new URL(page.url()).searchParams.get('workspace')).toMatch(
 					/^[0-9a-f-]{36}$/u
 				);
@@ -273,7 +275,9 @@ describe('workspace import browser integration', () => {
 					timeout: 90_000
 				});
 				await upload();
-				await page.waitForURL((url) => url.searchParams.has('workspace'));
+				await page.waitForURL((url) => url.searchParams.has('workspace'), {
+					waitUntil: 'commit'
+				});
 				await page.locator('.file-tab.active[title="from-zip.cpp"]').waitFor();
 				const id = new URL(page.url()).searchParams.get('workspace');
 				expect(id).toMatch(/^[0-9a-f-]{36}$/i);
