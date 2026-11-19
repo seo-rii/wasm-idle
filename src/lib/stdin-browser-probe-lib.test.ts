@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { runInNewContext } from 'node:vm';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -158,7 +159,10 @@ describe('program output observation', () => {
 		owner.run(7);
 		owner.output(7, 'y');
 		owner.output(7, 'es' + 'x'.repeat(70_000));
-		const bytes = new TextEncoder().encode('연\n끝');
+		const bytes: Uint8Array = runInNewContext('Uint8Array.from(encoded)', {
+			encoded: new TextEncoder().encode('연\n끝')
+		});
+		expect(bytes).not.toBeInstanceOf(Uint8Array);
 		owner.output(7, bytes.slice(0, 1));
 		owner.output(7, bytes.slice(1));
 		owner.output(8, 'other');

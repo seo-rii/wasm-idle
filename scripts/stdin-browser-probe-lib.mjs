@@ -92,6 +92,10 @@ export function installProgramOutputTransport() {
 		onRun: /** @type {((worker: Worker, request: any) => void) | undefined} */ (undefined)
 	});
 	const original = Worker.prototype.postMessage;
+	/**
+	 * @param {any} message
+	 * @param {...any} args
+	 */
 	Worker.prototype.postMessage = function (message, ...args) {
 		const result = Reflect.apply(original, this, [message, ...args]);
 		if (message?.version === 1 && typeof message.channel === 'string') {
@@ -157,7 +161,7 @@ export function observeProgramOutput(markers) {
 				found.size === wanted.length
 			)
 				return;
-			if (typeof event.data !== 'string' && !(event.data instanceof Uint8Array)) return;
+			if (typeof event.data !== 'string' && !ArrayBuffer.isView(event.data)) return;
 			const chunk =
 				typeof event.data === 'string'
 					? event.data
