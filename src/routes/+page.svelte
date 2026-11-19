@@ -97,7 +97,7 @@
 	import { consumeWorkspaceQueryInput } from './workspaceQuery';
 	import { migrateLegacyWorkspaceFile } from './workspaceMigration';
 	import { normalizeWorkspaceTabs, validateWorkspaceSnapshot } from './workspaceSnapshot';
-	import { preserveUnrestoredWorkspace } from './workspaceRecovery';
+	import { preserveUnrestoredWorkspace, type UnrestoredWorkspace } from './workspaceRecovery';
 	import { copyWorkspaceShare } from './workspaceShare';
 	import { serializeWorkspaceBackup } from './workspaceBackup';
 	import { requestWorkspaceArchive, type WorkspaceArchiveRequest } from './workspaceArchive';
@@ -407,7 +407,7 @@
 	}
 	let saveStatus = $state('Ready');
 	let manualShareUrl = $state('');
-	let unrestoredWorkspace = $state<string | null>(null);
+	let unrestoredWorkspace = $state<UnrestoredWorkspace | null>(null);
 	let workspaceRecoveryKey = $state<string | null>(null);
 	let recoveryBackupDownloaded = $state(false);
 	let workspaceSaveState = $state<WorkspaceSaveState>({
@@ -2081,7 +2081,7 @@
 	function downloadUnrestoredWorkspace() {
 		if (unrestoredWorkspace === null) return;
 		downloadBlob(
-			new Blob([unrestoredWorkspace], { type: 'application/json' }),
+			new Blob([unrestoredWorkspace.snapshot], { type: 'application/json' }),
 			'wasm-idle-recovery.json'
 		);
 		recoveryBackupDownloaded = true;
@@ -2090,11 +2090,7 @@
 	function startNewWorkspaceAfterRecovery() {
 		if (unrestoredWorkspace === null) return;
 		if (!workspaceRecoveryKey && !recoveryBackupDownloaded) {
-			workspaceRecoveryKey = preserveUnrestoredWorkspace(
-				(key, value) => localStorage.setItem(key, value),
-				currentWorkspaceStorageKey,
-				unrestoredWorkspace
-			);
+			workspaceRecoveryKey = preserveUnrestoredWorkspace(unrestoredWorkspace);
 			if (!workspaceRecoveryKey) {
 				saveStatus = 'Download the original snapshot before starting a new workspace';
 				return;
@@ -3680,11 +3676,7 @@
 			}
 			if (initialSelection.unrestoredWorkspace !== null) {
 				unrestoredWorkspace = initialSelection.unrestoredWorkspace;
-				workspaceRecoveryKey = preserveUnrestoredWorkspace(
-					(key, value) => localStorage.setItem(key, value),
-					currentWorkspaceStorageKey,
-					unrestoredWorkspace
-				);
+				workspaceRecoveryKey = preserveUnrestoredWorkspace(unrestoredWorkspace);
 				saveStatus = 'Stored workspace could not be restored';
 			} else if (initialSelection.invalidShare) saveStatus = 'Invalid share URL';
 			workspaceInitialized = true;
