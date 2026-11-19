@@ -1397,9 +1397,9 @@ describe('example route debug actions', () => {
 
 	it('keeps LSP opt-in and persists the toggle in workspace snapshots', () => {
 		expect(source).toMatch(/lspEnabled = \$state\(true\),/);
-		expect(source).toMatch(
-			/function snapshot\(\): WorkspaceSnapshot \{[\s\S]*log,\s+lspEnabled,[\s\S]*version: 6,/s
-		);
+		const snapshotStart = source.indexOf('function snapshot(');
+		const snapshotBody = source.slice(snapshotStart, source.indexOf('\n\t}\n', snapshotStart));
+		expect(snapshotBody).toMatch(/log,\s+lspEnabled,[\s\S]*version: 6,/);
 		expect(source).toMatch(
 			/if \(typeof value\?\.lspEnabled === 'boolean'\) lspEnabled = value\.lspEnabled;/
 		);
