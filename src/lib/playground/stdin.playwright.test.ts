@@ -828,6 +828,70 @@ int main() {
 	);
 
 	it(
+		'reports the failing C++ edit and its compiler diagnostics',
+		{
+			skip:
+				!runAllStdinBrowserCases &&
+				process.env.WASM_IDLE_RUN_REAL_BROWSER_CLANG_STDIN !== '1',
+			meta: {
+				browser: true,
+				requiredBrowser:
+					runAllStdinBrowserCases ||
+					process.env.WASM_IDLE_RUN_REAL_BROWSER_CLANG_STDIN === '1'
+			},
+			timeout: browserStdinTestTimeoutMs
+		},
+		async () => {
+			await withBrowserPreview(async (browserUrl) => {
+				const program = (marker: string) =>
+					`extern "C" int puts(const char *); int main() { puts("${marker}"); }`;
+				const error = await runStdinBrowserProbe({
+					browserUrl,
+					language: 'CPP',
+					source: program('initial-ok'),
+					stdinText: '',
+					expectedOutput: 'initial-ok',
+					followUpRuns: [
+						{
+							source: program('first-edit-ok'),
+							stdinText: '',
+							expectedOutput: 'first-edit-ok'
+						},
+						{
+							source: '#error invalid_followup_source',
+							stdinText: '',
+							expectedOutput: 'second-edit-ok'
+						}
+					]
+				}).then(
+					() => expect.unreachable('the C++ compiler should reject the second edit'),
+					(error: Error) => error
+				);
+
+				expect(error.message).toMatch(/^CPP follow-up 2:/u);
+				expect(error.cause).toBeInstanceOf(Error);
+				expect((error.cause as Error).message).toContain('follow-up run failed');
+				const summary = JSON.parse(
+					error.message.slice(error.message.lastIndexOf('\n{\n') + 1)
+				);
+				expect(summary).toMatchObject({
+					expectedOutput: 'second-edit-ok',
+					execution: {
+						state: {
+							id: expect.any(Number),
+							language: 'CPP',
+							status: 'failed',
+							exitCode: null
+						}
+					},
+					pageErrors: expect.any(Array),
+					transcript: expect.stringContaining('invalid_followup_source')
+				});
+			});
+		}
+	);
+
+	it(
 		'links a C-selected response-file C++ program in the real browser',
 		{
 			skip:
