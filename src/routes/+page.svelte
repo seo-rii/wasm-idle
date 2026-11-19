@@ -2293,6 +2293,14 @@
 			}
 			let imported: string[] = [];
 			if (plan.kind === 'backup') {
+				if (unrestoredWorkspace !== null) {
+					const copyUrl = createSharedWorkspaceUrl(new URL(location.href));
+					const copyKey = workspaceStorageKey(copyUrl);
+					workspaceStorage.createCopy(JSON.stringify(plan.backup), copyKey);
+					currentWorkspaceStorageKey = copyKey;
+					replaceState(copyUrl, page.state);
+					unrestoredWorkspace = null;
+				}
 				applySnapshot(plan.backup, 'Workspace backup restored');
 				return;
 			} else if (plan.fromZip) {

@@ -82,6 +82,99 @@ async function retrySaveAfterStorageError(page: Page) {
 }
 
 describe('workspace storage browser integration', () => {
+	it.each([false, true])(
+		'restores a valid backup into a saved copy during recovery (storage initially full: %s)',
+		browserOptions,
+		async (initiallyFull) => {
+			await withWorkspacePage(async (page, context, browserUrl) => {
+				const key = 'wasm-idle:example-workspace:v3';
+				const original =
+					'{"files":[{"path":"old.cpp","content":"original"}],"openTabs":"broken"}';
+				await context.addInitScript(
+					({ key, original, initiallyFull }) => {
+						if (localStorage.getItem(key) === null) localStorage.setItem(key, original);
+						if (!initiallyFull) return;
+						const write = Storage.prototype.setItem;
+						Storage.prototype.setItem = function (name, value) {
+							if (
+								this === localStorage &&
+								name.startsWith(key + ':') &&
+								!sessionStorage.getItem('allowCopy')
+							)
+								throw new DOMException('Storage is full', 'QuotaExceededError');
+							write.call(this, name, value);
+						};
+					},
+					{ key, original, initiallyFull }
+				);
+				await page.goto(browserUrl, { waitUntil: 'domcontentloaded', timeout: 90_000 });
+				await page.locator('[data-workspace-recovery]').waitFor();
+				await page
+					.locator('#language-select[data-workspace-ready="true"]')
+					.waitFor({ state: 'attached', timeout: 90_000 });
+				const readOriginal = () =>
+					page.evaluate(
+						(key) => ({
+							source: localStorage.getItem(key),
+							backups: Object.fromEntries(
+								Object.keys(localStorage)
+									.filter((name) => name.startsWith(key + ':recovery:'))
+									.map((name) => [name, localStorage.getItem(name)])
+							)
+						}),
+						key
+					);
+				const before = await readOriginal();
+				expect(before.source).toBe(original);
+				const originalUrl = page.url();
+				const upload = () =>
+					page.locator('input[type="file"]').setInputFiles({
+						name: 'saved-project.json',
+						mimeType: 'application/json',
+						buffer: Buffer.from(
+							JSON.stringify({
+								format: WORKSPACE_BACKUP_FORMAT,
+								snapshot: {
+									version: 6,
+									language: 'CPP',
+									activePath: 'restored.cpp',
+									files: [{ path: 'restored.cpp', content: 'int restored;' }],
+									lspEnabled: false
+								}
+							})
+						)
+					});
+				await upload();
+				if (initiallyFull) {
+					await page.getByText(/Import failed: Storage is full/).waitFor();
+					expect(page.url()).toBe(originalUrl);
+					expect(await page.locator('[data-workspace-recovery]').isVisible()).toBe(true);
+					expect(await page.locator('.file-tab[title="restored.cpp"]').count()).toBe(0);
+					expect(await readOriginal()).toEqual(before);
+					await page.evaluate(() => sessionStorage.setItem('allowCopy', '1'));
+					await upload();
+				}
+				await page.locator('.file-tab.active[title="restored.cpp"]').waitFor();
+				const id = new URL(page.url()).searchParams.get('workspace');
+				expect(id).toMatch(/^[0-9a-f-]{36}$/i);
+				expect(await page.locator('[data-workspace-recovery]').count()).toBe(0);
+				const args = page.getByRole('textbox', { name: 'Program arguments' });
+				await args.fill('--after-restore');
+				await page.getByRole('button', { name: 'Save', exact: true }).click();
+				await page.waitForFunction(
+					(key) =>
+						JSON.parse(localStorage.getItem(key) ?? '{}').argsInput ===
+						'--after-restore',
+					key + ':' + id
+				);
+				await page.reload({ waitUntil: 'domcontentloaded' });
+				await page.locator('.file-tab.active[title="restored.cpp"]').waitFor();
+				expect(await args.inputValue()).toBe('--after-restore');
+				expect(await readOriginal()).toEqual(before);
+			});
+		}
+	);
+
 	it(
 		'preserves both tabs when a stale workspace conflicts and is saved as a separate copy',
 		browserOptions,

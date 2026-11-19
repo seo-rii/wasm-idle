@@ -47,6 +47,13 @@ export function createWorkspaceStorage(
 	}
 	return {
 		observe,
+		/** Seed a fresh, unpublished identity without changing the currently open workspace. */
+		createCopy(snapshot: string, storageIdentity: string) {
+			if (options && options.read(storageIdentity) !== null)
+				throw new Error('The destination workspace already exists');
+			write(snapshot, storageIdentity);
+			storedSnapshots.set(storageIdentity, snapshot);
+		},
 		pending() {
 			if (state.phase === 'saved' || state.phase === 'saving') {
 				publish({ phase: 'dirty', revision: state.revision + 1 });
