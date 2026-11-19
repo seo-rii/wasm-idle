@@ -657,17 +657,12 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		return get(activeStore);
 	}
 
-	function getEffectiveBreakpoints(sourcePath = get(sourcePathStore)) {
-		const lines =
-			sourcePath === get(sourcePathStore)
-				? [...get(breakpointsStore)]
-				: [...(get(breakpointsBySourceStore).get(sourcePath) || [])];
-		const runToCursorLine = get(runToCursorLineStore);
-		if (
-			sourcePath === get(sourcePathStore) &&
-			runToCursorLine !== null &&
-			!lines.includes(runToCursorLine)
-		)
+	function getEffectiveBreakpoints(
+		breakpoints: readonly number[],
+		runToCursorLine: number | null
+	) {
+		const lines = [...breakpoints];
+		if (runToCursorLine !== null && !lines.includes(runToCursorLine))
 			lines.push(runToCursorLine);
 		return lines.sort((left, right) => left - right);
 	}
@@ -923,7 +918,10 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 			(!terminal?.setBreakpoints && !terminal?.setSourceBreakpoints)
 		)
 			return;
-		void dispatchTrackedBreakpoints(terminal, getEffectiveBreakpoints());
+		void dispatchTrackedBreakpoints(
+			terminal,
+			getEffectiveBreakpoints(get(breakpointsStore), get(runToCursorLineStore))
+		);
 	}
 
 	async function dispatchTrackedBreakpoints(
@@ -966,13 +964,14 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		);
 		const lines = normalized.filter((spec) => spec.enabled !== false).map((spec) => spec.line);
 		breakpointsBySourceStore.update((current) => new Map(current).set(sourcePath, lines));
-		if (sourcePath === get(sourcePathStore)) breakpointsStore.set(lines);
+		const isCurrentSource = sourcePath === get(sourcePathStore);
+		if (isCurrentSource) breakpointsStore.set(lines);
 		const terminal = get(terminalStore);
 		if (shouldSyncBreakpoints() && terminal) {
 			if (!terminal.setBreakpoints && !terminal.setSourceBreakpoints) return false;
 			return dispatchTrackedBreakpoints(
 				terminal,
-				getEffectiveBreakpoints(sourcePath),
+				getEffectiveBreakpoints(lines, isCurrentSource ? get(runToCursorLineStore) : null),
 				sourcePath
 			);
 		}
@@ -1915,7 +1914,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 			});
 		},
 		get effectiveBreakpoints() {
-			return getEffectiveBreakpoints();
+			return getEffectiveBreakpoints(breakpointsState.current, runToCursorLineState.current);
 		},
 		get cursorLine() {
 			return cursorLineState.current;
