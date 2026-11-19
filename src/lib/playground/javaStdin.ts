@@ -2,21 +2,21 @@ const JAVA_STDIN_HELPER_CLASS = 'WasmIdleStdin';
 const JAVA_SCANNER_COMPAT_SENTINEL = '// wasm-idle Scanner compatibility shim';
 const JAVA_SCANNER_COMPAT_SHIM = `${JAVA_SCANNER_COMPAT_SENTINEL}
 final class Scanner implements AutoCloseable {
-    private final java.io.InputStream input;
+    private final java.io.Reader reader;
     private int bufferedChar = Integer.MIN_VALUE;
     private String bufferedToken = null;
     private boolean closed = false;
 
     Scanner(java.io.InputStream input) {
-        this.input = input;
+        this(input, java.nio.charset.Charset.defaultCharset());
+    }
+
+    Scanner(java.io.InputStream input, java.nio.charset.Charset charset) {
+        this.reader = new java.io.InputStreamReader(input, charset);
     }
 
     Scanner(String source) {
-        this(
-            new java.io.ByteArrayInputStream(
-                source != null ? source.getBytes() : new byte[0]
-            )
-        );
+        this.reader = new java.io.StringReader(source != null ? source : "");
     }
 
     private void ensureOpen() {
@@ -25,28 +25,28 @@ final class Scanner implements AutoCloseable {
         }
     }
 
-    private int readByteInternal() {
+    private int readInputChar() {
         try {
-            return input.read();
+            return reader.read();
         } catch (java.io.IOException error) {
             throw new RuntimeException(error);
         }
     }
 
-    private int readByte() {
+    private int readChar() {
         ensureOpen();
         if (bufferedChar != Integer.MIN_VALUE) {
             int value = bufferedChar;
             bufferedChar = Integer.MIN_VALUE;
             return value;
         }
-        return readByteInternal();
+        return readInputChar();
     }
 
-    private int peekByte() {
+    private int peekChar() {
         ensureOpen();
         if (bufferedChar == Integer.MIN_VALUE) {
-            bufferedChar = readByteInternal();
+            bufferedChar = readInputChar();
         }
         return bufferedChar;
     }
@@ -56,20 +56,20 @@ final class Scanner implements AutoCloseable {
     }
 
     private boolean skipWhitespace() {
-        int value = peekByte();
+        int value = peekChar();
         while (value != -1 && isWhitespace(value)) {
-            readByte();
-            value = peekByte();
+            readChar();
+            value = peekChar();
         }
         return value != -1;
     }
 
     private String readTokenValue() {
         java.lang.StringBuilder token = new java.lang.StringBuilder();
-        int value = peekByte();
+        int value = peekChar();
         while (value != -1 && !isWhitespace(value)) {
-            token.append((char) readByte());
-            value = peekByte();
+            token.append((char) readChar());
+            value = peekChar();
         }
         return token.toString();
     }
@@ -106,30 +106,30 @@ final class Scanner implements AutoCloseable {
             line.append(bufferedToken);
             bufferedToken = null;
         }
-        int value = peekByte();
+        int value = peekChar();
         if (line.length() == 0 && value == -1) {
             return "";
         }
         if (line.length() == 0 && value == '\\r') {
-            readByte();
-            if (peekByte() == '\\n') {
-                readByte();
+            readChar();
+            if (peekChar() == '\\n') {
+                readChar();
             }
             return "";
         }
         if (line.length() == 0 && value == '\\n') {
-            readByte();
+            readChar();
             return "";
         }
         while (true) {
-            value = readByte();
+            value = readChar();
             if (value == -1 || value == '\\n' || value == '\\r') {
                 break;
             }
             line.append((char) value);
         }
-        if (value == '\\r' && peekByte() == '\\n') {
-            readByte();
+        if (value == '\\r' && peekChar() == '\\n') {
+            readChar();
         }
         return line.toString();
     }
@@ -204,7 +204,7 @@ final class Scanner implements AutoCloseable {
         }
         closed = true;
         try {
-            input.close();
+            reader.close();
         } catch (java.io.IOException error) {
             throw new RuntimeException(error);
         }

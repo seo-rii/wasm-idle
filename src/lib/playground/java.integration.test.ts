@@ -253,6 +253,39 @@ public class Main {
 		// not retain their JS-only @JSByRef typed array paths.
 		const cases = [
 			{
+				name: 'Scanner decodes a UTF-8 line across host input chunks',
+				code: `import java.util.Scanner;
+
+public class Main {
+    public static void main(String[] args) {
+        String line = new Scanner(System.in).nextLine();
+        System.out.println(line.length() + ":" + line.substring(4095));
+    }
+}`,
+				// The emoji's first byte ends the default 4 KiB host chunk.
+				stdin: 'x'.repeat(4095) + '🙂한글é\r\n',
+				expected: '4100:🙂한글é\n'
+			},
+			{
+				name: 'Scanner honors the selected input charset and preserves String input',
+				code: `import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.Scanner;
+
+public class Main {
+    public static void main(String[] args) {
+        Scanner utf8 = new Scanner(System.in, StandardCharsets.UTF_8);
+        System.out.println(utf8.next());
+        byte[] bytes = { 99, 97, 102, (byte) 0xE9 };
+        Scanner latin = new Scanner(new ByteArrayInputStream(bytes), StandardCharsets.ISO_8859_1);
+        System.out.println(latin.nextLine());
+        System.out.println(new Scanner("문자열🙂").next());
+    }
+}`,
+				stdin: '안녕🙂\n',
+				expected: '안녕🙂\ncafé\n문자열🙂\n'
+			},
+			{
 				name: 'BufferedReader with StringTokenizer',
 				code: `import java.io.*;
 import java.util.StringTokenizer;
