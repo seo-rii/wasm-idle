@@ -428,6 +428,10 @@
 		? { source: location.href, target: initialSelection.replacementUrl }
 		: null;
 	let editorWorkspaceRevision = $state(0);
+	const editorWorkspaceKey = $derived(
+		`${currentWorkspaceStorageKey}:${language}:${editorWorkspaceRevision}`
+	);
+	let zipExportRequest = 0;
 	const workspaceStorage = createWorkspaceStorage(
 		(value, key) => localStorage.setItem(key, value),
 		(state) => {
@@ -2233,16 +2237,24 @@
 	}
 
 	async function downloadZip() {
-		const response = await runWorkspaceArchive({
-			type: 'create',
-			files: files.map((file) => ({ ...file }))
-		});
-		if (response.type !== 'created') throw new Error('ZIP worker returned an invalid response');
-		downloadBlob(
-			new Blob([response.archive], { type: 'application/zip' }),
-			'wasm-idle-workspace.zip'
-		);
-		saveStatus = 'ZIP downloaded';
+		const request = ++zipExportRequest;
+		const workspace = editorWorkspaceKey;
+		let message = 'ZIP downloaded';
+		try {
+			const response = await runWorkspaceArchive({
+				type: 'create',
+				files: files.map((file) => ({ ...file }))
+			});
+			if (response.type !== 'created')
+				throw new Error('ZIP worker returned an invalid response');
+			downloadBlob(
+				new Blob([response.archive], { type: 'application/zip' }),
+				'wasm-idle-workspace.zip'
+			);
+		} catch (error) {
+			message = `ZIP export failed: ${error instanceof Error ? error.message : String(error)}`;
+		}
+		if (request === zipExportRequest && workspace === editorWorkspaceKey) saveStatus = message;
 	}
 
 	async function extractImportedZip(archive: Uint8Array) {
@@ -5268,7 +5280,7 @@
 					{/each}
 				</nav>
 				<div class="editor-surface">
-					{#key `${currentWorkspaceStorageKey}:${language}:${editorWorkspaceRevision}`}
+					{#key editorWorkspaceKey}
 						<Monaco
 							language={editorLanguage}
 							lspLanguage={monacoLspLanguage}

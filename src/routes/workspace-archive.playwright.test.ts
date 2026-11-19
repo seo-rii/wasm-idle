@@ -166,6 +166,41 @@ describe('workspace ZIP browser integration', () => {
 					if (!legacyPath) throw new Error('Missing renamed legacy WASM download');
 					expect(await readFile(legacyPath)).toEqual(wasmBytes);
 					await legacyContext.close();
+
+					// A JSON backup can contain more files than a ZIP export allows.
+					const files = Array.from({ length: 1001 }, (_, i) => ({
+						path: i === 0 ? 'main.cpp' : `item-${i}.txt`,
+						content: ''
+					}));
+					await page.locator('input[type="file"]').setInputFiles({
+						name: 'many-files.json',
+						mimeType: 'application/json',
+						buffer: Buffer.from(
+							JSON.stringify({
+								version: 6,
+								language: 'CPP',
+								activePath: files[1000].path,
+								files
+							})
+						)
+					});
+					await page.getByText('Workspace backup restored', { exact: true }).waitFor();
+					const zipButton = page.getByRole('button', { name: 'ZIP', exact: true });
+					await zipButton.click();
+					await page
+						.getByText('ZIP export failed: ZIP cannot contain more than 1000 files', {
+							exact: true
+						})
+						.waitFor();
+
+					page.once('dialog', (dialog) => dialog.accept());
+					await page.getByRole('button', { name: 'Delete', exact: true }).click();
+					const retry = page.waitForEvent('download');
+					await zipButton.click();
+					const retryPath = await (await retry).path();
+					if (!retryPath) throw new Error('Missing ZIP after reducing the file count');
+					expect(Object.keys(unzipSync(await readFile(retryPath)))).toHaveLength(1000);
+					await page.getByText('ZIP downloaded', { exact: true }).waitFor();
 					expect(pageErrors).toEqual([]);
 				} finally {
 					await context.close();
