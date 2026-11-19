@@ -23,6 +23,8 @@ const packages = [
 ];
 
 const MiB = 1024 * 1024;
+// Advance this registry date when qualifying a new dependency baseline for the size budgets.
+const INSTALL_BUDGET_REGISTRY_DATE = '2026-11-19T00:30:25Z';
 
 /**
  * @typedef {{ maxBytes: number; maxFiles: number; maxPackages: number }} InstallBudget
@@ -485,7 +487,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// The full install with Bash terminal and copy fixes measures 43,330,188 bytes.
 		// The combined install measures 43,373,829 bytes with Svelte 5.58.0.
 		// The input layout and Readline renderer each add a JavaScript file and a declaration.
-		budget: { maxBytes: 43374592, maxFiles: 3494, maxPackages: 70 },
+		// source-map-js 1.2.3 added 2,296 bytes to Vue's dependency tree. Allow 3 KiB.
+		budget: { maxBytes: 43377664, maxFiles: 3494, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
@@ -821,8 +824,9 @@ export function assertInstallBudget(scenario, installed, contributors = []) {
  * @param {Map<string, string>} tarballs
  * @param {InstallScenario} scenario
  * @param {number} index
+ * @param {string} [registryBefore] npm publication cutoff for the measured baseline.
  */
-async function verifyScenario(tempRoot, tarballs, scenario, index) {
+async function verifyScenario(tempRoot, tarballs, scenario, index, registryBefore) {
 	const installDir = path.join(tempRoot, `install-${index + 1}`);
 	await mkdir(installDir, { recursive: true });
 	try {
@@ -854,7 +858,8 @@ async function verifyScenario(tempRoot, tarballs, scenario, index) {
 				'--no-audit',
 				'--no-fund',
 				'--package-lock=false',
-				'--omit=dev'
+				'--omit=dev',
+				...(registryBefore ? [`--before=${registryBefore}`] : [])
 			],
 			installDir
 		);
@@ -920,7 +925,13 @@ async function verifyScenario(tempRoot, tarballs, scenario, index) {
 				`    ${contributor.name}: ${formatMiB(contributor.bytes)}, ${contributor.files} files${instanceSuffix}.`
 			);
 		}
-		assertInstallBudget(scenario, installed, contributors);
+		try {
+			assertInstallBudget(scenario, installed, contributors);
+		} catch (error) {
+			if (registryBefore) throw error;
+			console.warn('Current registry footprint exceeds the qualified budget.');
+			console.warn(error instanceof Error ? error.message : error);
+		}
 		console.log('  Import smoke checks passed.');
 	} finally {
 		await rm(installDir, { recursive: true, force: true });
@@ -1014,8 +1025,15 @@ async function main() {
 			);
 		}
 
-		for (const [index, scenario] of scenarios.entries()) {
-			await verifyScenario(tempRoot, tarballs, scenario, index);
+		for (const registryBefore of [INSTALL_BUDGET_REGISTRY_DATE, undefined]) {
+			console.log(
+				registryBefore
+					? `\nChecking install budgets with registry versions available at ${registryBefore}.`
+					: '\nChecking current npm consumer installs and reporting their sizes.'
+			);
+			for (const [index, scenario] of scenarios.entries()) {
+				await verifyScenario(tempRoot, tarballs, scenario, index, registryBefore);
+			}
 		}
 		console.log('\nPacked packages install and import successfully in every scenario.');
 	} finally {
