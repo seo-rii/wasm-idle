@@ -3,8 +3,9 @@ import {
 	WORKSPACE_STORAGE_KEY,
 	workspaceStorageKey
 } from './workspaceContext';
-import { consumeWorkspaceQueryInput, hasWorkspaceQueryInput } from './workspaceQuery';
+import { hasWorkspaceQueryInput } from './workspaceQuery';
 import { validateWorkspaceSnapshot } from './workspaceSnapshot';
+import type { UnrestoredWorkspace } from './workspaceRecovery';
 
 export interface InitialWorkspaceOverrides {
 	code: string | null;
@@ -23,11 +24,11 @@ export interface InitialWorkspaceSelection<Language extends string> {
 	storageKey: string;
 	/** Exact bytes read for this identity, used to detect changes before the first save. */
 	storedSnapshot: string | null;
-	/** Replace the visible URL only after the initial state has been applied. */
+	/** Publish this URL once the selected workspace is saved under its new storage key. */
 	replacementUrl: URL | null;
 	overrides: InitialWorkspaceOverrides;
 	/** Preserve this exact input through the existing recovery flow before saving. */
-	unrestoredWorkspace: string | null;
+	unrestoredWorkspace: UnrestoredWorkspace | null;
 	invalidShare: boolean;
 }
 
@@ -103,8 +104,7 @@ function selectInitialWorkspace<Language extends string>(
 			typeof snapshot.activePath === 'string' ? snapshot.activePath : ''
 		) ??
 		fallbackLanguage;
-	const editableUrl = () =>
-		consumeWorkspaceQueryInput(createSharedWorkspaceUrl(url, options.createWorkspaceId?.()));
+	const editableUrl = () => createSharedWorkspaceUrl(url, options.createWorkspaceId?.());
 
 	if (url.hash.startsWith('#workspace=')) {
 		let shared: Record<string, unknown> | null = null;
@@ -174,7 +174,7 @@ function selectInitialWorkspace<Language extends string>(
 				snapshot
 			};
 		} catch {
-			base.unrestoredWorkspace = stored;
+			base.unrestoredWorkspace = { storageKey: base.storageKey, snapshot: stored };
 		}
 	}
 

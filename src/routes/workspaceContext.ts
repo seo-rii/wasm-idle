@@ -1,3 +1,5 @@
+import { consumeWorkspaceQueryInput } from './workspaceQuery';
+
 export const WORKSPACE_STORAGE_KEY = 'wasm-idle:example-workspace:v3';
 
 export function workspaceStorageKey(url: URL) {
@@ -18,7 +20,7 @@ function createWorkspaceId() {
 }
 
 export function createSharedWorkspaceUrl(url: URL, workspaceId = createWorkspaceId()) {
-	const editableUrl = new URL(url);
+	const editableUrl = consumeWorkspaceQueryInput(url);
 	editableUrl.hash = '';
 	editableUrl.searchParams.set('workspace', workspaceId);
 	return editableUrl;

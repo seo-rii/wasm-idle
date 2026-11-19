@@ -2371,6 +2371,7 @@
 	let model = $state<monaco.editor.ITextModel | undefined>();
 	let debugView = $state<MonacoDebugView | null>(null);
 	interface Props {
+		binary?: boolean;
 		compact?: boolean;
 		dark?: boolean;
 		editor: monaco.editor.IStandaloneCodeEditor | null;
@@ -2508,6 +2509,7 @@
 	}
 
 	let {
+		binary = false,
 		compact = false,
 		dark = false,
 		editor = $bindable(),
@@ -2715,6 +2717,8 @@
 	);
 	const editorSetting = $derived<IMonacoSetting>({
 		automaticLayout: true,
+		readOnly: binary,
+		readOnlyMessage: { value: 'Binary files are read-only.' },
 		fontFamily: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
 		fontSize: compact ? 13 : 14,
 		lineHeight: compact ? 20 : 22,

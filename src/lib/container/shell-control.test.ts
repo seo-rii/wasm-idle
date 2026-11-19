@@ -422,6 +422,66 @@ describe('real Bash directory control protocol', () => {
 		}
 	});
 
+	it('finishes a language switch before claiming the prompt for Run', async () => {
+		const { control, fs } = fixture();
+		const changing = control.requestDirectory('CPP');
+		const directoryAck = acknowledgement(fs);
+		const paused = control.requestPrompt('suspend');
+		const result = Promise.allSettled([changing, paused]);
+		expect(acknowledgement(fs)).toEqual(directoryAck);
+		control.onInvocation(directoryAck);
+		await changing;
+		const pauseAck = acknowledgement(fs, '/workspace/CPP');
+		expect(pauseAck.argv.slice(1)).toEqual(['2', 'ab'.repeat(16), '2', 'suspend', 'ok']);
+		control.onInvocation(pauseAck);
+		expect((await result).map((entry) => entry.status)).toEqual(['fulfilled', 'fulfilled']);
+		expect(control.inspect().cwd).toBe('/workspace/CPP');
+	});
+
+	it('queues directory changes behind a pending prompt, applying the latest language', async () => {
+		const { control, fs } = fixture();
+		const paused = control.requestPrompt('suspend');
+		const ack = acknowledgement(fs, '/workspace');
+		const earlier = control.requestDirectory('C');
+		const later = control.requestDirectory('CPP');
+		const settled = Promise.allSettled([paused, earlier, later]);
+		expect(acknowledgement(fs, '/workspace')).toEqual(ack);
+		control.onInvocation(ack);
+		await paused;
+		control.onInvocation(acknowledgement(fs));
+		expect((await settled).map((entry) => entry.status)).toEqual([
+			'fulfilled',
+			'rejected',
+			'fulfilled'
+		]);
+		expect(control.inspect().cwd).toBe('/workspace/CPP');
+	});
+
+	it('changes directory silently while the foreground program owns the display', () => {
+		const local = nativeFixture(`1 ${'ab'.repeat(16)} 1 CPP\n`);
+		const result = local.run(
+			'__wasm_idle_terminal_suspended=1\n__wasm_idle_poll\nprintf "%d|%s" "$?" "$PWD"'
+		);
+		expect(result.status).toBe(0);
+		expect(result.stdout).toBe(`0|${join(local.workspace, 'CPP')}`);
+	});
+
+	it('cancels a queued prompt claim without dropping the language switch or issuing a late claim', async () => {
+		const { control, fs } = fixture();
+		const changing = control.requestDirectory('CPP');
+		const directoryAck = acknowledgement(fs);
+		const abort = new AbortController();
+		const paused = control.requestPrompt('suspend', abort.signal);
+		const settled = Promise.allSettled([changing, paused]);
+		abort.abort(new Error('Busy shell'));
+		control.onInvocation(directoryAck);
+		expect(await settled).toEqual([
+			{ status: 'fulfilled', value: undefined },
+			{ status: 'rejected', reason: abort.signal.reason }
+		]);
+		expect(acknowledgement(fs)).toEqual(directoryAck);
+	});
+
 	it('uses prompt generations without entering a language directory or accepting directory acknowledgements', async () => {
 		const { control, fs } = fixture();
 		const paused = control.requestPrompt('suspend');

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onDestroy, untrack } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { MOONBIT_SERVICE_POLICY } from '$lib/playground/moonbitServicePolicy';
 	import { parseDebugInteger } from './debugInteger';
 	import Monaco from './Monaco.svelte';
@@ -38,7 +39,6 @@
 	import * as publicEnvironment from '$app/env/public';
 	import { replaceState } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { SvelteURL } from 'svelte/reactivity';
 	import {
 		createApplicationAssetResolver,
 		createApplicationRuntimeAssets
@@ -95,9 +95,10 @@
 		WORKSPACE_STORAGE_KEY,
 		workspaceStorageKey
 	} from './workspaceContext';
+	import { consumeWorkspaceQueryInput } from './workspaceQuery';
 	import { migrateLegacyWorkspaceFile } from './workspaceMigration';
 	import { normalizeWorkspaceTabs, validateWorkspaceSnapshot } from './workspaceSnapshot';
-	import { preserveUnrestoredWorkspace } from './workspaceRecovery';
+	import { preserveUnrestoredWorkspace, type UnrestoredWorkspace } from './workspaceRecovery';
 	import { copyWorkspaceShare } from './workspaceShare';
 	import { serializeWorkspaceBackup } from './workspaceBackup';
 	import { requestWorkspaceArchive, type WorkspaceArchiveRequest } from './workspaceArchive';
@@ -407,7 +408,7 @@
 	}
 	let saveStatus = $state('Ready');
 	let manualShareUrl = $state('');
-	let unrestoredWorkspace = $state<string | null>(null);
+	let unrestoredWorkspace = $state<UnrestoredWorkspace | null>(null);
 	let workspaceRecoveryKey = $state<string | null>(null);
 	let recoveryBackupDownloaded = $state(false);
 	let workspaceSaveState = $state<WorkspaceSaveState>({
@@ -417,6 +418,10 @@
 		error: null
 	});
 	let currentWorkspaceStorageKey = $state(initialSelection?.storageKey ?? WORKSPACE_STORAGE_KEY);
+	// A reload can recover from the incoming URL until the new storage key has a snapshot.
+	let pendingWorkspaceUrl = initialSelection?.replacementUrl
+		? { source: location.href, target: initialSelection.replacementUrl }
+		: null;
 	let editorWorkspaceRevision = $state(0);
 	const workspaceStorage = createWorkspaceStorage(
 		(value, key) => localStorage.setItem(key, value),
@@ -735,6 +740,7 @@
 	);
 	const compact = $derived(examplePaneWidth > 0 && examplePaneWidth <= 760);
 	const activeFile = $derived(files.find((file) => file.path === activePath) ?? files[0]);
+	const activeFileIsBinary = $derived(!!activeFile && isBinaryWorkspaceFile(activeFile));
 	const activeDebugSourcePath = $derived(
 		`/workspace/${normalizePath(activePath) || defaultPathForLanguage()}`
 	);
@@ -1396,8 +1402,8 @@
 		return workspaces;
 	}
 
-	const containerWorkspaceConflicts = new Set<string>();
-	const changedContainerProjects = new Set<PlaygroundLanguage>();
+	const containerWorkspaceConflicts = new SvelteSet<string>();
+	const changedContainerProjects = new SvelteSet<PlaygroundLanguage>();
 	let containerRescanPending = false;
 	let containerChangeRevision = 0;
 	let containerReadRevision = 0;
@@ -1449,7 +1455,7 @@
 					const confirmActive = containerRefreshForcePending;
 					const rescan = containerRescanPending;
 					const revision = containerChangeRevision;
-					const changed = new Set(changedContainerProjects);
+					const changed = new SvelteSet(changedContainerProjects);
 					containerRefreshForcePending = containerRescanPending = false;
 					changedContainerProjects.clear();
 					try {
@@ -1788,7 +1794,7 @@
 
 	function updateActiveContent(value: string) {
 		const file = activeFile;
-		if (!file || file.content === value) return;
+		if (!file || activeFileIsBinary || file.content === value) return;
 		file.content = value;
 		if (debug.active) {
 			debug.markSourceRevisionStale(`/workspace/${file.path}`);
@@ -2048,6 +2054,11 @@
 			return false;
 		}
 		const saved = await workspaceStorage.save(workspaceSaveKey, identity);
+		if (saved && identity === currentWorkspaceStorageKey && pendingWorkspaceUrl) {
+			if (location.href === pendingWorkspaceUrl.source)
+				replaceState(pendingWorkspaceUrl.target, page.state);
+			pendingWorkspaceUrl = null;
+		}
 		if (saved && showStatus) saveStatus = 'Saved locally';
 		return saved;
 	}
@@ -2055,8 +2066,8 @@
 	async function saveWorkspaceCopy() {
 		if (runningMode) return;
 		const copyUrl = createSharedWorkspaceUrl(new URL(location.href));
+		pendingWorkspaceUrl = { source: location.href, target: copyUrl };
 		currentWorkspaceStorageKey = workspaceStorageKey(copyUrl);
-		replaceState(copyUrl, page.state);
 		await saveWorkspace(true);
 	}
 
@@ -2076,7 +2087,7 @@
 	function downloadUnrestoredWorkspace() {
 		if (unrestoredWorkspace === null) return;
 		downloadBlob(
-			new Blob([unrestoredWorkspace], { type: 'application/json' }),
+			new Blob([unrestoredWorkspace.snapshot], { type: 'application/json' }),
 			'wasm-idle-recovery.json'
 		);
 		recoveryBackupDownloaded = true;
@@ -2085,11 +2096,7 @@
 	function startNewWorkspaceAfterRecovery() {
 		if (unrestoredWorkspace === null) return;
 		if (!workspaceRecoveryKey && !recoveryBackupDownloaded) {
-			workspaceRecoveryKey = preserveUnrestoredWorkspace(
-				(key, value) => localStorage.setItem(key, value),
-				currentWorkspaceStorageKey,
-				unrestoredWorkspace
-			);
+			workspaceRecoveryKey = preserveUnrestoredWorkspace(unrestoredWorkspace);
 			if (!workspaceRecoveryKey) {
 				saveStatus = 'Download the original snapshot before starting a new workspace';
 				return;
@@ -2124,7 +2131,7 @@
 		if (!browser) return;
 		saveWorkspace();
 		const shareHash = `${SHARE_PREFIX}${encodeBase64Url(JSON.stringify(snapshot()))}`;
-		const url = new SvelteURL(location.href);
+		const url = consumeWorkspaceQueryInput(new URL(location.href));
 		url.hash = shareHash;
 		url.searchParams.delete('workspace');
 		if (await copyWorkspaceShare(url.toString(), navigator.clipboard)) {
@@ -2293,6 +2300,14 @@
 			}
 			let imported: string[] = [];
 			if (plan.kind === 'backup') {
+				if (unrestoredWorkspace !== null) {
+					const copyUrl = createSharedWorkspaceUrl(new URL(location.href));
+					const copyKey = workspaceStorageKey(copyUrl);
+					workspaceStorage.createCopy(JSON.stringify(plan.backup), copyKey);
+					currentWorkspaceStorageKey = copyKey;
+					replaceState(copyUrl, page.state);
+					unrestoredWorkspace = null;
+				}
 				applySnapshot(plan.backup, 'Workspace backup restored');
 				return;
 			} else if (plan.fromZip) {
@@ -3228,13 +3243,6 @@
 		return execution;
 	}
 
-	// Only URL publication waits for the router. Workspace restoration is synchronous
-	// so Monaco, the terminal and prewarming all observe the selected language first.
-	$effect(() => {
-		if (initialSelection?.replacementUrl)
-			untrack(() => replaceState(initialSelection.replacementUrl!, page.state));
-	});
-
 	$effect(() => {
 		if (workspaceEditorReady) workspaceEditorInitialized = true;
 	});
@@ -3512,7 +3520,7 @@
 				return editor?.getValue() || '';
 			},
 			async setEditorValue(text: string) {
-				if (!editor) return false;
+				if (!editor || activeFileIsBinary) return false;
 				editor.setValue(text);
 				updateActiveContent(text);
 				await Promise.resolve();
@@ -3679,11 +3687,7 @@
 			}
 			if (initialSelection.unrestoredWorkspace !== null) {
 				unrestoredWorkspace = initialSelection.unrestoredWorkspace;
-				workspaceRecoveryKey = preserveUnrestoredWorkspace(
-					(key, value) => localStorage.setItem(key, value),
-					currentWorkspaceStorageKey,
-					unrestoredWorkspace
-				);
+				workspaceRecoveryKey = preserveUnrestoredWorkspace(unrestoredWorkspace);
 				saveStatus = 'Stored workspace could not be restored';
 			} else if (initialSelection.invalidShare) saveStatus = 'Invalid share URL';
 			workspaceInitialized = true;
@@ -5249,6 +5253,7 @@
 							goTarget={languageExecutionOptions.goTarget}
 							bind:editor
 							value={activeFile?.content ?? ''}
+							binary={activeFileIsBinary}
 							onChange={updateActiveContent}
 							{compact}
 							dark={darkMode}

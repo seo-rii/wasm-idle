@@ -29,9 +29,10 @@ pnpm sync:forth-lsp
 The producer downloads the pinned source archive, verifies its SHA-256 and
 `Cargo.lock`, applies the checked-in transport patch, builds with Rust 1.94.0 and
 `--locked`, and verifies the resulting module against the qualified receipt.
-It installs the minimal pinned Rust toolchain and WASI standard library when
-needed. Project, registry and sysroot paths are remapped for reproducibility.
-Each physical source copy has its own Cargo target and intermediate directory.
+Cold builds install the pinned Rust toolchain with the WASI standard library and
+the `rust-src` component. Rust uses those sources for locations embedded in the
+reactor. The producer remaps project, registry and sysroot paths and keeps Cargo
+intermediates per source checkout, target and expected WASM digest.
 
 Generated assets and upstream MIT license are written to `static/wasm-forth-lsp/`
 and are not committed. The existing compression, runtime-lock and size-budget

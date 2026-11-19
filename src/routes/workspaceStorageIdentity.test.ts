@@ -2,6 +2,29 @@ import { describe, expect, it } from 'vitest';
 import { createWorkspaceStorage } from './workspaceStorage';
 
 describe('workspace storage identity', async () => {
+	it('initializes a separate copy for subsequent saves and preserves existing identities', async () => {
+		const entries = new Map([['original', 'damaged snapshot']]);
+		const storage = createWorkspaceStorage(
+			(snapshot, key) => entries.set(key, snapshot),
+			() => {},
+			{
+				read: (key) => entries.get(key) ?? null,
+				initialStorageIdentity: 'original',
+				initialSnapshot: 'damaged snapshot'
+			}
+		);
+		storage.observe('current editor', 'original');
+		const currentState = storage.getState();
+		expect(() => storage.createCopy('imported', 'original')).toThrow('already exists');
+		storage.createCopy('imported', 'fresh');
+		expect(storage.getState()).toEqual(currentState);
+		expect(await storage.save('edited import', 'fresh')).toBe(true);
+		expect(Object.fromEntries(entries)).toEqual({
+			original: 'damaged snapshot',
+			fresh: 'edited import'
+		});
+	});
+
 	it('requires an independent write when unchanged content moves to another workspace', async () => {
 		let identity = 'first';
 		const entries = new Map<string, string>();

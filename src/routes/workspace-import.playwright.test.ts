@@ -62,6 +62,54 @@ async function withImportPage(run: (page: Page) => Promise<void>) {
 
 describe('workspace import browser integration', () => {
 	it(
+		'keeps uploaded binary bytes intact while adjacent text remains editable',
+		browserOptions,
+		async () => {
+			await withImportPage(async (page) => {
+				const content = 'data:application/octet-stream;base64,AP8B';
+				const value = () =>
+					page.evaluate(() =>
+						(
+							window as typeof window & {
+								__wasmIdleDebug?: { getEditorValue(): string };
+							}
+						).__wasmIdleDebug?.getEditorValue()
+					);
+				const select = (name: string) =>
+					page.locator(`.workspace-files button[title="${name}"]`).click();
+				const typeAtEnd = async (text: string) => {
+					await page.locator('.editor-surface .monaco-editor .view-line').first().click();
+					await page.keyboard.press('Control+End');
+					await page.keyboard.insertText(text);
+				};
+				await page.locator('input[type="file"]').setInputFiles([
+					{
+						name: 'sample.bin',
+						mimeType: 'application/octet-stream',
+						buffer: Buffer.from([0, 255, 1])
+					},
+					{ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('notes') }
+				]);
+				await expect.poll(value).toBe(content);
+				await typeAtEnd('!');
+				expect(await value()).toBe(content);
+				await select('notes.txt');
+				await expect.poll(value).toBe('notes');
+				await typeAtEnd(' edited');
+				await expect.poll(value).toBe('notes edited');
+				await page.getByRole('button', { name: 'Save', exact: true }).click();
+				await page.locator('[data-workspace-save-state="saved"]').waitFor();
+				await page.reload({ waitUntil: 'domcontentloaded' });
+				await page.locator('#language-select[data-workspace-ready="true"]').waitFor();
+				await expect.poll(value).toBe('notes edited');
+				await select('sample.bin');
+				await expect.poll(value).toBe(content);
+				expect(await page.locator('[data-workspace-recovery]').count()).toBe(0);
+			});
+		}
+	);
+
+	it(
 		'reports restored backups without replacing their status with zero imported files',
 		browserOptions,
 		async () => {

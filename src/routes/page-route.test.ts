@@ -7,6 +7,7 @@ import { runInNewContext } from 'node:vm';
 import { stripTypeScriptTypes } from 'node:module';
 import { normalizeWorkspaceTabs } from './workspaceSnapshot';
 import { compile, parse } from 'svelte/compiler';
+import { SvelteSet } from 'svelte/reactivity';
 import { describe, expect, it, vi } from 'vitest';
 import { createExecutionPreflightGate } from './executionPreflight';
 import {
@@ -72,8 +73,9 @@ describe('shared workspace refresh scheduling', () => {
 			openTabs: ['main.c'],
 			activeFile: baseline[0],
 			debug: { active: false },
-			containerWorkspaceConflicts: new Set<string>(),
-			changedContainerProjects: new Set<string>(),
+			SvelteSet,
+			containerWorkspaceConflicts: new SvelteSet<string>(),
+			changedContainerProjects: new SvelteSet<string>(),
 			containerChangeRevision: 0,
 			containerReadRevision: 0,
 			scheduleWorkspaceSave: vi.fn(),
@@ -1346,7 +1348,7 @@ describe('example route debug actions', () => {
 			/getEditorValue\(\) \{\s+return editor\?\.getValue\(\) \|\| '';\s+\}/s
 		);
 		expect(source).toMatch(
-			/async setEditorValue\(text: string\) \{\s+if \(!editor\) return false;\s+editor\.setValue\(text\);\s+updateActiveContent\(text\);\s+await Promise\.resolve\(\);\s+return editor\.getValue\(\) === text && activeFile\?\.content === text;\s+\}/s
+			/async setEditorValue\(text: string\) \{\s+if \(!editor \|\| activeFileIsBinary\) return false;\s+editor\.setValue\(text\);\s+updateActiveContent\(text\);\s+await Promise\.resolve\(\);\s+return editor\.getValue\(\) === text && activeFile\?\.content === text;\s+\}/s
 		);
 		expect(source).toMatch(/setPreloadedStdin\(text: string\) \{\s+stdinInput = text;\s+\}/s);
 		expect(source).toMatch(
