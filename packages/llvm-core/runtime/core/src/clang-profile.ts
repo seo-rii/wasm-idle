@@ -7,7 +7,7 @@ const defaultCStandardArg = '-std=gnu11';
 
 /** Workspace source siblings automatically compiled by both Clang execution backends. */
 export function isClangWorkspaceTranslationUnit(path: string) {
-	return /\.(?:c|cc|cpp|cxx)$/.test(path);
+	return /\.(?:c|C|cc|cpp|cxx)$/.test(path);
 }
 
 export type ClangSourceLanguage = 'C' | 'CPP' | 'OBJC';

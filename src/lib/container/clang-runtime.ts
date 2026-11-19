@@ -437,12 +437,22 @@ export class ContainerClangRuntime {
 			}
 			const filenameCpp = /\.(?:cc|cpp|cxx|C)$/.test(activePath);
 			const filenameLanguage = language === 'CPP' || filenameCpp ? 'CPP' : 'C';
-			let sourceLanguage: 'C' | 'CPP' | undefined = filenameLanguage;
+			type Source = { path: string; mode: string | undefined };
+			const sourceLanguage = ({ path, mode }: Source) => {
+				if (!mode) {
+					if (path === activePath) return filenameLanguage;
+					return path.endsWith('.c') ? 'C' : 'CPP';
+				}
+				if (mode === 'c' || mode === 'c-header' || mode === 'cpp-output') return 'C';
+				if (mode === 'c++' || mode === 'c++-header' || mode === 'c++-cpp-output')
+					return 'CPP';
+			};
+			let mode: string | undefined;
 			let omitBuiltinIncludes = false;
-			let filenameModes = true;
 			let responseFile = false;
-			const inputArguments = new Set<number>();
-			const explicitSources = new Map<number, string>();
+			const modeSwitches = new Map<number, string | undefined>();
+			const inputModes = new Map<number, string | undefined>();
+			const explicitSources = new Map<number, Source>();
 			const standards = new Map<number, 'C' | 'CPP'>();
 			const projectSources = new Set(sources);
 			for (let index = 0; index < compileArgs.length; index++) {
@@ -497,40 +507,42 @@ export class ContainerClangRuntime {
 				if (argument.startsWith('@')) {
 					// A response file may name inputs or change -x. Preserve that driver invocation.
 					responseFile = true;
-					sourceLanguage = undefined;
+					mode = '@';
 				} else if (argument.startsWith('-x')) {
+					const switchIndex = index;
 					const value = argument === '-x' ? compileArgs[++index] : argument.slice(2);
-					filenameModes = value === 'none';
-					if (value === 'none') sourceLanguage = filenameLanguage;
-					else if (value === 'c' || value === 'c-header' || value === 'cpp-output')
-						sourceLanguage = 'C';
-					else if (
-						value === 'c++' ||
-						value === 'c++-header' ||
-						value === 'c++-cpp-output'
-					)
-						sourceLanguage = 'CPP';
-					else sourceLanguage = undefined;
+					mode = value === 'none' ? undefined : value;
+					modeSwitches.set(switchIndex, mode);
 				} else if (/^--?std=/.test(argument)) {
 					standards.set(index, argument.includes('++') ? 'CPP' : 'C');
 				} else if (!argument.startsWith('-')) {
-					inputArguments.add(index);
+					inputModes.set(index, mode);
 					try {
 						const absolute = this.profile.container.fs.realpath(argument, { cwd });
 						const path = absolute.slice(cwd.length + 1);
-						if (absolute.startsWith(cwd + '/') && projectSources.has(path))
-							explicitSources.set(index, path);
+						if (
+							absolute.startsWith(cwd + '/') &&
+							(projectSources.has(path) || mode === 'c' || mode === 'c++')
+						)
+							explicitSources.set(index, { path, mode });
 					} catch {
 						// Clang reports missing or external inputs with its normal diagnostics.
 					}
 				}
 			}
-			const units = responseFile ? [activePath] : sources;
-			const cUnits = units.filter((path) =>
-				path === activePath ? filenameLanguage === 'C' : path.endsWith('.c')
-			);
-			const mixed = filenameModes && cUnits.length > 0 && cUnits.length < units.length;
-			const finalLanguage = mixed ? 'CPP' : sourceLanguage;
+			const named = new Set([...explicitSources.values()].map((source) => source.path));
+			const autoSources = (responseFile ? [activePath] : sources)
+				.filter((path) => !named.has(path))
+				.map((path) => ({ path, mode }));
+			const units = [...explicitSources.values(), ...autoSources];
+			const cUnits = units.filter((source) => sourceLanguage(source) === 'C');
+			const hasCpp = units.some((source) => sourceLanguage(source) === 'CPP');
+			const mixed = !responseFile && cUnits.length > 0 && hasCpp;
+			let finalLanguage = sourceLanguage({ path: activePath, mode });
+			if (!responseFile) {
+				if (hasCpp) finalLanguage = 'CPP';
+				else if (cUnits.length === units.length) finalLanguage = 'C';
+			}
 			// Opaque response files choose their own source mode and standard.
 			const standard = finalLanguage
 				? resolveClangLanguageArgs(finalLanguage, options).standardArg.slice('-std='.length)
@@ -555,21 +567,32 @@ export class ContainerClangRuntime {
 			// The driver accepts one -std for all its inputs. In a mixed project, compile the
 			// C units to private objects first, then link those alongside the C++ sources.
 			const cObjects = new Map(
-				(mixed ? cUnits : []).map((path) => [
-					path,
+				(mixed ? cUnits : []).map((source) => [
+					source,
 					artifact + '.' + crypto.randomUUID() + '.o'
 				])
 			);
-			const named = new Set(explicitSources.values());
+			let linkMode: string | undefined;
+			// A generated object always needs filename inference. Restore an explicit -x
+			// only when the next operand needs it, so trailing switches do not trip -Werror.
+			const linkInput = (path: string, wantedMode: string | undefined, source?: Source) => {
+				const object = source && cObjects.get(source);
+				if (object) wantedMode = undefined;
+				if (!mixed || wantedMode === linkMode) return [object ?? path];
+				linkMode = wantedMode;
+				return ['-x', wantedMode ?? 'none', object ?? path];
+			};
 			const userArgs = compileArgs.flatMap((arg, index) => {
 				if (mixed && standards.get(index) === 'C') return [];
-				const source = explicitSources.get(index);
-				return [source ? (cObjects.get(source) ?? arg) : arg];
+				if (modeSwitches.has(index)) linkMode = modeSwitches.get(index);
+				return inputModes.has(index)
+					? linkInput(arg, inputModes.get(index), explicitSources.get(index))
+					: [arg];
 			});
 			const inputPath = (path: string) => (/^[-@]/.test(path) ? './' + path : path);
-			const autoInputs = units
-				.filter((path) => !named.has(path))
-				.map((path) => cObjects.get(path) ?? inputPath(path));
+			const autoInputs = autoSources.flatMap((source) =>
+				linkInput(inputPath(source.path), source.mode, source)
+			);
 			const common = [
 				...profileArgs,
 				`--target=${CLANG_WASI_DRIVER_TARGET}`,
@@ -671,10 +694,10 @@ export class ContainerClangRuntime {
 			let okay: boolean;
 			if (mixed) {
 				const cArgs = compileArgs.filter(
-					(_, index) => !inputArguments.has(index) && standards.get(index) !== 'CPP'
+					(_, index) => !inputModes.has(index) && standards.get(index) !== 'CPP'
 				);
 				try {
-					for (const [path, object] of cObjects) {
+					for (const [source, object] of cObjects) {
 						if (
 							!(await compile([
 								...profileArgs,
@@ -685,9 +708,9 @@ export class ContainerClangRuntime {
 								'-Qunused-arguments',
 								...cArgs,
 								'-x',
-								'c',
+								source.mode ?? 'c',
 								'-c',
-								inputPath(path),
+								inputPath(source.path),
 								'-o',
 								object
 							]))

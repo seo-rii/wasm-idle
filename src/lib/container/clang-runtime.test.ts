@@ -460,6 +460,59 @@ describe('container Clang stdin completion', () => {
 });
 
 describe('website container Clang compilation', () => {
+	it.each([
+		{ activePath: 'main.cpp', language: 'CPP' },
+		{ activePath: 'helper.c', language: 'C' }
+	])('keeps an explicit C++ input in its -x scope when running $activePath', async (test) => {
+		const f = fixture();
+		const compileArgs = ['-x', 'c++', 'helper.c', '-x', 'none'];
+		const workspaceFiles = ['helper.c', 'plain.c', 'upper.C']
+			.filter((path) => path !== test.activePath)
+			.map((path) => ({
+				path,
+				content: ''
+			}));
+		expect(
+			await f.prepare(
+				'int main() {}',
+				{ activePath: test.activePath, workspaceFiles, compileArgs },
+				test.language
+			)
+		).toBe(true);
+		const [c, link] = f.spawn.mock.calls.map(([, args]) => args);
+		expect(f.spawn.mock.calls).toHaveLength(2);
+		expect(c).toContain('plain.c');
+		expect(link).toEqual(expect.arrayContaining(['upper.C', '--driver-mode=g++', c.at(-1)]));
+		const start = link.indexOf('helper.c');
+		expect(link.slice(start - 2, start + 3)).toEqual(compileArgs);
+		expect(link.filter((arg) => arg === 'helper.c')).toHaveLength(1);
+	});
+
+	it('links consecutive forced C inputs as objects even when their extensions differ', async () => {
+		const f = fixture();
+		const workspaceFiles = ['force.cpp', 'plain.inc'].map((path) => ({ path, content: '' }));
+		const compileArgs = ['-xc', 'force.cpp', 'plain.inc', '-xnone'];
+		expect(
+			await f.prepare('int main() {}', {
+				activePath: 'main.cpp',
+				workspaceFiles,
+				compileArgs
+			})
+		).toBe(true);
+		expect(f.spawn.mock.calls).toHaveLength(3);
+		const [first, second, link] = f.spawn.mock.calls.map(([, args]) => args);
+		expect(first).toContain('force.cpp');
+		expect(second).toContain('plain.inc');
+		const start = link.indexOf(first.at(-1)!);
+		expect(link.slice(start - 2, start + 3)).toEqual([
+			'-x',
+			'none',
+			first.at(-1),
+			second.at(-1),
+			'-xnone'
+		]);
+	});
+
 	it('links workspace sources in path order, preserving a manually named input and skipping data', async () => {
 		const f = fixture();
 		const options = {
