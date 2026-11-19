@@ -23,7 +23,7 @@ public class Main {
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
         int n = scanner.hasNextInt() ? scanner.nextInt() : 0;
-        System.out.println("main=" + (n + 5));
+        System.out.println("main=" + (n + 5) + " " + scanner.next());
     }
 }`;
 
@@ -319,8 +319,8 @@ const sharedStdinBrowserCases = [
 	{
 		language: 'JAVA',
 		source: javaStdinSource,
-		stdinText: '68\n',
-		expectedOutput: 'main=73',
+		stdinText: '68 한글🙂\n',
+		expectedOutput: 'main=73 한글🙂',
 		defaultRunTimeoutMs: 300_000
 	},
 	{
