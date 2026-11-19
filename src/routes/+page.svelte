@@ -1913,27 +1913,32 @@
 		return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
 	}
 
-	function snapshot(): WorkspaceSnapshot {
+	function snapshot(
+		project: LanguageWorkspace = { activePath, files, openTabs },
+		workspaces = workspaceMapForSnapshot()
+	): WorkspaceSnapshot {
 		return {
-			activePath,
+			activePath: project.activePath,
 			argsInput,
 			compilerOptions: Object.fromEntries(
 				Object.entries(compilerOptions).map(([key, value]) => [key, { ...value }])
 			),
 			cppVersion,
-			files: files.map((file) => ({ ...file })),
+			files: cloneFiles(project.files),
 			goTarget,
 			language,
 			log,
 			lspEnabled,
 			ocamlBackend,
 			ocamlWasmBinaryenMode,
-			openTabs: openTabs.filter((tab) => files.some((file) => file.path === tab)),
+			openTabs: project.openTabs.filter((tab) =>
+				project.files.some((file) => file.path === tab)
+			),
 			rustTargetTriple,
 			rustOptimizationProfile,
 			sidebarOpen,
 			version: 6,
-			workspaces: workspaceMapForSnapshot()
+			workspaces
 		};
 	}
 
@@ -2246,21 +2251,26 @@
 		destination: ReturnType<typeof captureWorkspaceImportDestination>
 	) {
 		if (!importedFiles.length) throw new Error('ZIP archive contains no files');
-		const nextActivePath = importedFiles.some((file) => file.path === activePath)
-			? activePath
-			: importedFiles[0].path;
 		if (!(await saveWorkspace()))
 			throw new Error('Save the current workspace before opening a ZIP');
 		destination.assertCurrent();
 		const importedUrl = createSharedWorkspaceUrl(new URL(location.href));
-		currentWorkspaceStorageKey = workspaceStorageKey(importedUrl);
-		const importedWorkspace = {
-			files: cloneFiles(importedFiles),
-			activePath: nextActivePath,
-			openTabs: [nextActivePath]
+		const importedKey = workspaceStorageKey(importedUrl);
+		const firstPath = importedFiles[0].path;
+		const project: LanguageWorkspace = {
+			files: importedFiles,
+			activePath: firstPath,
+			openTabs:
+				firstPath !== activePath && importedFiles.some((file) => file.path === activePath)
+					? [activePath, firstPath]
+					: [firstPath]
 		};
-		languageWorkspaces = { ...languageWorkspaces, [language]: importedWorkspace };
-		activateWorkspace(importedWorkspace);
+		const workspaces = createDefaultLanguageWorkspaces();
+		workspaces[language] = project;
+		const imported = { ...snapshot(project, workspaces), argsInput: '', compilerOptions: {} };
+		workspaceStorage.createCopy(JSON.stringify(imported), importedKey);
+		applySnapshot(imported);
+		currentWorkspaceStorageKey = importedKey;
 		destination.advance();
 		await replaceState(importedUrl, page.state);
 		destination.assertCurrent();
