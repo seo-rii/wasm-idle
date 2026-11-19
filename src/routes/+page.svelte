@@ -38,7 +38,6 @@
 	import * as publicEnvironment from '$app/env/public';
 	import { replaceState } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { SvelteURL } from 'svelte/reactivity';
 	import {
 		createApplicationAssetResolver,
 		createApplicationRuntimeAssets
@@ -95,6 +94,7 @@
 		WORKSPACE_STORAGE_KEY,
 		workspaceStorageKey
 	} from './workspaceContext';
+	import { consumeWorkspaceQueryInput } from './workspaceQuery';
 	import { migrateLegacyWorkspaceFile } from './workspaceMigration';
 	import { normalizeWorkspaceTabs, validateWorkspaceSnapshot } from './workspaceSnapshot';
 	import { preserveUnrestoredWorkspace } from './workspaceRecovery';
@@ -417,6 +417,10 @@
 		error: null
 	});
 	let currentWorkspaceStorageKey = $state(initialSelection?.storageKey ?? WORKSPACE_STORAGE_KEY);
+	// A reload can recover from the incoming URL until the new storage key has a snapshot.
+	let pendingWorkspaceUrl = initialSelection?.replacementUrl
+		? { source: location.href, target: initialSelection.replacementUrl }
+		: null;
 	let editorWorkspaceRevision = $state(0);
 	const workspaceStorage = createWorkspaceStorage(
 		(value, key) => localStorage.setItem(key, value),
@@ -2043,6 +2047,11 @@
 			return false;
 		}
 		const saved = await workspaceStorage.save(workspaceSaveKey, identity);
+		if (saved && identity === currentWorkspaceStorageKey && pendingWorkspaceUrl) {
+			if (location.href === pendingWorkspaceUrl.source)
+				replaceState(pendingWorkspaceUrl.target, page.state);
+			pendingWorkspaceUrl = null;
+		}
 		if (saved && showStatus) saveStatus = 'Saved locally';
 		return saved;
 	}
@@ -2050,8 +2059,8 @@
 	async function saveWorkspaceCopy() {
 		if (runningMode) return;
 		const copyUrl = createSharedWorkspaceUrl(new URL(location.href));
+		pendingWorkspaceUrl = { source: location.href, target: copyUrl };
 		currentWorkspaceStorageKey = workspaceStorageKey(copyUrl);
-		replaceState(copyUrl, page.state);
 		await saveWorkspace(true);
 	}
 
@@ -2119,7 +2128,7 @@
 		if (!browser) return;
 		saveWorkspace();
 		const shareHash = `${SHARE_PREFIX}${encodeBase64Url(JSON.stringify(snapshot()))}`;
-		const url = new SvelteURL(location.href);
+		const url = consumeWorkspaceQueryInput(new URL(location.href));
 		url.hash = shareHash;
 		url.searchParams.delete('workspace');
 		if (await copyWorkspaceShare(url.toString(), navigator.clipboard)) {
@@ -3217,13 +3226,6 @@
 		activeExecution = execution;
 		return execution;
 	}
-
-	// Only URL publication waits for the router. Workspace restoration is synchronous
-	// so Monaco, the terminal and prewarming all observe the selected language first.
-	$effect(() => {
-		if (initialSelection?.replacementUrl)
-			untrack(() => replaceState(initialSelection.replacementUrl!, page.state));
-	});
 
 	$effect(() => {
 		if (workspaceEditorReady) workspaceEditorInitialized = true;
