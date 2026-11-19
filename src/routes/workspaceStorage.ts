@@ -5,6 +5,8 @@ export interface WorkspaceSaveState {
 	error: string | null;
 }
 
+export type WorkspaceSaveResult = 'saved' | 'superseded' | 'failed';
+
 interface WorkspaceStorageOptions {
 	read: (storageIdentity: string) => string | null;
 	initialStorageIdentity: string;
@@ -45,6 +47,56 @@ export function createWorkspaceStorage(
 			error: 'Another tab changed this workspace. Save a separate copy to keep your edits.'
 		});
 	}
+	async function saveRevision(
+		snapshot: string,
+		storageIdentity = ''
+	): Promise<WorkspaceSaveResult> {
+		observe(snapshot, storageIdentity);
+		const revision = state.revision;
+		const isCurrent = () =>
+			currentStorageIdentity === storageIdentity && state.revision === revision;
+		publish({ phase: 'saving', error: null });
+		try {
+			let superseded = false;
+			const persist = () => {
+				// A queued save belongs to the snapshot and identity captured at invocation.
+				if (!isCurrent()) {
+					superseded = currentStorageIdentity === storageIdentity;
+					return false;
+				}
+				const stored = options?.read(storageIdentity);
+				if (
+					options &&
+					stored !== (storedSnapshots.get(storageIdentity) ?? null) &&
+					stored !== snapshot
+				) {
+					conflict();
+					return false;
+				}
+				if (!options || stored !== snapshot) write(snapshot, storageIdentity);
+				storedSnapshots.set(storageIdentity, snapshot);
+				if (currentStorageIdentity === storageIdentity)
+					publish({
+						savedRevision: revision,
+						phase: state.revision === revision ? 'saved' : 'dirty',
+						error: null
+					});
+				return true;
+			};
+			const saved = options?.withLock
+				? await options.withLock(storageIdentity, persist)
+				: persist();
+			if (saved) return 'saved';
+			return superseded ? 'superseded' : 'failed';
+		} catch (error) {
+			if (isCurrent())
+				publish({
+					phase: 'error',
+					error: error instanceof Error ? error.message : String(error)
+				});
+			return 'failed';
+		}
+	}
 	return {
 		observe,
 		/** Seed a fresh, unpublished identity without changing the currently open workspace. */
@@ -77,46 +129,9 @@ export function createWorkspaceStorage(
 				publish({ phase: 'error', error: String(error) });
 			}
 		},
+		saveRevision,
 		async save(snapshot: string, storageIdentity = '') {
-			observe(snapshot, storageIdentity);
-			const revision = state.revision;
-			const isCurrent = () =>
-				currentStorageIdentity === storageIdentity && state.revision === revision;
-			publish({ phase: 'saving', error: null });
-			try {
-				const persist = () => {
-					// A queued save belongs to the snapshot and identity captured at invocation.
-					if (!isCurrent()) return false;
-					const stored = options?.read(storageIdentity);
-					if (
-						options &&
-						stored !== (storedSnapshots.get(storageIdentity) ?? null) &&
-						stored !== snapshot
-					) {
-						conflict();
-						return false;
-					}
-					if (!options || stored !== snapshot) write(snapshot, storageIdentity);
-					storedSnapshots.set(storageIdentity, snapshot);
-					if (currentStorageIdentity === storageIdentity)
-						publish({
-							savedRevision: revision,
-							phase: state.revision === revision ? 'saved' : 'dirty',
-							error: null
-						});
-					return true;
-				};
-				return options?.withLock
-					? await options.withLock(storageIdentity, persist)
-					: persist();
-			} catch (error) {
-				if (isCurrent())
-					publish({
-						phase: 'error',
-						error: error instanceof Error ? error.message : String(error)
-					});
-				return false;
-			}
+			return (await saveRevision(snapshot, storageIdentity)) === 'saved';
 		}
 	};
 }
