@@ -76,6 +76,11 @@ pnpm exec vitest run src/lib/playground/index.test.ts -t "Common Lisp"
 `pnpm test:watch` starts Vitest in watch mode. Workspace packages with their own suites run with
 `pnpm --dir packages/<name> test` (`debug`, `llvm-core`, `lsp` and `terminal`).
 
+`pnpm verify:package` installs the packed SDK with npm. Size, file, and package limits use
+the registry publication cutoff in `scripts/verify-package.mjs`. Advance that date when
+reviewing a new dependency baseline. A second pass checks the same consumer imports, types,
+and dependency boundaries against the current registry and reports any footprint overage.
+
 ### Real-browser tests
 
 Most `test:browser:*` scripts set a `WASM_IDLE_RUN_REAL_BROWSER_<NAME>=1` switch and run one
