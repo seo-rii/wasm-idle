@@ -340,4 +340,69 @@ describe.skipIf(!enabled)('real Lean 4 runtime in Chromium', () => {
 			}
 		}
 	);
+
+	it(
+		'places Lean compiler errors at the editor column after Unicode text',
+		{ timeout: 600_000, meta: browserMeta },
+		async () => {
+			const url = new URL(process.env.WASM_IDLE_BROWSER_URL || server.browserUrl);
+			url.searchParams.set('lsp-test', '1');
+			const context = await browser.newContext();
+			await addBrowserTestCookies(context, url.href);
+			try {
+				const page = await context.newPage();
+				page.setDefaultTimeout(240_000);
+				await prepareContainerRuntimePage(page, url.href);
+				await page.locator('#language-select').selectOption('LEAN4');
+				await page.waitForFunction(() =>
+					(window as any).__wasmIdleDebug.getEditorValue().includes('What is your name?')
+				);
+				const file = 'Cases/실험.lean';
+				expect(
+					await page.evaluate(
+						(path) => (window as any).__wasmIdleDebug.setWorkspaceFiles([], path),
+						file
+					)
+				).toBe(true);
+				await page.waitForFunction(
+					(path) => (window as any).__wasmIdleMonacoEditor?.getModel()?.uri.path === path,
+					'/workspace/' + file
+				);
+				const line = '  IO.println ("🍎🍏🍊한글", missingValue)';
+				const source = 'def main : IO Unit := do\n' + line;
+				expect(
+					await page.evaluate(
+						(value) => (window as any).__wasmIdleDebug.setEditorValue(value),
+						source
+					)
+				).toBe(true);
+				await page.locator('button.action-button--run').first().click();
+				await page.waitForFunction(
+					() => (window as any).__wasmIdleDebug.getExecutionState().status === 'failed',
+					undefined,
+					{ timeout: 240_000 }
+				);
+				const markers = await page.evaluate(() => {
+					const hooks = window as any;
+					return hooks.__wasmIdleMonacoApi.editor.getModelMarkers({
+						resource: hooks.__wasmIdleMonacoEditor.getModel().uri,
+						owner: 'wasm-idle-compiler'
+					});
+				});
+				const prefix = line.slice(0, line.indexOf('missingValue'));
+				expect(markers).toMatchObject([
+					{
+						message: expect.stringContaining('Unknown identifier'),
+						startLineNumber: 2,
+						startColumn: prefix.length + 1
+					}
+				]);
+				expect(await page.getByTestId('terminal-debug-output').textContent()).toContain(
+					file + ':2:' + [...prefix].length + ': error'
+				);
+			} finally {
+				await context.close();
+			}
+		}
+	);
 });

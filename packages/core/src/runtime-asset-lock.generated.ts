@@ -942,7 +942,7 @@ export const RUNTIME_ASSET_LOCK: RuntimeAssetLockManifest = /* @__PURE__ */ free
 		"wasm-lean4/lean.mjs": {"sha256":"16d6d6cb07c844bedf745f856a364ec61e86c13c4fe13a2e57c0c698a5c5f727","bytes":108528,"mediaType":"text/javascript"},
 		"wasm-lean4/lean.wasm.gz.bin": {"sha256":"89dc3cb841d487f9e29c1dc3069e7aeb1a63e5ec0267b8250552e3fe90f855bf","bytes":20239874,"encoding":"gzip","mediaType":"application/wasm","uncompressedSha256":"d81dbde2ba4aaf0546affca2756477b6d1365a5633080d7119f737e5906ed919","uncompressedBytes":113033667},
 		"wasm-lean4/producer-receipt.json": {"sha256":"335bd6e1720371fc161859cb7c2858600ec12314c30da1f0e5e503e324a96d42","bytes":9768,"mediaType":"application/json"},
-		"wasm-lean4/runner-worker.js": {"sha256":"795a49f1781b2eaea22b0d163e15f389386482240afb0008dcd2b80d76e4fb8b","bytes":16804,"mediaType":"text/javascript"},
+		"wasm-lean4/runner-worker.js": {"sha256":"8d7f87d79eb1648e6a3c58e6f404a5d28505d3f61bd184b7e60651b1d922b1ea","bytes":17814,"mediaType":"text/javascript"},
 		"wasm-lfortran/lfortran.data.bin": {"sha256":"6d6dbe72e4f23f9761eb8005c8a737490750f54dbb173c6455a9c9cb9489c99f","bytes":179758,"mediaType":"application/octet-stream"},
 		"wasm-lfortran/lfortran.js": {"sha256":"348d5472c307da2bae15eb73e8a38da0e7c2a4cfaebacbccbee2b163806a59c3","bytes":968283,"mediaType":"text/javascript","deliveryPath":"wasm-lfortran/lfortran.js.gz"},
 		"wasm-lfortran/lfortran.js.gz": {"sha256":"dce3c058984ff07a9ff5edb867d07afc830dd195f2e279cb7031d0f8f02a5aae","bytes":205454,"encoding":"gzip","mediaType":"text/javascript","uncompressedSha256":"348d5472c307da2bae15eb73e8a38da0e7c2a4cfaebacbccbee2b163806a59c3","uncompressedBytes":968283},

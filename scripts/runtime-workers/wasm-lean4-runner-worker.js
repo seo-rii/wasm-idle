@@ -259,6 +259,38 @@ function createDiagnostics(report) {
 	};
 }
 
+function createDiagnosticReporter({ activePath, code, workspaceFiles = [] }) {
+	const linesByFile = new Map();
+	let reported = 0;
+	return (diagnostic) => {
+		if (reported++ >= 1000) return;
+		const { fileName, lineNumber, columnNumber } = diagnostic;
+		let lines = linesByFile.get(fileName);
+		if (!lines) {
+			const source =
+				fileName === (activePath || 'Main.lean')
+					? code
+					: workspaceFiles.find((file) => file.path === fileName)?.content;
+			const text = typeof source === 'string' ? source : new TextDecoder().decode(source);
+			lines = text.split('\n');
+			linesByFile.set(fileName, lines);
+		}
+		const line = lines[lineNumber - 1];
+		if (line !== undefined) {
+			// Lean's printed column counts Unicode scalars; the editor counts UTF-16 units.
+			let scalarColumn = 1;
+			let editorColumn = 1;
+			for (const character of line) {
+				if (scalarColumn === columnNumber) break;
+				editorColumn += character.length;
+				scalarColumn++;
+			}
+			if (scalarColumn === columnNumber) diagnostic.columnNumber = editorColumn;
+		}
+		self.postMessage({ diagnostic });
+	};
+}
+
 function workspacePath(value) {
 	if (
 		typeof value !== 'string' ||
@@ -291,10 +323,7 @@ self.onmessage = async ({ data }) => {
 		self.postMessage({ progress: { percent: 0.24, stage: 'Preparing the Lean 4 library' } });
 		const library = unpackLibrary(payload);
 		const wasmMemory = createBoundedMemory(data.limits?.maxWasmMemoryBytes);
-		let reported = 0;
-		const report = (diagnostic) => {
-			if (reported++ < 1000) self.postMessage({ diagnostic });
-		};
+		const report = createDiagnosticReporter(data);
 		const stdoutDiagnostics = createDiagnostics(report);
 		const stderrDiagnostics = createDiagnostics(report);
 		const stdout = createOutput('stdout', stdoutDiagnostics);
