@@ -59,7 +59,7 @@ async function withWorkspacePage(
 
 describe('narrow paused debugger controls', () => {
 	it(
-		'keeps every debugger action inside the clipped shell at a 300px pane width',
+		'toggles gutter breakpoints and keeps paused debugger actions reachable at a 300px pane width',
 		browserOptions,
 		async () => {
 			await withWorkspacePage(async (page, context, browserUrl, observeErrors) => {
@@ -88,7 +88,26 @@ describe('narrow paused debugger controls', () => {
 				await page.waitForFunction(() =>
 					(window as any).__wasmIdleDebug?.getEditorValue().includes('debug-layout')
 				);
-				await page.evaluate(() => (window as any).__wasmIdleDebug.setBreakpoints([2]));
+				const gutter = page.locator('.monaco-editor .glyph-margin').first();
+				const secondLine = page
+					.locator('.monaco-editor .line-numbers', { hasText: /^2$/ })
+					.first();
+				await secondLine.scrollIntoViewIfNeeded();
+				const [margin, line] = await Promise.all([
+					gutter.boundingBox(),
+					secondLine.boundingBox()
+				]);
+				if (!margin || !line)
+					throw new Error('Expected a visible breakpoint gutter on line 2');
+				const toggleBreakpoint = () =>
+					page.mouse.click(margin.x + 3, line.y + line.height / 2);
+				const marker = page.locator('.monaco-editor .debug-breakpoint-glyph');
+				await toggleBreakpoint();
+				await marker.waitFor();
+				await toggleBreakpoint();
+				await marker.waitFor({ state: 'detached' });
+				await toggleBreakpoint();
+				await marker.waitFor();
 				await page.getByRole('button', { name: 'Debug', exact: true }).click();
 				await page.waitForFunction(
 					() => (window as any).__wasmIdleDebug?.getDebugState().paused,

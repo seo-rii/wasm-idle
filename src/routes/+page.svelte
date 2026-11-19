@@ -466,6 +466,7 @@
 		ZIG: () => ({ zigTargetTriple: 'wasm32-wasi' })
 	};
 	const currentCompilerSettings = $derived(compilerOptions[language] ?? defaultCompilerSettings);
+	let compilerOptionsPanel = $state<ReturnType<typeof CompilerOptions>>();
 	const compilerSourceLanguage = $derived(resolveCompilerSourceLanguage(language, activePath));
 	const parsedCompilerArgs = $derived.by(() => {
 		try {
@@ -1800,7 +1801,11 @@
 
 	function updateActiveContent(value: string) {
 		const file = activeFile;
-		if (!file || activeFileIsBinary || file.content === value) return;
+		if (!file) {
+			if (value) addWorkspaceFile(defaultPathForLanguage(), value);
+			return;
+		}
+		if (activeFileIsBinary || file.content === value) return;
 		file.content = value;
 		if (debug.active) {
 			debug.markSourceRevisionStale(`/workspace/${file.path}`);
@@ -3067,7 +3072,10 @@
 	function exec(enableDebug = false): Promise<void> {
 		const args = argsHelpLanguages.has(language) ? parsedArgs.args : [];
 		if (!args) return Promise.resolve();
-		if (compilerArgumentConfig[language] && !parsedCompilerArgs.args) return Promise.resolve();
+		if (compilerArgumentConfig[language] && !parsedCompilerArgs.args) {
+			compilerOptionsPanel?.revealArgumentError();
+			return Promise.resolve();
+		}
 		if (!editor || !terminal || !activeFile) return Promise.resolve();
 		if (!executionAvailable) return Promise.resolve();
 		if (enableDebug && !debugLanguage) return Promise.resolve();
@@ -5092,6 +5100,7 @@
 		{/if}
 		{#if compilerArgumentConfig[language]}
 			<CompilerOptions
+				bind:this={compilerOptionsPanel}
 				language={compilerSourceLanguage}
 				settings={currentCompilerSettings}
 				error={parsedCompilerArgs.error}
@@ -5272,7 +5281,7 @@
 						<Monaco
 							language={editorLanguage}
 							lspLanguage={monacoLspLanguage}
-							filePath={activePath}
+							filePath={activePath || defaultPathForLanguage()}
 							workspacePaths={editorFilePaths}
 							rustTargetTriple={languageExecutionOptions.rustTargetTriple}
 							goTarget={languageExecutionOptions.goTarget}

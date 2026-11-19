@@ -21,13 +21,22 @@
 	} = $props();
 	const config = $derived(compilerArgumentConfig[language]);
 	const clang = $derived(clangCompilerLanguages.has(language));
+	let panel = $state<HTMLDetailsElement>();
+	let argumentInput = $state<HTMLInputElement>();
+
+	export function revealArgumentError() {
+		if (!panel || !argumentInput) return;
+		panel.open = true;
+		argumentInput.focus();
+	}
+
 	function update<K extends keyof CompilerSettings>(key: K, value: CompilerSettings[K]) {
 		onchange({ ...settings, [key]: value });
 	}
 </script>
 
 {#if config}
-	<details class="compiler-options">
+	<details class="compiler-options" bind:this={panel}>
 		<summary
 			>Compile options{#if settings.arguments || settings.optimization !== 'default' || settings.warnings !== 'default' || settings.warningsAsErrors || settings.pedantic || !settings.gnuExtensions}<span
 					>Customized</span
@@ -118,12 +127,15 @@
 			<label class="compiler-options__arguments"
 				>{config.label}
 				<input
+					bind:this={argumentInput}
 					aria-label={config.label}
 					value={settings.arguments}
 					placeholder={config.placeholder}
 					spellcheck={false}
 					aria-invalid={!!error}
-					aria-describedby="compiler-options-help"
+					aria-describedby={error
+						? 'compiler-options-help compiler-options-error'
+						: 'compiler-options-help'}
 					oninput={(event) => update('arguments', event.currentTarget.value)}
 				/>
 			</label>
@@ -132,7 +144,7 @@
 				{#if language !== 'HASKELL'}Use quotes to group spaces in an argument.{/if}
 			</p>
 			{#if clang}<p>LLDB debug builds always use -O0 and debug information.</p>{/if}
-			{#if error}<p role="alert">{error}</p>{/if}
+			{#if error}<p id="compiler-options-error" role="alert">{error}</p>{/if}
 		</div>
 	</details>
 {/if}
