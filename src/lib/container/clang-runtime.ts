@@ -438,7 +438,7 @@ export class ContainerClangRuntime {
 			const filenameCpp = /\.(?:cc|cpp|cxx|C)$/.test(activePath);
 			const filenameLanguage = language === 'CPP' || filenameCpp ? 'CPP' : 'C';
 			type Source = { path: string; mode: string | undefined };
-			const sourceLanguage = ({ path, mode }: Source) => {
+			const sourceLanguage = ({ path, mode }: Source): 'C' | 'CPP' | undefined => {
 				if (!mode) {
 					if (path === activePath) return filenameLanguage;
 					return path.endsWith('.c') ? 'C' : 'CPP';
