@@ -460,6 +460,147 @@ describe('container Clang stdin completion', () => {
 });
 
 describe('website container Clang compilation', () => {
+	it.each([
+		{ activePath: 'main.cpp', language: 'CPP' },
+		{ activePath: 'helper.c', language: 'C' }
+	])('keeps an explicit C++ input in its -x scope when running $activePath', async (test) => {
+		const f = fixture();
+		const compileArgs = ['-x', 'c++', 'helper.c', '-x', 'none'];
+		const workspaceFiles = ['helper.c', 'plain.c', 'upper.C']
+			.filter((path) => path !== test.activePath)
+			.map((path) => ({
+				path,
+				content: ''
+			}));
+		expect(
+			await f.prepare(
+				'int main() {}',
+				{ activePath: test.activePath, workspaceFiles, compileArgs },
+				test.language
+			)
+		).toBe(true);
+		const [c, link] = f.spawn.mock.calls.map(([, args]) => args);
+		expect(f.spawn.mock.calls).toHaveLength(2);
+		expect(c).toContain('plain.c');
+		expect(link).toEqual(expect.arrayContaining(['upper.C', '--driver-mode=g++', c.at(-1)]));
+		const start = link.indexOf('helper.c');
+		expect(link.slice(start - 2, start + 3)).toEqual(compileArgs);
+		expect(link.filter((arg) => arg === 'helper.c')).toHaveLength(1);
+	});
+
+	it('links consecutive forced C inputs as objects even when their extensions differ', async () => {
+		const f = fixture();
+		const workspaceFiles = ['force.cpp', 'plain.inc'].map((path) => ({ path, content: '' }));
+		const compileArgs = ['-xc', 'force.cpp', 'plain.inc', '-xnone'];
+		expect(
+			await f.prepare('int main() {}', {
+				activePath: 'main.cpp',
+				workspaceFiles,
+				compileArgs
+			})
+		).toBe(true);
+		expect(f.spawn.mock.calls).toHaveLength(3);
+		const [first, second, link] = f.spawn.mock.calls.map(([, args]) => args);
+		expect(first).toContain('force.cpp');
+		expect(second).toContain('plain.inc');
+		const start = link.indexOf(first.at(-1)!);
+		expect(link.slice(start - 2, start + 3)).toEqual([
+			'-x',
+			'none',
+			first.at(-1),
+			second.at(-1),
+			'-xnone'
+		]);
+	});
+
+	it('links workspace sources in path order, preserving a manually named input and skipping data', async () => {
+		const f = fixture();
+		const options = {
+			activePath: 'main.cpp',
+			workspaceFiles: [
+				{ path: 'z/file.cc', content: '' },
+				{ path: 'a/file.cpp', content: '' },
+				{ path: 'h.hpp', content: '' },
+				{ path: 'data.bin', content: '' }
+			],
+			compileArgs: ['-I', 'a/file.cpp', './z/file.cc']
+		};
+		expect(await f.prepare('int main() {}', options)).toBe(true);
+		const argv = f.spawn.mock.calls[0][1];
+		expect(argv).toContain('a/file.cpp');
+		expect(argv.filter((arg) => arg === 'a/file.cpp')).toHaveLength(2);
+		expect(argv.indexOf('main.cpp')).toBeGreaterThan(argv.lastIndexOf('a/file.cpp'));
+		expect(argv).toContain('./z/file.cc');
+		expect(argv).not.toContain('z/file.cc');
+		expect(argv).not.toContain('h.hpp');
+		expect(argv).not.toContain('data.bin');
+	});
+	it('compiles a C translation unit as C in a mixed C/C++ project and removes intermediate files', async () => {
+		const f = fixture([], true);
+		const options = {
+			activePath: 'main.c',
+			workspaceFiles: [{ path: 'helper.cpp', content: 'int helper() { return 42; }' }],
+			cVersion: 'C23',
+			cppVersion: 'CPP17'
+		};
+		expect(await f.prepare('int main(void) { return 0; }', options, 'C')).toBe(true);
+		expect(f.profile.prepareClang).toHaveBeenCalledWith('full', expect.any(AbortSignal));
+		const [c, link] = f.spawn.mock.calls.map((call) => call[1]);
+		expect(c).toEqual(expect.arrayContaining(['-c', 'main.c', '-std=gnu23']));
+		expect(link).toEqual(
+			expect.arrayContaining(['helper.cpp', '--driver-mode=g++', '-std=gnu++17'])
+		);
+		const object = c[c.indexOf('-o') + 1];
+		expect(link).toContain(object);
+		expect(() => f.fs.stat(object)).toThrow();
+		expect(await f.run('int main(void) { return 0; }', options, 'C')).toBe(true);
+		expect(f.spawn.mock.calls.filter(([command]) => command === 'clang')).toHaveLength(2);
+	});
+	it('preserves input roles, per-language standards and private object cleanup after a link error', async () => {
+		const f = fixture([], true);
+		const options = {
+			activePath: 'main.cpp',
+			workspaceFiles: [{ path: 'library.c', content: 'int number(void) { return 1; }' }],
+			compileArgs: [
+				'./library.c',
+				'-I',
+				'dir with spaces',
+				'-std=c17',
+				'-std=c++17',
+				'-Werror'
+			]
+		};
+		f.codes.push(0, 1);
+		expect(await f.prepare('int main() {}', options)).toBe(false);
+		const [c, link] = f.spawn.mock.calls.map((call) => call[1]);
+		expect(c).toEqual(
+			expect.arrayContaining(['library.c', '-std=c17', '-Werror', 'dir with spaces'])
+		);
+		expect(c).not.toContain('-std=c++17');
+		expect(c).not.toContain('./library.c');
+		const object = c[c.indexOf('-o') + 1];
+		expect(link.filter((arg) => arg === object)).toHaveLength(1);
+		expect(link).not.toContain('./library.c');
+		expect(link).not.toContain('-std=c17');
+		expect(link).toEqual(
+			expect.arrayContaining(['main.cpp', '-std=c++17', '-Werror', 'dir with spaces'])
+		);
+		expect(() => f.fs.stat(object)).toThrow();
+	});
+	it('rebuilds a cached multi-source program after editing a sibling', async () => {
+		const f = fixture();
+		const options = (value: number) => ({
+			activePath: 'main.cpp',
+			workspaceFiles: [{ path: 'helper.cpp', content: `int helper(){return ${value};}` }]
+		});
+		const code = 'int helper(); int main(){return helper();}';
+		await f.prepare(code, options(1));
+		await f.prepare(code, options(1));
+		expect(f.spawn).toHaveBeenCalledTimes(1);
+		await f.prepare(code, options(2));
+		expect(f.spawn).toHaveBeenCalledTimes(2);
+		expect(f.spawn.mock.calls[1][1]).toContain('helper.cpp');
+	});
 	it.each(['C', 'CPP'])(
 		'forwards the shared SIMD profile to %s compilation before user overrides',
 		async (language) => {

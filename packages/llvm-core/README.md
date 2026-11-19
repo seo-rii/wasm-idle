@@ -256,7 +256,7 @@ compile is retried without it and `usedPrecompiledHeader` stays false.
 
 Compile C/C++ LLDB artifacts with `compileArtifact(..., { debugMode: 'lldb' })`. They contain
 untouched source, embedded DWARF, stable `/workspace/...` paths, and exact Clang provenance.
-Lowercase `.c`, `.cc`, `.cpp`, and `.cxx` workspace siblings are compiled as independent
+Workspace siblings ending in `.c`, `.C`, `.cc`, `.cpp`, or `.cxx` compile as independent
 translation units in canonical path order and linked through collision-free internal object names;
 headers and data files remain mounted without being compiled. Normal and LLDB runs therefore use
 the same multi-TU program. Trace instrumentation remains single-TU and rejects a workspace with
