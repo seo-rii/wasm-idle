@@ -10,11 +10,28 @@ const patchPath = fileURLToPath(new URL('./patches/forth-lsp-reactor.patch', imp
 export const forthLspLock = JSON.parse(
 	await readFile(new URL('./forth-lsp.lock.json', import.meta.url), 'utf8')
 );
+// rustc uses the installed library sources for locations embedded by its inliner.
+export const forthLspRustupArgs = [
+	'toolchain',
+	'install',
+	forthLspLock.rustVersion,
+	'--profile',
+	'minimal',
+	'--target',
+	forthLspLock.target,
+	'--component',
+	'rust-src'
+];
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 
 export function verifyForthLspAsset(bytes, receipt, label) {
-	if (bytes.length !== receipt.bytes || sha256(bytes) !== receipt.sha256) {
-		throw new Error(`Forth LSP ${label} differs from the pinned producer receipt`);
+	const digest = sha256(bytes);
+	if (bytes.length !== receipt.bytes || digest !== receipt.sha256) {
+		throw new Error(
+			`Forth LSP ${label} differs from the pinned producer receipt. ` +
+				`Expected ${receipt.bytes} bytes with SHA-256 ${receipt.sha256}, ` +
+				`received ${bytes.length} bytes with SHA-256 ${digest}.`
+		);
 	}
 	return bytes;
 }
@@ -81,24 +98,17 @@ export async function buildForthLsp({
 	try {
 		wasm = verifyForthLspAsset(await readFile(wasmPath), lock.wasm, 'WASM');
 	} catch {
-		// Toolchain installation is a local build prerequisite; no deployment is performed.
-		await run('rustup', [
-			'toolchain',
-			'install',
-			lock.rustVersion,
-			'--profile',
-			'minimal',
-			'--target',
-			lock.target
-		]);
+		await run('rustup', forthLspRustupArgs);
 		const cargoRoot = process.env.CARGO_HOME || path.join(os.homedir(), '.cargo');
 		const sysroot = execFileSync('rustc', [`+${lock.rustVersion}`, '--print', 'sysroot'], {
 			encoding: 'utf8'
 		}).trim();
+		// Cargo can reuse an earlier build made before rust-src was installed.
+		const wasmBuildDirectory = path.join(cache, lock.target, lock.wasm.sha256);
 		const env = {
 			...process.env,
-			CARGO_TARGET_DIR: path.join(cache, 'wasi-target'),
-			CARGO_BUILD_BUILD_DIR: path.join(cache, 'wasi-intermediate'),
+			CARGO_TARGET_DIR: path.join(wasmBuildDirectory, 'target'),
+			CARGO_BUILD_BUILD_DIR: path.join(wasmBuildDirectory, 'intermediate'),
 			CARGO_BUILD_JOBS: '2',
 			SOURCE_DATE_EPOCH: '0',
 			CARGO_ENCODED_RUSTFLAGS: [
