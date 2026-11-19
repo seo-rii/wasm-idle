@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { strToU8, Zip, ZipPassThrough, zipSync } from 'fflate';
+import { crc32 } from 'node:zlib';
 import { createWorkspaceArchive, extractWorkspaceArchive } from './workspaceArchive.worker';
 import { workspaceFileBytes } from './workspaceCodec';
 
@@ -34,7 +35,85 @@ function archiveOffsets(archive: Uint8Array) {
 	return { view, end, directory, payload };
 }
 
+function archiveWithRawName(name: Uint8Array, os: number, unicodePath?: Uint8Array) {
+	const archive = zipSync({
+		['x'.repeat(name.length)]: [
+			strToU8('contents'),
+			{ os, extra: unicodePath ? { 0x7075: unicodePath } : undefined }
+		]
+	});
+	const { directory } = archiveOffsets(archive);
+	archive.set(name, 30);
+	archive.set(name, directory + 46);
+	return archive;
+}
+
+function unicodePathField(name: Uint8Array, path: string) {
+	const text = strToU8(path);
+	const field = new Uint8Array(5 + text.length);
+	field[0] = 1;
+	new DataView(field.buffer).setUint32(1, crc32(name), true);
+	field.set(text, 5);
+	return field;
+}
+
 describe('workspace archive worker', () => {
+	it('decodes unmarked Unix UTF-8 and legacy CP437 filenames', () => {
+		const latin = Uint8Array.of(0x63, 0x61, 0x66, 0x82, 0x2e, 0x68);
+		for (const os of [0, 3]) {
+			expect(extractWorkspaceArchive(archiveWithRawName(latin, os))[0].path).toBe('café.h');
+		}
+		expect(extractWorkspaceArchive(archiveWithRawName(strToU8('한글.cpp'), 3))[0].path).toBe(
+			'한글.cpp'
+		);
+		// These bytes spell é in UTF-8 or two box/punctuation characters in DOS CP437.
+		expect(extractWorkspaceArchive(archiveWithRawName(strToU8('é'), 0))[0].path).toBe('├⌐');
+	});
+
+	it.each(['both', 'local', 'central'])(
+		'reads a CRC-matched Unicode path from the %s header(s)',
+		(header) => {
+			const raw = strToU8('name.txt');
+			const field = unicodePathField(raw, '자료/실행.txt');
+			const archive = archiveWithRawName(raw, 0, field);
+			const { directory, view } = archiveOffsets(archive);
+			if (header === 'local') view.setUint16(directory + 46 + raw.length, 0xffff, true);
+			if (header === 'central') view.setUint16(30 + raw.length, 0xffff, true);
+			expect(extractWorkspaceArchive(archive)[0].path).toBe('자료/실행.txt');
+		}
+	);
+
+	it('ignores outdated Unicode path metadata and checks the decoded filenames for conflicts', () => {
+		const name = 'legacy.txt';
+		const raw = strToU8(name);
+		const stale = unicodePathField(strToU8('previous.txt'), 'unrelated.txt');
+		expect(extractWorkspaceArchive(archiveWithRawName(raw, 0, stale))[0].path).toBe(name);
+		const archive = zipSync({
+			[name]: [
+				strToU8('one'),
+				{ extra: { 0x7075: unicodePathField(raw, 'data/./notes.txt') } }
+			],
+			'data/notes.txt': strToU8('two')
+		});
+		expect(() => extractWorkspaceArchive(archive)).toThrow(/duplicate entry path/u);
+		const alias = 'data/./notes.txt';
+		const rawCollision = zipSync({
+			[alias]: [
+				strToU8('one'),
+				{ extra: { 0x7075: unicodePathField(strToU8(alias), 'other.txt') } }
+			],
+			'data/notes.txt': strToU8('two')
+		});
+		expect(() => extractWorkspaceArchive(rawCollision)).toThrow(/duplicate entry path/u);
+	});
+
+	it('rejects conflicting Unicode paths in the local and central headers', () => {
+		const raw = strToU8('legacy.txt');
+		const archive = archiveWithRawName(raw, 0, unicodePathField(raw, 'first.txt'));
+		const { directory } = archiveOffsets(archive);
+		archive.set(strToU8('other.txt'), directory + 46 + raw.length + 4 + 5);
+		expect(() => extractWorkspaceArchive(archive)).toThrow(/Conflicting ZIP Unicode paths/u);
+	});
 	it('round trips prototype-like filenames as real ZIP entries', () => {
 		const files = [
 			'__proto__',
