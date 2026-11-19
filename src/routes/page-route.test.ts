@@ -36,6 +36,48 @@ const expectPlaygroundLanguage = (language: PlaygroundLanguage) => {
 	expect(languageLabels[language]).toBeTruthy();
 };
 
+describe('workspace ZIP export status', () => {
+	const handler = source.slice(
+		source.indexOf('async function downloadZip('),
+		source.indexOf('async function extractImportedZip(')
+	);
+
+	it.each(['switch workspace', 'retry'])(
+		'keeps a delayed ZIP error with its request after %s',
+		async (action) => {
+			const previous = Promise.withResolvers<never>();
+			const state = {
+				editorWorkspaceKey: 'original',
+				zipExportRequest: 0,
+				saveStatus: 'Ready',
+				files: [],
+				Blob,
+				Error,
+				downloadBlob: vi.fn(),
+				runWorkspaceArchive: vi
+					.fn()
+					.mockReturnValueOnce(previous.promise)
+					.mockResolvedValue({ type: 'created', archive: new ArrayBuffer(0) })
+			};
+			const download = runInNewContext(
+				stripTypeScriptTypes(handler) + '\ndownloadZip',
+				state
+			);
+			const pending = download();
+			if (action === 'retry') await download();
+			else {
+				state.editorWorkspaceKey = 'new';
+				state.saveStatus = 'Workspace restored';
+			}
+			previous.reject(new Error('Earlier export failed'));
+			await pending;
+			expect(state.saveStatus).toBe(
+				action === 'retry' ? 'ZIP downloaded' : 'Workspace restored'
+			);
+		}
+	);
+});
+
 describe('active editor workspace publication', () => {
 	const publish = source.indexOf('void publishContainerWorkspace(selectedLanguage, values)');
 	const effect = source.slice(
