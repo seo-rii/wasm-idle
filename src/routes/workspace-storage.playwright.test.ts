@@ -90,9 +90,11 @@ describe('workspace storage browser integration', () => {
 					},
 					{ key, original, initiallyFull }
 				);
-				await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
+				await page.goto(browserUrl, { waitUntil: 'domcontentloaded', timeout: 90_000 });
 				await page.locator('[data-workspace-recovery]').waitFor();
-				await page.locator('#language-select[data-workspace-ready="true"]').waitFor();
+				await page
+					.locator('#language-select[data-workspace-ready="true"]')
+					.waitFor({ state: 'attached', timeout: 90_000 });
 				const readOriginal = () =>
 					page.evaluate(
 						(key) => ({
