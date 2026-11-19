@@ -168,7 +168,7 @@ function unpackLibrary(payload) {
 	return files;
 }
 
-function createOutput(stream, transform = (text) => text) {
+function createOutput(stream, diagnostics) {
 	const decoder = new TextDecoder();
 	const pending = [];
 	let line = '';
@@ -179,13 +179,13 @@ function createOutput(stream, transform = (text) => text) {
 		if (end < 0 && line.length < 4096) return;
 		const ready = end < 0 ? line : line.slice(0, end + 1);
 		line = end < 0 ? '' : line.slice(end + 1);
-		self.postMessage({ output: transform(ready), stream });
+		self.postMessage({ output: diagnostics.transform(ready), stream });
 	};
 	const flush = (final = false) => {
 		emit(decoder.decode(Uint8Array.from(pending), { stream: !final }));
 		pending.length = 0;
 		if (line) {
-			self.postMessage({ output: transform(line), stream });
+			self.postMessage({ output: diagnostics.transform(line), stream });
 			line = '';
 		}
 	};
@@ -200,24 +200,27 @@ function createOutput(stream, transform = (text) => text) {
 		line(value) {
 			emit(`${decoder.decode(Uint8Array.from(pending), { stream: true })}${value}\n`);
 			pending.length = 0;
+			diagnostics.finish();
 		},
 		flush
 	};
 }
 
 // Lean prints elaboration messages as `<file>:<line>:<column>: <severity>[(<code>)]: <message>`.
-const DIAGNOSTIC = /^\/workspace\/(.+?):(\d+):(\d+): (error|warning|info)(?:\([^)]*\))?: ?(.*)$/;
+const DIAGNOSTIC = /^\/workspace\/(.+?):(\d+):(\d+): (error|warning|info)(?:\([^)]*\))?: ?/;
 
-function createDiagnostics() {
+function createDiagnostics(report) {
 	let current;
-	let count = 0;
+	let atLineStart = true;
 	const finish = () => {
 		if (!current) return;
-		if (count++ < 1000) self.postMessage({ diagnostic: current });
+		current.message = current.message.replace(/\n$/, '');
+		report(current);
 		current = undefined;
 	};
-	const transformLine = (value) => {
-		const match = value.match(DIAGNOSTIC);
+	const transformPart = (value) => {
+		const match = atLineStart && value.match(DIAGNOSTIC);
+		atLineStart = value.endsWith('\n');
 		if (match) {
 			finish();
 			current = {
@@ -225,21 +228,32 @@ function createDiagnostics() {
 				lineNumber: Number(match[2]),
 				columnNumber: Number(match[3]) + 1,
 				severity: match[4] === 'info' ? 'other' : match[4],
-				message: match[5]
+				message: value.slice(match[0].length)
 			};
 			return value.slice(WORKSPACE.length + 1);
 		}
-		// Messages continue on following lines until a blank line or the next message.
-		if (current && value) current.message = `${current.message}\n${value}`;
-		else if (!value) finish();
+		if (current) current.message += value;
 		return value;
 	};
 	return {
-		/** Strip the virtual workspace prefix and collect structured diagnostics from whole lines. */
 		transform(text) {
-			const lines = text.split('\n');
-			const tail = lines.pop();
-			return [...lines.map(transformLine), tail].join('\n');
+			// The output sink may split a long line before its newline.
+			return text.replace(/[^\n]*\n|[^\n]+$/gu, transformPart);
+		},
+		bindWrites(stream) {
+			// Lean writes a rendered message, including its hint paragraphs, before running user IO.
+			// Keep partial writes open until their newline; the terminal still streams its own chunks.
+			const ops = stream.stream_ops;
+			stream.stream_ops = {
+				...ops,
+				write(...args) {
+					const written = ops.write.apply(this, args);
+					const [, buffer, offset, requested] = args;
+					if (written === requested && written > 0 && buffer[offset + written - 1] === 10)
+						finish();
+					return written;
+				}
+			};
 		},
 		finish
 	};
@@ -277,9 +291,14 @@ self.onmessage = async ({ data }) => {
 		self.postMessage({ progress: { percent: 0.24, stage: 'Preparing the Lean 4 library' } });
 		const library = unpackLibrary(payload);
 		const wasmMemory = createBoundedMemory(data.limits?.maxWasmMemoryBytes);
-		const diagnostics = createDiagnostics();
-		const stdout = createOutput('stdout', diagnostics.transform);
-		const stderr = createOutput('stderr', diagnostics.transform);
+		let reported = 0;
+		const report = (diagnostic) => {
+			if (reported++ < 1000) self.postMessage({ diagnostic });
+		};
+		const stdoutDiagnostics = createDiagnostics(report);
+		const stderrDiagnostics = createDiagnostics(report);
+		const stdout = createOutput('stdout', stdoutDiagnostics);
+		const stderr = createOutput('stderr', stderrDiagnostics);
 		const stdin = createSharedStdinReader(data.stdinChannel, () => {
 			stdout.flush();
 			stderr.flush();
@@ -310,6 +329,8 @@ self.onmessage = async ({ data }) => {
 			}
 		});
 		lean.FS.getStream(0).stream_ops.read = stdin.read;
+		stdoutDiagnostics.bindWrites(lean.FS.getStream(1));
+		stderrDiagnostics.bindWrites(lean.FS.getStream(2));
 		// `IO.appPath` reports /lean/bin/lean; Lean resolves its library relative to that directory.
 		lean.FS.mkdirTree('/lean/bin');
 		for (const file of library) {
@@ -340,7 +361,8 @@ self.onmessage = async ({ data }) => {
 		} finally {
 			stdout.flush(true);
 			stderr.flush(true);
-			diagnostics.finish();
+			stdoutDiagnostics.finish();
+			stderrDiagnostics.finish();
 		}
 		self.postMessage({
 			evidence: {

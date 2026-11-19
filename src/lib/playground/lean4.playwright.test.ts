@@ -72,8 +72,19 @@ describe.skipIf(!enabled)('real Lean 4 runtime in Chromium', () => {
 					content: `import Lean4 from ${JSON.stringify(base + 'src/lib/playground/lean4.ts')}; globalThis.__lean4Sandbox = Lean4;`
 				});
 				await page.waitForFunction(() => Boolean((globalThis as any).__lean4Sandbox));
+				const programJson = JSON.stringify({
+					caption: '',
+					data: 'program output',
+					endPos: { column: 3, line: 1 },
+					fileName: '/workspace/Main.lean',
+					isSilent: false,
+					keepFullRange: false,
+					kind: '[anonymous]',
+					pos: { column: 1, line: 1 },
+					severity: 'error'
+				});
 				const result = await page.evaluate(
-					async ({ source, base }) => {
+					async ({ source, base, programJson }) => {
 						const Lean4 = (globalThis as any).__lean4Sandbox;
 						const sandbox = new Lean4();
 						const rootUrl = new URL(base).pathname.replace(/\/$/, '');
@@ -158,6 +169,25 @@ describe.skipIf(!enabled)('real Lean 4 runtime in Chromium', () => {
 								'def main : IO Unit := do\n  IO.println (1 + "two")',
 								{ stdin: '' }
 							);
+							let replied = false;
+							reports.warning = await run(
+								[
+									'def main (unused : List String) : IO Unit := do',
+									'  let stdin ← IO.getStdin',
+									'  IO.print "reply? "',
+									'  (← IO.getStdout).flush',
+									'  IO.println (← stdin.getLine).trimAscii.toString',
+									'  IO.println ' + JSON.stringify(programJson),
+									'  IO.eprintln "program stderr"'
+								].join('\n'),
+								{},
+								(output) => {
+									if (!replied && output.includes('reply? ')) {
+										replied = true;
+										sandbox.write('hello\n');
+									}
+								}
+							);
 							const controller = new AbortController();
 							reports.cancel = await run(
 								source,
@@ -176,7 +206,11 @@ describe.skipIf(!enabled)('real Lean 4 runtime in Chromium', () => {
 							await sandbox.dispose();
 						}
 					},
-					{ source: promptSource, base: `${server.browserUrl.replace(/\/$/, '')}/` }
+					{
+						source: promptSource,
+						base: `${server.browserUrl.replace(/\/$/, '')}/`,
+						programJson
+					}
 				);
 				process.stdout.write(`Lean 4 adapter result: ${JSON.stringify(result)}\n`);
 				expect(result.isolated).toBe(true);
@@ -198,6 +232,24 @@ describe.skipIf(!enabled)('real Lean 4 runtime in Chromium', () => {
 					output: 'args=[a b, c]\n',
 					evidence: { exitCode: 3 }
 				});
+				const warning = result.warning as {
+					output: string;
+					diagnostics: { message: string }[];
+				};
+				expect(result.warning).toMatchObject({
+					value: true,
+					diagnostics: [{ severity: 'warning' }]
+				});
+				expect(warning.output).toContain(
+					'reply? hello\n' + programJson + '\nprogram stderr\n'
+				);
+				expect(warning.diagnostics[0].message).toContain(
+					'\n\nHint: The binding can be removed'
+				);
+				expect(warning.diagnostics[0].message).toContain(
+					'\n\nNote: This linter can be disabled'
+				);
+				expect(warning.diagnostics[0].message).not.toContain('reply? ');
 				expect(result.boundedMemory).toMatchObject({ value: true, output: 'bounded\n' });
 				expect(result.invalid).toMatchObject({
 					value: false,
@@ -211,6 +263,9 @@ describe.skipIf(!enabled)('real Lean 4 runtime in Chromium', () => {
 					]
 				});
 				expect((result.invalid as any).diagnostics[0].message).toContain('HAdd Nat String');
+				expect((result.invalid as any).diagnostics[0].message).toContain(
+					'\n\nHint: Type class instance resolution failures'
+				);
 				expect(String(result.invalid && (result.invalid as any).output)).toContain(
 					'Main.lean:2:14: error'
 				);
