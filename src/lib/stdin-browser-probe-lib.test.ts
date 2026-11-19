@@ -6,6 +6,7 @@ import {
 	classifyTerminalRun,
 	isExecutionRuntimeAssetPath,
 	isStdinEditorReady,
+	observeProgramOutput,
 	withWallClockTimeout
 } from '../../scripts/stdin-browser-probe-lib.mjs';
 
@@ -81,6 +82,82 @@ describe('classifyTerminalRun', () => {
 			).toBe('failure');
 		}
 	);
+});
+
+describe('program output observation', () => {
+	afterEach(() => vi.unstubAllGlobals());
+
+	function fixture() {
+		let previous = 1;
+		let write: (id: number, chunk: string) => void = () => {};
+		const stop = vi.fn();
+		const target = {
+			__wasmIdleDebug: {
+				getExecutionState: () => ({ id: previous }),
+				observeProgramOutput(listener: typeof write) {
+					write = listener;
+					return stop;
+				}
+			},
+			__wasmIdleOutputProbe: undefined as
+				{ matched(id: number, marker: string): boolean; stop(): void } | undefined
+		};
+		vi.stubGlobal('window', target);
+		return {
+			target,
+			stop,
+			start: (id: number) => {
+				previous = id;
+			},
+			write: (id: number, chunk: string) => write(id, chunk),
+			matched: (id: number, marker: string) =>
+				target.__wasmIdleOutputProbe?.matched(id, marker)
+		};
+	}
+
+	it('keeps markers split between chunks after the terminal rolls over', () => {
+		const { write, matched } = fixture();
+		expect(observeProgramOutput(['one', 'two'])).toBe(1);
+		write(1, 'one two');
+		expect(matched(1, 'one')).toBe(false);
+		write(2, 'on');
+		write(2, 'e and t');
+		write(2, 'wo' + 'x'.repeat(70_000));
+		expect(matched(2, 'one')).toBe(true);
+		expect(matched(2, 'two')).toBe(true);
+		write(3, 'one');
+		write(2, 'late two');
+		expect(matched(3, 'one')).toBe(true);
+		expect(matched(3, 'two')).toBe(false);
+	});
+
+	it('disconnects a replaced observer and accepts empty expectations only for a new run', () => {
+		const { target, stop, start, write, matched } = fixture();
+		observeProgramOutput(['old']);
+		write(2, 'old');
+		start(2);
+		expect(observeProgramOutput(['', 'new'])).toBe(2);
+		expect(stop).toHaveBeenCalledOnce();
+		expect(matched(2, '')).toBe(false);
+		expect(matched(3, '')).toBe(true);
+		expect(matched(3, 'new')).toBe(false);
+		target.__wasmIdleOutputProbe?.stop();
+		expect(stop).toHaveBeenCalledTimes(2);
+		expect(target.__wasmIdleOutputProbe).toBeUndefined();
+	});
+
+	it('uses the streamed match, execution identity and exit status together', () => {
+		const state = { id: 2, language: 'CPP', status: 'completed', exitCode: 0 };
+		const classify = (observed: boolean, current = state, previousId = 1) =>
+			classifyTerminalRun('old', 'tail', 'tail', current, previousId, 'CPP', observed);
+		expect(classify(false)).toBe('failure');
+		expect(classifyTerminalRun('tail', 'tail', 'gone', state, 1, 'CPP', true)).toBe('success');
+		expect(classify(true, state, 2)).toBe('running');
+		expect(classify(true, { ...state, status: 'running' })).toBe('running');
+		expect(classify(true, { ...state, status: 'cancelled' })).toBe('failure');
+		expect(classify(true, { ...state, exitCode: 1 })).toBe('failure');
+		expect(classify(true, { ...state, language: 'C' })).toBe('failure');
+	});
 });
 
 describe('stdin editor readiness', () => {

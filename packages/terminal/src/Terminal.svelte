@@ -47,6 +47,8 @@
 		onkey?: (e: KeyboardEvent) => void;
 		ondebug?: (event: DebugSessionEvent) => void;
 		oncompilediagnostic?: (diagnostic: CompilerDiagnostic) => void;
+		/** Program output as written to the terminal, before its diagnostic tail is trimmed. */
+		onprogramoutput?: (text: string) => void;
 		onimage?: (payload: { mime: string; b64: string; ts?: number }) => void;
 		terminal?: TerminalControl;
 	}
@@ -62,6 +64,7 @@
 		onkey,
 		ondebug,
 		oncompilediagnostic,
+		onprogramoutput,
 		onimage,
 		terminal = $bindable()
 	}: Props = $props();
@@ -169,6 +172,7 @@
 
 	function writeTerminalOutput(text: string, executionOutput = false) {
 		if (!text) return;
+		if (executionOutput && activeExecutionLanguage) onprogramoutput?.(text);
 		if (
 			executionOutput &&
 			activeExecutionLanguage &&
