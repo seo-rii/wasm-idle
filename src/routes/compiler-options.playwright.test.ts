@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { chromium } from 'playwright-core';
 import { describe, expect, it } from 'vitest';
+import { waitForSelectedEditorModel } from '../../scripts/browser-editor-readiness.mjs';
 import { addBrowserTestCookies } from '../../scripts/browser-test-cookies.mjs';
 import { disableBrowserPrewarm } from '../../scripts/browser-test-prewarm.mjs';
 import {
@@ -92,7 +93,9 @@ describe('compiler options in the playground', () => {
 				};
 			}
 			try {
-				await prepareContainerRuntimePage(page, server.browserUrl);
+				const url = new URL(server.browserUrl);
+				url.searchParams.set('lsp-test', '1');
+				await prepareContainerRuntimePage(page, url.href);
 				for (const language of ['C', 'CPP'] as const) {
 					await page.locator('#language-select').selectOption(language);
 					const panel = page.locator('details.compiler-options');
@@ -157,7 +160,16 @@ int main(void) { printf("include-policy-ok"); return 0; }`);
 					expect(await panel.getByRole('alert').textContent()).toContain(
 						'Close the " quote'
 					);
-					await page.getByRole('button', { name: 'Run', exact: true }).click();
+					for (const action of ['Run', 'Debug']) {
+						await panel.locator('summary').click();
+						await page.getByRole('button', { name: action, exact: true }).click();
+						expect(await panel.getByRole('alert').isVisible()).toBe(true);
+						expect(
+							await panel
+								.getByLabel('Compiler arguments')
+								.evaluate((input) => input === document.activeElement)
+						).toBe(true);
+					}
 					expect(
 						await page.evaluate(
 							() => (window as any).__wasmIdleDebug.getExecutionState().id
@@ -190,14 +202,13 @@ int main(void) { printf("include-policy-ok"); return 0; }`);
 					false
 				);
 				await page.locator('#language-select').selectOption('C');
+				await waitForSelectedEditorModel(page, 'C', 'main.c');
 				expect(await page.getByLabel('C standard', { exact: true }).inputValue()).toBe(
 					'C23'
 				);
-				expect(
-					await page.evaluate(() =>
-						(window as any).__wasmIdleDebug.setWorkspaceFiles([], 'main.cpp')
-					)
-				).toBe(true);
+				page.once('dialog', (dialog) => dialog.accept('main.cpp'));
+				await page.getByRole('button', { name: 'Rename', exact: true }).click();
+				await waitForSelectedEditorModel(page, 'C', 'main.cpp');
 				await page.locator('#cpp-version').selectOption('CPP17');
 				expect(await page.locator('#language-select').inputValue()).toBe('C');
 				const cppInC = await runSource(`#include <stdio.h>
