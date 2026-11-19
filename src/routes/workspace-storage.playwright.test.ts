@@ -390,21 +390,28 @@ describe('workspace storage browser integration', () => {
 					},
 					{ times: 1 }
 				);
-				await page.goto(url.toString(), { waitUntil: 'domcontentloaded' });
-				await page.waitForFunction(
-					() => {
-						const [navigation] = performance.getEntriesByType(
-							'navigation'
-						) as PerformanceNavigationTiming[];
-						return (
-							navigation?.type === 'reload' &&
-							crossOriginIsolated &&
-							!!navigator.serviceWorker.controller
-						);
-					},
-					undefined,
-					{ timeout: 90_000 }
-				);
+				// Wait for the worker's navigation response before inspecting the replacement document.
+				const [reload] = await Promise.all([
+					page.waitForResponse(
+						(response) =>
+							response.url() === url.href &&
+							response.request().isNavigationRequest() &&
+							response.fromServiceWorker(),
+						{ timeout: 90_000 }
+					),
+					page.goto(url.href, { waitUntil: 'domcontentloaded' })
+				]);
+				await reload.finished();
+				await page.waitForFunction(() => {
+					const [navigation] = performance.getEntriesByType(
+						'navigation'
+					) as PerformanceNavigationTiming[];
+					return (
+						navigation?.type === 'reload' &&
+						crossOriginIsolated &&
+						!!navigator.serviceWorker.controller
+					);
+				});
 				await page.locator('[data-workspace-recovery]').waitFor();
 				const readRecovery = () =>
 					page.evaluate(
