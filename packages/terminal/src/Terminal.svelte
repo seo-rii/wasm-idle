@@ -368,6 +368,7 @@
 	}
 
 	function submitSandboxEof() {
+		if (input.length > 0) submitCurrentInput();
 		if (sandbox && sandboxAcceptingInput) sandbox.eof?.();
 		else pendingSandboxEof = true;
 	}
@@ -1129,10 +1130,7 @@
 						else sandbox?.kill?.();
 					} else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'd') {
 						ev.preventDefault();
-						whenInputReady(() => {
-							if (input.length > 0) submitCurrentInput();
-							submitSandboxEof();
-						});
+						whenInputReady(submitSandboxEof);
 					} else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'v') {
 						ev.preventDefault();
 						const generation = sandboxInputGeneration;

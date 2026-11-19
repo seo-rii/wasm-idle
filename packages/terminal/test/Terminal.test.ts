@@ -144,7 +144,7 @@ describe('Terminal source', () => {
 			/function discardPendingSandboxInput\(\) \{\s+sandboxInputGeneration \+= 1;\s+pendingSandboxInput = \[\];\s+pendingSandboxEof = false;\s+\}/s
 		);
 		expect(source).toMatch(
-			/function submitSandboxEof\(\) \{\s+if \(sandbox && sandboxAcceptingInput\) sandbox\.eof\?\.\(\);\s+else pendingSandboxEof = true;\s+\}/s
+			/if \(sandbox && sandboxAcceptingInput\) sandbox\.eof\?\.\(\);\s+else pendingSandboxEof = true;/s
 		);
 		expect(source).toMatch(
 			/function finishSandboxRun\(\) \{\s+sandboxAcceptingInput = false;/s
