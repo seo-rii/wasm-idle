@@ -5,6 +5,11 @@ export const OBJECTIVE_C_LSP_DEFINES = ['-DOBJC2RUNTIME=1'] as const;
 const defaultCppStandardArg = '-std=gnu++20';
 const defaultCStandardArg = '-std=gnu11';
 
+/** Workspace source siblings automatically compiled by both Clang execution backends. */
+export function isClangWorkspaceTranslationUnit(path: string) {
+	return /\.(?:c|C|cc|cpp|cxx)$/.test(path);
+}
+
 export type ClangSourceLanguage = 'C' | 'CPP' | 'OBJC';
 
 function normalizeStandardCode(value?: string) {

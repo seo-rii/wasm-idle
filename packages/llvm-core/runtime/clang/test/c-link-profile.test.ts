@@ -40,7 +40,7 @@ describe('C-only linker profile', () => {
 		expect(clang.compile).toHaveBeenCalledTimes(2);
 		expect(libraries(clang)).not.toContain('-lc++');
 	});
-	it.each(['cc', 'cpp', 'cxx'])('keeps C++ archives when a C project has a .%s unit', async (extension) => {
+	it.each(['cc', 'cpp', 'cxx', 'C'])('keeps C++ archives when a C project has a .%s unit', async (extension) => {
 		const clang = harness();
 		await clang.compileLink('int main(void) { return 0; }', {
 			language: 'C', workspaceFiles: [{ path: `helper.${extension}`, content: 'int helper() { return 0; }' }]

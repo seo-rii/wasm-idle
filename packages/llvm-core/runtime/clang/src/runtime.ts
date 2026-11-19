@@ -26,6 +26,7 @@ import {
 	CLANG_WASI_TARGET,
 	OBJECTIVE_C_RUNTIME_FLAGS,
 	clangSystemIncludePaths,
+	isClangWorkspaceTranslationUnit,
 	resolveClangLanguageArgs,
 	type ClangSourceLanguage
 } from '../../core/src/clang-profile.js';
@@ -73,7 +74,6 @@ const defaultCompilerRuntimeLibDir = 'lib/clang/8.0.1/lib/wasi';
 const internalBuildRoot = '__wasm_idle_build';
 const bitcodeCompilations = new WeakSet<object>();
 const printscanLongDoublePath = 'lib/wasm32-wasi/libc-printscan-long-double.a';
-const workspaceTranslationUnitPattern = /\.(?:c|cc|cpp|cxx)$/;
 
 const hasUnknownLanguageOverride = (compileArgs: readonly unknown[]) =>
 	compileArgs.some(
@@ -1948,7 +1948,7 @@ class Clang {
 			left.path < right.path ? -1 : left.path > right.path ? 1 : 0
 		);
 		const translationUnits = workspaceSnapshot.filter(
-			(file) => file.path === input || workspaceTranslationUnitPattern.test(file.path)
+			(file) => file.path === input || isClangWorkspaceTranslationUnit(file.path)
 		);
 		// Match compile()'s effective language, not just the active editor language.
 		// -x overrides and response files may switch the effective language to C++.

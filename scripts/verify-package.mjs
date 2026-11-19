@@ -77,7 +77,8 @@ export const scenarios = [
 		// Bash terminal capabilities and EOF handling add 2,377 installed bytes.
 		// Cross-project reconciliation and cancellable terminal ownership measure 7,644,207 installed bytes (865 files).
 		// Serializing Bash prompt and directory requests adds 1,289 bytes. The root install measures 7,645,519 bytes.
-		budget: { maxBytes: 7646208, maxFiles: 865, maxPackages: 6 },
+		// Linking workspace sources with per-input Clang modes measures 7,652,352 bytes.
+		budget: { maxBytes: 7652352, maxFiles: 865, maxPackages: 6 },
 		absentPackageNames: [
 			'@katana-project/asm',
 			'java-parser',
@@ -489,7 +490,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// The combined install measures 43,373,829 bytes with Svelte 5.58.0.
 		// The input layout and Readline renderer each add a JavaScript file and a declaration.
 		// source-map-js 1.2.3 added 2,296 bytes to Vue's dependency tree. Allow 3 KiB.
-		budget: { maxBytes: 43377664, maxFiles: 3494, maxPackages: 70 },
+		// The multi-source Clang runner and foreground terminal input together measure 43,391,388 bytes.
+		budget: { maxBytes: 43392000, maxFiles: 3494, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

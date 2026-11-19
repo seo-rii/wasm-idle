@@ -16,6 +16,18 @@ const enabled = process.env.WASM_IDLE_RUN_CONTAINER_WEBSITE_BROWSER === '1';
 const runTimeout = Number(process.env.WASM_IDLE_CPP_WORKSPACE_RUN_TIMEOUT_MS || '180000');
 const storageKey = 'wasm-idle:example-workspace:v3';
 const ownedWasm = 'data:application/wasm;base64,AGFzbQEAAAA=';
+const helperSources = [
+	{
+		path: 'c/value.c',
+		content:
+			'#ifdef __cplusplus\n#error Use the C compiler for this file\n#endif\nint project_base(void) { return 40; }'
+	},
+	{
+		path: 'cpp/value.cpp',
+		content:
+			'extern "C" int project_base();\nint project_value(int revision) { return project_base() - 40 + revision; }'
+	}
+];
 type Execution = { id: number; status: string; exitCode: number | null; endedAt: number | null };
 type SiteWindow = typeof globalThis & {
 	__wasmIdleDebug?: {
@@ -32,10 +44,11 @@ type SavedWorkspace = {
 function source(revision: number) {
 	return `#include <fstream>
 #include <iostream>
+int project_value(int revision);
 int main() {
     const char bytes[] = {0, static_cast<char>(255), 'A'};
     std::ofstream("generated.bin", std::ios::binary).write(bytes, sizeof(bytes));
-    std::cout << "cpp_workspace_${revision}\\n";
+    std::cout << "cpp_workspace_" << project_value(${revision}) << "\\n";
     return 0;
 }
 `;
@@ -87,6 +100,8 @@ async function saveAndCheckFiles(page: Page, expectedSource: string) {
 		// program.wasm belongs to the user. Compiler output must neither replace it
 		// nor add another generated binary to the editable project or its snapshot.
 		expect(files.map((file) => file.path).sort()).toEqual([
+			'c/value.c',
+			'cpp/value.cpp',
 			'generated.bin',
 			'main.cpp',
 			'program.wasm'
@@ -108,7 +123,7 @@ async function saveAndCheckFiles(page: Page, expectedSource: string) {
 }
 
 it(
-	'keeps C++ compiler output outside saved files while edits and user binaries survive repeated runs',
+	'links C and C++ siblings and keeps compiler output outside saved files across repeated runs',
 	{
 		skip: !enabled,
 		timeout: runTimeout * 3 + 90_000,
@@ -143,7 +158,7 @@ it(
 				await disableBrowserPrewarm(context);
 				const initialSource = source(1);
 				await context.addInitScript(
-					({ key, source, binary }) => {
+					({ key, source, binary, helpers }) => {
 						if (localStorage.getItem(key) !== null) return;
 						localStorage.setItem(
 							key,
@@ -153,13 +168,19 @@ it(
 								activePath: 'main.cpp',
 								files: [
 									{ path: 'main.cpp', content: source },
+									...helpers,
 									{ path: 'program.wasm', content: binary, encoding: 'data-url' }
 								],
 								lspEnabled: false
 							})
 						);
 					},
-					{ key: storageKey, source: initialSource, binary: ownedWasm }
+					{
+						key: storageKey,
+						source: initialSource,
+						binary: ownedWasm,
+						helpers: helperSources
+					}
 				);
 				page = await context.newPage();
 				page.setDefaultTimeout(30_000);
