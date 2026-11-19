@@ -83,7 +83,11 @@
 		restoreCompilerOptions,
 		type CompilerOptionsByLanguage
 	} from './compilerOptions';
-	import { createWorkspaceStorage, type WorkspaceSaveState } from './workspaceStorage';
+	import {
+		createWorkspaceStorage,
+		type WorkspaceSaveResult,
+		type WorkspaceSaveState
+	} from './workspaceStorage';
 	import {
 		normalizeWorkspacePath,
 		recoverWorkspaceFilePaths,
@@ -2023,8 +2027,9 @@
 		workspaceSaveTimer = setTimeout(() => saveWorkspace(), 400);
 	}
 
-	async function saveWorkspace(showStatus = false) {
-		if (!browser || !workspaceEditorInitialized || unrestoredWorkspace !== null) return false;
+	async function saveWorkspace(showStatus = false): Promise<WorkspaceSaveResult> {
+		if (!browser || !workspaceEditorInitialized || unrestoredWorkspace !== null)
+			return 'failed';
 		const identity = currentWorkspaceStorageKey;
 		if (
 			(showStatus && containerReady) ||
@@ -2036,31 +2041,31 @@
 				await refreshContainerWorkspace(false, showStatus);
 			} catch (error) {
 				if (identity === currentWorkspaceStorageKey) workspaceStorage.fail(String(error));
-				return false;
+				return 'failed';
 			}
-			if (identity !== currentWorkspaceStorageKey) return false;
+			if (identity !== currentWorkspaceStorageKey) return 'failed';
 			if (
 				containerEditorRefreshDeferred &&
 				containerReadRevision !== containerChangeRevision
 			) {
 				if (showStatus) saveStatus = 'Workspace changes will be saved after execution';
-				return false;
+				return 'failed';
 			}
 		}
 		if (containerWorkspaceConflicts.size) {
 			workspaceStorage.fail(
 				`Editor and terminal changes conflict in ${[...containerWorkspaceConflicts].join(', ')}. Open the project and refresh files to resolve them.`
 			);
-			return false;
+			return 'failed';
 		}
-		const saved = await workspaceStorage.save(workspaceSaveKey, identity);
-		if (saved && identity === currentWorkspaceStorageKey && pendingWorkspaceUrl) {
+		const result = await workspaceStorage.saveRevision(workspaceSaveKey, identity);
+		if (result === 'saved' && identity === currentWorkspaceStorageKey && pendingWorkspaceUrl) {
 			if (location.href === pendingWorkspaceUrl.source)
 				replaceState(pendingWorkspaceUrl.target, page.state);
 			pendingWorkspaceUrl = null;
 		}
-		if (saved && showStatus) saveStatus = 'Saved locally';
-		return saved;
+		if (result === 'saved' && showStatus) saveStatus = 'Saved locally';
+		return result;
 	}
 
 	async function saveWorkspaceCopy() {
@@ -2106,20 +2111,22 @@
 		saveWorkspace(true);
 	}
 
-	function warnUnsavedChanges(event: BeforeUnloadEvent) {
-		if (!workspaceEditorInitialized) return;
+	function isCurrentWorkspaceSaved() {
 		workspaceStorage.observe(workspaceSaveKey, currentWorkspaceStorageKey);
 		workspaceStorage.checkExternalChanges(currentWorkspaceStorageKey);
 		const state = workspaceStorage.getState();
-		if (
+		return (
 			state.phase === 'saved' &&
 			state.revision === state.savedRevision &&
 			containerReadRevision === containerChangeRevision &&
 			!containerRescanPending &&
 			!changedContainerProjects.size &&
 			!containerWorkspaceConflicts.size
-		)
-			return;
+		);
+	}
+
+	function warnUnsavedChanges(event: BeforeUnloadEvent) {
+		if (!workspaceEditorInitialized || isCurrentWorkspaceSaved()) return;
 		// An asynchronous cross-tab lock cannot finish reliably during unload.
 		// Keep the tab open until saving finishes, or let the user export its edits.
 		void saveWorkspace();
@@ -2251,9 +2258,16 @@
 		destination: ReturnType<typeof captureWorkspaceImportDestination>
 	) {
 		if (!importedFiles.length) throw new Error('ZIP archive contains no files');
-		if (!(await saveWorkspace()))
-			throw new Error('Save the current workspace before opening a ZIP');
-		destination.assertCurrent();
+		// A container change can invalidate the source snapshot while its save waits for a lock.
+		let sourceSaved = false;
+		for (let attempt = 0; attempt < 3 && !sourceSaved; attempt++) {
+			const result = await saveWorkspace();
+			destination.assertCurrent();
+			sourceSaved = result === 'saved' && isCurrentWorkspaceSaved();
+			const { phase } = workspaceStorage.getState();
+			if (result === 'failed' || phase === 'error' || phase === 'conflict') break;
+		}
+		if (!sourceSaved) throw new Error('Save the current workspace before opening a ZIP');
 		const importedUrl = createSharedWorkspaceUrl(new URL(location.href));
 		const importedKey = workspaceStorageKey(importedUrl);
 		const firstPath = importedFiles[0].path;
@@ -2283,6 +2297,7 @@
 			return;
 		}
 		const destination = captureWorkspaceImportDestination(() => ({
+			storageKey: currentWorkspaceStorageKey,
 			language,
 			files,
 			running: !!runningMode
@@ -3372,7 +3387,9 @@
 		const executing = runningMode;
 		const timer = setTimeout(
 			() => {
+				if (binding !== playground) return;
 				void publishContainerWorkspace(selectedLanguage, values).catch((error) => {
+					if (binding !== playground) return;
 					saveStatus = `Workspace sync failed: ${error instanceof Error ? error.message : String(error)}`;
 				});
 			},

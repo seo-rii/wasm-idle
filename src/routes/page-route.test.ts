@@ -11,6 +11,11 @@ import { SvelteSet } from 'svelte/reactivity';
 import { describe, expect, it, vi } from 'vitest';
 import { createExecutionPreflightGate } from './executionPreflight';
 import {
+	captureWorkspaceImportDestination,
+	WorkspaceImportCancelled
+} from './workspaceImportDestination';
+import { createWorkspaceStorage } from './workspaceStorage';
+import {
 	argsHelpLanguages,
 	compilerDiagnosticLanguages,
 	editorLanguages,
@@ -30,6 +35,54 @@ const expectPlaygroundLanguage = (language: PlaygroundLanguage) => {
 	expect(playgroundLanguages).toContain(language);
 	expect(languageLabels[language]).toBeTruthy();
 };
+
+describe('active editor workspace publication', () => {
+	const publish = source.indexOf('void publishContainerWorkspace(selectedLanguage, values)');
+	const effect = source.slice(
+		source.lastIndexOf('\n\t$effect(', publish),
+		source.indexOf('\n\t});', publish) + '\n\t});'.length
+	);
+
+	it.each(['before dispatch', 'during sync', 'current'] as const)(
+		'keeps publication errors with their workspace owner (%s)',
+		async (switchAt) => {
+			const pending = Promise.withResolvers<void>();
+			const publishContainerWorkspace = vi.fn(() => pending.promise);
+			const context = {
+				browser: true,
+				workspaceInitialized: true,
+				playground: {},
+				language: 'CPP',
+				files: [{ path: 'main.cpp', content: 'original editor' }],
+				runningMode: null,
+				saveStatus: '2 files imported',
+				publishContainerWorkspace,
+				Error,
+				$effect: (callback: () => void) => callback(),
+				setTimeout: vi.fn((_callback: () => void, _delay: number) => 1),
+				clearTimeout: vi.fn()
+			};
+			runInNewContext(effect, context);
+			if (switchAt === 'before dispatch') context.playground = {};
+			const [dispatch] = context.setTimeout.mock.calls[0];
+			dispatch();
+			if (switchAt === 'before dispatch') {
+				expect(publishContainerWorkspace).not.toHaveBeenCalled();
+			} else {
+				expect(publishContainerWorkspace).toHaveBeenCalledExactlyOnceWith(
+					'CPP',
+					context.files
+				);
+				if (switchAt === 'during sync') context.playground = {};
+				pending.reject(new Error('write failed'));
+				await pending.promise.catch(() => {});
+			}
+			expect(context.saveStatus).toBe(
+				switchAt === 'current' ? 'Workspace sync failed: write failed' : '2 files imported'
+			);
+		}
+	);
+});
 
 describe('shared workspace refresh scheduling', () => {
 	const refreshStart = source.indexOf('async function refreshContainerWorkspace(');
@@ -355,6 +408,179 @@ describe('shared workspace refresh scheduling', () => {
 		expect(binding.acceptWorkspace).not.toHaveBeenCalled();
 		expect(binding.readWorkspace).toHaveBeenCalledOnce();
 		expect(context.sharedWorkspaceOpening).toBe(false);
+	});
+
+	function zipImportFixture() {
+		const { context, binding, refresh } = fixture();
+		context.runningMode = null;
+		const entries = new Map([['source', 'last saved source']]);
+		const withLock = vi.fn(async (_key: string, persist: () => boolean) => persist());
+		const write = vi.fn((snapshot: string, key: string) => {
+			entries.set(key, snapshot);
+		});
+		const workspaceStorage = createWorkspaceStorage(write, () => {}, {
+			read: (key) => entries.get(key) ?? null,
+			initialStorageIdentity: 'source',
+			initialSnapshot: entries.get('source')!,
+			withLock
+		});
+		const archive = [{ path: 'from-zip.c', content: 'zip contents' }];
+		const terminalFile = { path: 'notes.py', content: 'created in the terminal' };
+		binding.listWorkspaceFiles.mockResolvedValue([
+			{ path: 'PYTHON/notes.py', type: 'file', size: 23 }
+		]);
+		binding.publishedWorkspace = (project) => (project === 'PYTHON' ? [] : context.files);
+		binding.readWorkspace.mockImplementation(async (project) =>
+			project === 'PYTHON' ? [terminalFile] : context.files
+		);
+		const app = Object.assign(context, {
+			workspaceEditorInitialized: true,
+			unrestoredWorkspace: null,
+			currentWorkspaceStorageKey: 'source',
+			pendingWorkspaceUrl: null,
+			workspaceStorage,
+			refreshContainerWorkspace: refresh,
+			captureWorkspaceImportDestination,
+			WorkspaceImportCancelled,
+			stageWorkspaceImport: async () => ({ kind: 'files', fromZip: true, files: archive }),
+			extractImportedZip: vi.fn(),
+			URL,
+			location: { href: 'https://example.test/' },
+			createSharedWorkspaceUrl: () => new URL('https://example.test/?workspace=copy'),
+			workspaceStorageKey: () => 'copy',
+			createDefaultLanguageWorkspaces: () => ({}),
+			snapshot: (project: { files: WorkspaceFile[] }) => project,
+			applySnapshot: (project: { files: WorkspaceFile[] }) => {
+				context.files = project.files;
+			},
+			page: { state: {} },
+			replaceState: vi.fn(),
+			selectFile: vi.fn()
+		});
+		Object.defineProperty(app, 'workspaceSaveKey', {
+			get: () =>
+				JSON.stringify({ files: app.files, python: app.languageWorkspaces.PYTHON.files })
+		});
+		const saves = source.slice(
+			source.indexOf('async function saveWorkspace('),
+			source.indexOf('async function saveWorkspaceCopy(')
+		);
+		const checkSaved = source.slice(
+			source.indexOf('function isCurrentWorkspaceSaved('),
+			source.indexOf('function warnUnsavedChanges(')
+		);
+		const imports = source.slice(
+			source.indexOf('async function openImportedZipWorkspace('),
+			source.indexOf('async function handleUpload(')
+		);
+		const upload = runInNewContext(
+			`${stripTypeScriptTypes(saves + checkSaved + imports)}\n() => importFiles([])`,
+			app
+		) as () => Promise<void>;
+		function rescan() {
+			app.containerRescanPending = true;
+			app.containerChangeRevision++;
+			workspaceStorage.pending();
+		}
+		return { app, entries, archive, terminalFile, write, withLock, rescan, upload };
+	}
+
+	it.each(['before', 'after'])(
+		'opens a ZIP on the first import when a rescan arrives %s the locked write',
+		async (timing) => {
+			const { app, entries, archive, terminalFile, write, withLock, rescan, upload } =
+				zipImportFixture();
+			const original = app.files;
+			withLock.mockImplementationOnce(async (_key, persist) => {
+				if (timing === 'before') rescan();
+				const saved = persist();
+				if (timing === 'after') rescan();
+				return saved;
+			});
+			await upload();
+			expect(withLock).toHaveBeenCalledTimes(2);
+			expect(JSON.parse(entries.get('source')!)).toMatchObject({
+				files: original,
+				python: expect.arrayContaining([terminalFile])
+			});
+			expect(write.mock.calls.at(-1)?.[1]).toBe('copy');
+			expect(JSON.parse(entries.get('copy')!).files).toEqual(archive);
+			expect(app.files).toEqual(archive);
+			expect(app.replaceState).toHaveBeenCalledOnce();
+		}
+	);
+
+	it.each(['quota', 'another tab', 'lock denied'])(
+		'keeps the original workspace when a rescan is followed by %s',
+		async (failure) => {
+			const { app, entries, write, withLock, rescan, upload } = zipImportFixture();
+			withLock.mockImplementationOnce(async (_key, persist) => {
+				rescan();
+				return persist();
+			});
+			withLock.mockImplementationOnce(async (_key, persist) => {
+				if (failure === 'lock denied') throw new Error('Lock denied');
+				if (failure === 'another tab') entries.set('source', 'remote edits');
+				else
+					write.mockImplementationOnce(() => {
+						throw new Error('Quota exceeded');
+					});
+				return persist();
+			});
+			await expect(upload()).rejects.toThrow('Save the current workspace');
+			expect(withLock).toHaveBeenCalledTimes(2);
+			expect(app.workspaceStorage.getState().phase).toBe(
+				failure === 'another tab' ? 'conflict' : 'error'
+			);
+			expect([...entries.values()]).toEqual([
+				failure === 'another tab' ? 'remote edits' : 'last saved source'
+			]);
+			expect(app.replaceState).not.toHaveBeenCalled();
+		}
+	);
+
+	it('preserves another tab’s update between the successful write and ZIP publication', async () => {
+		const { app, entries, withLock, upload } = zipImportFixture();
+		withLock.mockImplementationOnce(async (_key, persist) => {
+			const saved = persist();
+			entries.set('source', 'remote edits');
+			return saved;
+		});
+		await expect(upload()).rejects.toThrow('Save the current workspace');
+		expect(withLock).toHaveBeenCalledOnce();
+		expect(app.workspaceStorage.getState().phase).toBe('conflict');
+		expect([...entries.values()]).toEqual(['remote edits']);
+		expect(app.replaceState).not.toHaveBeenCalled();
+	});
+
+	it.each(['workspace changed', 'running program'])(
+		'cancels a superseded ZIP save with the appropriate message (%s)',
+		async (reason) => {
+			const { app, entries, withLock, rescan, upload } = zipImportFixture();
+			withLock.mockImplementationOnce(async (_key, persist) => {
+				rescan();
+				if (reason === 'workspace changed') app.currentWorkspaceStorageKey = 'new source';
+				else app.runningMode = 'run';
+				return persist();
+			});
+			await upload();
+			expect(app.saveStatus).toContain(reason);
+			expect(withLock).toHaveBeenCalledOnce();
+			expect([...entries.values()]).toEqual(['last saved source']);
+			expect(app.replaceState).not.toHaveBeenCalled();
+		}
+	);
+
+	it('leaves the ZIP unpublished while successive rescans keep invalidating the source', async () => {
+		const { app, entries, withLock, rescan, upload } = zipImportFixture();
+		withLock.mockImplementation(async (_key, persist) => {
+			rescan();
+			return persist();
+		});
+		await expect(upload()).rejects.toThrow('Save the current workspace');
+		expect(withLock).toHaveBeenCalledTimes(3);
+		expect([...entries.values()]).toEqual(['last saved source']);
+		expect(app.replaceState).not.toHaveBeenCalled();
 	});
 });
 

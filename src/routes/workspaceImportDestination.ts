@@ -9,7 +9,12 @@ export class WorkspaceImportCancelled extends Error {
 
 /** Array identity also detects switching away and back to the same language. */
 export function captureWorkspaceImportDestination(
-	current: () => { language: string; files: readonly WorkspaceFile[]; running?: boolean }
+	current: () => {
+		storageKey?: string;
+		language: string;
+		files: readonly WorkspaceFile[];
+		running?: boolean;
+	}
 ) {
 	let destination = current();
 	return {
@@ -19,7 +24,11 @@ export function captureWorkspaceImportDestination(
 				throw new WorkspaceImportCancelled(
 					'Stop the running program before importing files'
 				);
-			if (target.language !== destination.language || target.files !== destination.files) {
+			if (
+				target.storageKey !== destination.storageKey ||
+				target.language !== destination.language ||
+				target.files !== destination.files
+			) {
 				throw new WorkspaceImportCancelled();
 			}
 		},
