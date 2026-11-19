@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onDestroy, untrack } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { MOONBIT_SERVICE_POLICY } from '$lib/playground/moonbitServicePolicy';
 	import { parseDebugInteger } from './debugInteger';
 	import Monaco from './Monaco.svelte';
@@ -1396,8 +1397,8 @@
 		return workspaces;
 	}
 
-	const containerWorkspaceConflicts = new Set<string>();
-	const changedContainerProjects = new Set<PlaygroundLanguage>();
+	const containerWorkspaceConflicts = new SvelteSet<string>();
+	const changedContainerProjects = new SvelteSet<PlaygroundLanguage>();
 	let containerRescanPending = false;
 	let containerChangeRevision = 0;
 	let containerReadRevision = 0;
@@ -1449,7 +1450,7 @@
 					const confirmActive = containerRefreshForcePending;
 					const rescan = containerRescanPending;
 					const revision = containerChangeRevision;
-					const changed = new Set(changedContainerProjects);
+					const changed = new SvelteSet(changedContainerProjects);
 					containerRefreshForcePending = containerRescanPending = false;
 					changedContainerProjects.clear();
 					try {
