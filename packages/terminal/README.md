@@ -49,8 +49,7 @@ Input submitted while `prepare()` is still running remains queued for the matchi
 same language and runtime assets reuse that sandbox. `stop()`, `clear()`, `destroy()`, runtime
 restart, component teardown, and a language or asset change discard queued input and EOF state
 before retiring the sandbox. A later debug session therefore cannot consume stdin entered for an
-older generation. Clipboard reads are asynchronous, so pasted text is accepted only if the input
-generation that requested it is still current when the browser returns the clipboard contents.
+older generation. Keyboard paste uses the browser's native paste event. Its input follows the same queue and cancellation rules as typed text.
 
 The component prepares Fit, Unicode 11, and Web Links addons in parallel. Search and serialization
 addons are loaded only when a host calls `loadSearchPlugin(terminal)` or

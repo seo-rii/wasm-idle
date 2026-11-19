@@ -78,7 +78,6 @@
 		pendingDebugBreakpoints = new SvelteMap<string, number[]>(),
 		pendingDebugSpecifications = new Map<string, DebugSourceBreakpoint[]>(),
 		pendingSandboxEof = false,
-		sandboxInputGeneration = 0,
 		sandbox: BoundSandbox,
 		sandboxAcceptingInput = false,
 		first = true,
@@ -383,7 +382,6 @@
 	}
 
 	function discardPendingSandboxInput() {
-		sandboxInputGeneration += 1;
 		pendingSandboxInput = [];
 		pendingSandboxEof = false;
 	}
@@ -1220,14 +1218,14 @@
 				});
 				term.open(ref);
 				term.attachCustomKeyEventHandler((event) => {
-					// Stop xterm before onKey emits Ctrl+C through onData. Leave the browser's
-					// native copy event enabled so xterm can copy without Clipboard API permission.
-					return !(
-						event.type === 'keydown' &&
-						(event.ctrlKey || event.metaKey) &&
-						event.key.toLowerCase() === 'c' &&
-						term?.hasSelection()
-					);
+					if (event.type !== 'keydown' || !(event.ctrlKey || event.metaKey)) return true;
+					const key = event.key.toLowerCase();
+					// Let the browser deliver a trusted paste event to xterm's textarea.
+					if (key === 'v' && !event.altKey && (!finish || executionInputOwners > 0)) {
+						onkey?.(event);
+						return false;
+					}
+					return key !== 'c' || !term?.hasSelection();
 				});
 				term.onData(function receiveInput(data: string) {
 					if (!term || terminalDisposed) return;
@@ -1295,20 +1293,6 @@
 					} else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'd') {
 						ev.preventDefault();
 						whenInputReady(submitSandboxEof);
-					} else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'v') {
-						ev.preventDefault();
-						const generation = sandboxInputGeneration;
-						const reservation = reservedInput;
-						navigator.clipboard
-							.readText()
-							.then((text) => {
-								const current = reservation
-									? reservation === reservedInput
-									: generation === sandboxInputGeneration;
-								if (!current) return;
-								whenInputReady(() => applyPastedText(text));
-							})
-							.catch(() => {});
 					}
 				});
 				plugin = await registerBasicPlugins(term, initialization.signal);

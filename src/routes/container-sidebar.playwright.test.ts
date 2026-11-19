@@ -1000,3 +1000,61 @@ console.log('RESIZED=' + fs.readLineSync(0).trimEnd());`;
 			}
 		})
 );
+
+it(
+	'handles foreground editing shortcuts for a program waiting on stdin',
+	{ skip: !enabled, timeout: 180_000, meta: { browser: true, requiredBrowser: enabled } },
+	async () =>
+		withShellBrowser(async (browser, browserUrl) => {
+			const context = await browser.newContext({ viewport: shellViewport(106) });
+			try {
+				await addBrowserTestCookies(context, browserUrl);
+				await disableBrowserPrewarm(context);
+				await context.grantPermissions(['clipboard-write'], {
+					origin: new URL(browserUrl).origin
+				});
+				const source = [
+					"const fs = require('fs');",
+					"console.log('READY_FOR_INPUT');",
+					"console.log('FIRST=' + fs.readLineSync(0).trimEnd());",
+					"console.log('SECOND=' + fs.readLineSync(0).trimEnd());"
+				].join('\n');
+				const url = new URL(browserUrl);
+				url.searchParams.set('lang', 'JAVASCRIPT');
+				url.searchParams.set('code', source);
+				url.searchParams.set('lsp-test', '1');
+				const page = await context.newPage();
+				await page.goto(url.href, { waitUntil: 'domcontentloaded' });
+				await page.waitForFunction(
+					(expected) =>
+						crossOriginIsolated &&
+						(window as SiteWindow).__wasmIdleDebug?.getEditorValue() === expected,
+					source,
+					{ timeout: 90_000 }
+				);
+				if (await page.locator('#lsp-toggle').isChecked())
+					await page.locator('#lsp-toggle').uncheck();
+				await page.locator('button.action-button--run').first().click();
+				const output = page.locator('[data-testid="terminal-debug-output"]');
+				await expect
+					.poll(() => output.textContent(), { timeout: 60_000 })
+					.toContain('READY_FOR_INPUT');
+				await page.locator('.terminal-shell .xterm-helper-textarea').focus();
+				expect(
+					await page.evaluate(async () => {
+						await navigator.clipboard.writeText('alpha\nbeta');
+						return navigator.clipboard.readText().then(
+							() => 'allowed',
+							(error: DOMException) => error.name
+						);
+					})
+				).toBe('NotAllowedError');
+				await page.keyboard.press('Control+v');
+				await expect.poll(() => output.textContent()).toContain('FIRST=alpha');
+				await page.keyboard.press('Enter');
+				await expect.poll(() => output.textContent()).toContain('SECOND=beta\r\n');
+			} finally {
+				await context.close();
+			}
+		})
+);

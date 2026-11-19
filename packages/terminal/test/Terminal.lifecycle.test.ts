@@ -7,7 +7,8 @@ import Terminal from '../src/Terminal.svelte';
 import TerminalHarness from './TerminalHarness.svelte';
 
 const xtermCallbacks = vi.hoisted(() => ({
-	onKey: undefined as ((event: { domEvent: KeyboardEvent; key: string }) => void) | undefined
+	filterKey: undefined as ((event: KeyboardEvent) => boolean) | undefined,
+	onData: undefined as ((text: string) => void) | undefined
 }));
 
 vi.stubGlobal(
@@ -35,11 +36,13 @@ vi.mock('@xterm/xterm', () => ({
 		hasSelection() {
 			return false;
 		}
-		onData() {}
-		attachCustomKeyEventHandler() {}
-		onKey(callback: (event: { domEvent: KeyboardEvent; key: string }) => void) {
-			xtermCallbacks.onKey = callback;
+		onData(callback: (text: string) => void) {
+			xtermCallbacks.onData = callback;
 		}
+		attachCustomKeyEventHandler(callback: (event: KeyboardEvent) => boolean) {
+			xtermCallbacks.filterKey = callback;
+		}
+		onKey() {}
 		open() {}
 		reset() {}
 		write() {}
@@ -94,7 +97,8 @@ async function mountTerminal(playground: PlaygroundBinding) {
 
 afterEach(async () => {
 	for (const component of mountedComponents.splice(0)) await unmount(component);
-	xtermCallbacks.onKey = undefined;
+	xtermCallbacks.onData = undefined;
+	xtermCallbacks.filterKey = undefined;
 	document.body.replaceChildren();
 });
 
@@ -249,89 +253,30 @@ describe('Terminal sandbox input generations', () => {
 		);
 	});
 
-	it('discards a delayed clipboard read from a stopped sandbox generation', async () => {
-		const prepared = deferred<boolean | string>();
-		const clipboard = deferred<string>();
-		const sandbox = createSandbox((_code, prepare) =>
-			prepare ? prepared.promise : Promise.resolve(true)
-		);
-		const playground: PlaygroundBinding = {
-			runtimeAssets: {} as PlaygroundBinding['runtimeAssets'],
-			load: vi.fn(async () => sandbox)
-		};
-		const clipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
-		Object.defineProperty(navigator, 'clipboard', {
-			configurable: true,
-			value: { readText: vi.fn(() => clipboard.promise) }
-		});
-
-		try {
-			const terminal = await mountTerminal(playground);
+	it.each([{ ctrlKey: true }, { metaKey: true }])(
+		'leaves foreground paste to the browser and discards pasted input after stop (%j)',
+		async (modifier) => {
+			const prepared = deferred<boolean>();
+			const sandbox = createSandbox((_code, prepare) =>
+				prepare ? prepared.promise : Promise.resolve(true)
+			);
+			const terminal = await mountTerminal({
+				runtimeAssets: {} as PlaygroundBinding['runtimeAssets'],
+				load: vi.fn(async () => sandbox)
+			});
 			const preparing = terminal.prepare('C', 'source');
 			await vi.waitFor(() => expect(sandbox.run).toHaveBeenCalledOnce());
-			expect(xtermCallbacks.onKey).toBeTypeOf('function');
-			xtermCallbacks.onKey?.({
-				domEvent: new KeyboardEvent('keydown', { ctrlKey: true, key: 'v' }),
-				key: 'v'
-			});
-			await vi.waitFor(() => expect(navigator.clipboard.readText).toHaveBeenCalledOnce());
-
+			const key = new KeyboardEvent('keydown', { ...modifier, key: 'v', cancelable: true });
+			expect(xtermCallbacks.filterKey?.(key)).toBe(false);
+			expect(key.defaultPrevented).toBe(false);
+			xtermCallbacks.onData?.('old input\r');
 			await terminal.stop!();
-			clipboard.resolve('stale\n');
-			await clipboard.promise;
-			await Promise.resolve();
 			prepared.resolve(true);
 			await preparing;
 			await terminal.run('C', 'source');
-
-			expect(sandbox.write).not.toHaveBeenCalledWith('stale\n');
-		} finally {
-			if (clipboardDescriptor) {
-				Object.defineProperty(navigator, 'clipboard', clipboardDescriptor);
-			} else {
-				Reflect.deleteProperty(navigator, 'clipboard');
-			}
-		}
-	});
-
-	it('contains clipboard permission rejection inside the active input generation', async () => {
-		const prepared = deferred<boolean | string>();
-		const sandbox = createSandbox((_code, prepare) =>
-			prepare ? prepared.promise : Promise.resolve(true)
-		);
-		const playground: PlaygroundBinding = {
-			runtimeAssets: {} as PlaygroundBinding['runtimeAssets'],
-			load: vi.fn(async () => sandbox)
-		};
-		const clipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
-		Object.defineProperty(navigator, 'clipboard', {
-			configurable: true,
-			value: {
-				readText: vi.fn(() => Promise.reject(new Error('clipboard permission denied')))
-			}
-		});
-
-		try {
-			const terminal = await mountTerminal(playground);
-			const preparing = terminal.prepare('C', 'source');
-			await vi.waitFor(() => expect(sandbox.run).toHaveBeenCalledOnce());
-			xtermCallbacks.onKey?.({
-				domEvent: new KeyboardEvent('keydown', { ctrlKey: true, key: 'v' }),
-				key: 'v'
-			});
-			prepared.resolve(true);
-			await preparing;
-			await new Promise((resolve) => setTimeout(resolve, 0));
-
 			expect(sandbox.write).not.toHaveBeenCalled();
-		} finally {
-			if (clipboardDescriptor) {
-				Object.defineProperty(navigator, 'clipboard', clipboardDescriptor);
-			} else {
-				Reflect.deleteProperty(navigator, 'clipboard');
-			}
 		}
-	});
+	);
 });
 
 describe('Terminal structured debugger bridge', () => {
