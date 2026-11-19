@@ -46,7 +46,10 @@ async function withImportPage(run: (page: Page) => Promise<void>) {
 			await page.goto(server.browserUrl + '?prewarm=0&lsp=0', {
 				waitUntil: 'domcontentloaded'
 			});
-			await page.locator('#language-select[data-workspace-ready="true"]').waitFor();
+			await page.locator('#language-select[data-workspace-ready="true"]').waitFor({
+				state: 'attached',
+				timeout: 90_000
+			});
 			await run(page);
 			expect(errors).toEqual([]);
 		} finally {
@@ -224,6 +227,69 @@ describe('workspace import browser integration', () => {
 					original
 				);
 				expect(await page.locator('button[title="util.h"]').count()).toBe(0);
+			});
+		}
+	);
+	it(
+		'keeps previous language projects and arguments out of a shared ZIP workspace',
+		browserOptions,
+		async () => {
+			await withImportPage(async (page) => {
+				const previousFile = { path: 'previous-project.py', content: 'print("previous")' };
+				const backup = {
+					version: 6,
+					language: 'CPP',
+					workspaces: {
+						CPP: { files: [{ path: 'main.cpp', content: '// previous C++' }] },
+						PYTHON: { files: [previousFile] }
+					},
+					argsInput: '--previous-project',
+					compilerOptions: { CPP: { arguments: '-DPREVIOUS_PROJECT' } }
+				};
+				const upload = page.locator('input[type="file"]');
+				await upload.setInputFiles({
+					name: 'previous-workspace.json',
+					mimeType: 'application/json',
+					buffer: Buffer.from(serializeWorkspaceBackup(backup))
+				});
+				await page.getByText('Workspace backup restored', { exact: true }).waitFor();
+				await page.locator('[data-workspace-save-state="saved"]').waitFor();
+
+				const source = 'int main() { return 0; }';
+				await upload.setInputFiles({
+					name: 'standalone.zip',
+					mimeType: 'application/zip',
+					buffer: Buffer.from(zipSync({ 'main.cpp': strToU8(source) }))
+				});
+				await page.getByText('1 file imported', { exact: true }).waitFor();
+				await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+				await page.getByRole('button', { name: 'Share', exact: true }).click();
+				await page.getByText(/Share URL copied/).waitFor();
+				const share = new URL(await page.evaluate(() => navigator.clipboard.readText()));
+				const shared = JSON.parse(
+					Buffer.from(share.hash.slice('#workspace='.length), 'base64url').toString(
+						'utf8'
+					)
+				);
+				expect(shared.workspaces.CPP.files).toEqual([
+					expect.objectContaining({ path: 'main.cpp', content: source })
+				]);
+				expect(
+					shared.workspaces.PYTHON.files.map((file: { path: string }) => file.path)
+				).not.toContain(previousFile.path);
+				expect(shared.argsInput).toBe('');
+				expect(shared.compilerOptions).toEqual({});
+
+				await page.getByRole('link', { name: 'Local workspace', exact: true }).click();
+				await page.locator('#language-select[data-workspace-ready="true"]').waitFor({
+					state: 'attached',
+					timeout: 90_000
+				});
+				expect(
+					await page.getByRole('textbox', { name: 'Program arguments' }).inputValue()
+				).toBe(backup.argsInput);
+				await page.locator('#language-select').selectOption('PYTHON');
+				await page.locator('.file-tab.active[title="previous-project.py"]').waitFor();
 			});
 		}
 	);

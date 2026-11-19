@@ -2246,14 +2246,16 @@
 			throw new Error('Save the current workspace before opening a ZIP');
 		destination.assertCurrent();
 		const importedUrl = createSharedWorkspaceUrl(new URL(location.href));
-		currentWorkspaceStorageKey = workspaceStorageKey(importedUrl);
-		const importedWorkspace = {
-			files: cloneFiles(importedFiles),
+		applySnapshot({
+			version: 6,
+			language,
+			files: importedFiles,
 			activePath: nextActivePath,
-			openTabs: [nextActivePath]
-		};
-		languageWorkspaces = { ...languageWorkspaces, [language]: importedWorkspace };
-		activateWorkspace(importedWorkspace);
+			openTabs: [nextActivePath],
+			compilerOptions: {},
+			sidebarOpen
+		});
+		currentWorkspaceStorageKey = workspaceStorageKey(importedUrl);
 		destination.advance();
 		await replaceState(importedUrl, page.state);
 		destination.assertCurrent();
