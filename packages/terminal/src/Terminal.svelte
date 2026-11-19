@@ -19,9 +19,9 @@
 	import { onMount } from 'svelte';
 	import { SvelteMap } from 'svelte/reactivity';
 	import '@xterm/xterm/css/xterm.css';
-	import type { Terminal as TerminalType } from '@xterm/xterm';
+	import type { IMarker, Terminal as TerminalType } from '@xterm/xterm';
 	import { loadWebglPlugin, registerBasicPlugins } from './plugin/index.js';
-	import { fitAtInputOrigin, InputLineLayout } from './input-line-layout.js';
+	import { fitAtInputOrigin, InputLineLayout, revealScrolledInput } from './input-line-layout.js';
 	import Theme from './theme.js';
 	import { createReadlineOutput } from './readline-output.js';
 	import type {
@@ -101,6 +101,8 @@
 	let lastExecutionError: unknown;
 	let executionInputOwners = 0;
 	let inputStartColumn = 0;
+	let inputStartMarker: IMarker | undefined;
+	let visibleInputLength: number | undefined;
 	// A string continues the program byte stream; null starts a new terminal
 	// message and cancels any incomplete sequence left by a finished program.
 	type ScreenUpdate = { apply: (output?: string) => void; output?: string | null };
@@ -532,9 +534,19 @@
 	function captureInputStart() {
 		updateScreen(() =>
 			afterScreenWrite('', (current) => {
-				inputStartColumn = current.buffer.active.cursorX;
+				setInputOrigin(current, current.buffer.active.cursorX);
 			})
 		);
+	}
+
+	function setInputOrigin(current: TerminalType, column: number) {
+		inputStartColumn = column;
+		visibleInputLength = undefined;
+		inputStartMarker?.dispose();
+		// A fit can put the cursor at the next row's first cell for a prompt
+		// that ended at the right margin of the previous row.
+		const rowOffset = column === current.cols && !current.buffer.active.cursorX ? -1 : 0;
+		inputStartMarker = current.registerMarker?.(rowOffset);
 	}
 
 	function atInputOrigin(
@@ -543,19 +555,35 @@
 		action: (current: TerminalType) => void
 	) {
 		const current = term!;
-		const old = inputLayout(characters);
-		const erase = inputLayout([]).redraw(old.rowAt(cursor), old.end, 0, 0);
-		// CHA can position at the final column, but cannot restore xterm's
-		// pending wrap one cell beyond it. Keep the original glyph and attributes.
-		const pendingWrap =
-			inputStartColumn === current.cols
-				? (current as TerminalType & { _core?: { buffers?: { active: { x: number } } } })
-						._core?.buffers?.active
-				: undefined;
-		afterScreenWrite(erase + (pendingWrap ? '\x1b[A' : ''), (parsed) => {
-			if (pendingWrap) pendingWrap.x = parsed.cols;
-			action(parsed);
-		});
+		const painted =
+			visibleInputLength === undefined ? characters : characters.slice(0, visibleInputLength);
+		const old = inputLayout(painted);
+		const erase = (scrolledColumn?: number) => {
+			const column = scrolledColumn ?? inputStartColumn;
+			// CHA cannot restore xterm's pending wrap one cell past the final column.
+			const wrapped =
+				column === current.cols
+					? (
+							current as TerminalType & {
+								_core?: { buffers?: { active: { x: number } } };
+							}
+						)._core?.buffers?.active
+					: undefined;
+			const clear =
+				scrolledColumn === undefined
+					? inputLayout([]).redraw(old.rowAt(cursor), old.end, 0, 0)
+					: (wrapped ? '\x1b[2;1H' : `\x1b[1;${column + 1}H`) + '\x1b[J';
+			afterScreenWrite(clear + (wrapped ? '\x1b[A' : ''), (parsed) => {
+				if (wrapped) wrapped.x = parsed.cols;
+				action(parsed);
+			});
+		};
+		if (old.rowAfterPrefix(painted.length) >= current.rows) {
+			// A paste can still be in xterm's write queue when output arrives.
+			afterScreenWrite('', () =>
+				erase(revealScrolledInput(current, inputStartMarker, inputStartColumn))
+			);
+		} else erase();
 	}
 
 	function paintDraft(
@@ -564,13 +592,14 @@
 		cursor: number,
 		column: number
 	) {
-		inputStartColumn = column;
+		setInputOrigin(current, column);
 		const layout = inputLayout(characters);
+		const end = layout.visibleLength(cursor, current.rows);
+		if (end < characters.length) visibleInputLength = end;
+		const shown = visibleInputLength === undefined ? characters : characters.slice(0, end);
 		current.write(
-			characters.join('') +
-				(cursor === characters.length
-					? ''
-					: layout.moveTo(layout.rowAt(characters.length), cursor))
+			shown.join('') +
+				(cursor === end ? '' : layout.moveTo(layout.rowAfterPrefix(end), cursor))
 		);
 	}
 
@@ -584,10 +613,18 @@
 		// A combining mark can change the grapheme just before the insertion.
 		if (changed && previous[changed - 1] !== characters[changed - 1]) changed--;
 		updateScreen(() => {
+			const next = inputLayout(characters);
+			if (
+				visibleInputLength !== undefined ||
+				next.visibleLength(cursor, term!.rows) < characters.length
+			) {
+				atInputOrigin(previous, previousCursor, (current) =>
+					paintDraft(current, characters, cursor, current.buffer.active.cursorX)
+				);
+				return;
+			}
 			const old = inputLayout(previous);
-			term?.write(
-				inputLayout(characters).redraw(old.rowAt(previousCursor), old.end, changed, cursor)
-			);
+			term?.write(next.redraw(old.rowAt(previousCursor), old.end, changed, cursor));
 		});
 	}
 
@@ -662,6 +699,15 @@
 		inputCursor = position;
 		updateScreen(() => {
 			const layout = inputLayout(characters);
+			if (
+				layout.visibleLength(position, term!.rows) !==
+				(visibleInputLength ?? characters.length)
+			) {
+				atInputOrigin(characters, previousCursor, (current) =>
+					paintDraft(current, characters, position, current.buffer.active.cursorX)
+				);
+				return;
+			}
 			term?.write(layout.moveTo(layout.rowAt(previousCursor), position));
 		});
 	}
@@ -1125,7 +1171,7 @@
 			updateScreen(() =>
 				atInputOrigin(characters, cursor, (current) => {
 					const column = fitAtInputOrigin(current, () => fit.fit());
-					paintDraft(current, characters, cursor, column);
+					afterScreenWrite('', () => paintDraft(current, characters, cursor, column));
 					resizeShell(current);
 				})
 			);

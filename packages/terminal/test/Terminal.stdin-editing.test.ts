@@ -5,13 +5,24 @@ import { afterEach, expect, it, vi } from 'vitest';
 import type { BoundSandbox, PlaygroundBinding, TerminalControl } from '../src/types.js';
 import TerminalHarness from './TerminalHarness.svelte';
 
-const renderer = vi.hoisted(() => ({ term: undefined as XtermTerminal | undefined }));
+const renderer = vi.hoisted(() => ({
+	term: undefined as XtermTerminal | undefined,
+	columns: 0
+}));
+const sizeListeners = new Map<Element, () => void>();
 
 vi.stubGlobal(
 	'ResizeObserver',
 	class {
-		observe() {}
-		unobserve() {}
+		constructor(private callback: ResizeObserverCallback) {}
+		observe(target: Element) {
+			sizeListeners.set(target, () =>
+				this.callback([{ target } as ResizeObserverEntry], this as ResizeObserver)
+			);
+		}
+		unobserve(target: Element) {
+			sizeListeners.delete(target);
+		}
 		disconnect() {}
 	}
 );
@@ -36,7 +47,12 @@ vi.mock('../src/plugin/index.js', () => ({
 		const { Unicode11Addon } = await import('@xterm/addon-unicode11');
 		term.loadAddon(new Unicode11Addon());
 		term.unicode.activeVersion = '11';
-		return {};
+		return {
+			fit: {
+				proposeDimensions: () => ({ cols: renderer.columns || term.cols, rows: term.rows }),
+				fit: () => term.resize(renderer.columns || term.cols, term.rows)
+			}
+		};
 	}),
 	loadWebglPlugin: vi.fn()
 }));
@@ -44,6 +60,7 @@ vi.mock('../src/plugin/index.js', () => ({
 let component: ReturnType<typeof mount>;
 let endRun: () => void;
 afterEach(async () => {
+	renderer.columns = 0;
 	endRun?.();
 	if (component) await unmount(component);
 	document.body.replaceChildren();
@@ -283,3 +300,55 @@ it('leaves a full-width program prompt pending until the next output byte', asyn
 	term.input('\r');
 	expect(write).toHaveBeenCalledWith('ab\n');
 });
+
+it.each([2, 90])(
+	'keeps a scrolled draft and its caret %i characters from the end',
+	async (trailing) => {
+		const { term, sandbox, write } = await runningTerminal();
+		term.resize(16, 5);
+		const history = term.registerMarker();
+		sandbox.output!('older history\n\x1b[32mprompt> \x1b[0m');
+		const draft = '0123456789'.repeat(18);
+		const caret = draft.length - trailing;
+		term.input(draft + '\x1b[D'.repeat(trailing));
+		await screen(term);
+		sandbox.output!('\nPROGRESS\n');
+		const prefix = 'older historyprompt> PROGRESS';
+		const checkCaret = async () => {
+			const { rows, row, col } = await screen(term);
+			// A far-left caret keeps the rest of the line editable below the visible window.
+			const content = rows.join('');
+			expect((prefix + draft).startsWith(content)).toBe(true);
+			if (trailing === 2) expect(content).toBe(prefix + draft);
+			const before = term.buffer.active.getLine(row)!.translateToString(false, 0, col);
+			expect(rows.slice(0, row).join('') + before).toBe(prefix + draft.slice(0, caret));
+		};
+		await vi.waitFor(checkCaret);
+		for (const cols of [8, 32]) {
+			renderer.columns = cols;
+			for (const [element, notify] of sizeListeners) {
+				Object.defineProperty(element, 'clientWidth', {
+					configurable: true,
+					value: cols * 10
+				});
+				notify();
+			}
+			flushSync();
+			await vi.waitFor(async () => {
+				expect(term.cols).toBe(cols);
+				await checkCaret();
+			});
+		}
+		term.input('X\r');
+		const edited = draft.slice(0, caret) + 'X' + draft.slice(caret);
+		expect(write).toHaveBeenCalledWith(edited + '\n');
+		await vi.waitFor(async () =>
+			expect((await screen(term)).rows.join('')).toBe(prefix + edited)
+		);
+		expect(history.isDisposed).toBe(false);
+		expect(term.buffer.active.getLine(history.line)?.translateToString(true)).toBe(
+			'older history'
+		);
+		history.dispose();
+	}
+);
