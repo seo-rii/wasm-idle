@@ -1,4 +1,4 @@
-import { strFromU8, UnzipInflate, UnzipPassThrough, Zip, ZipDeflate } from 'fflate';
+import { UnzipInflate, UnzipPassThrough, Zip, ZipDeflate } from 'fflate';
 
 const MAX_FILES = 1000;
 const MAX_FILE_BYTES = 16 * 1024 * 1024;
@@ -10,6 +10,12 @@ const crcTable = Uint32Array.from({ length: 256 }, (_, index) => {
 	for (let bit = 0; bit < 8; bit++) value = (value >>> 1) ^ (value & 1 ? 0xedb88320 : 0);
 	return value >>> 0;
 });
+
+function crc32(bytes: Uint8Array, previous = 0) {
+	let value = previous ^ 0xffffffff;
+	for (const byte of bytes) value = (value >>> 8) ^ crcTable[(value ^ byte) & 255];
+	return (value ^ 0xffffffff) >>> 0;
+}
 
 import { workspaceFileBytes, workspaceFileFromBytes, type WorkspaceFile } from './workspaceCodec';
 import { normalizeWorkspacePath } from './workspacePath';
@@ -28,6 +34,80 @@ function normalizeArchivePath(value: string) {
 	const safePath = normalizeWorkspacePath(value);
 	if (!safePath) throw new Error('ZIP entry path cannot be empty');
 	return safePath;
+}
+
+const utf8Names = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
+// The upper 128 bytes of IBM code page 437, the legacy ZIP filename encoding.
+const cp437High =
+	'ÇüéâäàåçêëèïîìÄÅÉæÆôöòûùÿÖÜ¢£¥₧ƒ' +
+	'áíóúñÑªº¿⌐¬½¼¡«»░▒▓│┤╡╢╖╕╣║╗╝╜╛┐' +
+	'└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀' +
+	'αßΓπΣσµτΦΘΩδ∞φε∩≡±≥≤⌠⌡÷≈°∙·√ⁿ²■\u00a0';
+
+function tryUtf8Name(bytes: Uint8Array) {
+	try {
+		return utf8Names.decode(bytes);
+	} catch {
+		return undefined;
+	}
+}
+
+function unicodePathExtra(extra: Uint8Array, nameCrc: number) {
+	const view = new DataView(extra.buffer, extra.byteOffset, extra.byteLength);
+	let name: string | undefined;
+	for (let offset = 0; offset + 4 <= extra.length;) {
+		const id = view.getUint16(offset, true);
+		const size = view.getUint16(offset + 2, true);
+		const start = offset + 4;
+		offset = start + size;
+		if (offset > extra.length) break;
+		// Info-ZIP Unicode Path v1 ties the UTF-8 spelling to the CRC of the stored name.
+		if (
+			id !== 0x7075 ||
+			size < 5 ||
+			extra[start] !== 1 ||
+			view.getUint32(start + 1, true) !== nameCrc
+		)
+			continue;
+		const decoded = tryUtf8Name(extra.subarray(start + 5, offset));
+		if (decoded === undefined) continue;
+		if (name !== undefined && name !== decoded)
+			throw new Error('Conflicting ZIP Unicode paths');
+		name = decoded;
+	}
+	return name;
+}
+
+function decodeArchivePath(
+	raw: Uint8Array,
+	flags: number,
+	os: number,
+	localExtra: Uint8Array,
+	centralExtra: Uint8Array
+) {
+	const utf8 = Boolean(flags & 0x0800);
+	// Info-ZIP on Unix/macOS can write a UTF-8 name without setting the language flag.
+	const decoded = utf8 || os === 3 || os === 19 ? tryUtf8Name(raw) : undefined;
+	if (utf8 && decoded === undefined) throw new Error('Invalid UTF-8 ZIP entry name');
+	const rawName =
+		decoded ??
+		Array.from(raw, (byte) =>
+			byte < 128 ? String.fromCharCode(byte) : cp437High[byte - 128]
+		).join('');
+	const rawPath = normalizeArchivePath(rawName);
+	const directory = /[/\\]$/u.test(rawName);
+	if (utf8 || (!localExtra.length && !centralExtra.length))
+		return { path: rawPath, rawPath, directory };
+	const nameCrc = crc32(raw);
+	const localName = unicodePathExtra(localExtra, nameCrc);
+	const centralName = unicodePathExtra(centralExtra, nameCrc);
+	if (localName !== undefined && centralName !== undefined && localName !== centralName) {
+		throw new Error('Conflicting ZIP Unicode paths');
+	}
+	const name = centralName ?? localName;
+	if (name === undefined) return { path: rawPath, rawPath, directory };
+	if (/[/\\]$/u.test(name) !== directory) throw new Error('Inconsistent ZIP directory name');
+	return { path: normalizeArchivePath(name), rawPath, directory };
 }
 
 export function createWorkspaceArchive(files: WorkspaceArchiveFile[]) {
@@ -115,7 +195,8 @@ function readArchiveEntries(source: Uint8Array): ArchiveEntry[] {
 	}
 	if (directory + directorySize !== end) throw new Error('Invalid ZIP directory bounds');
 	const entries: ArchiveEntry[] = [];
-	const paths = new Set<string>();
+	const rawPaths = new Set<string>();
+	const resolvedPaths = new Set<string>();
 	let offset = directory;
 	let fileCount = 0;
 	let totalBytes = 0;
@@ -129,7 +210,9 @@ function readArchiveEntries(source: Uint8Array): ArchiveEntry[] {
 		const compressedSize = u32(offset + 20);
 		const originalSize = u32(offset + 24);
 		const nameLength = u16(offset + 28);
-		const next = offset + 46 + nameLength + u16(offset + 30) + u16(offset + 32);
+		const nameEnd = offset + 46 + nameLength;
+		const extraEnd = nameEnd + u16(offset + 30);
+		const next = extraEnd + u16(offset + 32);
 		const localOffset = u32(offset + 42);
 		if (next > end || u16(offset + 34) !== 0) throw new Error('Invalid ZIP directory entry');
 		if ([compressedSize, originalSize, localOffset].includes(0xffffffff)) {
@@ -141,12 +224,36 @@ function readArchiveEntries(source: Uint8Array): ArchiveEntry[] {
 		if (compression !== 0 && compression !== 8) {
 			throw new Error(`Unsupported ZIP compression method ${compression}`);
 		}
-		const name = source.subarray(offset + 46, offset + 46 + nameLength);
-		const decodedName = strFromU8(name, !(flags & 0x0800));
-		const path = normalizeArchivePath(decodedName);
-		if (paths.has(path)) throw new Error(`ZIP contains duplicate entry path: ${path}`);
-		paths.add(path);
-		const isDirectory = decodedName.replaceAll('\\', '/').endsWith('/');
+		const name = source.subarray(offset + 46, nameEnd);
+		const localNameEnd = localOffset + 30 + nameLength;
+		if (
+			localNameEnd > directory ||
+			u32(localOffset) !== 0x04034b50 ||
+			u16(localOffset + 6) !== flags ||
+			u16(localOffset + 8) !== compression ||
+			u16(localOffset + 26) !== nameLength ||
+			!name.every((byte, index) => source[localOffset + 30 + index] === byte)
+		) {
+			throw new Error('Inconsistent ZIP entry metadata');
+		}
+		const payload = localNameEnd + u16(localOffset + 28);
+		const payloadEnd = payload + compressedSize;
+		if (payloadEnd > directory) throw new Error('Truncated ZIP entry payload');
+		const {
+			path,
+			rawPath,
+			directory: isDirectory
+		} = decodeArchivePath(
+			name,
+			flags,
+			source[offset + 5],
+			source.subarray(localNameEnd, payload),
+			source.subarray(nameEnd, extraEnd)
+		);
+		if (rawPaths.has(rawPath)) throw new Error(`ZIP contains duplicate entry path: ${rawPath}`);
+		if (resolvedPaths.has(path)) throw new Error(`ZIP contains duplicate entry path: ${path}`);
+		rawPaths.add(rawPath);
+		resolvedPaths.add(path);
 		if (!isDirectory && ++fileCount > MAX_FILES) {
 			throw new Error(`ZIP cannot contain more than ${MAX_FILES} files`);
 		}
@@ -156,16 +263,6 @@ function readArchiveEntries(source: Uint8Array): ArchiveEntry[] {
 		totalBytes += originalSize;
 		if (totalBytes > MAX_TOTAL_BYTES) {
 			throw new Error(`ZIP contents exceed the ${MAX_TOTAL_BYTES} byte limit`);
-		}
-		if (
-			localOffset + 30 + nameLength > directory ||
-			u32(localOffset) !== 0x04034b50 ||
-			u16(localOffset + 6) !== flags ||
-			u16(localOffset + 8) !== compression ||
-			u16(localOffset + 26) !== nameLength ||
-			!name.every((byte, index) => source[localOffset + 30 + index] === byte)
-		) {
-			throw new Error(`Inconsistent ZIP entry metadata: ${path}`);
 		}
 		for (const [field, expected] of [
 			[14, checksum],
@@ -177,9 +274,6 @@ function readArchiveEntries(source: Uint8Array): ArchiveEntry[] {
 				throw new Error(`Inconsistent ZIP entry metadata: ${path}`);
 			}
 		}
-		const payload = localOffset + 30 + nameLength + u16(localOffset + 28);
-		const payloadEnd = payload + compressedSize;
-		if (payloadEnd > directory) throw new Error(`Truncated ZIP entry payload: ${path}`);
 		entries.push({
 			path,
 			directory: isDirectory,
@@ -227,7 +321,7 @@ export function extractWorkspaceArchive(source: Uint8Array) {
 		const { path } = entry;
 		const chunks: Uint8Array[] = [];
 		let fileBytes = 0;
-		let checksum = 0xffffffff;
+		let checksum = 0;
 		let completed = false;
 		let archiveError: unknown;
 		const file = entry.compression === 8 ? new UnzipInflate() : new UnzipPassThrough();
@@ -245,13 +339,12 @@ export function extractWorkspaceArchive(source: Uint8Array) {
 			if (totalBytes > MAX_TOTAL_BYTES) {
 				throw new Error(`ZIP contents exceed the ${MAX_TOTAL_BYTES} byte limit`);
 			}
-			for (const byte of data)
-				checksum = (checksum >>> 8) ^ crcTable[(checksum ^ byte) & 255];
+			checksum = crc32(data, checksum);
 			if (data.byteLength > 0) chunks.push(data);
 			if (!final) return;
 			if (fileBytes !== entry.originalSize)
 				throw new Error(`Invalid ZIP entry size: ${path}`);
-			if ((checksum ^ 0xffffffff) >>> 0 !== entry.checksum) {
+			if (checksum !== entry.checksum) {
 				throw new Error(`Invalid ZIP CRC checksum: ${path}`);
 			}
 			completed = true;
