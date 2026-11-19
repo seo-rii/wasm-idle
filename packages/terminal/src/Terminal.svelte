@@ -375,6 +375,8 @@
 
 	function finishSandboxRun() {
 		sandboxAcceptingInput = false;
+		input = '';
+		inputCursor = 0;
 		stopRequested = false;
 		onfinish?.();
 		finish = true;
@@ -865,6 +867,8 @@
 			stopRequested = true;
 			finish = true;
 			sandboxAcceptingInput = false;
+			input = '';
+			inputCursor = 0;
 			discardPendingSandboxInput();
 			if (sandbox?.kill) await sandbox.kill();
 			else await sandbox?.terminate?.();

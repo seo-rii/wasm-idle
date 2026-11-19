@@ -60,6 +60,7 @@ async function runningTerminal() {
 	const loaded = deferred<TerminalControl>();
 	endRun = () => completed.resolve(true);
 	const write = vi.fn<(text: string) => void>();
+	const eof = vi.fn();
 	const sandbox = {
 		clear: async () => {},
 		load: async () => {},
@@ -69,6 +70,7 @@ async function runningTerminal() {
 			return completed.promise;
 		},
 		write,
+		eof,
 		elapse: 0
 	} as unknown as BoundSandbox;
 	component = mount(TerminalHarness, {
@@ -83,10 +85,28 @@ async function runningTerminal() {
 	});
 	flushSync();
 	const control = await loaded.promise;
-	void control.run('CPP', '');
+	const run = control.run('CPP', '');
 	await started.promise;
-	return { term: renderer.term!, sandbox, write };
+	return { term: renderer.term!, sandbox, write, eof, control, run };
 }
+
+it.each(['exit', 'stop'])(
+	'discards the previous program draft before an idle EOF after %s',
+	async (action) => {
+		const { term, write, eof, control, run } = await runningTerminal();
+		term.input('previous program');
+		if (action === 'stop') {
+			await control.stop!();
+			await control.eof?.();
+		}
+		endRun();
+		await run;
+		if (action === 'exit') await control.eof?.();
+		await control.run('CPP', 'another program');
+		expect(write).not.toHaveBeenCalled();
+		expect(eof).toHaveBeenCalledOnce();
+	}
+);
 
 it('edits foreground stdin with navigation and Delete and consumes unsupported key sequences', async () => {
 	const { term, write } = await runningTerminal();
