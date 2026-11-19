@@ -1346,7 +1346,7 @@ describe('example route debug actions', () => {
 			/getEditorValue\(\) \{\s+return editor\?\.getValue\(\) \|\| '';\s+\}/s
 		);
 		expect(source).toMatch(
-			/async setEditorValue\(text: string\) \{\s+if \(!editor\) return false;\s+editor\.setValue\(text\);\s+updateActiveContent\(text\);\s+await Promise\.resolve\(\);\s+return editor\.getValue\(\) === text && activeFile\?\.content === text;\s+\}/s
+			/async setEditorValue\(text: string\) \{\s+if \(!editor \|\| activeFileIsBinary\) return false;\s+editor\.setValue\(text\);\s+updateActiveContent\(text\);\s+await Promise\.resolve\(\);\s+return editor\.getValue\(\) === text && activeFile\?\.content === text;\s+\}/s
 		);
 		expect(source).toMatch(/setPreloadedStdin\(text: string\) \{\s+stdinInput = text;\s+\}/s);
 		expect(source).toMatch(

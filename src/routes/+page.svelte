@@ -735,6 +735,7 @@
 	);
 	const compact = $derived(examplePaneWidth > 0 && examplePaneWidth <= 760);
 	const activeFile = $derived(files.find((file) => file.path === activePath) ?? files[0]);
+	const activeFileIsBinary = $derived(!!activeFile && isBinaryWorkspaceFile(activeFile));
 	const activeDebugSourcePath = $derived(
 		`/workspace/${normalizePath(activePath) || defaultPathForLanguage()}`
 	);
@@ -1788,7 +1789,7 @@
 
 	function updateActiveContent(value: string) {
 		const file = activeFile;
-		if (!file || file.content === value) return;
+		if (!file || activeFileIsBinary || file.content === value) return;
 		file.content = value;
 		if (debug.active) {
 			debug.markSourceRevisionStale(`/workspace/${file.path}`);
@@ -3502,7 +3503,7 @@
 				return editor?.getValue() || '';
 			},
 			async setEditorValue(text: string) {
-				if (!editor) return false;
+				if (!editor || activeFileIsBinary) return false;
 				editor.setValue(text);
 				updateActiveContent(text);
 				await Promise.resolve();
@@ -5239,6 +5240,7 @@
 							goTarget={languageExecutionOptions.goTarget}
 							bind:editor
 							value={activeFile?.content ?? ''}
+							binary={activeFileIsBinary}
 							onChange={updateActiveContent}
 							{compact}
 							dark={darkMode}
