@@ -11,6 +11,12 @@ const execFileAsync = promisify(execFile);
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const tempDirs: string[] = [];
 
+// Without a fixture build host, the script probes rustc and rustup may download a toolchain.
+const toolchainBuildEnv = {
+	...process.env,
+	WASM_RUST_BUILD_HOST_TARGET: 'x86_64-unknown-linux-gnu'
+};
+
 async function makeTempDir() {
 	const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'wasm-rust-wasip3-build-'));
 	tempDirs.push(dir);
@@ -602,7 +608,7 @@ printf '%s\\n' "\${CXXFLAGS_wasm32_wasip1_threads:-}" > ${JSON.stringify(recorde
 			{
 				cwd: projectRoot,
 				env: {
-					...process.env,
+					...toolchainBuildEnv,
 					PATH: `${fakeBinDir}:${process.env.PATH || ''}`,
 					WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
 					WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
@@ -703,7 +709,7 @@ exit 0
 			{
 				cwd: projectRoot,
 				env: {
-					...process.env,
+					...toolchainBuildEnv,
 					WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
 					WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
 					WASM_RUST_RUST_CONFIG: configPath,
@@ -788,7 +794,7 @@ exit 0
 			{
 				cwd: projectRoot,
 				env: {
-					...process.env,
+					...toolchainBuildEnv,
 					PATH: `${fakeBinDir}:${process.env.PATH || ''}`,
 					WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
 					WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
@@ -844,7 +850,7 @@ exit 0
 			{
 				cwd: projectRoot,
 				env: {
-					...process.env,
+					...toolchainBuildEnv,
 					PATH: `${fakeBinDir}:${process.env.PATH || ''}`,
 					WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
 					WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
@@ -900,7 +906,7 @@ exit 0
 			{
 				cwd: projectRoot,
 				env: {
-					...process.env,
+					...toolchainBuildEnv,
 					WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
 					WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
 					WASM_RUST_RUST_CONFIG: configPath,
@@ -984,7 +990,7 @@ printf '%s\\n' "$3" > ${JSON.stringify(recordedConfigPath)}
 			{
 				cwd: projectRoot,
 				env: {
-					...process.env,
+					...toolchainBuildEnv,
 					WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
 					WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
 					WASM_RUST_RUST_CONFIG: missingConfigPath,
@@ -1047,7 +1053,7 @@ printf '%s\\n' "\${CXXFLAGS_wasm32_wasip1_threads:-}" > ${JSON.stringify(recorde
 			{
 				cwd: projectRoot,
 				env: {
-					...process.env,
+					...toolchainBuildEnv,
 					WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
 					WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
 					WASM_RUST_RUST_CONFIG: configPath,
@@ -1108,7 +1114,7 @@ printf '%s\\n' "\${CXXFLAGS_wasm32_wasip1_threads:-}" > ${JSON.stringify(recorde
 			{
 				cwd: projectRoot,
 				env: {
-					...process.env,
+					...toolchainBuildEnv,
 					PATH: `${fakeBinDir}:${process.env.PATH || ''}`,
 					WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
 					WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
@@ -1167,7 +1173,7 @@ exit 99
 			{
 				cwd: projectRoot,
 				env: {
-					...process.env,
+					...toolchainBuildEnv,
 					PATH: `${fakeBinDir}:${process.env.PATH || ''}`,
 					WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
 					WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
@@ -1239,7 +1245,7 @@ exit 99
 			{
 				cwd: projectRoot,
 				env: {
-					...process.env,
+					...toolchainBuildEnv,
 					PATH: `${fakeBinDir}:${process.env.PATH || ''}`,
 					WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
 					WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
@@ -1301,7 +1307,7 @@ printf '%s\\n' "\${CARGO_INCREMENTAL:-}" > ${JSON.stringify(recordedIncrementalP
 			{
 				cwd: projectRoot,
 				env: {
-					...process.env,
+					...toolchainBuildEnv,
 					WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
 					WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
 					WASM_RUST_RUST_CONFIG: configPath,
@@ -1358,13 +1364,12 @@ printf '%s\\n' "\${CARGO_INCREMENTAL:-}" > ${JSON.stringify(recordedIncrementalP
 			{
 				cwd: projectRoot,
 				env: {
-					...process.env,
+					...toolchainBuildEnv,
 					WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
 					WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
 					WASM_RUST_RUST_CONFIG: configPath,
 					WASM_RUST_LLVM_BUILD_DIR: llvmBuildDir,
-					WASM_RUST_INSTALL_TARGETS: 'x86_64-unknown-linux-gnu',
-					WASM_RUST_BUILD_HOST_TARGET: 'x86_64-unknown-linux-gnu'
+					WASM_RUST_INSTALL_TARGETS: 'x86_64-unknown-linux-gnu'
 				},
 				maxBuffer: 8 * 1024 * 1024
 			}
@@ -1411,14 +1416,13 @@ printf '%s\\n' "\${CARGO_INCREMENTAL:-}" > ${JSON.stringify(recordedIncrementalP
 			{
 				cwd: projectRoot,
 				env: {
-					...process.env,
+					...toolchainBuildEnv,
 					PATH: `${fakeBinDir}:${process.env.PATH || ''}`,
 					WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
 					WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
 					WASM_RUST_RUST_CONFIG: configPath,
 					WASM_RUST_LLVM_BUILD_DIR: llvmBuildDir,
-					WASM_RUST_INSTALL_TARGETS: 'x86_64-unknown-linux-gnu',
-					WASM_RUST_BUILD_HOST_TARGET: 'x86_64-unknown-linux-gnu'
+					WASM_RUST_INSTALL_TARGETS: 'x86_64-unknown-linux-gnu'
 				},
 				maxBuffer: 8 * 1024 * 1024
 			}
@@ -1472,13 +1476,12 @@ printf '%s\\n' "\${CARGO_INCREMENTAL:-}" > ${JSON.stringify(recordedIncrementalP
 				{
 					cwd: projectRoot,
 					env: {
-						...process.env,
+						...toolchainBuildEnv,
 						WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
 						WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
 						WASM_RUST_RUST_CONFIG: configPath,
 						WASM_RUST_LLVM_BUILD_DIR: llvmBuildDir,
-						WASM_RUST_INSTALL_TARGETS: 'x86_64-unknown-linux-gnu',
-						WASM_RUST_BUILD_HOST_TARGET: 'x86_64-unknown-linux-gnu'
+						WASM_RUST_INSTALL_TARGETS: 'x86_64-unknown-linux-gnu'
 					},
 					maxBuffer: 8 * 1024 * 1024
 				}
@@ -1522,7 +1525,7 @@ printf '%s\\n' "\${CARGO_INCREMENTAL:-}" > ${JSON.stringify(recordedIncrementalP
 			execFileAsync('bash', ['./scripts/build-custom-rustc-toolchain.sh', '--foreground'], {
 				cwd: projectRoot,
 				env: {
-					...process.env,
+					...toolchainBuildEnv,
 					WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
 					WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
 					WASM_RUST_RUST_CONFIG: configPath,
@@ -1573,13 +1576,12 @@ wait "$child"
 			{
 				cwd: projectRoot,
 				env: {
-					...process.env,
+					...toolchainBuildEnv,
 					WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
 					WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
 					WASM_RUST_RUST_CONFIG: configPath,
 					WASM_RUST_LLVM_BUILD_DIR: llvmBuildDir,
-					WASM_RUST_INSTALL_TARGETS: 'x86_64-unknown-linux-gnu',
-					WASM_RUST_BUILD_HOST_TARGET: 'x86_64-unknown-linux-gnu'
+					WASM_RUST_INSTALL_TARGETS: 'x86_64-unknown-linux-gnu'
 				},
 				maxBuffer: 8 * 1024 * 1024
 			}
@@ -1616,13 +1618,12 @@ wait "$child"
 			{
 				cwd: projectRoot,
 				env: {
-					...process.env,
+					...toolchainBuildEnv,
 					WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
 					WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
 					WASM_RUST_RUST_CONFIG: configPath,
 					WASM_RUST_LLVM_BUILD_DIR: llvmBuildDir,
-					WASM_RUST_INSTALL_TARGETS: 'x86_64-unknown-linux-gnu',
-					WASM_RUST_BUILD_HOST_TARGET: 'x86_64-unknown-linux-gnu'
+					WASM_RUST_INSTALL_TARGETS: 'x86_64-unknown-linux-gnu'
 				},
 				maxBuffer: 8 * 1024 * 1024
 			}
@@ -1737,13 +1738,12 @@ exit 0
 			{
 				cwd: projectRoot,
 				env: {
-					...process.env,
+					...toolchainBuildEnv,
 					WASM_RUST_CUSTOM_TOOLCHAIN_ROOT: root,
 					WASM_RUST_RUST_SOURCE_ROOT: rustRoot,
 					WASM_RUST_RUST_CONFIG: configPath,
 					WASM_RUST_LLVM_BUILD_DIR: llvmBuildDir,
-					WASM_RUST_INSTALL_TARGETS: 'x86_64-unknown-linux-gnu',
-					WASM_RUST_BUILD_HOST_TARGET: 'x86_64-unknown-linux-gnu'
+					WASM_RUST_INSTALL_TARGETS: 'x86_64-unknown-linux-gnu'
 				},
 				maxBuffer: 8 * 1024 * 1024
 			}
