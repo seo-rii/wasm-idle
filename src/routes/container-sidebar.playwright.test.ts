@@ -30,6 +30,8 @@ type SiteWindow = typeof globalThis & {
 	__wasmIdleDebug?: {
 		writeTerminalInput(text: string, eof: boolean): Promise<void>;
 		getEditorValue(): string;
+		setEditorValue(source: string): Promise<boolean>;
+		getExecutionState(): { id: number; status: string; exitCode: number | null };
 	};
 };
 
@@ -442,6 +444,68 @@ async function openShellPage(
 	await page.locator('.terminal-shell .xterm-helper-textarea').focus();
 	return { context, page };
 }
+
+it(
+	'explains a refused Run and leaves the foreground shell usable for a retry',
+	{ skip: !enabled, timeout: 180_000, meta: { browser: true, requiredBrowser: enabled } },
+	async () => {
+		await withShellBrowser(async (browser, url) => {
+			const errors: string[] = [];
+			const { context, page } = await openShellPage(browser, url, 53, errors);
+			try {
+				await page
+					.locator('#language-select[data-workspace-ready="true"]')
+					.selectOption('CPP');
+				const rows = async () => (await readShellScreen(page)).rows;
+				await expect.poll(rows, { timeout: 30_000 }).toContain('~/CPP $');
+				expect(
+					await page.evaluate(() =>
+						(globalThis as SiteWindow).__wasmIdleDebug!.setEditorValue(
+							'extern "C" int puts(const char*); int main() { puts("retry-ok"); }'
+						)
+					)
+				).toBe(true);
+				const input = page.locator('.terminal-shell .xterm-helper-textarea');
+				await input.focus();
+				await page.keyboard.type('echo waiting; IFS= read -r reply; echo received-$reply');
+				await page.keyboard.press('Enter');
+				await expect.poll(rows, { timeout: 10_000 }).toContain('waiting');
+
+				const run = page.getByRole('button', { name: 'Run', exact: true });
+				const state = () =>
+					page.evaluate(() =>
+						(globalThis as SiteWindow).__wasmIdleDebug!.getExecutionState()
+					);
+				await run.click();
+				await expect
+					.poll(async () => (await state()).status, { timeout: 30_000 })
+					.toBe('failed');
+				const refused = await state();
+				const notice = page.getByRole('alert').filter({
+					hasText: 'Finish the current shell command before running a program.'
+				});
+				await notice.waitFor({ state: 'visible', timeout: 5000 });
+				expect(errors).toEqual([]);
+
+				await input.focus();
+				await page.keyboard.type('kept');
+				await page.keyboard.press('Enter');
+				await expect.poll(rows, { timeout: 10_000 }).toContain('received-kept');
+				await run.click();
+				await notice.waitFor({ state: 'detached' });
+				await expect.poll(state, { timeout: 90_000 }).toMatchObject({
+					status: 'completed',
+					exitCode: 0
+				});
+				expect((await state()).id).toBeGreaterThan(refused.id);
+				await expect.poll(rows, { timeout: 10_000 }).toContain('retry-ok');
+				expect(errors).toEqual([]);
+			} finally {
+				await context.close();
+			}
+		});
+	}
+);
 
 it(
 	'preserves UTF-8 bytes when deleting and inserting at the Bash cursor',
