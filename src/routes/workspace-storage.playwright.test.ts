@@ -13,6 +13,7 @@ import {
 	startBrowserPreviewServer
 } from '../../scripts/browser-preview-server.mjs';
 import { addBrowserTestCookies } from '../../scripts/browser-test-cookies.mjs';
+import { disableBrowserPrewarm } from '../../scripts/browser-test-prewarm.mjs';
 import { resolveChromiumExecutable } from '../../scripts/rust-browser-probe-lib.mjs';
 
 const browserEnabled = process.env.WASM_IDLE_RUN_REAL_BROWSER_WORKSPACE_ARCHIVE === '1';
@@ -1166,6 +1167,58 @@ describe('workspace storage browser integration', () => {
 });
 
 describe('workspace editor model lifetime', () => {
+	it(
+		'saves the first edit in an empty project under the language entry path',
+		browserOptions,
+		async () => {
+			await withWorkspacePage(async (page, context, browserUrl) => {
+				await disableBrowserPrewarm(context);
+				const key = 'wasm-idle:example-workspace:v3';
+				await context.addInitScript((key) => {
+					if (localStorage.getItem(key) === null) {
+						localStorage.setItem(
+							key,
+							JSON.stringify({
+								version: 6,
+								language: 'PYTHON',
+								activePath: '',
+								files: [],
+								openTabs: [],
+								lspEnabled: false
+							})
+						);
+					}
+				}, key);
+				await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
+				const ready = page.locator('#language-select[data-workspace-ready="true"]');
+				await ready.waitFor({ timeout: 120_000 });
+				expect(await page.locator('.file-tab').count()).toBe(0);
+				const source = 'print("first edit")';
+				await page
+					.locator('.monaco-editor .view-lines')
+					.click({ position: { x: 6, y: 6 } });
+				await page.keyboard.insertText('print');
+				await page.locator('.file-tab.active[title="main.py"]').waitFor();
+				await page.keyboard.insertText('("first edit")');
+				await page.locator('button[title="Save workspace"]').click();
+				await expect
+					.poll(() =>
+						page.evaluate((key) => {
+							const snapshot = JSON.parse(localStorage.getItem(key) || '{}');
+							return snapshot.workspaces?.PYTHON?.files;
+						}, key)
+					)
+					.toMatchObject([{ path: 'main.py', content: source }]);
+				await page.reload({ waitUntil: 'domcontentloaded' });
+				await ready.waitFor();
+				await page.locator('.file-tab.active[title="main.py"]').waitFor();
+				expect(
+					await page.evaluate(() => (window as any).__wasmIdleDebug.getEditorValue())
+				).toBe(source);
+			});
+		}
+	);
+
 	it(
 		'discards retained redo history when resetting from another file',
 		browserOptions,

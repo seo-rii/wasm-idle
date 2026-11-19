@@ -524,7 +524,7 @@ describe('Monaco route debug sync', () => {
 		}
 		expect(pageSource).toMatch(/language=\{editorLanguage\}/);
 		expect(pageSource).toMatch(/lspLanguage=\{monacoLspLanguage\}/);
-		expect(pageSource).toMatch(/filePath=\{activePath\}/);
+		expect(pageSource).toContain('filePath={activePath || defaultPathForLanguage()}');
 		expect(pageSource).toMatch(/const monacoLspLanguage = \$derived/);
 		expect(runtimeLspCapabilities.RUST).toBe('rust');
 		expect(runtimeLspCapabilities.GO).toBe('go');

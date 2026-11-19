@@ -1800,7 +1800,11 @@
 
 	function updateActiveContent(value: string) {
 		const file = activeFile;
-		if (!file || activeFileIsBinary || file.content === value) return;
+		if (!file) {
+			if (value) addWorkspaceFile(defaultPathForLanguage(), value);
+			return;
+		}
+		if (activeFileIsBinary || file.content === value) return;
 		file.content = value;
 		if (debug.active) {
 			debug.markSourceRevisionStale(`/workspace/${file.path}`);
@@ -5272,7 +5276,7 @@
 						<Monaco
 							language={editorLanguage}
 							lspLanguage={monacoLspLanguage}
-							filePath={activePath}
+							filePath={activePath || defaultPathForLanguage()}
 							workspacePaths={editorFilePaths}
 							rustTargetTriple={languageExecutionOptions.rustTargetTriple}
 							goTarget={languageExecutionOptions.goTarget}
