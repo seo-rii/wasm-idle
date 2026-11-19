@@ -59,6 +59,18 @@ describe('initial workspace selection before the editor and container mount', ()
 		expect(selection.storedSnapshot).toBeNull();
 		expect(readStorage).not.toHaveBeenCalled();
 	});
+
+	it('keeps the recovery source when an opening gets its own writable key', () => {
+		const sourceKey = `${WORKSPACE_STORAGE_KEY}:${previousWorkspaceId}`;
+		const raw = '{ "files":';
+		const { selection } = initial(
+			`?workspace=${previousWorkspaceId}`,
+			{ [sourceKey]: raw },
+			true
+		);
+		expect(selection.storageKey).toBe(`${WORKSPACE_STORAGE_KEY}:${workspaceId}`);
+		expect(selection.unrestoredWorkspace).toEqual({ storageKey: sourceKey, snapshot: raw });
+	});
 	it('preserves the exact restored snapshot as the first-save conflict baseline', () => {
 		const raw = JSON.stringify(snapshot(), null, 2);
 		expect(initial('', { [WORKSPACE_STORAGE_KEY]: raw }).selection.storedSnapshot).toBe(raw);
@@ -183,7 +195,7 @@ describe('initial workspace selection before the editor and container mount', ()
 		expect(selection).toMatchObject({
 			language: 'PYTHON',
 			source: 'legacy',
-			unrestoredWorkspace: raw,
+			unrestoredWorkspace: { storageKey: WORKSPACE_STORAGE_KEY, snapshot: raw },
 			overrides: { code: 'recoverable legacy' }
 		});
 		expect(values).toEqual(before);
@@ -198,7 +210,7 @@ describe('initial workspace selection before the editor and container mount', ()
 		expect(selection).toMatchObject({
 			language: 'CPP',
 			snapshot: null,
-			unrestoredWorkspace: raw
+			unrestoredWorkspace: { storageKey: WORKSPACE_STORAGE_KEY, snapshot: raw }
 		});
 	});
 

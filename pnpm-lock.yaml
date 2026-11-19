@@ -300,6 +300,9 @@ importers:
       jsdom:
         specifier: ^30.1.3
         version: 30.1.3
+      lib0:
+        specifier: 0.2.119
+        version: 0.2.119
       monaco-editor:
         specifier: ^0.55.1
         version: 0.55.1(patch_hash=ea369fa1ae54a0a7186c45dc98a642d6561bed9a9e66b69b1b7b1505198c4beb)

@@ -369,6 +369,8 @@ describe('workspace storage browser integration', () => {
 				const key = `wasm-idle:example-workspace:v3:${id}`;
 				await context.addInitScript(
 					({ primary, raw, key }) => {
+						if (sessionStorage.getItem('seeded-recovery')) return;
+						sessionStorage.setItem('seeded-recovery', '1');
 						localStorage.setItem('wasm-idle:example-workspace:v3', primary);
 						localStorage.setItem(key, raw);
 					},
@@ -376,17 +378,49 @@ describe('workspace storage browser integration', () => {
 				);
 				const url = new URL(browserUrl);
 				url.searchParams.set('workspace', id);
+				// Let the real service worker supply isolation on the second navigation.
+				await page.route(
+					(requestUrl) => requestUrl.href === url.href,
+					async (route) => {
+						const response = await route.fetch();
+						const headers = response.headers();
+						delete headers['cross-origin-opener-policy'];
+						delete headers['cross-origin-embedder-policy'];
+						await route.fulfill({ response, headers });
+					},
+					{ times: 1 }
+				);
 				await page.goto(url.toString(), { waitUntil: 'domcontentloaded' });
+				await page.waitForFunction(
+					() => {
+						const [navigation] = performance.getEntriesByType(
+							'navigation'
+						) as PerformanceNavigationTiming[];
+						return (
+							navigation?.type === 'reload' &&
+							crossOriginIsolated &&
+							!!navigator.serviceWorker.controller
+						);
+					},
+					undefined,
+					{ timeout: 90_000 }
+				);
 				await page.locator('[data-workspace-recovery]').waitFor();
-				expect(
-					await page.evaluate(
-						(key) =>
-							Object.keys(localStorage)
+				const readRecovery = () =>
+					page.evaluate(
+						(key) => ({
+							original: localStorage.getItem(key),
+							backups: Object.keys(localStorage)
 								.filter((item) => item.startsWith(`${key}:recovery:`))
-								.map((item) => localStorage.getItem(item)),
+								.map((item) => [item, localStorage.getItem(item)])
+						}),
 						key
-					)
-				).toEqual([raw]);
+					);
+				const preserved = await readRecovery();
+				expect(preserved).toEqual({ original: raw, backups: [[expect.any(String), raw]] });
+				await page.reload({ waitUntil: 'domcontentloaded' });
+				await page.locator('[data-workspace-recovery]').waitFor();
+				expect(await readRecovery()).toEqual(preserved);
 				await page
 					.getByRole('button', { name: 'Start new workspace', exact: true })
 					.click();

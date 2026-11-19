@@ -5,6 +5,7 @@ import {
 } from './workspaceContext';
 import { consumeWorkspaceQueryInput, hasWorkspaceQueryInput } from './workspaceQuery';
 import { validateWorkspaceSnapshot } from './workspaceSnapshot';
+import type { UnrestoredWorkspace } from './workspaceRecovery';
 
 export interface InitialWorkspaceOverrides {
 	code: string | null;
@@ -27,7 +28,7 @@ export interface InitialWorkspaceSelection<Language extends string> {
 	replacementUrl: URL | null;
 	overrides: InitialWorkspaceOverrides;
 	/** Preserve this exact input through the existing recovery flow before saving. */
-	unrestoredWorkspace: string | null;
+	unrestoredWorkspace: UnrestoredWorkspace | null;
 	invalidShare: boolean;
 }
 
@@ -174,7 +175,7 @@ function selectInitialWorkspace<Language extends string>(
 				snapshot
 			};
 		} catch {
-			base.unrestoredWorkspace = stored;
+			base.unrestoredWorkspace = { storageKey: base.storageKey, snapshot: stored };
 		}
 	}
 
