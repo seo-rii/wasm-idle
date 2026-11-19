@@ -3,6 +3,7 @@
 import { addBrowserTestCookies } from '../../../scripts/browser-test-cookies.mjs';
 import { disableBrowserPrewarm } from '../../../scripts/browser-test-prewarm.mjs';
 import { chromium, type CDPSession, type Page } from 'playwright-core';
+import { resolveRuntimeAssetCacheOptions } from '@wasm-idle/core';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -103,6 +104,30 @@ const bashCanonicalRequests = [
 		version: WASM_BASH_RUNTIME_PROFILE.webcReceipt.sha256
 	}
 ] as const;
+
+async function evictBashRuntimeBodies(page: Page) {
+	await page.evaluate(
+		async ({ namespace, digests }) => {
+			const name = `wasm-idle-assets-v1:${namespace}`;
+			if (!(await caches.has(name))) return;
+			const cache = await caches.open(name);
+			for (const digest of digests) {
+				await cache.delete(
+					`https://wasm-idle.invalid/.runtime-assets/${namespace}/${digest}`
+				);
+			}
+		},
+		{
+			namespace: resolveRuntimeAssetCacheOptions().namespace,
+			digests: [
+				WASM_BASH_RUNTIME_PROFILE.manifestReceipt.sha256,
+				WASM_BASH_RUNTIME_PROFILE.sdkJavaScriptReceipt.sha256,
+				WASM_BASH_RUNTIME_PROFILE.wasmerWasmReceipt.sha256,
+				WASM_BASH_RUNTIME_PROFILE.webcReceipt.sha256
+			]
+		}
+	);
+}
 
 function matchCanonicalBashRequest(url: string) {
 	const parsed = new URL(url);
@@ -327,13 +352,9 @@ async function runBashCancellationProbe(browserUrl: string, runTimeoutMs: number
 
 		const retiredTargetIds = new Set<string>();
 		for (let cycle = 1; cycle <= 3; cycle += 1) {
-			// Cancellation retires workers but preserves verified assets on disk.
-			// Each cycle checks a cold four-asset preflight, so clear that storage
-			// after the preceding workers have retired and before starting again.
-			await storageSession.send('Storage.clearDataForOrigin', {
-				origin: browserOrigin,
-				storageTypes: 'cache_storage,indexeddb'
-			});
+			// Each cycle verifies a cold four-asset preflight. The interactive shell
+			// loads its own assets concurrently in the same origin.
+			await evictBashRuntimeBodies(page);
 			const assetRequestStart = runtimeAssetRequests.length;
 			const marker = `bash-cancel-${cycle}-ready`;
 			await setEditorSource(
@@ -413,10 +434,21 @@ async function runBashCancellationProbe(browserUrl: string, runTimeoutMs: number
 
 		// The retry also verifies cold loading; the following warm run keeps
 		// both the persistent cache and the successfully prepared worker.
-		await storageSession.send('Storage.clearDataForOrigin', {
-			origin: browserOrigin,
-			storageTypes: 'cache_storage,indexeddb'
+		await evictBashRuntimeBodies(page);
+		const shellStorage = 'wasm-idle-assets-v1:container-website';
+		const shellBodyCount = await page.evaluate(async (name) => {
+			if (!(await caches.has(name))) return 0;
+			return (await (await caches.open(name)).keys()).length;
+		}, shellStorage);
+		expect(shellBodyCount).toBeGreaterThan(0);
+		await storageSession.send('IndexedDB.enable');
+		const shellMetadata = await storageSession.send('IndexedDB.getMetadata', {
+			securityOrigin: browserOrigin,
+			databaseName: shellStorage,
+			objectStoreName: 'assets'
 		});
+		expect(shellMetadata.entriesCount).toBeGreaterThan(0);
+
 		const retryMarker = 'bash-cancel-retry-ok';
 		const retryAssetRequestStart = runtimeAssetRequests.length;
 		await setEditorSource(page, `printf '${retryMarker}\\n'\n`, runTimeoutMs);
