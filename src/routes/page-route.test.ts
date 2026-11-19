@@ -36,6 +36,54 @@ const expectPlaygroundLanguage = (language: PlaygroundLanguage) => {
 	expect(languageLabels[language]).toBeTruthy();
 };
 
+describe('active editor workspace publication', () => {
+	const publish = source.indexOf('void publishContainerWorkspace(selectedLanguage, values)');
+	const effect = source.slice(
+		source.lastIndexOf('\n\t$effect(', publish),
+		source.indexOf('\n\t});', publish) + '\n\t});'.length
+	);
+
+	it.each(['before dispatch', 'during sync', 'current'] as const)(
+		'keeps publication errors with their workspace owner (%s)',
+		async (switchAt) => {
+			const pending = Promise.withResolvers<void>();
+			const publishContainerWorkspace = vi.fn(() => pending.promise);
+			const context = {
+				browser: true,
+				workspaceInitialized: true,
+				playground: {},
+				language: 'CPP',
+				files: [{ path: 'main.cpp', content: 'original editor' }],
+				runningMode: null,
+				saveStatus: '2 files imported',
+				publishContainerWorkspace,
+				Error,
+				$effect: (callback: () => void) => callback(),
+				setTimeout: vi.fn((_callback: () => void, _delay: number) => 1),
+				clearTimeout: vi.fn()
+			};
+			runInNewContext(effect, context);
+			if (switchAt === 'before dispatch') context.playground = {};
+			const [dispatch] = context.setTimeout.mock.calls[0];
+			dispatch();
+			if (switchAt === 'before dispatch') {
+				expect(publishContainerWorkspace).not.toHaveBeenCalled();
+			} else {
+				expect(publishContainerWorkspace).toHaveBeenCalledExactlyOnceWith(
+					'CPP',
+					context.files
+				);
+				if (switchAt === 'during sync') context.playground = {};
+				pending.reject(new Error('write failed'));
+				await pending.promise.catch(() => {});
+			}
+			expect(context.saveStatus).toBe(
+				switchAt === 'current' ? 'Workspace sync failed: write failed' : '2 files imported'
+			);
+		}
+	);
+});
+
 describe('shared workspace refresh scheduling', () => {
 	const refreshStart = source.indexOf('async function refreshContainerWorkspace(');
 	const refreshSource = source.slice(

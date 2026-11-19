@@ -3387,7 +3387,9 @@
 		const executing = runningMode;
 		const timer = setTimeout(
 			() => {
+				if (binding !== playground) return;
 				void publishContainerWorkspace(selectedLanguage, values).catch((error) => {
+					if (binding !== playground) return;
 					saveStatus = `Workspace sync failed: ${error instanceof Error ? error.message : String(error)}`;
 				});
 			},
