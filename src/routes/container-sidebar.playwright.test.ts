@@ -1017,7 +1017,9 @@ it(
 					"const fs = require('fs');",
 					"console.log('READY_FOR_INPUT');",
 					"console.log('FIRST=' + fs.readLineSync(0).trimEnd());",
-					"console.log('SECOND=' + fs.readLineSync(0).trimEnd());"
+					"console.log('SECOND=' + fs.readLineSync(0).trimEnd());",
+					"console.log('WAIT_TO_STOP');",
+					'fs.readLineSync(0);'
 				].join('\n');
 				const url = new URL(browserUrl);
 				url.searchParams.set('lang', 'JAVASCRIPT');
@@ -1053,6 +1055,16 @@ it(
 				await expect.poll(() => output.textContent()).toContain('FIRST=alpha');
 				await page.keyboard.press('Enter');
 				await expect.poll(() => output.textContent()).toContain('SECOND=beta\r\n');
+				await expect.poll(() => output.textContent()).toContain('WAIT_TO_STOP');
+				await page.keyboard.press('Control+c');
+				await expect
+					.poll(() =>
+						page.evaluate(
+							() => (window as SiteWindow).__wasmIdleDebug?.getExecutionState().status
+						)
+					)
+					.toBe('cancelled');
+				expect(await output.textContent()).not.toContain('AbortError:');
 			} finally {
 				await context.close();
 			}

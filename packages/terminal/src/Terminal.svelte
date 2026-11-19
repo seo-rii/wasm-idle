@@ -1288,7 +1288,7 @@
 					onkey?.(ev);
 					if (isCopyShortcut) {
 						ev.preventDefault();
-						if (reservedInput?.queued) reservedInput.interrupt();
+						if (reservedInput) reservedInput.interrupt();
 						else sandbox?.kill?.();
 					} else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'd') {
 						ev.preventDefault();
