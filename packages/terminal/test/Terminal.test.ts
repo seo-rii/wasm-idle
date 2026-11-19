@@ -41,7 +41,7 @@ describe('Terminal source', () => {
 		expect(source).toMatch(/stopRequested = false;/);
 		expect(source).toMatch(/if \(stopRequested\) return false;/);
 		expect(source).toMatch(
-			/async stop\(\) \{\s+await wait\(\);\s+progressController\.invalidate\(\);\s+invalidatePreparedExecution\(\);\s+stopRequested = true;\s+finish = true;\s+sandboxAcceptingInput = false;\s+discardPendingSandboxInput\(\);\s+if \(sandbox\?\.kill\) await sandbox\.kill\(\);\s+else await sandbox\?\.terminate\?\.\(\);\s+discardPendingSandboxInput\(\);\s+\}/s
+			/async stop\(\) \{\s+await wait\(\);\s+progressController\.invalidate\(\);\s+invalidatePreparedExecution\(\);\s+stopRequested = true;\s+finish = true;\s+sandboxAcceptingInput = false;\s+input = '';\s+inputCursor = 0;\s+discardPendingSandboxInput\(\);\s+if \(sandbox\?\.kill\) await sandbox\.kill\(\);\s+else await sandbox\?\.terminate\?\.\(\);\s+discardPendingSandboxInput\(\);\s+\}/s
 		);
 	});
 
@@ -144,7 +144,7 @@ describe('Terminal source', () => {
 			/function discardPendingSandboxInput\(\) \{\s+sandboxInputGeneration \+= 1;\s+pendingSandboxInput = \[\];\s+pendingSandboxEof = false;\s+\}/s
 		);
 		expect(source).toMatch(
-			/function submitSandboxEof\(\) \{\s+if \(sandbox && sandboxAcceptingInput\) sandbox\.eof\?\.\(\);\s+else pendingSandboxEof = true;\s+\}/s
+			/if \(sandbox && sandboxAcceptingInput\) sandbox\.eof\?\.\(\);\s+else pendingSandboxEof = true;/s
 		);
 		expect(source).toMatch(
 			/function finishSandboxRun\(\) \{\s+sandboxAcceptingInput = false;/s

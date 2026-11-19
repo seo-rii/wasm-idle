@@ -288,31 +288,40 @@ describe('Terminal host shell binding', () => {
 		expect(shell.binding.write).toHaveBeenCalledWith('echo shell\n');
 	});
 
-	it('keeps keyboard edits, early writes and EOF through clear and sandbox replacement', async () => {
-		const shell = createShell();
-		const { terminal, sandbox } = await mountTerminal(shell.binding);
-		await terminal.run('FIRST', 'old');
-		const release = terminal.reserveInput!(vi.fn());
-		renderer.data?.('12\u007f0\r');
-		const clearing = terminal.clear();
-		await terminal.write('100\n');
-		await clearing;
-		await terminal.prepare('SECOND', 'new');
-		renderer.data?.('third');
-		dispatchKey(new KeyboardEvent('keydown', { ctrlKey: true, key: 'd' }), '\u0004');
-		expect(shell.binding.write).not.toHaveBeenCalled();
-		expect(sandbox.write).not.toHaveBeenCalled();
+	it.each(['keyboard', 'control'])(
+		'keeps edits and %s EOF through clear and sandbox replacement',
+		async (source) => {
+			const shell = createShell();
+			const { terminal, sandbox } = await mountTerminal(shell.binding);
+			await terminal.run('FIRST', 'old');
+			const release = terminal.reserveInput!(vi.fn());
+			renderer.data?.('12\u007f0\r');
+			const clearing = terminal.clear();
+			await terminal.write('100\n');
+			await clearing;
+			await terminal.prepare('SECOND', 'new');
+			renderer.data?.('third');
+			if (source === 'keyboard')
+				dispatchKey(new KeyboardEvent('keydown', { ctrlKey: true, key: 'd' }), '\u0004');
+			else await terminal.eof?.();
+			expect(shell.binding.write).not.toHaveBeenCalled();
+			expect(sandbox.write).not.toHaveBeenCalled();
 
-		await terminal.run('SECOND', 'new');
-		expect(vi.mocked(sandbox.write!).mock.calls).toEqual([['10\n'], ['100\n'], ['third\n']]);
-		expect(sandbox.eof).toHaveBeenCalledOnce();
-		expect(vi.mocked(sandbox.write!).mock.invocationCallOrder.at(-1)).toBeLessThan(
-			vi.mocked(sandbox.eof!).mock.invocationCallOrder[0]!
-		);
-		release();
-		await terminal.write('echo shell\n');
-		expect(shell.binding.write).toHaveBeenCalledExactlyOnceWith('echo shell\n');
-	});
+			await terminal.run('SECOND', 'new');
+			expect(vi.mocked(sandbox.write!).mock.calls).toEqual([
+				['10\n'],
+				['100\n'],
+				['third\n']
+			]);
+			expect(sandbox.eof).toHaveBeenCalledOnce();
+			expect(vi.mocked(sandbox.write!).mock.invocationCallOrder.at(-1)).toBeLessThan(
+				vi.mocked(sandbox.eof!).mock.invocationCallOrder[0]!
+			);
+			release();
+			await terminal.write('echo shell\n');
+			expect(shell.binding.write).toHaveBeenCalledExactlyOnceWith('echo shell\n');
+		}
+	);
 
 	it('drops cancelled startup input without releasing the next foreground run', async () => {
 		const shell = createShell();
@@ -354,6 +363,25 @@ describe('Terminal host shell binding', () => {
 		dispatchKey(new KeyboardEvent('keydown', { ctrlKey: true, key: 'c' }), '\u0003');
 		expect(sandbox.kill).toHaveBeenCalledOnce();
 		expect(shell.binding.interrupt).not.toHaveBeenCalled();
+		running.resolve(true);
+		await run;
+	});
+
+	it.each(['abc', ''])('submits the pending line %j before the foreground EOF', async (line) => {
+		const running = deferred<boolean>();
+		const shell = createShell();
+		const sandbox = createSandbox();
+		vi.mocked(sandbox.run).mockImplementation(async (_source, prepare) =>
+			prepare ? true : await running.promise
+		);
+		const { terminal } = await mountTerminal(shell.binding, sandbox);
+		const run = terminal.run('C', 'source');
+		await vi.waitFor(() => expect(sandbox.run).toHaveBeenCalledTimes(2));
+		renderer.data?.(line);
+		await terminal.eof?.();
+		expect(vi.mocked(sandbox.write!).mock.calls).toEqual(line ? [[line + '\n']] : []);
+		expect(sandbox.eof).toHaveBeenCalledOnce();
+		if (line) expect(sandbox.write).toHaveBeenCalledBefore(vi.mocked(sandbox.eof!));
 		running.resolve(true);
 		await run;
 	});

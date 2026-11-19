@@ -76,7 +76,8 @@ export const scenarios = [
 		// Round to the next KiB while retaining the existing file and package limits.
 		// Bash terminal capabilities and EOF handling add 2,377 installed bytes.
 		// Cross-project reconciliation and cancellable terminal ownership measure 7,644,207 installed bytes (865 files).
-		budget: { maxBytes: 7645184, maxFiles: 865, maxPackages: 6 },
+		// Serializing Bash prompt and directory requests adds 1,289 bytes. The root install measures 7,645,519 bytes.
+		budget: { maxBytes: 7646208, maxFiles: 865, maxPackages: 6 },
 		absentPackageNames: [
 			'@katana-project/asm',
 			'java-parser',

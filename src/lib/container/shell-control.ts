@@ -116,7 +116,7 @@ function rcfile(session: string, languages: readonly string[]) {
 		'  __wic_oldpwd=$PWD',
 		'  if builtin cd -P -- "/workspace/$__wic_language"; then',
 		`    if '${SHELL_CONTROL_ROUTE}' 1 "$__wic_session" "$__wic_generation" "$__wic_language" ok; then :; else :; fi`,
-		'    if [[ "$__wic_oldpwd" != "$PWD" ]]; then',
+		'    if [[ "$__wic_oldpwd" != "$PWD" && ${__wasm_idle_terminal_suspended:-0} == 0 ]]; then',
 		'      builtin printf "\\r\\n"',
 		'      return 124',
 		'    fi',
@@ -172,7 +172,9 @@ export function createShellControl(options: ShellControlOptions) {
 			resizeGeneration,
 			appliedResizeGeneration
 		});
+	const idle = new EventTarget();
 	const changed = () => {
+		if (!pending) idle.dispatchEvent(new Event('idle'));
 		try {
 			options.onChange?.(inspect());
 		} catch {
@@ -298,6 +300,19 @@ export function createShellControl(options: ShellControlOptions) {
 			if (version === '1' ? !allowed.has(target) : !['suspend', 'resume'].includes(target))
 				throw new Error('Unknown shell control target');
 			if (pending?.version === version && pending.target === target) return pending.promise;
+			// A language switch and a Run share one native mailbox. Only a newer
+			// request of the same kind can supersede an earlier one.
+			if (pending && pending.version !== version) {
+				return new Promise<void>((resolve, reject) => {
+					const abort = () => reject(signal!.reason);
+					const retry = () => {
+						signal?.removeEventListener('abort', abort);
+						resolve(request(version, target, signal));
+					};
+					idle.addEventListener('idle', retry, { once: true, signal });
+					signal?.addEventListener('abort', abort, { once: true });
+				});
+			}
 			if (generation === MAX_GENERATION)
 				throw new Error('Shell control generation exhausted');
 			const targetCwd = version === '1' ? `/workspace/${target}` : undefined,

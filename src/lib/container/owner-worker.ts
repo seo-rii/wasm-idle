@@ -32,6 +32,7 @@ export interface ContainerWorkerOptions {
 }
 
 const servingScopes = new WeakSet<object>();
+const shellStartupTimeoutMs = 10_000;
 
 /** Install the owner protocol in the application's dedicated module Worker. */
 export function serveContainerWorker(options: ContainerWorkerOptions): {
@@ -57,7 +58,7 @@ export function serveContainerWorker(options: ContainerWorkerOptions): {
 	let shellStarting: Promise<void> | undefined,
 		shellClosed = false;
 	let shellWriter: WritableStreamDefaultWriter<Uint8Array> | undefined;
-	let shellWrites = Promise.resolve();
+	let shellWrites: Promise<void> | undefined;
 	let shellResizes = Promise.resolve();
 	let shellClosingInput: Promise<void> | undefined;
 	let shellInputClosed = false;
@@ -287,7 +288,7 @@ export function serveContainerWorker(options: ContainerWorkerOptions): {
 										'Bash workspace control did not become ready within 10 seconds'
 									)
 								),
-							10_000
+							shellStartupTimeoutMs
 						);
 					})
 				]);
@@ -309,7 +310,10 @@ export function serveContainerWorker(options: ContainerWorkerOptions): {
 				? new TextEncoder().encode(text.replaceAll('\r\n', '\n').replaceAll('\r', '\n'))
 				: text;
 		if (bytes.length > 65536) throw new Error('Terminal input exceeds 64 KiB');
-		const next = shellWrites.catch(() => {}).then(() => shellWriter!.write(bytes));
+		if (!bytes.length) return;
+		const next = Promise.resolve(shellWrites)
+			.catch(() => {})
+			.then(() => shellWriter!.write(bytes));
 		shellWrites = next;
 		await next;
 	}
@@ -526,7 +530,13 @@ export function serveContainerWorker(options: ContainerWorkerOptions): {
 			try {
 				return await shellControl.requestPrompt(
 					method === 'shellSuspend' ? 'suspend' : 'resume',
-					AbortSignal.any([signal, lifetime.signal, AbortSignal.timeout(2_000)])
+					AbortSignal.any([
+						signal,
+						lifetime.signal,
+						// An untouched shell cannot be running a user command. Its initial
+						// directory and geometry handshakes can still be completing.
+						AbortSignal.timeout(shellWrites ? 2_000 : shellStartupTimeoutMs)
+					])
 				);
 			} catch (error) {
 				if ((error as Error)?.name === 'TimeoutError')
