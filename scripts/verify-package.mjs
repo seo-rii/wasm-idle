@@ -367,7 +367,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		name: '@wasm-idle/terminal install',
 		packageNames: ['@wasm-idle/terminal', '@wasm-idle/core'],
 		// Early stdin, tab-stop editing and Readline redraws with Svelte 5.58.0 measure 17,714,131 bytes (1,340 files).
-		budget: { maxBytes: 17714176, maxFiles: 1370, maxPackages: 32 },
+		// Preserving a foreground input draft through output and resize measures 17,720,508 bytes.
+		budget: { maxBytes: 17721344, maxFiles: 1370, maxPackages: 32 },
 		absentPackageNames: [
 			'@wasm-idle/debug',
 			'@wasm-idle/lsp',
@@ -489,7 +490,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// The combined install measures 43,373,829 bytes with Svelte 5.58.0.
 		// The input layout and Readline renderer each add a JavaScript file and a declaration.
 		// source-map-js 1.2.3 added 2,296 bytes to Vue's dependency tree. Allow 3 KiB.
-		budget: { maxBytes: 43377664, maxFiles: 3494, maxPackages: 70 },
+		// The multi-source Clang runner and foreground terminal input together measure 43,388,052 bytes.
+		budget: { maxBytes: 43388928, maxFiles: 3494, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

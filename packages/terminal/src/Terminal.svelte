@@ -21,7 +21,7 @@
 	import '@xterm/xterm/css/xterm.css';
 	import type { Terminal as TerminalType } from '@xterm/xterm';
 	import { loadWebglPlugin, registerBasicPlugins } from './plugin/index.js';
-	import { InputLineLayout } from './input-line-layout.js';
+	import { fitAtInputOrigin, InputLineLayout } from './input-line-layout.js';
 	import Theme from './theme.js';
 	import { createReadlineOutput } from './readline-output.js';
 	import type {
@@ -101,7 +101,11 @@
 	let lastExecutionError: unknown;
 	let executionInputOwners = 0;
 	let inputStartColumn = 0;
-	let pendingScreenUpdates: Array<() => void> | undefined;
+	// A string continues the program byte stream; null starts a new terminal
+	// message and cancels any incomplete sequence left by a finished program.
+	type ScreenUpdate = { apply: (output?: string) => void; output?: string | null };
+	let pendingScreenUpdates: ScreenUpdate[] | undefined;
+	let continueProgramOutput: ((text: string) => void) | undefined;
 	let reservedInput: { queued?: Array<() => void>; interrupt: () => void } | undefined;
 	let terminalDisposed = false;
 	let abortInitialization: (() => void) | undefined;
@@ -187,7 +191,22 @@
 				: (debugOutput + text).slice(-maxDebugOutputCharacters);
 		// Keep a bounded debug tail without starting in the middle of a surrogate pair.
 		debugOutput = /^[\uDC00-\uDFFF]/.test(tail) ? tail.slice(1) : tail;
-		writeScreen(text);
+		const characters = executionOutput && input ? getInputCharacters(input) : [];
+		const cursor = inputCursor;
+		updateScreen(
+			(output = text) => {
+				if (!term || !characters.length) {
+					term?.write(output);
+					return;
+				}
+				atInputOrigin(characters, cursor, () => {
+					afterScreenWrite(output, (current) =>
+						paintDraft(current, characters, cursor, current.buffer.active.cursorX)
+					);
+				});
+			},
+			executionOutput ? text : null
+		);
 	}
 
 	function reportShellError(error: unknown) {
@@ -446,33 +465,113 @@
 		first = false;
 	}
 
-	function updateScreen(update: () => void) {
-		if (pendingScreenUpdates) pendingScreenUpdates.push(update);
-		else update();
+	function updateScreen(apply: ScreenUpdate['apply'], output?: string | null) {
+		if (continueProgramOutput && output !== undefined) {
+			continueProgramOutput(output ?? '\x18');
+			if (output !== null) return;
+		}
+		const previous = pendingScreenUpdates?.at(-1);
+		if (typeof output === 'string' && typeof previous?.output === 'string') {
+			previous.output += output;
+		} else if (pendingScreenUpdates) pendingScreenUpdates.push({ apply, output });
+		else apply(output ?? undefined);
 	}
 
 	function writeScreen(text: string) {
 		updateScreen(() => term?.write(text));
 	}
 
-	function captureInputStart() {
-		updateScreen(() => {
-			const current = term;
-			if (!current) return;
-			// xterm parses writes asynchronously. Read the position after any prompt
-			// has been parsed, keeping following echo and program output in order.
-			pendingScreenUpdates = [];
-			current.write('', () => {
-				if (terminalDisposed) {
-					pendingScreenUpdates = undefined;
-					return;
-				}
-				inputStartColumn = current.buffer.active.cursorX;
-				const updates = pendingScreenUpdates!;
+	function afterScreenWrite(text: string, action: (current: TerminalType) => void) {
+		const current = term;
+		if (!current) return;
+		// xterm parses writes asynchronously. Keep echo, cursor measurements,
+		// resizes and subsequent output in the same order as their producers.
+		const updates: ScreenUpdate[] = [];
+		pendingScreenUpdates = updates;
+		const parsed = () => {
+			if (terminalDisposed) {
 				pendingScreenUpdates = undefined;
-				for (const update of updates) updateScreen(update);
-			});
+				return;
+			}
+			// Cursor controls and input echo must never be inserted in the middle
+			// of a program's VT sequence or surrogate pair. xterm exposes parser
+			// handlers publicly, but only its input handler exposes these states.
+			const handler = (
+				current as TerminalType & {
+					_core?: {
+						_inputHandler?: {
+							_parser?: { currentState: number; initialState: number };
+							_stringDecoder?: { _interim: number };
+						};
+					};
+				}
+			)._core?._inputHandler;
+			if (
+				handler?._parser?.currentState !== handler?._parser?.initialState ||
+				handler?._stringDecoder?._interim
+			) {
+				continueProgramOutput = (next) => {
+					continueProgramOutput = undefined;
+					current.write(next, parsed);
+				};
+				const next = updates.findIndex((update) => update.output !== undefined);
+				if (next >= 0) {
+					const continuation = updates[next].output;
+					if (continuation !== null) updates.splice(next, 1);
+					continueProgramOutput(continuation ?? '\x18');
+				}
+				return;
+			}
+			pendingScreenUpdates = undefined;
+			action(current);
+			for (const update of updates) updateScreen(update.apply, update.output);
+		};
+		current.write(text, parsed);
+	}
+
+	function captureInputStart() {
+		updateScreen(() =>
+			afterScreenWrite('', (current) => {
+				inputStartColumn = current.buffer.active.cursorX;
+			})
+		);
+	}
+
+	function atInputOrigin(
+		characters: string[],
+		cursor: number,
+		action: (current: TerminalType) => void
+	) {
+		const current = term!;
+		const old = inputLayout(characters);
+		const erase = inputLayout([]).redraw(old.rowAt(cursor), old.end, 0, 0);
+		// CHA can position at the final column, but cannot restore xterm's
+		// pending wrap one cell beyond it. Keep the original glyph and attributes.
+		const pendingWrap =
+			inputStartColumn === current.cols
+				? (current as TerminalType & { _core?: { buffers?: { active: { x: number } } } })
+						._core?.buffers?.active
+				: undefined;
+		afterScreenWrite(erase + (pendingWrap ? '\x1b[A' : ''), (parsed) => {
+			if (pendingWrap) pendingWrap.x = parsed.cols;
+			action(parsed);
 		});
+	}
+
+	function paintDraft(
+		current: TerminalType,
+		characters: string[],
+		cursor: number,
+		column: number
+	) {
+		inputStartColumn = column;
+		const layout = inputLayout(characters);
+		current.write(
+			characters.join('') +
+				(cursor === characters.length
+					? ''
+					: layout.moveTo(layout.rowAt(characters.length), cursor))
+		);
 	}
 
 	function inputLayout(characters: string[]) {
@@ -649,7 +748,7 @@
 			lastExecutionError = undefined;
 			invalidatePreparedExecution();
 			discardPendingSandboxInput();
-			updateScreen(() => term?.reset());
+			updateScreen(() => term?.reset(), null);
 			writeScreen(`\u001B[?25l\x1b[0m\x1b[?25h`);
 			if (term) term.options.cursorBlink = false;
 			debugOutput = '';
@@ -1011,7 +1110,27 @@
 		let _ = clientWidth + clientHeight;
 		if (!plugin || !term || terminalDisposed) return;
 		const binding = shell;
-		const nextSize = plugin.fit?.proposeDimensions?.();
+		const resizeShell = (current: TerminalType) => {
+			if (!binding || shell !== binding) return;
+			void binding.resize?.(current.cols, current.rows).catch((error) => {
+				if (connectedShell === binding) reportShellError(error);
+			});
+			void connectShell(binding).catch(() => {});
+		};
+		const fit = plugin.fit;
+		const nextSize = fit?.proposeDimensions?.();
+		if (fit && nextSize && nextSize.cols !== term.cols && input && !finish) {
+			const characters = getInputCharacters(input);
+			const cursor = inputCursor;
+			updateScreen(() =>
+				atInputOrigin(characters, cursor, (current) => {
+					const column = fitAtInputOrigin(current, () => fit.fit());
+					paintDraft(current, characters, cursor, column);
+					resizeShell(current);
+				})
+			);
+			return;
+		}
 		// Readline redraws relative to its old cursor row. xterm can move that row
 		// when other lines reflow, even with reflowCursorLine disabled.
 		const buffer =
@@ -1033,12 +1152,7 @@
 			}
 			marker.dispose();
 		}
-		if (binding) {
-			void binding.resize?.(term.cols, term.rows).catch((error) => {
-				if (connectedShell === binding) reportShellError(error);
-			});
-			void connectShell(binding).catch(() => {});
-		}
+		resizeShell(term);
 	});
 
 	$effect(() => {

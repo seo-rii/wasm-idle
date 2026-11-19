@@ -1,3 +1,4 @@
+import { fitAtInputOrigin } from '../src/input-line-layout.js';
 import type { Terminal as XtermTerminal } from '@xterm/xterm';
 import { flushSync, mount, unmount } from 'svelte';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -228,4 +229,57 @@ it('edits pasted tabs at active VT tab stops and submits the original bytes', as
 	term.input('X\r');
 	expect(write).toHaveBeenCalledWith('a\tXb\n');
 	expect((await screen(term)).rows[1]).toBe('> a  Xb');
+});
+
+it('reanchors an edited Unicode draft after split VT output and keeps Enter aligned', async () => {
+	const { term, sandbox, write } = await runningTerminal();
+	term.resize(18, 8);
+	sandbox.output!('> ');
+	term.input('ab한🙂cd\x1b[D\x1b[D');
+	await screen(term);
+	sandbox.output!('\n\x1b[3');
+	await screen(term);
+	sandbox.output!('1mstatus\ud83d');
+	await screen(term);
+	sandbox.output!('\ude42\x1b[0m\n');
+	await vi.waitFor(async () =>
+		expect((await screen(term)).rows.filter(Boolean)).toEqual(['> ', 'status🙂', 'ab한🙂cd'])
+	);
+	term.input('X\r');
+	expect(write).toHaveBeenCalledWith('ab한🙂Xcd\n');
+	await vi.waitFor(async () =>
+		expect((await screen(term)).rows.filter(Boolean)).toEqual(['> ', 'status🙂', 'ab한🙂Xcd'])
+	);
+});
+
+it('retains a wrapped prompt and restores its input origin on shrink and expansion', async () => {
+	const { term, sandbox } = await runningTerminal();
+	term.resize(16, 8);
+	sandbox.output!('history\n\x1b[32mabcdefghijklmno한🙂: \x1b[0m');
+	await screen(term);
+	for (const cols of [8, 30]) {
+		const column = fitAtInputOrigin(term, () => term.resize(cols, 8));
+		const actual = await screen(term);
+		expect(actual.col).toBe(column);
+		expect(actual.rows.join('')).toBe('historyabcdefghijklmno한🙂: ');
+	}
+	term.input('X\r');
+	expect((await screen(term)).rows.filter(Boolean)).toEqual([
+		'history',
+		'abcdefghijklmno한🙂: X'
+	]);
+});
+
+it('leaves a full-width program prompt pending until the next output byte', async () => {
+	const { term, sandbox, write } = await runningTerminal();
+	term.resize(8, 7);
+	sandbox.output!('history\n\x1b[31m12345678\x1b[0m');
+	term.input('ab');
+	await screen(term);
+	sandbox.output!('\nnext\n');
+	await vi.waitFor(async () =>
+		expect((await screen(term)).rows.slice(0, 4)).toEqual(['history', '12345678', 'next', 'ab'])
+	);
+	term.input('\r');
+	expect(write).toHaveBeenCalledWith('ab\n');
 });

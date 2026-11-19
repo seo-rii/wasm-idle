@@ -1,3 +1,5 @@
+import type { Terminal } from '@xterm/xterm';
+
 type CellWidth = (character: string, offset: number) => number;
 
 // Offsets count terminal cells from column zero of the input's first screen row.
@@ -84,5 +86,58 @@ export class InputLineLayout {
 			offset += count;
 		}
 		return echo + this.moveTo(row, cursor);
+	}
+}
+
+// Fit preserves the cells and attributes of the program's prompt, but xterm
+// clamps cursorX before it reflows lines. Map that insertion point through the
+// reflow, including wrapped prompts, wide cells, and gaps left by tabs/CUF.
+export function fitAtInputOrigin(term: Terminal, fit: () => void) {
+	const buffer = term.buffer.active;
+	const cursorRow = buffer.baseY + buffer.cursorY;
+	let firstRow = cursorRow;
+	while (firstRow > 0 && buffer.getLine(firstRow)?.isWrapped) firstRow--;
+	const marker = term.registerMarker(firstRow - cursorRow);
+	const widths: number[] = [];
+	for (let row = firstRow; row <= cursorRow; row++) {
+		const line = buffer.getLine(row);
+		if (!line) continue;
+		let columns = row === cursorRow ? buffer.cursorX : term.cols;
+		if (row < cursorRow) {
+			const lastCell = line.getCell(columns - 1);
+			const nextCell = buffer.getLine(row + 1)?.getCell(0);
+			if (
+				lastCell?.getCode() === 0 &&
+				lastCell.getWidth() === 1 &&
+				nextCell?.getWidth() === 2
+			) {
+				columns--; // padding before a wide character that wrapped early
+			}
+		}
+		for (let x = 0; x < columns; x++) {
+			const width = line.getCell(x)?.getWidth();
+			if (width) widths.push(width);
+		}
+	}
+	const reflow = term.options.reflowCursorLine;
+	term.options.reflowCursorLine = true;
+	try {
+		fit();
+		let offset = 0;
+		for (const width of widths) {
+			if (width > term.cols - (offset % term.cols)) offset++;
+			offset += width;
+		}
+		const column = offset % term.cols;
+		if (marker.isDisposed) return buffer.cursorX;
+		const row = marker.line - buffer.baseY + Math.floor(offset / term.cols);
+		if (row < 0) return buffer.cursorX;
+		// A prompt that ends on the new right margin may need a fresh bottom row.
+		if (row >= term.rows) term.write(`\x1b[${term.rows};1H\r\n`);
+		else term.write(`\x1b[${row + 1};${column + 1}H`);
+		return offset > 0 && column === 0 ? term.cols : column;
+	} finally {
+		term.options.reflowCursorLine = reflow;
+		marker.dispose();
 	}
 }

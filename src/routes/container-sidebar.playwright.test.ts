@@ -912,3 +912,91 @@ it(
 		});
 	}
 );
+
+it(
+	'keeps foreground stdin editable through program output and a terminal resize',
+	{ skip: !enabled, timeout: 180_000, meta: { browser: true, requiredBrowser: enabled } },
+	async () =>
+		withShellBrowser(async (browser, browserUrl) => {
+			const context = await browser.newContext({ viewport: shellViewport(106) });
+			try {
+				await addBrowserTestCookies(context, browserUrl);
+				await disableBrowserPrewarm(context);
+				const page = await context.newPage();
+				const source = `const fs = require('fs');
+console.log('DRAFT-READY');
+fs.readLineSync(0);
+console.log('');
+console.log('NEXT');
+console.log('RECEIVED=' + fs.readLineSync(0).trimEnd());
+console.log('BEFORE-RESIZE');
+console.log('RESIZED=' + fs.readLineSync(0).trimEnd());`;
+				const url = new URL(browserUrl);
+				url.searchParams.set('lang', 'JAVASCRIPT');
+				url.searchParams.set('code', source);
+				url.searchParams.set('lsp-test', '1');
+				await page.goto(url.href, { waitUntil: 'domcontentloaded' });
+				await page.waitForFunction(
+					(expected) =>
+						crossOriginIsolated &&
+						(window as SiteWindow).__wasmIdleDebug?.getEditorValue() === expected,
+					source,
+					{ timeout: 90_000 }
+				);
+				if (await page.locator('#lsp-toggle').isChecked())
+					await page.locator('#lsp-toggle').uncheck();
+				await page.locator('button.action-button--run').first().click();
+				const output = page.locator('[data-testid="terminal-debug-output"]');
+				await expect
+					.poll(() => output.textContent(), { timeout: 60_000 })
+					.toContain('DRAFT-READY');
+				const terminal = page.locator('.terminal-shell .xterm-helper-textarea');
+				await terminal.focus();
+				await terminal.evaluate((textarea) => {
+					const clipboardData = new DataTransfer();
+					clipboardData.setData('text/plain', 'first\nabcd');
+					textarea.dispatchEvent(
+						new ClipboardEvent('paste', { bubbles: true, clipboardData })
+					);
+				});
+				const visible = async () => (await readShellScreen(page)).rows.filter(Boolean);
+				await expect
+					.poll(async () => (await visible()).slice(-2))
+					.toEqual(['NEXT', 'abcd']);
+				await page.keyboard.press('ArrowLeft');
+				await page.keyboard.press('ArrowLeft');
+				await page.keyboard.type('X');
+				await expect.poll(async () => (await visible()).at(-1)).toBe('abXcd');
+				await page.keyboard.press('Enter');
+				await expect.poll(() => output.textContent()).toContain('RECEIVED=abXcd');
+				const draft = '0123456789'.repeat(13);
+				await page.keyboard.insertText(draft);
+				await expect
+					.poll(async () => (await readShellScreen(page)).text)
+					.toContain('BEFORE-RESIZE' + draft);
+				await page.keyboard.press('ArrowLeft');
+				await page.keyboard.press('ArrowLeft');
+				await page.setViewportSize(shellViewport(53));
+				await expect.poll(async () => (await readShellScreen(page)).columns).toBe(53);
+				await expect
+					.poll(async () => (await readShellScreen(page)).text)
+					.toContain('BEFORE-RESIZE' + draft);
+				await page.keyboard.type('Y');
+				const edited = draft.slice(0, -2) + 'Y' + draft.slice(-2);
+				await expect
+					.poll(async () => (await readShellScreen(page)).text)
+					.toContain('BEFORE-RESIZE' + edited);
+				await page.setViewportSize(shellViewport(106));
+				await expect.poll(async () => (await readShellScreen(page)).columns).toBe(106);
+				await page.keyboard.press('Home');
+				await page.keyboard.type('X');
+				await expect
+					.poll(async () => (await readShellScreen(page)).text)
+					.toContain('BEFORE-RESIZEX' + edited);
+				await page.keyboard.press('Enter');
+				await expect.poll(() => output.textContent()).toContain('RESIZED=X' + edited);
+			} finally {
+				await context.close();
+			}
+		})
+);
