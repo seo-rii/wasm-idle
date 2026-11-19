@@ -761,8 +761,29 @@ export async function runStdinBrowserProbe(options) {
 			);
 		}
 		const followUps = [];
-		for (const run of followUpRuns)
-			followUps.push(await runFollowUp(page, run, runTimeoutMs, language));
+		for (const [index, run] of followUpRuns.entries()) {
+			try {
+				const result = await runFollowUp(page, run, runTimeoutMs, language);
+				if (pageErrors.length > 0) throw new Error('page errors detected');
+				followUps.push(result);
+			} catch (cause) {
+				const details = await readProbeSummary(
+					page,
+					activeState,
+					pageErrors,
+					consoleMessages
+				);
+				const message = cause instanceof Error ? cause.message : String(cause);
+				throw new Error(
+					`${language} follow-up ${index + 1}: ${message}\n${JSON.stringify(
+						{ expectedOutput: run.expectedOutput, ...details },
+						null,
+						2
+					)}`,
+					{ cause }
+				);
+			}
+		}
 		return { ...summary, followUpRuns: followUps };
 	} finally {
 		await withWallClockTimeout(page.close(), 2_000, 'page close').catch(() => {});
