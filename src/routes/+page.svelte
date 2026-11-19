@@ -324,6 +324,7 @@
 		resizingPane = $state(false);
 	let restartDebugPending = $state(false);
 	let executionStopPending = $state(false);
+	let executionErrorMessage = $state('');
 	let executionGeneration = 0;
 	// Compiler diagnostics resolve against the workspace their run compiled.
 	let compilerDiagnosticRun: { entryPath: string; workspacePaths: string[] } | null = null;
@@ -1686,6 +1687,7 @@
 
 	function activateWorkspace(workspace: LanguageWorkspace) {
 		const nextWorkspace = sanitizeWorkspace(workspace, language);
+		executionErrorMessage = '';
 		files = cloneFiles(nextWorkspace.files);
 		activePath = nextWorkspace.activePath;
 		openTabs = [...nextWorkspace.openTabs];
@@ -3072,6 +3074,7 @@
 		if (enableDebug && !sharedBufferAvailable) return Promise.resolve();
 		if (enableDebug && !debugTargetAvailable) return Promise.resolve();
 		if (runningMode) return Promise.resolve();
+		executionErrorMessage = '';
 		const generation = ++executionGeneration;
 		const preflight = executionPreflight.begin();
 		const execution = (async () => {
@@ -3255,7 +3258,12 @@
 			}
 		})();
 		activeExecution = execution;
-		return execution;
+		// Teardown awaits the original promise. The toolbar reports failures in the console pane.
+		return execution.catch((error: unknown) => {
+			if (generation !== executionGeneration) return;
+			const reason = error instanceof Error ? error.message : String(error);
+			executionErrorMessage = `${enableDebug ? 'Debug' : 'Run'} failed. ${reason}`;
+		});
 	}
 
 	$effect(() => {
@@ -5511,6 +5519,9 @@
 					</div>
 				</header>
 				<div class="console-body">
+					{#if executionErrorMessage}
+						<div class="execution-error" role="alert">{executionErrorMessage}</div>
+					{/if}
 					{#if loading}
 						<div class="progress-shell" aria-live="polite">
 							<div class="progress-copy">
@@ -6917,7 +6928,8 @@
 		color: var(--danger-text);
 	}
 
-	.workspace-save-error {
+	.workspace-save-error,
+	.execution-error {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 8px;
