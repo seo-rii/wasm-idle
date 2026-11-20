@@ -13,7 +13,7 @@ interface QueryExecResult {
 }
 
 interface Database {
-	exec(sql: string): QueryExecResult[];
+	exec(sql: string, params?: undefined, config?: { useBigInt: boolean }): QueryExecResult[];
 	close(): void;
 }
 
@@ -137,7 +137,7 @@ self.onmessage = async (event: { data: any }) => {
 					`[wasm-idle:sqlite-worker] exec start bytes=${code.length} activePath=${activePath}`
 				);
 			}
-			for (const result of db.exec(code)) {
+			for (const result of db.exec(code, undefined, { useBigInt: true })) {
 				postMessage({ output: formatResult(result) });
 			}
 			if (log) {
