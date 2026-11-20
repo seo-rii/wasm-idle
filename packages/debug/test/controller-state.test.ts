@@ -1026,6 +1026,31 @@ describe('shared structured breakpoint and stepping state', () => {
 		expect(controller.structuredBreakpoints).toEqual([{ line: 9, hitCondition: '10' }]);
 	});
 
+	it('restores the target file after a stop in a different file', async () => {
+		const setSourceBreakpoints = vi.fn(async () => {});
+		const controller = controllerWith({ setSourceBreakpoints }, { syncBreakpointsWhile: true });
+		await controller.setStructuredBreakpoints([{ line: 9, hitCondition: '10' }]);
+		pause(controller, { capabilities: { ...capabilities, hitConditionalBreakpoints: true } });
+		await controller.runToCursor(9);
+		expect(setSourceBreakpoints).toHaveBeenLastCalledWith([{ line: 9 }], '/workspace/main.cpp');
+		controller.setSourcePath('/workspace/helper.cpp');
+		expect(controller.runToCursorLine).toBeNull();
+		controller.handleEvent({
+			type: 'pause',
+			line: 4,
+			reason: 'breakpoint',
+			sourcePath: '/workspace/helper.cpp',
+			locals: [],
+			callStack: [
+				{ id: 1, functionName: 'helper', sourcePath: '/workspace/helper.cpp', line: 4 }
+			]
+		});
+		expect(setSourceBreakpoints).toHaveBeenLastCalledWith(
+			[{ line: 9, hitCondition: '10' }],
+			'/workspace/main.cpp'
+		);
+	});
+
 	it('ignores superseded breakpoint transport failures and keeps the newer specification', async () => {
 		let rejectOld!: (error: Error) => void;
 		const old = new Promise<void>((_resolve, reject) => {

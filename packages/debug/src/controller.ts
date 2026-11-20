@@ -203,7 +203,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	const resolvedBreakpointsBySourceStore = writable<
 		ReadonlyMap<string, DebugResolvedBreakpoint[]>
 	>(new Map());
-	const runToCursorLineStore = writable<number | null>(null);
+	const runToCursorStore = writable<{ sourcePath: string; line: number } | null>(null);
 	const watchInputStore = writable('');
 	const watchExpressionsStore = writable<string[]>([]);
 	const watchValuesStore = writable<DebugWatchValue[]>([]);
@@ -281,7 +281,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	const pausedSourcePathState = fromStore(pausedSourcePathStore);
 	const sourceRevisionStaleState = fromStore(sourceRevisionStaleStore);
 	const breakpointsBySourceState = fromStore(breakpointsBySourceStore);
-	const runToCursorLineState = fromStore(runToCursorLineStore);
+	const runToCursorState = fromStore(runToCursorStore);
 	const watchInputState = fromStore(watchInputStore);
 	const watchExpressionsState = fromStore(watchExpressionsStore);
 	const watchValuesState = fromStore(watchValuesStore);
@@ -875,6 +875,21 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		);
 	}
 
+	function temporaryLineFor(sourcePath: string, target = get(runToCursorStore)) {
+		return target?.sourcePath === sourcePath ? target.line : null;
+	}
+
+	function restoreCursorBreakpoint(terminal: DebugTerminalControl) {
+		const target = get(runToCursorStore);
+		if (!target) return;
+		runToCursorStore.set(null);
+		const lines =
+			target.sourcePath === get(sourcePathStore)
+				? get(breakpointsStore)
+				: (get(breakpointsBySourceStore).get(target.sourcePath) ?? []);
+		return dispatchTrackedBreakpoints(terminal, [...lines], target.sourcePath);
+	}
+
 	function dispatchBreakpoints(
 		terminal: DebugTerminalControl,
 		lines: number[],
@@ -882,8 +897,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	) {
 		if (terminal.setSourceBreakpoints) {
 			const specs = get(structuredBreakpointsStore).get(sourcePath) ?? [];
-			const temporaryLine =
-				sourcePath === get(sourcePathStore) ? get(runToCursorLineStore) : null;
+			const temporaryLine = temporaryLineFor(sourcePath);
 			const structured = lines.map((line) =>
 				line === temporaryLine
 					? { line }
@@ -920,7 +934,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 			return;
 		void dispatchTrackedBreakpoints(
 			terminal,
-			getEffectiveBreakpoints(get(breakpointsStore), get(runToCursorLineStore))
+			getEffectiveBreakpoints(get(breakpointsStore), temporaryLineFor(get(sourcePathStore)))
 		);
 	}
 
@@ -971,7 +985,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 			if (!terminal.setBreakpoints && !terminal.setSourceBreakpoints) return false;
 			return dispatchTrackedBreakpoints(
 				terminal,
-				getEffectiveBreakpoints(lines, isCurrentSource ? get(runToCursorLineStore) : null),
+				getEffectiveBreakpoints(lines, temporaryLineFor(sourcePath)),
 				sourcePath
 			);
 		}
@@ -1006,7 +1020,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		variableViewSuspended = true;
 		releaseCommandRequest();
 		invalidateVariableRequests();
-		runToCursorLineStore.set(null);
+		runToCursorStore.set(null);
 		pausedLineStore.set(null);
 		localsStore.set([]);
 		callStackStore.set([]);
@@ -1191,14 +1205,8 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 			currentStopTimestamp = Date.now();
 			activeStore.set(true);
 			capabilitiesStore.set({ ...(event.capabilities ?? disabledCapabilities) });
-			const restoreBreakpoints = get(runToCursorLineStore) !== null;
-			runToCursorLineStore.set(null);
-			if (restoreBreakpoints) {
-				const terminal = get(terminalStore);
-				if (terminal?.setBreakpoints || terminal?.setSourceBreakpoints) {
-					void dispatchTrackedBreakpoints(terminal, [...get(breakpointsStore)]);
-				}
-			}
+			const terminal = get(terminalStore);
+			if (terminal) void restoreCursorBreakpoint(terminal);
 			const pausedSourcePath =
 				event.sourcePath || event.callStack[0]?.sourcePath || get(sourcePathStore);
 			if (event.sourceRevisionStale && pausedSourcePath) {
@@ -1284,7 +1292,6 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	function setSourcePath(sourcePath: string) {
 		if (sourcePath === get(sourcePathStore)) return;
 		sourcePathStore.set(sourcePath);
-		runToCursorLineStore.set(null);
 		breakpointsStore.set([...(get(breakpointsBySourceStore).get(sourcePath) || [])]);
 		resolvedBreakpointsStore.set([
 			...(get(resolvedBreakpointsBySourceStore).get(sourcePath) || [])
@@ -1427,15 +1434,22 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 			targetSpec?.hitCondition ||
 			targetSpec?.logMessage
 		);
-		runToCursorLineStore.set(
-			breakpoints.includes(targetLine) && !needsUnconditionalTarget ? null : targetLine
-		);
+		const target =
+			breakpoints.includes(targetLine) && !needsUnconditionalTarget
+				? null
+				: { sourcePath: get(sourcePathStore), line: targetLine };
+		runToCursorStore.set(target);
 		const version = beginCommandRequest();
 		pendingTransition = 'continue';
 		try {
 			await dispatchBreakpoints(terminal, nextBreakpoints);
 			await terminal.debugCommand('continue');
 			return true;
+		} catch (error) {
+			if (version === commandRequestVersion) pendingTransition = null;
+			if (get(runToCursorStore) === target && get(terminalStore) === terminal)
+				await restoreCursorBreakpoint(terminal);
+			throw error;
 		} finally {
 			finishCommandRequest(version);
 		}
@@ -1890,7 +1904,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 			return resolvedBreakpointsState.current;
 		},
 		get runToCursorLine() {
-			return runToCursorLineState.current;
+			return temporaryLineFor(sourcePathState.current, runToCursorState.current);
 		},
 		get breakpoints() {
 			return breakpointsState.current;
@@ -1914,7 +1928,10 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 			});
 		},
 		get effectiveBreakpoints() {
-			return getEffectiveBreakpoints(breakpointsState.current, runToCursorLineState.current);
+			return getEffectiveBreakpoints(
+				breakpointsState.current,
+				temporaryLineFor(sourcePathState.current, runToCursorState.current)
+			);
 		},
 		get cursorLine() {
 			return cursorLineState.current;
