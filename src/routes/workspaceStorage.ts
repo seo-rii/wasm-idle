@@ -14,6 +14,11 @@ interface WorkspaceStorageOptions {
 	withLock?: (storageIdentity: string, write: () => boolean) => Promise<boolean>;
 }
 
+const serializationError =
+	'The current workspace could not be serialized. The saved copy is preserved.';
+const isSnapshot = (value: unknown): value is string =>
+	typeof value === 'string' && value.length > 0 && value !== 'undefined';
+
 /** A failed write never advances the saved revision or removes the previous snapshot. */
 export function createWorkspaceStorage(
 	write: (snapshot: string, storageIdentity: string) => void,
@@ -29,16 +34,19 @@ export function createWorkspaceStorage(
 		state = { ...state, ...next };
 		onChange({ ...state });
 	}
-	function observe(snapshot: string, storageIdentity = '') {
+	function observe(snapshot: string | undefined, storageIdentity = '') {
 		const identityChanged = storageIdentity !== currentStorageIdentity;
 		if (snapshot === currentSnapshot && !identityChanged) return;
 		currentSnapshot = snapshot;
 		currentStorageIdentity = storageIdentity;
-		publish({
-			revision: state.revision + 1,
-			phase: identityChanged ? 'dirty' : state.error ? state.phase : 'dirty',
-			...(identityChanged ? { savedRevision: -1, error: null } : {})
-		});
+		const revision = state.revision + 1;
+		const savedRevision = identityChanged ? -1 : state.savedRevision;
+		if (!isSnapshot(snapshot)) {
+			publish({ revision, savedRevision, phase: 'error', error: serializationError });
+			return;
+		}
+		const error = identityChanged || state.error === serializationError ? null : state.error;
+		publish({ revision, savedRevision, phase: error ? state.phase : 'dirty', error });
 	}
 	function conflict() {
 		publish({
@@ -48,10 +56,11 @@ export function createWorkspaceStorage(
 		});
 	}
 	async function saveRevision(
-		snapshot: string,
+		snapshot: string | undefined,
 		storageIdentity = ''
 	): Promise<WorkspaceSaveResult> {
 		observe(snapshot, storageIdentity);
+		if (!isSnapshot(snapshot)) return 'failed';
 		const revision = state.revision;
 		const isCurrent = () =>
 			currentStorageIdentity === storageIdentity && state.revision === revision;
@@ -100,7 +109,8 @@ export function createWorkspaceStorage(
 	return {
 		observe,
 		/** Seed a fresh, unpublished identity without changing the currently open workspace. */
-		createCopy(snapshot: string, storageIdentity: string) {
+		createCopy(snapshot: string | undefined, storageIdentity: string) {
+			if (!isSnapshot(snapshot)) throw new Error(serializationError);
 			if (options && options.read(storageIdentity) !== null)
 				throw new Error('The destination workspace already exists');
 			write(snapshot, storageIdentity);

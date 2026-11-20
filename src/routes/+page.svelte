@@ -760,7 +760,13 @@
 	const sortedFiles = $derived([...files].sort((a, b) => a.path.localeCompare(b.path)));
 	const activeLines = $derived(activeFile ? activeFile.content.split(/\r\n|\r|\n/).length : 0);
 	const activeBytes = $derived(activeFile ? new Blob([activeFile.content]).size : 0);
-	const workspaceSaveKey = $derived(JSON.stringify(snapshot()));
+	const workspaceSaveKey = $derived.by(() => {
+		try {
+			return JSON.stringify(snapshot());
+		} catch {
+			return undefined;
+		}
+	});
 
 	const loadingProgress = createLoadingProgressController({
 		onChange(state) {
@@ -3374,8 +3380,8 @@
 	$effect(() => {
 		if (!browser || !workspaceEditorInitialized || unrestoredWorkspace !== null) return;
 		const key = workspaceSaveKey;
-		if (!key) return;
 		workspaceStorage.observe(key, currentWorkspaceStorageKey);
+		if (!key) return;
 		scheduleWorkspaceSave();
 		return () => {
 			if (workspaceSaveTimer) clearTimeout(workspaceSaveTimer);

@@ -2,6 +2,25 @@ import { describe, expect, it, vi } from 'vitest';
 import { createWorkspaceStorage } from './workspaceStorage';
 
 describe('workspace persistence revisions', async () => {
+	it('never writes an unserializable save or recovery copy and permits a subsequent valid save', async () => {
+		const entries = new Map<string, string>();
+		const storage = createWorkspaceStorage(
+			(value, key) => entries.set(key, String(value)),
+			vi.fn()
+		);
+		await storage.saveRevision('{"files":[]}', 'original');
+		const savedRevision = storage.getState().savedRevision;
+		for (const invalid of [undefined, '', 'undefined']) {
+			expect(await storage.saveRevision(invalid, 'original')).toBe('failed');
+			expect(storage.getState()).toMatchObject({ phase: 'error', savedRevision });
+			expect(() => storage.createCopy(invalid, 'copy')).toThrow(/serialized/);
+			expect([...entries]).toEqual([['original', '{"files":[]}']]);
+		}
+		expect(await storage.saveRevision('{"files":[1]}', 'original')).toBe('saved');
+		storage.createCopy('{"files":[1]}', 'copy');
+		expect(entries.get('copy')).toBe(entries.get('original'));
+	});
+
 	it('retains the previous snapshot and saved revision when quota is exhausted, then retries', async () => {
 		let persisted = '';
 		let quotaFull = false;
