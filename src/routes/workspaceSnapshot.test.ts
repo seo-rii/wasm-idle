@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { parseWorkspaceBackup, serializeWorkspaceBackup } from './workspaceBackup';
 import { normalizeWorkspaceTabs, validateWorkspaceSnapshot } from './workspaceSnapshot';
 
 const files = [
@@ -28,7 +27,7 @@ describe('workspace JSON boundary', () => {
 			activePath: raw.path,
 			openTabs: [raw.path, nested.path]
 		};
-		expect(parseWorkspaceBackup(serializeWorkspaceBackup(snapshot))).toEqual(snapshot);
+		expect(() => validateWorkspaceSnapshot(snapshot)).not.toThrow();
 		expect(() =>
 			validateWorkspaceSnapshot({ files: [{ ...raw, pathStyle: undefined }, nested] })
 		).toThrow();

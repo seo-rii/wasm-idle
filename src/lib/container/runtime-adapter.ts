@@ -480,9 +480,7 @@ export class ContainerRuntimeAdapter {
 				).values()
 			]);
 		}
-		const files = this.readWorkspace(language).filter(({ path }) =>
-			isRuntimeWorkspacePath(path)
-		);
+		const files = this.readWorkspace(language);
 		return {
 			code: new TextDecoder('utf-8', { fatal: true }).decode(
 				this.fs.readFile(activePath, { root, cwd: root })
@@ -490,7 +488,7 @@ export class ContainerRuntimeAdapter {
 			options: {
 				...options,
 				activePath,
-				workspaceFiles: files
+				workspaceFiles: files.filter(({ path }) => isRuntimeWorkspacePath(path))
 			} as unknown as SandboxExecutionOptions
 		};
 	}

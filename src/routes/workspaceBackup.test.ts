@@ -24,6 +24,17 @@ const snapshot = {
 };
 
 describe('workspace backup format', () => {
+	it('round trips literal shell filenames alongside nested portable paths', () => {
+		const raw = { path: 'names\\one.txt', pathStyle: 'posix', content: 'literal' };
+		const nested = { path: 'names/one.txt', content: 'nested' };
+		const project = {
+			files: [raw, nested, { path: 'report:2026', pathStyle: 'posix', content: 'note' }],
+			activePath: raw.path,
+			openTabs: [raw.path, nested.path]
+		};
+		expect(parseWorkspaceBackup(serializeWorkspaceBackup(project))).toEqual(project);
+	});
+
 	it('sniffs UTF-8 BOM/whitespace backups while leaving binary ZIP input alone', () => {
 		const bytes = new TextEncoder().encode(' \n\t' + serializeWorkspaceBackup(snapshot));
 		expect(parseWorkspaceBackupBytes(Uint8Array.from([0xef, 0xbb, 0xbf, ...bytes]))).toEqual(

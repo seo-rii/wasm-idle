@@ -762,16 +762,7 @@
 	const sortedFiles = $derived([...files].sort((a, b) => a.path.localeCompare(b.path)));
 	const activeLines = $derived(activeFile ? activeFile.content.split(/\r\n|\r|\n/).length : 0);
 	const activeBytes = $derived(activeFile ? new Blob([activeFile.content]).size : 0);
-	const needsPosixBackup = $derived(
-		files.some((file) => file.pathStyle === 'posix' && normalizePath(file.path) !== file.path)
-	);
-	const workspaceSaveKey = $derived.by(() => {
-		try {
-			return JSON.stringify(snapshot());
-		} catch {
-			return undefined;
-		}
-	});
+	const workspaceSaveKey = $derived(JSON.stringify(snapshot()));
 
 	const loadingProgress = createLoadingProgressController({
 		onChange(state) {
@@ -1445,6 +1436,9 @@
 	let shellDirectoryPending = $state(false);
 	let shellDirectoryGeneration = 0;
 	let sharedWorkspaceOpening = $state(false);
+	const needsPosixBackup = $derived(
+		files.some((file) => file.pathStyle === 'posix' && normalizePath(file.path) !== file.path)
+	);
 	const containerFiles = (values: readonly WorkspaceFile[]) =>
 		values.map((file) => ({ path: file.path, content: workspaceFileBytes(file) }));
 	const editorFiles = (values: readonly { path: string; content: string | Uint8Array }[]) =>
@@ -2097,7 +2091,7 @@
 			);
 			return 'failed';
 		}
-		const result = await workspaceStorage.saveRevision(workspaceSaveKey, identity);
+		const result = await workspaceStorage.saveRevision(readWorkspaceSaveKey(), identity);
 		if (result === 'saved' && identity === currentWorkspaceStorageKey && pendingWorkspaceUrl) {
 			if (location.href === pendingWorkspaceUrl.source)
 				replaceState(pendingWorkspaceUrl.target, page.state);
@@ -2105,6 +2099,14 @@
 		}
 		if (result === 'saved' && showStatus) saveStatus = 'Saved locally';
 		return result;
+	}
+
+	function readWorkspaceSaveKey() {
+		try {
+			return workspaceSaveKey;
+		} catch {
+			return undefined;
+		}
 	}
 
 	async function saveWorkspaceCopy() {
@@ -2151,7 +2153,7 @@
 	}
 
 	function isCurrentWorkspaceSaved() {
-		workspaceStorage.observe(workspaceSaveKey, currentWorkspaceStorageKey);
+		workspaceStorage.observe(readWorkspaceSaveKey(), currentWorkspaceStorageKey);
 		workspaceStorage.checkExternalChanges(currentWorkspaceStorageKey);
 		const state = workspaceStorage.getState();
 		return (
@@ -3398,7 +3400,7 @@
 
 	$effect(() => {
 		if (!browser || !workspaceEditorInitialized || unrestoredWorkspace !== null) return;
-		const key = workspaceSaveKey;
+		const key = readWorkspaceSaveKey();
 		workspaceStorage.observe(key, currentWorkspaceStorageKey);
 		if (!key) return;
 		scheduleWorkspaceSave();
