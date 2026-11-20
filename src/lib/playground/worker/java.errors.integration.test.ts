@@ -309,6 +309,31 @@ final class Helper {
 		expect(error).toContain('\tat demo.Main.main(Main.java:5)');
 	}, 60_000);
 
+	it('compiles distinct same-named package sources and ignores other workspace assets', async () => {
+		const messages = await worker.run(
+			'package app; public class Main { public static void main(String[] args) { System.out.println(a.Value.N + b.Value.N); } }',
+			{
+				activePath: 'src/app/Main.java',
+				workspaceFiles: [
+					{
+						path: 'src/a/Value.java',
+						content: 'package a; public class Value {public static final int N=40;}'
+					},
+					{
+						path: 'src/b/Value.java',
+						content: new TextEncoder().encode(
+							'package b; public class Value {public static final int N=2;}'
+						)
+					},
+					{ path: 'README.txt', content: 'Notes about this project.' },
+					{ path: 'logo.png', content: Uint8Array.of(0xff, 0, 0xab) }
+				]
+			}
+		);
+		expect(messages.at(-1)).toEqual({ results: true, mainClass: 'app.Main' });
+		expect(outputFrom(messages)).toBe('42\n');
+	}, 60_000);
+
 	it('flushes pending stdout and stderr before reporting the exception', async () => {
 		const messages = await worker.run(`public class Main {
     public static void main(String[] args) {

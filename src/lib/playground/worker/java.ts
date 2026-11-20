@@ -201,7 +201,6 @@ self.addEventListener('message', async (event) => {
 		const sourceIdentity = resolveJavaSourceIdentity(code, activePath);
 		const sourcePath =
 			typeof activePath === 'string' && activePath ? activePath : sourceIdentity.sourcePath;
-		const sourceFileName = sourcePath.split('/').pop() || sourcePath;
 		if (
 			!Array.isArray(workspaceFiles) ||
 			!workspaceFiles.every(
@@ -215,15 +214,15 @@ self.addEventListener('message', async (event) => {
 		}
 		// Container files arrive as bytes; Java compiler inputs are strict UTF-8 source text.
 		const sourceDecoder = new TextDecoder('utf-8', { fatal: true });
-		const sourceFiles: Array<{ path: string; content: string }> = workspaceFiles.map(
-			(file: { path: string; content: string | Uint8Array }) => ({
+		const sourceFiles: Array<{ path: string; content: string }> = workspaceFiles
+			.filter((file: { path: string }) => file.path.endsWith('.java'))
+			.map((file: { path: string; content: string | Uint8Array }) => ({
 				path: file.path,
 				content:
 					typeof file.content === 'string'
 						? file.content
 						: sourceDecoder.decode(file.content)
-			})
-		);
+			}));
 		const debugEnabled = debugMode === 'trace';
 		if (debugMode && debugMode !== 'none' && !debugEnabled)
 			throw new Error('Java supports the trace debugger backend');
@@ -381,10 +380,9 @@ self.addEventListener('message', async (event) => {
 			compiler.clearSourceFiles?.();
 			compiler.clearInputClassFiles?.();
 			compiler.clearOutputFiles?.();
-			// TeaVM derives packages from source text but validates public types against the basename.
-			compiler.addSourceFile(sourceFileName, mainSource);
+			compiler.addSourceFile(sourcePath, mainSource);
 			for (const file of otherSources) {
-				compiler.addSourceFile(file.path.split('/').pop() || file.path, file.content);
+				compiler.addSourceFile(file.path, file.content);
 			}
 			if (debugBridge) compiler.addSourceFile(debugBridge.sourceFileName, debugBridge.source);
 			if (
