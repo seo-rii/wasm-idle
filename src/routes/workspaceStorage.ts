@@ -11,6 +11,7 @@ interface WorkspaceStorageOptions {
 	read: (storageIdentity: string) => string | null;
 	initialStorageIdentity: string;
 	initialSnapshot: string | null;
+	sameContents?: (left: string | null, right: string | null) => boolean;
 	withLock?: (storageIdentity: string, write: () => boolean) => Promise<boolean>;
 }
 
@@ -28,6 +29,8 @@ export function createWorkspaceStorage(
 	let currentSnapshot: string | undefined;
 	let currentStorageIdentity: string | undefined;
 	const storedSnapshots = new Map<string, string | null>();
+	const sameContents = (left: string | null, right: string | null) =>
+		left === right || options?.sameContents?.(left, right) === true;
 	if (options) storedSnapshots.set(options.initialStorageIdentity, options.initialSnapshot);
 	let state: WorkspaceSaveState = { phase: 'dirty', revision: 0, savedRevision: -1, error: null };
 	function publish(next: Partial<WorkspaceSaveState>) {
@@ -76,8 +79,8 @@ export function createWorkspaceStorage(
 				const stored = options?.read(storageIdentity);
 				if (
 					options &&
-					stored !== (storedSnapshots.get(storageIdentity) ?? null) &&
-					stored !== snapshot
+					!sameContents(stored ?? null, storedSnapshots.get(storageIdentity) ?? null) &&
+					!sameContents(stored ?? null, snapshot)
 				) {
 					conflict();
 					return false;
@@ -129,10 +132,14 @@ export function createWorkspaceStorage(
 			if (!options || storageIdentity !== currentStorageIdentity) return;
 			try {
 				const stored = options.read(storageIdentity);
-				if (stored !== (storedSnapshots.get(storageIdentity) ?? null)) {
-					if (stored === currentSnapshot) {
+				const baseline = storedSnapshots.get(storageIdentity) ?? null;
+				if (stored !== baseline) {
+					if (sameContents(stored, currentSnapshot ?? null)) {
 						storedSnapshots.set(storageIdentity, stored);
 						publish({ phase: 'saved', savedRevision: state.revision, error: null });
+					} else if (sameContents(stored, baseline)) {
+						// A different tab selected another file while this tab has unsaved text.
+						storedSnapshots.set(storageIdentity, stored);
 					} else conflict();
 				}
 			} catch (error) {

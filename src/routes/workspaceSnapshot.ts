@@ -69,7 +69,7 @@ export function validateWorkspaceSnapshot(
 		(typeof value.version !== 'number' ||
 			!Number.isInteger(value.version) ||
 			value.version < 1 ||
-			value.version > 6)
+			value.version > 7)
 	)
 		invalid('version');
 	for (const field of ['argsInput', 'language']) {
@@ -118,4 +118,59 @@ export function normalizeWorkspaceTabs(
 		: [];
 	if (validPaths.has(activePath)) tabs.push(activePath);
 	return [...new Set(tabs)];
+}
+
+/** Keep the active project's files once in local storage. Portable v6 backups retain their shape. */
+export function serializeStoredWorkspace(snapshot: Record<string, unknown>): string {
+	const projects = snapshot.workspaces;
+	const language = snapshot.language;
+	if (
+		typeof language !== 'string' ||
+		!projects ||
+		typeof projects !== 'object' ||
+		Array.isArray(projects)
+	)
+		return JSON.stringify(snapshot);
+	const { [language]: active, ...inactive } = projects as Record<string, Record<string, unknown>>;
+	if (!active || !Array.isArray(active.files)) return JSON.stringify(snapshot);
+	return JSON.stringify({
+		...snapshot,
+		version: 7,
+		activePath: active.activePath ?? snapshot.activePath,
+		openTabs: active.openTabs ?? snapshot.openTabs,
+		files: active.files,
+		workspaces: Object.keys(inactive).length ? inactive : undefined
+	});
+}
+
+/** Selection and open tabs can legitimately differ between windows showing the same files. */
+export function sameWorkspaceContents(left: string | null, right: string | null) {
+	if (left === right) return true;
+	if (left === null || right === null) return false;
+	function contentKey(raw: string) {
+		const snapshot: Record<string, unknown> = JSON.parse(raw);
+		if (!snapshot || typeof snapshot !== 'object' || (!snapshot.files && !snapshot.workspaces))
+			return raw;
+		const compact = JSON.parse(serializeStoredWorkspace(snapshot)) as Record<string, unknown>;
+		const withoutSelection = (workspace: Record<string, unknown>) => {
+			const result = { ...workspace };
+			delete result.activePath;
+			delete result.openTabs;
+			return result;
+		};
+		const result = withoutSelection(compact);
+		if (result.workspaces && typeof result.workspaces === 'object')
+			result.workspaces = Object.fromEntries(
+				Object.entries(result.workspaces).map(([id, project]) => [
+					id,
+					withoutSelection(project)
+				])
+			);
+		return JSON.stringify(result);
+	}
+	try {
+		return contentKey(left) === contentKey(right);
+	} catch {
+		return false;
+	}
 }

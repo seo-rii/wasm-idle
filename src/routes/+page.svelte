@@ -104,7 +104,12 @@
 	} from './workspaceContext';
 	import { consumeWorkspaceQueryInput } from './workspaceQuery';
 	import { migrateLegacyWorkspaceFile } from './workspaceMigration';
-	import { normalizeWorkspaceTabs, validateWorkspaceSnapshot } from './workspaceSnapshot';
+	import {
+		normalizeWorkspaceTabs,
+		sameWorkspaceContents,
+		serializeStoredWorkspace,
+		validateWorkspaceSnapshot
+	} from './workspaceSnapshot';
 	import { preserveUnrestoredWorkspace, type UnrestoredWorkspace } from './workspaceRecovery';
 	import { copyWorkspaceShare, isNavigableWorkspaceShare } from './workspaceShare';
 	import { serializeWorkspaceBackup } from './workspaceBackup';
@@ -446,6 +451,7 @@
 			read: (key) => localStorage.getItem(key),
 			initialStorageIdentity: initialSelection?.storageKey ?? WORKSPACE_STORAGE_KEY,
 			initialSnapshot: initialSelection?.storedSnapshot ?? null,
+			sameContents: sameWorkspaceContents,
 			withLock: async (key, write) =>
 				navigator.locks ? await navigator.locks.request(key, write) : write()
 		}
@@ -770,7 +776,7 @@
 	const sortedFiles = $derived([...files].sort((a, b) => a.path.localeCompare(b.path)));
 	const activeLines = $derived(activeFile ? activeFile.content.split(/\r\n|\r|\n/).length : 0);
 	const activeBytes = $derived(activeFile ? new Blob([activeFile.content]).size : 0);
-	const workspaceSaveKey = $derived(JSON.stringify(snapshot()));
+	const workspaceSaveKey = $derived(serializeStoredWorkspace(snapshot()));
 
 	const loadingProgress = createLoadingProgressController({
 		onChange(state) {
@@ -2007,7 +2013,7 @@
 				recovered
 			);
 		}
-		if (!value?.workspaces) {
+		if (!value.workspaces?.[nextLanguage] && Array.isArray(value.files)) {
 			nextWorkspaces[nextLanguage] = sanitizeWorkspace(
 				{
 					activePath: value?.activePath,
@@ -2381,7 +2387,7 @@
 		const workspaces = createDefaultLanguageWorkspaces();
 		workspaces[language] = project;
 		const imported = { ...snapshot(project, workspaces), argsInput: '', compilerOptions: {} };
-		workspaceStorage.createCopy(JSON.stringify(imported), importedKey);
+		workspaceStorage.createCopy(serializeStoredWorkspace(imported), importedKey);
 		applySnapshot(imported);
 		currentWorkspaceStorageKey = importedKey;
 		destination.advance();
@@ -2423,7 +2429,7 @@
 				if (unrestoredWorkspace !== null) {
 					const copyUrl = createSharedWorkspaceUrl(new URL(location.href));
 					const copyKey = workspaceStorageKey(copyUrl);
-					workspaceStorage.createCopy(JSON.stringify(plan.backup), copyKey);
+					workspaceStorage.createCopy(serializeStoredWorkspace(plan.backup), copyKey);
 					currentWorkspaceStorageKey = copyKey;
 					replaceState(copyUrl, page.state);
 					unrestoredWorkspace = null;
