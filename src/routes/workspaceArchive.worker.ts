@@ -30,9 +30,9 @@ type WorkspaceArchiveResponse =
 	| { type: 'extracted'; files: WorkspaceArchiveFile[] }
 	| { type: 'error'; message: string };
 
-function normalizeArchivePath(value: string) {
+function normalizeArchivePath(value: string, directory = false) {
 	const safePath = normalizeWorkspacePath(value);
-	if (!safePath) throw new Error('ZIP entry path cannot be empty');
+	if (!safePath && !directory) throw new Error('ZIP entry path cannot be empty');
 	return safePath;
 }
 
@@ -94,8 +94,8 @@ function decodeArchivePath(
 		Array.from(raw, (byte) =>
 			byte < 128 ? String.fromCharCode(byte) : cp437High[byte - 128]
 		).join('');
-	const rawPath = normalizeArchivePath(rawName);
 	const directory = /[/\\]$/u.test(rawName);
+	const rawPath = normalizeArchivePath(rawName, directory);
 	if (utf8 || (!localExtra.length && !centralExtra.length))
 		return { path: rawPath, rawPath, directory };
 	const nameCrc = crc32(raw);
@@ -107,7 +107,7 @@ function decodeArchivePath(
 	const name = centralName ?? localName;
 	if (name === undefined) return { path: rawPath, rawPath, directory };
 	if (/[/\\]$/u.test(name) !== directory) throw new Error('Inconsistent ZIP directory name');
-	return { path: normalizeArchivePath(name), rawPath, directory };
+	return { path: normalizeArchivePath(name, directory), rawPath, directory };
 }
 
 export function createWorkspaceArchive(files: WorkspaceArchiveFile[]) {
@@ -310,6 +310,7 @@ function readArchiveEntries(source: Uint8Array): ArchiveEntry[] {
 		}
 		expectedOffset = nextOffset;
 	}
+	if (expectedOffset !== directory) throw new Error('Inconsistent ZIP entry offsets');
 	return entries;
 }
 
@@ -368,7 +369,9 @@ export function extractWorkspaceArchive(source: Uint8Array) {
 		} while (offset < entry.payloadEnd);
 		if (!completed) throw new Error(`Unfinished ZIP entry: ${path}`);
 	}
-	if (files.length === 0) throw new Error('ZIP archive contains no files');
+	// The workspace can represent an empty root, but cannot retain named empty directories.
+	if (!files.length && entries.some((entry) => entry.path !== '' || entry.originalSize !== 0))
+		throw new Error('ZIP archive contains no files');
 	return files;
 }
 

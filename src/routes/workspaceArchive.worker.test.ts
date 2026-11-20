@@ -58,6 +58,13 @@ function unicodePathField(name: Uint8Array, path: string) {
 }
 
 describe('workspace archive worker', () => {
+	it('round trips an empty workspace ZIP', () => {
+		expect(extractWorkspaceArchive(createWorkspaceArchive([]))).toEqual([]);
+		expect(extractWorkspaceArchive(entryArchive([['./', '']]))).toEqual([]);
+		// An editor workspace cannot retain a named empty directory.
+		expect(() => extractWorkspaceArchive(entryArchive([['src/', '']]))).toThrow(/no files/u);
+	});
+
 	it('decodes unmarked Unix UTF-8 and legacy CP437 filenames', () => {
 		const latin = Uint8Array.of(0x63, 0x61, 0x66, 0x82, 0x2e, 0x68);
 		for (const os of [0, 3]) {
@@ -378,6 +385,19 @@ describe('workspace archive worker', () => {
 			expect(() => extractWorkspaceArchive(entryArchive([[path, 'invalid']]))).toThrow();
 		}
 	);
+
+	it('imports files when an archiver includes the current directory as an entry', () => {
+		const entries: Array<[string, string]> = [
+			['./', ''],
+			['./main.py', 'from src.helper import answer'],
+			['./src/', ''],
+			['./src/helper.py', 'answer = 42']
+		];
+		expect(extractWorkspaceArchive(entryArchive(entries))).toEqual([
+			{ path: 'main.py', content: 'from src.helper import answer', encoding: 'utf-8' },
+			{ path: 'src/helper.py', content: 'answer = 42', encoding: 'utf-8' }
+		]);
+	});
 
 	it('validates directory paths before skipping their entries', () => {
 		expect(() =>

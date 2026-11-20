@@ -527,6 +527,22 @@ describe('shared workspace refresh scheduling', () => {
 		return { app, entries, archive, terminalFile, write, withLock, rescan, upload };
 	}
 
+	it('opens an empty ZIP as a separate editable project with no tabs', async () => {
+		const { app, entries, archive, upload } = zipImportFixture();
+		archive.length = 0;
+		const original = app.files;
+		await upload();
+		expect(JSON.parse(entries.get('source')!).files).toEqual(original);
+		expect(JSON.parse(entries.get('copy')!)).toMatchObject({
+			activePath: '',
+			files: [],
+			openTabs: []
+		});
+		expect(app.currentWorkspaceStorageKey).toBe('copy');
+		expect(app.selectFile).not.toHaveBeenCalled();
+		expect(app.saveStatus).toBe('Empty workspace imported');
+	});
+
 	it.each(['before', 'after'])(
 		'opens a ZIP on the first import when a rescan arrives %s the locked write',
 		async (timing) => {
