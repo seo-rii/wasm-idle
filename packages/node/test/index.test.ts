@@ -1,4 +1,4 @@
-import type { ExecutionResult, Sandbox } from '@wasm-idle/core';
+import { createPlaygroundBinding, type ExecutionResult, type Sandbox } from '@wasm-idle/core';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -20,6 +20,39 @@ function createSandbox(run: Sandbox['run']): Sandbox {
 }
 
 describe('runWasmIdleInNode', () => {
+	it('reads and writes class-backed accessors on their owning sandbox', async () => {
+		class TimedSandbox {
+			#elapsed = 0;
+			get elapse() {
+				return this.#elapsed;
+			}
+			set elapse(value: number) {
+				this.#elapsed = value;
+			}
+			eof = vi.fn();
+			load = vi.fn(async () => {});
+			run = vi.fn(async () => true);
+			clear = vi.fn(async () => {});
+			terminate = vi.fn();
+		}
+		const adapter = new TimedSandbox();
+		const binding = createPlaygroundBinding('', async () => adapter);
+		const bound = await binding.load('C');
+		bound.elapse = 7;
+		expect(adapter.elapse).toBe(7);
+		await bound.dispose?.();
+		const result = await runWasmIdleInNode({
+			language: 'C',
+			code: '',
+			loadSandbox: async () => {
+				const fresh = new TimedSandbox();
+				fresh.elapse = 17;
+				return fresh;
+			}
+		});
+		expect(result).toEqual({ ok: true, result: true, elapsedMs: 17 });
+	});
+
 	it.each([true, false])(
 		'preserves the run outcome (success: %s) and attempts disposal after clear fails',
 		async (success) => {
