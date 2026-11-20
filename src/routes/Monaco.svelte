@@ -43,6 +43,8 @@
 	import { onMount, untrack } from 'svelte';
 	import { SvelteURL } from 'svelte/reactivity';
 	import { createWorkspaceModelUri } from './workspace-model-uri';
+	import { createOriginalLineEndings } from './workspace-model-eol';
+	import { moveModelHistory } from './workspace-model-history';
 	import { adaptMonacoFullDocumentSync } from './lsp-full-sync';
 	import {
 		isEditorDefaultSource,
@@ -3964,6 +3966,43 @@
 	const workspaceModels = new Map<string, monaco.editor.ITextModel>();
 	// eslint-disable-next-line svelte/prefer-svelte-reactivity
 	const modelViewStates = new Map<monaco.editor.ITextModel, monaco.editor.ICodeEditorViewState>();
+	const originalEndings = new WeakMap<
+		monaco.editor.ITextModel,
+		NonNullable<ReturnType<typeof createOriginalLineEndings>>
+	>();
+	function rememberText(model: monaco.editor.ITextModel, text: string) {
+		const endings = createOriginalLineEndings(
+			text,
+			model.getEOL(),
+			model.getAlternativeVersionId()
+		);
+		if (endings) originalEndings.set(model, endings);
+		else originalEndings.delete(model);
+	}
+
+	// A Monaco URI is immutable. Give the renamed file its real URI while its source still
+	// owns the native history, view state and any original per-line separators.
+	export function prepareFileRename(from: string, to: string) {
+		const old = workspaceModels.get(from);
+		if (!Monaco || !old || old.isDisposed()) return;
+		const text = originalEndings.get(old)?.text ?? old.getValue(undefined, true);
+		const uri = createWorkspaceModelUri(Monaco.Uri, to);
+		const renamed =
+			workspaceModels.get(to) ?? Monaco.editor.createModel(text, old.getLanguageId(), uri);
+		renamed.setValue(text);
+		try {
+			moveModelHistory(old, renamed);
+		} catch (error) {
+			workspaceModels.delete(to);
+			renamed.dispose();
+			throw error;
+		}
+		workspaceModels.set(to, renamed);
+		const endings = originalEndings.get(old);
+		if (endings) originalEndings.set(renamed, endings);
+		const view = editor?.getModel() === old ? editor.saveViewState() : modelViewStates.get(old);
+		if (view) modelViewStates.set(renamed, view);
+	}
 
 	$effect(() => {
 		const monacoApi = Monaco;
@@ -3983,6 +4022,7 @@
 				// Monaco can restore a disposed model's history by URI, even for equal text.
 				// A newly owned model must start with fresh history; cached tabs keep theirs.
 				nextModel.setValue(initialValue);
+				rememberText(nextModel, initialValue);
 				workspaceModels.set(path, nextModel);
 			} else if (nextModel.getLanguageId() !== modelLanguage) {
 				monacoApi.editor.setModelLanguage(nextModel, modelLanguage);
@@ -4102,8 +4142,13 @@
 
 	const handleEditorInput = (event: IMonacoInputEvent) => {
 		// Monaco stores a leading BOM separately from the editable text.
-		if (!applyingValue && event.model === model)
-			onChange?.(event.model.getValue(undefined, true));
+		if (applyingValue || event.reason !== 'change' || event.model !== model) return;
+		const endings = originalEndings.get(event.model);
+		onChange?.(
+			endings && event.event
+				? endings.change(event.model, event.event)
+				: event.model.getValue(undefined, true)
+		);
 	};
 
 	$effect(() => {
@@ -4157,11 +4202,17 @@
 
 	$effect(() => {
 		const activeModel = model || editor?.getModel();
-		if (!activeModel || value === undefined || activeModel.getValue(undefined, true) === value)
+		if (
+			!activeModel ||
+			value === undefined ||
+			(originalEndings.get(activeModel)?.text ?? activeModel.getValue(undefined, true)) ===
+				value
+		)
 			return;
 		const viewState = editor?.saveViewState();
 		applyingValue = true;
 		activeModel.setValue(value);
+		rememberText(activeModel, value);
 		if (viewState) editor?.restoreViewState(viewState);
 		applyingValue = false;
 	});

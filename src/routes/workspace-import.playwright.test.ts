@@ -119,6 +119,41 @@ describe('workspace import browser integration', () => {
 	);
 
 	it(
+		'retains mixed line endings and undo/redo when a workspace document is renamed',
+		browserOptions,
+		async () => {
+			await withImportPage(async (page) => {
+				const original = '\uFEFFfirst\r\nsecond\nthird\rfourth';
+				await page.locator('input[type="file"]').setInputFiles({
+					name: 'draft.txt',
+					mimeType: 'text/plain',
+					buffer: Buffer.from(original)
+				});
+				await page.locator('.file-tab.active[title="draft.txt"]').waitFor();
+				const focus = () =>
+					page.locator('.editor-surface .monaco-editor .view-line').last().click();
+				const bytes = async () => {
+					const pending = page.waitForEvent('download');
+					await page.getByRole('button', { name: 'Download', exact: true }).click();
+					return readFile((await (await pending).path())!);
+				};
+				await focus();
+				await page.keyboard.press('Control+End');
+				await page.keyboard.insertText('!');
+				expect(await bytes()).toEqual(Buffer.from(original + '!'));
+				page.once('dialog', (dialog) => dialog.accept('renamed.txt'));
+				await page.getByRole('button', { name: 'Rename', exact: true }).click();
+				await page.locator('.file-tab.active[title="renamed.txt"]').waitFor();
+				await focus();
+				await page.keyboard.press('Control+z');
+				expect(await bytes()).toEqual(Buffer.from(original));
+				await focus();
+				await page.keyboard.press('Control+y');
+				expect(await bytes()).toEqual(Buffer.from(original + '!'));
+			});
+		}
+	);
+	it(
 		'keeps uploaded binary bytes intact while adjacent text remains editable',
 		browserOptions,
 		async () => {
