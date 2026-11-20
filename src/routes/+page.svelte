@@ -2313,7 +2313,6 @@
 		importedFiles: WorkspaceFile[],
 		destination: ReturnType<typeof captureWorkspaceImportDestination>
 	) {
-		if (!importedFiles.length) throw new Error('ZIP archive contains no files');
 		// A container change can invalidate the source snapshot while its save waits for a lock.
 		let sourceSaved = false;
 		for (let attempt = 0; attempt < 3 && !sourceSaved; attempt++) {
@@ -2326,14 +2325,11 @@
 		if (!sourceSaved) throw new Error('Save the current workspace before opening a ZIP');
 		const importedUrl = createSharedWorkspaceUrl(new URL(location.href));
 		const importedKey = workspaceStorageKey(importedUrl);
-		const firstPath = importedFiles[0].path;
+		const firstPath = importedFiles[0]?.path ?? '';
 		const project: LanguageWorkspace = {
 			files: importedFiles,
 			activePath: firstPath,
-			openTabs:
-				firstPath !== activePath && importedFiles.some((file) => file.path === activePath)
-					? [activePath, firstPath]
-					: [firstPath]
+			openTabs: normalizeWorkspaceTabs([activePath], importedFiles, firstPath)
 		};
 		const workspaces = createDefaultLanguageWorkspaces();
 		workspaces[language] = project;
@@ -2394,7 +2390,10 @@
 				imported = additions.map((file) => file.path);
 			}
 			if (imported[0]) selectFile(imported[0]);
-			saveStatus = `${imported.length} file${imported.length === 1 ? '' : 's'} imported`;
+			saveStatus =
+				plan.fromZip && !imported.length
+					? 'Empty workspace imported'
+					: `${imported.length} file${imported.length === 1 ? '' : 's'} imported`;
 		} catch (error) {
 			if (!(error instanceof WorkspaceImportCancelled)) throw error;
 			saveStatus = error.message;

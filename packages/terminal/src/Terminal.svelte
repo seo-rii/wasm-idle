@@ -78,7 +78,6 @@
 		pendingDebugBreakpoints = new SvelteMap<string, number[]>(),
 		pendingDebugSpecifications = new Map<string, DebugSourceBreakpoint[]>(),
 		pendingSandboxEof = false,
-		sandboxInputGeneration = 0,
 		sandbox: BoundSandbox,
 		sandboxAcceptingInput = false,
 		first = true,
@@ -383,7 +382,6 @@
 	}
 
 	function discardPendingSandboxInput() {
-		sandboxInputGeneration += 1;
 		pendingSandboxInput = [];
 		pendingSandboxEof = false;
 	}
@@ -726,6 +724,16 @@
 	function handleInputKey(key: string) {
 		const characters = getInputCharacters(input);
 		switch (key) {
+			case 'Meta-b':
+			case 'Meta-f': {
+				const step = key === 'Meta-b' ? -1 : 1;
+				let position = inputCursor;
+				const adjacent = () => characters[step < 0 ? position - 1 : position];
+				const word = /[\p{L}\p{N}_]/u;
+				while (adjacent() && !word.test(adjacent())) position += step;
+				while (adjacent() && word.test(adjacent())) position += step;
+				return moveInputCursor(characters, position);
+			}
 			case 'D':
 				return moveInputCursor(characters, Math.max(0, inputCursor - 1));
 			case 'C':
@@ -1220,14 +1228,14 @@
 				});
 				term.open(ref);
 				term.attachCustomKeyEventHandler((event) => {
-					// Stop xterm before onKey emits Ctrl+C through onData. Leave the browser's
-					// native copy event enabled so xterm can copy without Clipboard API permission.
-					return !(
-						event.type === 'keydown' &&
-						(event.ctrlKey || event.metaKey) &&
-						event.key.toLowerCase() === 'c' &&
-						term?.hasSelection()
-					);
+					if (event.type !== 'keydown' || !(event.ctrlKey || event.metaKey)) return true;
+					const key = event.key.toLowerCase();
+					// Let the browser deliver a trusted paste event to xterm's textarea.
+					if (key === 'v' && !event.altKey && (!finish || executionInputOwners > 0)) {
+						onkey?.(event);
+						return false;
+					}
+					return key !== 'c' || !term?.hasSelection();
 				});
 				term.onData(function receiveInput(data: string) {
 					if (!term || terminalDisposed) return;
@@ -1241,15 +1249,19 @@
 					}
 					let pendingText = '';
 					for (let i = 0; i < data.length;) {
-						// Match a complete CSI or SS3 key, including modifiers and unsupported keys.
+						// Consume the whole CSI, SS3 or Meta key, even when unsupported.
 						const escapeSequence =
 							data[i] === '\x1b' &&
-							/^\x1b(?:\[|O)([0-?]*)[ -/]*([@-~])/.exec(data.slice(i));
+							/^\x1b(?:(?:\[|O)([0-?]*)[ -/]*([@-~])|([ -~]))/.exec(data.slice(i));
 						if (escapeSequence) {
 							appendInputText(pendingText);
 							pendingText = '';
-							const [, parameters, final] = escapeSequence;
-							handleInputKey(final === '~' ? parameters.split(';')[0] + '~' : final);
+							const [, parameters, final, meta] = escapeSequence;
+							if (meta) handleInputKey(`Meta-${meta}`);
+							else
+								handleInputKey(
+									final === '~' ? parameters.split(';')[0] + '~' : final
+								);
 							i += escapeSequence[0].length;
 							continue;
 						}
@@ -1290,25 +1302,11 @@
 					onkey?.(ev);
 					if (isCopyShortcut) {
 						ev.preventDefault();
-						if (reservedInput?.queued) reservedInput.interrupt();
+						if (reservedInput) reservedInput.interrupt();
 						else sandbox?.kill?.();
 					} else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'd') {
 						ev.preventDefault();
 						whenInputReady(submitSandboxEof);
-					} else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'v') {
-						ev.preventDefault();
-						const generation = sandboxInputGeneration;
-						const reservation = reservedInput;
-						navigator.clipboard
-							.readText()
-							.then((text) => {
-								const current = reservation
-									? reservation === reservedInput
-									: generation === sandboxInputGeneration;
-								if (!current) return;
-								whenInputReady(() => applyPastedText(text));
-							})
-							.catch(() => {});
 					}
 				});
 				plugin = await registerBasicPlugins(term, initialization.signal);

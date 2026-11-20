@@ -155,6 +155,14 @@ async function screen(term: XtermTerminal) {
 	return { rows, row: buffer.baseY + buffer.cursorY, col: buffer.cursorX };
 }
 
+it('moves by word on Meta+B/F without inserting unsupported Meta keys', async () => {
+	const { term, write } = await runningTerminal();
+	term.input('one two\x1bbX\r');
+	term.input('가나,do!\x1bb\x1bb_\x1bfX\r');
+	term.input('\x1bb\x1bfleft\x1bx\r');
+	expect(write.mock.calls.flat()).toEqual(['one Xtwo\n', '_가나X,do!\n', 'left\n']);
+});
+
 it('keeps the visual cursor, wrapped text, and submitted line together after editing', async () => {
 	const { term, sandbox, write } = await runningTerminal();
 	term.resize(8, 6);

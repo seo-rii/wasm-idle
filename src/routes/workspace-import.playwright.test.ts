@@ -1,5 +1,6 @@
 // @vitest-environment node
 
+import { readFile } from 'node:fs/promises';
 import { strToU8, zipSync } from 'fflate';
 import { chromium, type Page } from 'playwright-core';
 import { describe, expect, it } from 'vitest';
@@ -61,6 +62,49 @@ async function withImportPage(run: (page: Page) => Promise<void>) {
 }
 
 describe('workspace import browser integration', () => {
+	it(
+		'preserves the UTF-8 BOM and line endings across edits, undo, save and download',
+		browserOptions,
+		async () => {
+			await withImportPage(async (page) => {
+				const original = '\uFEFFfirst\r\n끝';
+				const downloadFile = async () => {
+					const pending = page.waitForEvent('download');
+					await page.getByRole('button', { name: 'Download', exact: true }).click();
+					const path = await (await pending).path();
+					if (!path) throw new Error('Missing workspace file download');
+					return readFile(path);
+				};
+				await page.locator('input[type="file"]').setInputFiles({
+					name: 'bom.txt',
+					mimeType: 'text/plain',
+					buffer: Buffer.from(original)
+				});
+				await page.locator('.file-tab.active[title="bom.txt"]').waitFor();
+				const line = page.locator('.editor-surface .monaco-editor .view-line').last();
+				await expect.poll(() => line.textContent()).toContain('끝');
+				expect(await downloadFile()).toEqual(Buffer.from(original));
+				await line.click();
+				await page.keyboard.press('Control+End');
+				await page.keyboard.insertText('!');
+				expect(await downloadFile()).toEqual(Buffer.from(original + '!'));
+				await line.click();
+				await page.keyboard.press('Control+z');
+				expect(await downloadFile()).toEqual(Buffer.from(original));
+				await line.click();
+				await page.keyboard.press('Control+y');
+				await page.getByTitle('Save workspace').click();
+				await page
+					.locator('.statusbar__message')
+					.filter({ hasText: 'Saved locally' })
+					.waitFor();
+				await page.reload({ waitUntil: 'domcontentloaded' });
+				await page.locator('.file-tab.active[title="bom.txt"]').waitFor();
+				expect(await downloadFile()).toEqual(Buffer.from(original + '!'));
+			});
+		}
+	);
+
 	it(
 		'keeps uploaded binary bytes intact while adjacent text remains editable',
 		browserOptions,
