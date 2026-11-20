@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onDestroy, untrack } from 'svelte';
-	import { SvelteSet } from 'svelte/reactivity';
+	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { MOONBIT_SERVICE_POLICY } from '$lib/playground/moonbitServicePolicy';
 	import { parseDebugInteger } from './debugInteger';
 	import { createProjectBreakpointSelection } from './workspaceBreakpoints';
@@ -1416,6 +1416,7 @@
 
 	const containerWorkspaceConflicts = new SvelteSet<string>();
 	const changedContainerProjects = new SvelteSet<PlaygroundLanguage>();
+	const pendingBackupProjects = new SvelteMap<PlaygroundLanguage, number>();
 	let containerRescanPending = false;
 	let containerChangeRevision = 0;
 	let containerReadRevision = 0;
@@ -2337,6 +2338,11 @@
 			}
 			let imported: string[] = [];
 			if (plan.kind === 'backup') {
+				// A recovery copy gets a fresh container. A healthy restore keeps the live Bash session.
+				const previous =
+					unrestoredWorkspace === null
+						? { ...languageWorkspaces, [language]: currentWorkspace() }
+						: null;
 				if (unrestoredWorkspace !== null) {
 					const copyUrl = createSharedWorkspaceUrl(new URL(location.href));
 					const copyKey = workspaceStorageKey(copyUrl);
@@ -2346,6 +2352,38 @@
 					unrestoredWorkspace = null;
 				}
 				applySnapshot(plan.backup, 'Workspace backup restored');
+				if (previous) {
+					const binding = playground;
+					const revision = editorWorkspaceRevision;
+					// The active editor publishes its own changes. Restore inactive diffs as well,
+					// including files removed by a backup that resets a project to its default.
+					const changed = playgroundLanguages.filter(
+						(project) =>
+							project !== language &&
+							(pendingBackupProjects.has(project) ||
+								!sameWorkspaceFiles(
+									previous[project].files,
+									languageWorkspaces[project].files
+								))
+					);
+					try {
+						await Promise.all(
+							changed.map(async (project) => {
+								// Keep failed or in-flight writes eligible for an identical restore.
+								pendingBackupProjects.set(project, revision);
+								await publishContainerWorkspace(
+									project,
+									languageWorkspaces[project].files
+								);
+								if (pendingBackupProjects.get(project) === revision)
+									pendingBackupProjects.delete(project);
+							})
+						);
+					} catch (error) {
+						if (binding === playground && revision === editorWorkspaceRevision)
+							saveStatus = `Workspace backup restored. Workspace sync failed: ${String(error)}`;
+					}
+				}
 				return;
 			} else if (plan.fromZip) {
 				imported = await openImportedZipWorkspace(plan.files, destination);
@@ -3439,6 +3477,7 @@
 		containerReady = false;
 		containerWorkspaceConflicts.clear();
 		changedContainerProjects.clear();
+		pendingBackupProjects.clear();
 		containerChangeRevision = containerReadRevision = 0;
 		// Restore customized inactive projects too: the shell can access them before the editor does.
 		untrack(() => {
