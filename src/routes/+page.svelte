@@ -712,6 +712,18 @@
 			: undefined
 	);
 	const sqlLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'sql');
+	const sqlLspWorkspaceFiles = $derived(
+		sqlLspEnabled || (lspEnabled && language === 'DUCKDB')
+			? files
+					.filter(
+						(file) =>
+							file.path !== activePath &&
+							!isBinaryWorkspaceFile(file) &&
+							(language === 'DUCKDB' || file.path.endsWith('.sql'))
+					)
+					.map(({ path, content }) => ({ path, content }))
+			: []
+	);
 	const sqlLspModuleUrl = $derived(sqlLspEnabled ? runtimeAssets.sqlite?.moduleUrl : undefined);
 	const postgresqlLspEnabled = $derived(
 		lspEnabled && activeRuntimeLspCapability === 'postgresql'
@@ -5544,6 +5556,7 @@
 							{nimLspWorkspaceFiles}
 							{sqlLspEnabled}
 							{sqlLspModuleUrl}
+							{sqlLspWorkspaceFiles}
 							{postgresqlLspEnabled}
 							{postgresqlLspModuleUrl}
 							{bashLspEnabled}

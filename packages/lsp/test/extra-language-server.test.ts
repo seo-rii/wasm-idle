@@ -745,10 +745,11 @@ describe('additional language server workers', () => {
 	});
 
 	it('starts SQL with SQLite wasm assets', async () => {
+		const workspaceFiles = [{ path: 'schema.sql', content: 'CREATE TABLE t(n)' }];
 		const handle = await getSqlLanguageServer({
 			rootUrl: 'https://static.example.com/repl_20240807',
 			currentUrl: 'https://app.example.com/editor',
-			sql: { wasmUrl: '/assets/sql-wasm.wasm' },
+			sql: { wasmUrl: '/assets/sql-wasm.wasm', workspaceFiles },
 			createWorker: () => new mockState.FakeWorker() as unknown as Worker
 		});
 
@@ -761,7 +762,8 @@ describe('additional language server workers', () => {
 				dialect: 'sqlite',
 				moduleUrl: 'https://static.example.com/repl_20240807/wasm-sqlite/runtime.mjs',
 				wasmUrl: '/assets/sql-wasm.wasm',
-				duckdbBundles: undefined
+				duckdbBundles: undefined,
+				workspaceFiles
 			}
 		});
 
@@ -769,6 +771,7 @@ describe('additional language server workers', () => {
 	});
 
 	it('starts DuckDB with DuckDB wasm bundles', async () => {
+		const workspaceFiles = [{ path: 'schema.duckdb', content: 'CREATE TABLE t(n int)' }];
 		const duckdbBundles = {
 			mvp: {
 				mainModule: '/duckdb-mvp.wasm',
@@ -778,7 +781,7 @@ describe('additional language server workers', () => {
 		const handle = await getDuckDbLanguageServer({
 			rootUrl: 'https://static.example.com/repl_20240807',
 			currentUrl: 'https://app.example.com/editor',
-			sql: { duckdbBundles },
+			sql: { duckdbBundles, workspaceFiles },
 			createWorker: () => new mockState.FakeWorker() as unknown as Worker
 		});
 
@@ -791,7 +794,8 @@ describe('additional language server workers', () => {
 				dialect: 'duckdb',
 				moduleUrl: 'https://static.example.com/repl_20240807/wasm-duckdb/runtime.mjs',
 				wasmUrl: undefined,
-				duckdbBundles
+				duckdbBundles,
+				workspaceFiles
 			}
 		});
 

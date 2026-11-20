@@ -5,13 +5,14 @@ import {
 import type { EditorLanguageServerOptions, EditorLanguageServerRuntimeOptions } from '../types.js';
 import type { DuckDBBundles } from '../types.js';
 import { createWorkerLanguageServerClient, type LanguageServerStatus } from '../worker-client.js';
-import type { SqlLanguageServerDialect } from './service.js';
+import type { SqlLanguageServerDialect, SqlWorkerOptions } from './service.js';
 
 export interface SqlLanguageServerConfig {
 	dialect?: SqlLanguageServerDialect;
 	moduleUrl?: string;
 	wasmUrl?: string;
 	duckdbBundles?: DuckDBBundles;
+	workspaceFiles?: SqlWorkerOptions['workspaceFiles'];
 }
 
 export interface SqlLanguageServerOptions extends EditorLanguageServerRuntimeOptions {
@@ -47,7 +48,8 @@ export async function getSqlLanguageServer(
 			dialect,
 			moduleUrl: resolveModuleUrl(options, dialect, hostOptions?.currentUrl),
 			wasmUrl: config.wasmUrl,
-			duckdbBundles: config.duckdbBundles
+			duckdbBundles: config.duckdbBundles,
+			workspaceFiles: config.workspaceFiles
 		},
 		onStatus: hostOptions?.onStatus,
 		lifecycle: {
@@ -69,7 +71,8 @@ export async function getDuckDbLanguageServer(
 			dialect: 'duckdb',
 			moduleUrl: resolveDuckDbLanguageServerModuleUrl(options, hostOptions?.currentUrl),
 			wasmUrl: config.wasmUrl,
-			duckdbBundles: config.duckdbBundles
+			duckdbBundles: config.duckdbBundles,
+			workspaceFiles: config.workspaceFiles
 		},
 		onStatus: hostOptions?.onStatus,
 		lifecycle: {

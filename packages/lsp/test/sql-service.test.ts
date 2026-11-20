@@ -3,6 +3,165 @@ import { describe, expect, it, vi } from 'vitest';
 import { createSqlWorkerService, type LspDocument, type LspDocumentContext } from '../src/index.js';
 
 describe('createSqlWorkerService', () => {
+	it.each(['sqlite', 'duckdb'] as const)(
+		'invalidates %s diagnostics for a sibling schema edit',
+		async (dialect) => {
+			const main = {
+				uri: 'file:///workspace/nested/main.sql',
+				languageId: 'sql',
+				version: 1,
+				text: 'SELECT n FROM task'
+			};
+			const schema = {
+				...main,
+				uri: 'file:///workspace/schema%20copy.sql',
+				text: 'CREATE TABLE task(n)'
+			};
+			const docs = new Map([
+				[main.uri, main],
+				[schema.uri, schema]
+			]);
+			const ctx: LspDocumentContext = {
+				documents: docs,
+				publishDiagnostics: vi.fn(),
+				reportProgress: vi.fn()
+			};
+			const validate = vi.fn(() => []);
+			const service = createSqlWorkerService(async () => ({ validate }));
+			await service.initialize?.(
+				{
+					dialect,
+					workspaceFiles: [
+						{ path: 'schema copy.sql', content: 'stale' },
+						{ path: 'nested/main.sql', content: 'stale main' },
+						{ path: 'data.txt', content: 'not SQL' }
+					]
+				},
+				ctx
+			);
+			const registered =
+				dialect === 'duckdb'
+					? expect.arrayContaining([
+							{ path: 'data.txt', content: 'not SQL' },
+							{ path: 'nested/main.sql', content: main.text }
+						])
+					: undefined;
+			await service.diagnostics?.(main, ctx);
+			expect(validate).toHaveBeenLastCalledWith(
+				main.text,
+				'main.sql',
+				[{ path: 'schema copy.sql', content: schema.text }],
+				registered
+			);
+			docs.set(schema.uri, { ...schema, version: 2, text: 'CREATE TABLE task(next)' });
+			await service.diagnostics?.(main, ctx);
+			expect(validate).toHaveBeenLastCalledWith(
+				main.text,
+				'main.sql',
+				[{ path: 'schema copy.sql', content: 'CREATE TABLE task(next)' }],
+				registered
+			);
+			docs.delete(schema.uri);
+			await service.diagnostics?.(main, ctx);
+			expect(validate).toHaveBeenLastCalledWith(
+				main.text,
+				'main.sql',
+				[{ path: 'schema copy.sql', content: 'stale' }],
+				registered
+			);
+			await service.dispose?.();
+		}
+	);
+
+	it('locates the syntax token after preceding comments, strings and identifiers', async () => {
+		const ctx: LspDocumentContext = {
+			documents: new Map(),
+			publishDiagnostics: vi.fn(),
+			reportProgress: vi.fn()
+		};
+		const doc = {
+			uri: 'file:///main.sql',
+			languageId: 'sql',
+			version: 1,
+			text: '-- FROM\n/* FROM */ SELECT \'FROM\' AS "FROM";\nSELECT FROM t;'
+		};
+		const service = createSqlWorkerService(async () => ({
+			validate: () => [{ message: 'near "FROM": syntax error' }]
+		}));
+		await service.initialize?.({}, ctx);
+		expect((await service.diagnostics?.(doc, ctx))?.[0].range.start).toEqual({
+			line: 2,
+			character: 7
+		});
+		await service.dispose?.();
+	});
+
+	it('shares pending revisions and serializes database resets across revisions', async () => {
+		const ctx: LspDocumentContext = {
+			documents: new Map(),
+			publishDiagnostics: vi.fn(),
+			reportProgress: vi.fn()
+		};
+		const doc = (text: string): LspDocument => ({
+			uri: 'file:///workspace/main.sql',
+			languageId: 'sql',
+			version: 1,
+			text
+		});
+		let release!: () => void;
+		const gate = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const validate = vi.fn(async (text: string) => {
+			if (text === 'invalid') {
+				await gate;
+				return [{ message: 'test syntax error' }];
+			}
+			return [];
+		});
+		const service = createSqlWorkerService(async () => ({ validate }));
+		await service.initialize?.({}, ctx);
+		await service.diagnostics?.(doc('seed'), ctx);
+		const a = service.diagnostics?.(doc('invalid'), ctx);
+		const b = service.diagnostics?.(doc('invalid'), ctx);
+		const next = service.diagnostics?.(doc('new revision'), ctx);
+		await vi.waitFor(() => expect(validate).toHaveBeenCalledTimes(2));
+		release();
+		const [left, right, other] = await Promise.all([a, b, next]);
+		expect(left).toHaveLength(1);
+		expect(right).toEqual(left);
+		expect(other).toEqual([]);
+		expect(validate.mock.calls.map(([text]) => text)).toEqual([
+			'seed',
+			'invalid',
+			'new revision'
+		]);
+		await service.dispose?.();
+	});
+
+	it('retries after an engine validation rejects', async () => {
+		const ctx: LspDocumentContext = {
+			documents: new Map(),
+			publishDiagnostics: vi.fn(),
+			reportProgress: vi.fn()
+		};
+		const doc = {
+			uri: 'file:///main.sql',
+			languageId: 'sql',
+			version: 1,
+			text: 'SELECT FROM;'
+		};
+		const validate = vi
+			.fn()
+			.mockRejectedValueOnce(new Error('interrupted'))
+			.mockResolvedValue([{ message: 'syntax error' }]);
+		const service = createSqlWorkerService(async () => ({ validate }));
+		await service.initialize?.({}, ctx);
+		await expect(service.diagnostics?.(doc, ctx)).rejects.toThrow('interrupted');
+		expect(await service.diagnostics?.(doc, ctx)).toHaveLength(1);
+		await service.dispose?.();
+	});
+
 	it('uses the SQLite WASM URL exported by the static runtime module', async () => {
 		const stateKey = '__wasmIdleSqliteLspRuntimeTest';
 		const state = {
@@ -55,6 +214,7 @@ describe('createSqlWorkerService', () => {
 			selectedBundles: null as unknown,
 			instantiated: [] as Array<string | null>,
 			queried: '',
+			files: new Map<string, string>(),
 			closed: false,
 			terminated: false
 		};
@@ -77,6 +237,8 @@ describe('createSqlWorkerService', () => {
 						globalThis.${stateKey}.instantiated = [mainModule, pthreadWorker];
 					}
 					async reset() {}
+					async dropFiles() { globalThis.${stateKey}.files.clear(); }
+					async registerFileText(name, text) { globalThis.${stateKey}.files.set(name, text); }
 					async connect() {
 						return {
 							async query(code) { globalThis.${stateKey}.queried = code; },
@@ -107,8 +269,16 @@ describe('createSqlWorkerService', () => {
 		};
 
 		try {
-			await service.initialize?.({ dialect: 'duckdb', moduleUrl }, context);
-			expect(await service.diagnostics?.(document, context)).toEqual([]);
+			const csv = { ...document, uri: 'file:///workspace/input/data.csv', text: 'n\n42' };
+			const documents = new Map(context.documents);
+			const workspace = { ...context, documents };
+			documents.set(csv.uri, csv);
+			await service.initialize?.({ dialect: 'duckdb', moduleUrl }, workspace);
+			expect(await service.diagnostics?.(document, workspace)).toEqual([]);
+			expect(state.files.get('input/data.csv')).toBe(csv.text);
+			documents.delete(csv.uri);
+			expect(await service.diagnostics?.(document, workspace)).toEqual([]);
+			expect([...state.files]).toEqual([['main.sql', document.text]]);
 			await service.dispose?.();
 			expect(state.selectedBundles).toEqual({
 				mvp: {
