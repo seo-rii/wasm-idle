@@ -3927,6 +3927,33 @@
 		}
 	];
 
+	$effect(() => {
+		const monacoApi = Monaco;
+		const activeModel = model;
+		if (!monacoApi || !activeModel || !lspEnabled || typescriptLspStatus.state !== 'ready')
+			return;
+		const defaults =
+			activeLspLanguage === 'typescript'
+				? monacoApi.typescript.typescriptDefaults
+				: activeLspLanguage === 'javascript'
+					? monacoApi.typescript.javascriptDefaults
+					: undefined;
+		if (!defaults) return;
+		const previous = defaults.getDiagnosticsOptions();
+		const options = {
+			...previous,
+			noSyntaxValidation: true,
+			noSemanticValidation: true,
+			noSuggestionDiagnostics: true
+		};
+		defaults.setDiagnosticsOptions(options);
+		return () => {
+			if (!activeModel.isDisposed()) monacoApi.editor.setModelMarkers(activeModel, 'lsp', []);
+			if (defaults.getDiagnosticsOptions() === options)
+				defaults.setDiagnosticsOptions(previous);
+		};
+	});
+
 	function disableAllLspStatuses() {
 		for (const route of lspRoutes) route.setStatus({ state: 'disabled' });
 	}
