@@ -48,6 +48,18 @@ describe('asynchronous workspace import destination', () => {
 		expect(python.map((file) => file.path)).toEqual(['main.py']);
 	});
 
+	it('protects in-place edits during a backup read while allowing additive imports', () => {
+		const files = [{ path: 'draft.txt', content: 'original' }];
+		const destination = captureWorkspaceImportDestination(() => ({ language: 'CPP', files }));
+		files[0].content = 'typed while reading';
+		expect(() => destination.assertBackupUnedited()).toThrow(WorkspaceImportCancelled);
+		expect(() => destination.assertCurrent()).not.toThrow();
+		files[0].content = 'original';
+		expect(() => destination.assertBackupUnedited()).not.toThrow();
+		files[0].path = 'renamed.txt';
+		expect(() => destination.assertBackupUnedited()).toThrow(WorkspaceImportCancelled);
+	});
+
 	it('cancels when the same language is restored into a different workspace array', () => {
 		let files = [{ path: 'main.py', content: 'old' }];
 		const destination = captureWorkspaceImportDestination(() => ({
