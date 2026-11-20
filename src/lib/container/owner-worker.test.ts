@@ -275,6 +275,8 @@ describe('application-owned container worker', () => {
 			expect(f.resize).toHaveBeenCalledExactlyOnceWith(90, 30);
 			f.send(7, 'shellResize', [0, 30]);
 			expect(await f.response(7)).toMatchObject({ type: 'error' });
+			f.send(9, 'shellSetDirectory', ['C']);
+			expect(await f.response(9)).toMatchObject({ type: 'result' });
 			f.send(8, 'shellWrite', ['after exit']);
 			expect(await f.response(8)).toMatchObject({
 				type: 'error',

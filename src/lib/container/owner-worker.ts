@@ -525,8 +525,15 @@ export function serveContainerWorker(options: ContainerWorkerOptions): {
 		}
 		if (method === 'shellSetDirectory') {
 			await shellStarting;
-			if (!shell || shellClosed || !shellControl) throw new Error('Shell is not running');
-			return await shellControl.requestDirectory(language);
+			if (shellClosed || shellInputClosed) return;
+			if (!shell || !shellControl) throw new Error('Shell is not running');
+			try {
+				await shellControl.requestDirectory(language);
+			} catch (error) {
+				if ((shellClosed || shellInputClosed) && (error as Error)?.name === 'AbortError')
+					return;
+				throw error;
+			}
 		}
 		if (method === 'shellSuspend' || method === 'shellResume') {
 			await shellStarting;
