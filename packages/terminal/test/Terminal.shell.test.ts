@@ -343,6 +343,31 @@ describe('Terminal host shell binding', () => {
 		expect(shell.binding.write).not.toHaveBeenCalled();
 	});
 
+	it('keeps the owner interrupt active after the reserved input queue is flushed', async () => {
+		const running = deferred<boolean>();
+		const shell = createShell();
+		const sandbox = createSandbox();
+		vi.mocked(sandbox.run).mockImplementation(async (_source, prepare) =>
+			prepare ? true : await running.promise
+		);
+		const { terminal } = await mountTerminal(shell.binding, sandbox);
+		const interrupt = vi.fn();
+		const release = terminal.reserveInput!(interrupt);
+		const run = terminal.run('C', 'source');
+		await vi.waitFor(() => expect(sandbox.run).toHaveBeenCalledTimes(2));
+		renderer.selection = 'selected output';
+		dispatchKey(new KeyboardEvent('keydown', { ctrlKey: true, key: 'c' }), '\u0003');
+		expect(interrupt).not.toHaveBeenCalled();
+		renderer.selection = '';
+		dispatchKey(new KeyboardEvent('keydown', { ctrlKey: true, key: 'c' }), '\u0003');
+		expect(interrupt).toHaveBeenCalledOnce();
+		expect(sandbox.kill).not.toHaveBeenCalled();
+		expect(shell.binding.interrupt).not.toHaveBeenCalled();
+		running.resolve(true);
+		await run;
+		release();
+	});
+
 	it('does not report shell output as Run readiness and preserves sandbox stop controls', async () => {
 		const running = deferred<boolean>();
 		const shell = createShell();
