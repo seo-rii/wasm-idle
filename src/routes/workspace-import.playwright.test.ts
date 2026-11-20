@@ -399,6 +399,28 @@ describe('workspace import browser integration', () => {
 		}
 	);
 	it(
+		'retires the manual share URL when a ZIP replaces the workspace',
+		browserOptions,
+		async () => {
+			await withImportPage(async (page) => {
+				await page.evaluate(() =>
+					Object.defineProperty(navigator, 'clipboard', { value: undefined })
+				);
+				await page.getByTitle('Copy share link').click();
+				const field = page.getByRole('textbox', { name: 'Share URL' });
+				await field.waitFor();
+				await page.locator('input[type="file"]').setInputFiles({
+					name: 'independent.zip',
+					mimeType: 'application/zip',
+					buffer: Buffer.from(zipSync({ 'new.txt': strToU8('different project') }))
+				});
+				await page.locator('.file-tab.active[title="new.txt"]').waitFor();
+				await field.waitFor({ state: 'detached' });
+			});
+		}
+	);
+
+	it(
 		'keeps previous language projects and arguments out of a shared ZIP workspace',
 		browserOptions,
 		async () => {

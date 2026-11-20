@@ -104,7 +104,7 @@
 	import { migrateLegacyWorkspaceFile } from './workspaceMigration';
 	import { normalizeWorkspaceTabs, validateWorkspaceSnapshot } from './workspaceSnapshot';
 	import { preserveUnrestoredWorkspace, type UnrestoredWorkspace } from './workspaceRecovery';
-	import { copyWorkspaceShare } from './workspaceShare';
+	import { copyWorkspaceShare, isNavigableWorkspaceShare } from './workspaceShare';
 	import { serializeWorkspaceBackup } from './workspaceBackup';
 	import { requestWorkspaceArchive, type WorkspaceArchiveRequest } from './workspaceArchive';
 	import { stageWorkspaceImport } from './workspaceImport';
@@ -414,7 +414,8 @@
 		}
 	}
 	let saveStatus = $state('Ready');
-	let manualShareUrl = $state('');
+	let shareNotice = $state<{ workspace: string; url?: string } | null>(null);
+	let shareRequest = 0;
 	let unrestoredWorkspace = $state<UnrestoredWorkspace | null>(null);
 	let workspaceRecoveryKey = $state<string | null>(null);
 	let recoveryBackupDownloaded = $state(false);
@@ -2192,17 +2193,25 @@
 
 	async function shareWorkspace() {
 		if (!browser) return;
-		saveWorkspace();
-		const shareHash = `${SHARE_PREFIX}${encodeBase64Url(JSON.stringify(snapshot()))}`;
+		const workspace = editorWorkspaceKey;
+		const request = ++shareRequest;
+		shareNotice = null;
+		void saveWorkspace();
 		const url = consumeWorkspaceQueryInput(new URL(location.href));
-		url.hash = shareHash;
+		url.hash = SHARE_PREFIX + encodeBase64Url(JSON.stringify(snapshot()));
 		url.searchParams.delete('workspace');
-		if (await copyWorkspaceShare(url.toString(), navigator.clipboard)) {
-			manualShareUrl = '';
-			saveStatus =
-				url.toString().length > 60000 ? 'Share URL copied, but large' : 'Share URL copied';
+		const link = url.toString();
+		if (!isNavigableWorkspaceShare(link)) {
+			shareNotice = { workspace };
+			saveStatus = 'Workspace is too large for a share URL';
+			return;
+		}
+		const copied = await copyWorkspaceShare(link, navigator.clipboard);
+		if (request !== shareRequest || editorWorkspaceKey !== workspace) return;
+		if (copied) {
+			saveStatus = link.length > 60000 ? 'Share URL copied, but large' : 'Share URL copied';
 		} else {
-			manualShareUrl = url.toString();
+			shareNotice = { workspace, url: link };
 			saveStatus = 'Select and copy the share URL below';
 		}
 	}
@@ -5217,21 +5226,31 @@
 			</div>
 		{/if}
 	</div>
-	{#if manualShareUrl}
+	{#if shareNotice?.workspace === editorWorkspaceKey}
 		<div class="workspace-share">
-			<label class="args-chip">
-				<span>Share URL</span>
-				<input
-					aria-label="Share URL"
-					value={manualShareUrl}
-					readonly
-					onfocus={(event) => event.currentTarget.select()}
-					onclick={(event) => event.currentTarget.select()}
-				/>
-			</label>
-			<button class="tool-button" onclick={() => (manualShareUrl = '')}
-				>Close share URL</button
-			>
+			{#if shareNotice.url}
+				<label class="args-chip">
+					<span>Share URL</span>
+					<input
+						aria-label="Share URL"
+						value={shareNotice.url}
+						readonly
+						onfocus={(event) => event.currentTarget.select()}
+						onclick={(event) => event.currentTarget.select()}
+					/>
+				</label>
+				<button class="tool-button" onclick={() => (shareNotice = null)}
+					>Close share URL</button
+				>
+			{:else}
+				<span
+					>This workspace is too large for a share URL. Share its JSON backup instead.</span
+				>
+				<button class="tool-button" onclick={downloadWorkspaceBackup}
+					>Download workspace backup</button
+				>
+				<button class="tool-button" onclick={() => (shareNotice = null)}>Close</button>
+			{/if}
 		</div>
 	{/if}
 	<div class="workbench">

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { copyWorkspaceShare } from './workspaceShare';
+import { copyWorkspaceShare, isNavigableWorkspaceShare } from './workspaceShare';
 
 describe('share clipboard confirmation', () => {
 	it('reports success only after writing the complete URL', async () => {
@@ -35,4 +35,11 @@ describe('share clipboard confirmation', () => {
 			})
 		).toBe(false);
 	});
+});
+
+it('limits the complete serialized share URL before copying or presenting it', () => {
+	const origin = 'https://example.test/#workspace=';
+	const atLimit = origin.padEnd(2 * 1024 * 1024, 'a');
+	expect(isNavigableWorkspaceShare(atLimit)).toBe(true);
+	expect(isNavigableWorkspaceShare(atLimit + 'a')).toBe(false);
 });
