@@ -1066,6 +1066,13 @@ describe('workspace storage browser integration', () => {
 				const backupBytes = await readFile(backupPath);
 				const backup = JSON.parse(backupBytes.toString());
 				expect(backup.format).toBe(WORKSPACE_BACKUP_FORMAT);
+				expect(backup.snapshot.version).toBe(6);
+				const { CPP: active, ...inactive } = backup.snapshot.workspaces;
+				expect(active).toEqual({
+					activePath: backup.snapshot.activePath,
+					files: backup.snapshot.files,
+					openTabs: backup.snapshot.openTabs
+				});
 				expect(backup.snapshot.files).toContainEqual({
 					path: 'unsaved.txt',
 					content: 'latest unsaved content',
@@ -1080,7 +1087,7 @@ describe('workspace storage browser integration', () => {
 					await page.evaluate(() =>
 						JSON.parse(localStorage.getItem('wasm-idle:example-workspace:v3')!)
 					)
-				).toEqual(backup.snapshot);
+				).toEqual({ ...backup.snapshot, version: 7, workspaces: inactive });
 				await page.evaluate(() => history.replaceState(null, '', location.pathname));
 				await page.reload({ waitUntil: 'domcontentloaded' });
 				await page.locator('button[title="unsaved.txt"]').waitFor();
@@ -1205,10 +1212,18 @@ describe('workspace editor model lifetime', () => {
 					.poll(() =>
 						page.evaluate((key) => {
 							const snapshot = JSON.parse(localStorage.getItem(key) || '{}');
-							return snapshot.workspaces?.PYTHON?.files;
+							return {
+								version: snapshot.version,
+								language: snapshot.language,
+								files: snapshot.files
+							};
 						}, key)
 					)
-					.toMatchObject([{ path: 'main.py', content: source }]);
+					.toMatchObject({
+						version: 7,
+						language: 'PYTHON',
+						files: [{ path: 'main.py', content: source }]
+					});
 				await page.reload({ waitUntil: 'domcontentloaded' });
 				await ready.waitFor();
 				await page.locator('.file-tab.active[title="main.py"]').waitFor();
