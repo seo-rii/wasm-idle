@@ -3,6 +3,43 @@ import { describe, expect, it, vi } from 'vitest';
 import { createGraphqlWorkerService, type LspDocumentContext } from '../src/index.js';
 
 describe('createGraphqlWorkerService', () => {
+	it('selects only parsed declarations at their actual name positions', async () => {
+		const text = [
+			'"""',
+			'type Example { x: Int }',
+			'"""',
+			'type Query { hello: String }',
+			'',
+			'',
+			'type Book { title: String }'
+		].join('\r\n');
+		const document = { uri: 'file:///schema.graphql', version: 1, languageId: 'graphql', text };
+		const service = createGraphqlWorkerService();
+		const context = {
+			documents: new Map(),
+			reportProgress: vi.fn(),
+			publishDiagnostics: vi.fn()
+		};
+		const symbols = await service.documentSymbols?.(document, context);
+		expect(symbols).toEqual([
+			expect.objectContaining({
+				name: 'Query',
+				selectionRange: {
+					start: { line: 3, character: 5 },
+					end: { line: 3, character: 10 }
+				}
+			}),
+			expect.objectContaining({
+				name: 'Book',
+				range: { start: { line: 6, character: 0 }, end: { line: 6, character: 27 } },
+				selectionRange: { start: { line: 6, character: 5 }, end: { line: 6, character: 9 } }
+			})
+		]);
+		expect(await service.documentSymbols?.({ ...document, text: 'query {' }, context)).toEqual(
+			[]
+		);
+	});
+
 	it('uses the GraphQL parser and schema validator for diagnostics', async () => {
 		const service = createGraphqlWorkerService();
 		const context: LspDocumentContext = {
