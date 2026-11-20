@@ -8,7 +8,7 @@ import { mergeContainerWorkspace, sameWorkspaceFiles } from '$lib/playground/con
 import type { WorkspaceFile } from './workspaceCodec';
 import { runInNewContext } from 'node:vm';
 import { stripTypeScriptTypes } from 'node:module';
-import { normalizeWorkspaceTabs } from './workspaceSnapshot';
+import { normalizeWorkspaceTabs, serializeStoredWorkspace } from './workspaceSnapshot';
 import { compile, parse } from 'svelte/compiler';
 import { SvelteSet } from 'svelte/reactivity';
 import { describe, expect, it, vi } from 'vitest';
@@ -572,7 +572,13 @@ describe('shared workspace refresh scheduling', () => {
 			createSharedWorkspaceUrl: () => new URL('https://example.test/?workspace=copy'),
 			workspaceStorageKey: () => 'copy',
 			createDefaultLanguageWorkspaces: () => ({}),
-			snapshot: (project: { files: WorkspaceFile[] }) => project,
+			serializeStoredWorkspace,
+			snapshot: (project: { files: WorkspaceFile[] }, workspaces: object) => ({
+				...project,
+				language: context.language,
+				version: 6,
+				workspaces
+			}),
 			applySnapshot: (project: { files: WorkspaceFile[] }) => {
 				context.files = project.files;
 			},
@@ -615,6 +621,7 @@ describe('shared workspace refresh scheduling', () => {
 		await upload();
 		expect(JSON.parse(entries.get('source')!).files).toEqual(original);
 		expect(JSON.parse(entries.get('copy')!)).toMatchObject({
+			version: 7,
 			activePath: '',
 			files: [],
 			openTabs: []
