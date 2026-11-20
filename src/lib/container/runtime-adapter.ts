@@ -22,7 +22,7 @@ import type {
 	SandboxRuntimeAssets
 } from '../playground/sandbox.js';
 import type { SandboxExecutionOptions } from '../playground/options.js';
-import { decodeWorkspaceText, workspaceFileFromBytes } from '../../routes/workspaceCodec.js';
+import { decodeWorkspaceText, workspaceFileFromBytes } from './workspace.js';
 import type {
 	ContainerWorkerEvent,
 	ContainerWorkspaceDelta,
