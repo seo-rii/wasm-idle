@@ -710,7 +710,7 @@ function bindRuntimeAssets(
 	};
 	installBoundarySinks();
 	return new Proxy(sandbox, {
-		get(target, prop, receiver) {
+		get(target, prop) {
 			if (prop === 'runtimeAssets') return runtimeAssets;
 			if (prop === 'trustProfile') return trustProfile;
 			if (prop === 'output') return outputSink;
@@ -890,10 +890,10 @@ function bindRuntimeAssets(
 					);
 				};
 			}
-			const value = Reflect.get(target, prop, receiver);
+			const value = Reflect.get(target, prop);
 			return typeof value === 'function' ? value.bind(target) : value;
 		},
-		set(target, prop, value, receiver) {
+		set(target, prop, value) {
 			if (prop === 'output') {
 				outputSink = typeof value === 'function' ? value : undefined;
 				installBoundarySinks();
@@ -904,7 +904,7 @@ function bindRuntimeAssets(
 				installBoundarySinks();
 				return true;
 			}
-			return Reflect.set(target, prop, value, receiver);
+			return Reflect.set(target, prop, value);
 		}
 	}) as BoundSandbox;
 }
