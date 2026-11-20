@@ -22,6 +22,48 @@ class FakeWorkerScope {
 }
 
 describe('startWorkerLanguageServer', () => {
+	it('waits for service disposal once across shutdown and exit', async () => {
+		const scope = new FakeWorkerScope();
+		let release!: () => void;
+		const dispose = vi.fn(
+			() =>
+				new Promise<void>((resolve) => {
+					release = resolve;
+				})
+		);
+		startWorkerLanguageServer({ name: 'test', dispose }, scope);
+		scope.dispatch({ jsonrpc: '2.0', id: 42, method: 'shutdown' });
+		scope.dispatch({ jsonrpc: '2.0', method: 'exit' });
+		await vi.waitFor(() => expect(dispose).toHaveBeenCalledOnce());
+		expect(scope.messages).not.toContainEqual({ jsonrpc: '2.0', id: 42, result: null });
+		release();
+		await vi.waitFor(() =>
+			expect(scope.messages).toContainEqual({ jsonrpc: '2.0', id: 42, result: null })
+		);
+		scope.dispatch({ jsonrpc: '2.0', method: 'exit' });
+		expect(dispose).toHaveBeenCalledOnce();
+	});
+
+	it('releases partially initialized resources on exit and suppresses a late ready message', async () => {
+		const scope = new FakeWorkerScope();
+		let finish!: () => void;
+		const initialize = vi.fn(
+			() =>
+				new Promise<void>((resolve) => {
+					finish = resolve;
+				})
+		);
+		const dispose = vi.fn();
+		startWorkerLanguageServer({ name: 'test', initialize, dispose }, scope);
+		scope.dispatch({ type: 'init' });
+		await vi.waitFor(() => expect(initialize).toHaveBeenCalledOnce());
+		scope.dispatch({ jsonrpc: '2.0', method: 'exit' });
+		expect(dispose).not.toHaveBeenCalled();
+		finish();
+		await vi.waitFor(() => expect(dispose).toHaveBeenCalledOnce());
+		expect(scope.messages).not.toContainEqual({ type: 'ready' });
+	});
+
 	it('accepts Monaco didChange notifications that arrive before didOpen', async () => {
 		const source = '<?php\nfunction main() {\n';
 		const scope = new FakeWorkerScope();

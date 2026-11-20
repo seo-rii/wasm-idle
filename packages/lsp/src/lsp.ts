@@ -107,7 +107,12 @@ export function positionAt(text: string, offset: number): LspPosition {
 	let line = 0;
 	let lineStart = 0;
 	for (let index = 0; index < bounded; index += 1) {
-		if (text.charCodeAt(index) === 10) {
+		const code = text.charCodeAt(index);
+		if (code === 13 || code === 10) {
+			if (code === 13 && text.charCodeAt(index + 1) === 10) {
+				if (index + 1 === bounded) return { line, character: index - lineStart };
+				index++;
+			}
 			line += 1;
 			lineStart = index + 1;
 		}
@@ -116,18 +121,18 @@ export function positionAt(text: string, offset: number): LspPosition {
 }
 
 export function offsetAt(text: string, position: LspPosition): number {
-	const targetLine = Math.max(0, position.line);
+	if (position.line < 0) return 0;
+	const lineBreaks = /\r\n|[\r\n]/g;
 	let line = 0;
-	let offset = 0;
-	while (line < targetLine && offset < text.length) {
-		const next = text.indexOf('\n', offset);
-		if (next === -1) return text.length;
-		offset = next + 1;
-		line += 1;
+	let start = 0;
+	while (line < position.line) {
+		if (!lineBreaks.exec(text)) return text.length;
+		start = lineBreaks.lastIndex;
+		line++;
 	}
-	const lineEnd = text.indexOf('\n', offset);
-	const end = lineEnd === -1 ? text.length : lineEnd;
-	return Math.min(offset + Math.max(0, position.character), end);
+	if (position.character <= 0) return start;
+	const end = lineBreaks.exec(text)?.index ?? text.length;
+	return Math.min(start + position.character, end);
 }
 
 export function applyContentChanges(text: string, changes: ContentChange[]) {
@@ -174,12 +179,14 @@ export function startWorkerLanguageServer(
 	let initialized = false;
 	let ready = false;
 	let shutdown = false;
+	let initialization: Promise<void> | undefined;
+	let disposal: Promise<void> | undefined;
 	let debug = false;
 	let fallbackProgress = 0;
 
 	const send = (message: unknown) => scope.postMessage(message);
 	const sendProgress = (stage: string, loaded?: number, total?: number) => {
-		if (ready) return;
+		if (ready || shutdown) return;
 		if (isProgressValue(loaded) && isProgressValue(total) && total > 0) {
 			fallbackProgress = Math.max(fallbackProgress, progressRatio(loaded, total, 0.95));
 			send({ type: 'progress', stage, loaded, total });
@@ -264,6 +271,12 @@ export function startWorkerLanguageServer(
 		pendingDiagnostics.clear();
 	};
 
+	const dispose = () => {
+		shutdown = true;
+		clearDiagnosticWork();
+		return (disposal ??= Promise.resolve(initialization).then(() => service.dispose?.()));
+	};
+
 	const scheduleDiagnostics = (document: LspDocument) => {
 		if (!service.diagnostics || shutdown) return;
 		const version = (diagnosticVersions.get(document.uri) || 0) + 1;
@@ -298,6 +311,10 @@ export function startWorkerLanguageServer(
 		const id = message.id ?? null;
 		const params = message.params || {};
 		try {
+			if (shutdown && message.method !== 'shutdown') {
+				respondError(id, -32600, 'Language server has shut down');
+				return;
+			}
 			switch (message.method) {
 				case 'initialize':
 					respond(id, {
@@ -316,8 +333,7 @@ export function startWorkerLanguageServer(
 					});
 					return;
 				case 'shutdown':
-					shutdown = true;
-					clearDiagnosticWork();
+					await dispose();
 					respond(id, null);
 					return;
 			}
@@ -375,15 +391,14 @@ export function startWorkerLanguageServer(
 
 	const handleNotification = async (message: JsonRpcMessage) => {
 		const params = message.params || {};
+		if (shutdown) return;
 		switch (message.method) {
 			case 'initialized':
 				return;
 			case 'exit':
-				clearDiagnosticWork();
-				if (!shutdown) {
-					await service.dispose?.();
-				}
-				shutdown = true;
+				await dispose().catch((error) => {
+					if (debug) console.error('Language server disposal failed', error);
+				});
 				return;
 			case 'textDocument/didOpen': {
 				const textDocument = params.textDocument;
@@ -452,7 +467,7 @@ export function startWorkerLanguageServer(
 		};
 		if (!message || typeof message !== 'object') return;
 		if (message.type === 'init') {
-			if (initialized) return;
+			if (initialized || shutdown) return;
 			initialized = true;
 			const initOptions = message.options as { debug?: unknown } | null | undefined;
 			debug = !!initOptions && typeof initOptions === 'object' && initOptions.debug === true;
@@ -460,13 +475,15 @@ export function startWorkerLanguageServer(
 				console.debug(`[wasm-idle:lsp-worker:${service.name}] init`);
 			}
 			sendProgress('startup', 0, 1);
-			void Promise.resolve()
+			initialization = Promise.resolve()
 				.then(() => {
+					if (shutdown) return;
 					if (message.persistentAssets)
 						configureWorkerLanguageToolPersistentAssets(message.persistentAssets);
 					return service.initialize?.(message.options, context);
 				})
 				.then(() => {
+					if (shutdown) return;
 					sendProgress('ready', 1, 1);
 					ready = true;
 					send({ type: 'ready' });
