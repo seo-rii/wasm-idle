@@ -20,6 +20,28 @@ it('reflects supplied-file deletions and renames while preserving generated outp
 	expect(runtime.runPython('open("subdir/output.txt").read()')).toBe('generated');
 }, 120_000);
 
+it('replaces emptied workspace directories while retaining generated directories and outputs', async () => {
+	const runtime = await loadPyodide();
+	const fs = runtime.FS;
+	const sync = createPythonWorkspaceFiles(fs);
+	fs.mkdir('user_empty');
+	sync([
+		{ path: 'assets/nested/preset.txt', content: '42' },
+		{ path: 'resources/input', content: 'first' },
+		{ path: 'renamed/input', content: 'first' }
+	]);
+	fs.writeFile('resources/generated', 'keep');
+	fs.unlink('renamed/input');
+	fs.rmdir('renamed');
+	fs.mkdir('renamed');
+	sync([{ path: 'assets', content: '43' }]);
+	expect(runtime.runPython("open('assets').read()")).toBe('43');
+	expect(runtime.runPython("open('resources/generated').read()")).toBe('keep');
+	expect(fs.stat('user_empty').mode).toBe(fs.stat('renamed').mode);
+	expect(() => sync([{ path: 'resources', content: 'must not overwrite output' }])).toThrow();
+	expect(() => sync([{ path: 'renamed', content: 'must not replace user directory' }])).toThrow();
+}, 120_000);
+
 it('removes both imported-module state and its deleted supplied source on a reused runtime', async () => {
 	const runtime = await loadPyodide();
 	const writeFiles = createPythonWorkspaceFiles(runtime.FS);

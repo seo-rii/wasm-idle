@@ -3,13 +3,13 @@ import type { PyodideInterface } from 'pyodide';
 // Pyodide exposes these helpers; older Emscripten FS declarations omit them.
 type WorkspaceFilesystem = PyodideInterface['FS'] & {
 	analyzePath(path: string): { exists: boolean };
-	mkdirTree(path: string): void;
 };
 
 /** Own only supplied files; generated files and directories survive later runs. */
 export function createPythonWorkspaceFiles(fs: PyodideInterface['FS']) {
 	const workspaceFs = fs as WorkspaceFilesystem;
 	const writtenPaths = new Set<string>();
+	const createdDirectories = new Map<string, number>();
 	return (files: { path: string; content: string }[]) => {
 		const root = fs.cwd().replace(/\/$/, '');
 		const currentPaths = new Set(files.map((file) => `${root}/${file.path}`));
@@ -21,9 +21,30 @@ export function createPythonWorkspaceFiles(fs: PyodideInterface['FS']) {
 			}
 			writtenPaths.delete(path);
 		}
+		const requiredDirectories = new Set<string>();
 		for (const file of files) {
-			const directory = file.path.split('/').slice(0, -1).join('/');
-			if (directory) workspaceFs.mkdirTree(directory);
+			let parent = root;
+			for (const component of file.path.split('/').slice(0, -1)) {
+				parent += `/${component}`;
+				requiredDirectories.add(parent);
+			}
+		}
+		// A directory created for an input may now need to become a regular file.
+		for (const path of [...createdDirectories.keys()].sort((a, b) => b.length - a.length)) {
+			const exists = workspaceFs.analyzePath(path).exists;
+			if (!exists || fs.lstat(path).ino !== createdDirectories.get(path)) {
+				createdDirectories.delete(path);
+			} else if (!requiredDirectories.has(path) && fs.readdir(path).length === 2) {
+				fs.rmdir(path);
+				createdDirectories.delete(path);
+			}
+		}
+		for (const directory of requiredDirectories) {
+			if (workspaceFs.analyzePath(directory).exists) continue;
+			fs.mkdir(directory);
+			createdDirectories.set(directory, fs.lstat(directory).ino);
+		}
+		for (const file of files) {
 			fs.writeFile(file.path, file.content);
 			// Retain ownership even when a later write in this operation fails.
 			writtenPaths.add(`${root}/${file.path}`);
