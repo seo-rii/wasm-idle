@@ -703,9 +703,7 @@
 						(file) =>
 							file.path !== activePath &&
 							!isBinaryWorkspaceFile(file) &&
-							(language === 'DUCKDB'
-								? /\.(sql|duckdb)$/iu.test(file.path)
-								: file.path.endsWith('.sql'))
+							(language === 'DUCKDB' || file.path.endsWith('.sql'))
 					)
 					.map(({ path, content }) => ({ path, content }))
 			: []

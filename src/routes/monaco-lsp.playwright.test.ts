@@ -303,7 +303,13 @@ const lspBrowserCases: LspBrowserCase[] = [
 		fileName: 'main.duckdb',
 		source: 'SELECT FROM task;\n',
 		validSource: 'SELECT n FROM task;\n',
-		workspaceFiles: [{ path: 'schema.sql', content: 'CREATE TABLE task(n INTEGER);' }],
+		workspaceFiles: [
+			{
+				path: 'schema.sql',
+				content: "CREATE TABLE task AS SELECT * FROM read_csv('data.csv');"
+			},
+			{ path: 'data.csv', content: 'n\n42\n' }
+		],
 		errorLine: 1,
 		timeoutMs: 240_000
 	},

@@ -49,6 +49,8 @@ interface DuckDBConnection {
 interface DuckDBDatabase {
 	instantiate(mainModule: string, pthreadWorker: string | null): Promise<void>;
 	reset(): Promise<void>;
+	dropFiles(): Promise<unknown>;
+	registerFileText(name: string, text: string): Promise<void>;
 	connect(): Promise<DuckDBConnection>;
 	terminate(): Promise<void>;
 }
@@ -77,7 +79,8 @@ export interface SqlEngine {
 	validate(
 		code: string,
 		fileName: string,
-		setupFiles?: readonly SqlWorkspaceFile[]
+		setupFiles?: readonly SqlWorkspaceFile[],
+		workspaceFiles?: readonly SqlWorkspaceFile[]
 	): Promise<SqlEngineDiagnostic[]> | SqlEngineDiagnostic[];
 	dispose?: () => void | Promise<void>;
 }
@@ -229,12 +232,19 @@ async function loadSqlJsEngine(options: SqlWorkerOptions): Promise<SqlEngine> {
 		await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
 
 		return {
-			async validate(code, _fileName, setupFiles = []) {
+			async validate(code, _fileName, setupFiles = [], workspaceFiles = []) {
 				if (!code.trim()) return [];
 				let connection: Awaited<ReturnType<typeof db.connect>> | null = null;
 				let setupFile: string | undefined;
 				try {
 					await db.reset();
+					// Native database reset leaves the worker's virtual file registrations intact.
+					await db.dropFiles();
+					for (const file of workspaceFiles) {
+						setupFile = file.path;
+						await db.registerFileText(file.path, file.content);
+					}
+					setupFile = undefined;
 					connection = await db.connect();
 					for (const file of setupFiles) {
 						setupFile = file.path;
@@ -308,7 +318,7 @@ async function loadSqlJsEngine(options: SqlWorkerOptions): Promise<SqlEngine> {
 						}
 					}
 				} catch (error) {
-					// On a prepare error sql.js retains the suffix beginning at the failed statement.
+					// On a prepare error the iterator retains the suffix beginning at the failed statement.
 					return [
 						{
 							message: error instanceof Error ? error.message : String(error),
@@ -373,6 +383,11 @@ export function createSqlWorkerService(
 				if (open.uri.startsWith(root))
 					files.set(uriToPath(open.uri).slice(rootPath.length), open.text);
 			}
+			files.set(active, text);
+			const workspaceFiles =
+				dialect === 'duckdb'
+					? Array.from(files, ([path, content]) => ({ path, content }))
+					: undefined;
 			files.delete(active);
 			const setupFiles = Array.from(files)
 				.filter(([path]) =>
@@ -380,13 +395,14 @@ export function createSqlWorkerService(
 				)
 				.map(([path, content]) => ({ path, content }));
 			if (dialect === 'duckdb') setupFiles.sort((a, b) => a.path.localeCompare(b.path));
-			const key = JSON.stringify([dialect, uri, text, setupFiles]);
+			const key = JSON.stringify([dialect, uri, workspaceFiles ?? [text, setupFiles]]);
 			if (cached?.key === key) return cached.result;
 			const result = pending.then(async () => {
 				const diagnostics = await current.validate(
 					text,
 					active.split('/').pop() || 'main.sql',
-					setupFiles
+					setupFiles,
+					workspaceFiles
 				);
 				return diagnostics.map((diagnostic) => diagnosticFor(text, diagnostic));
 			});

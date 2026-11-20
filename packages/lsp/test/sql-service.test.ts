@@ -39,20 +39,36 @@ describe('createSqlWorkerService', () => {
 				},
 				ctx
 			);
+			const registered =
+				dialect === 'duckdb'
+					? expect.arrayContaining([
+							{ path: 'data.txt', content: 'not SQL' },
+							{ path: 'nested/main.sql', content: main.text }
+						])
+					: undefined;
 			await service.diagnostics?.(main, ctx);
-			expect(validate).toHaveBeenLastCalledWith(main.text, 'main.sql', [
-				{ path: 'schema copy.sql', content: schema.text }
-			]);
+			expect(validate).toHaveBeenLastCalledWith(
+				main.text,
+				'main.sql',
+				[{ path: 'schema copy.sql', content: schema.text }],
+				registered
+			);
 			docs.set(schema.uri, { ...schema, version: 2, text: 'CREATE TABLE task(next)' });
 			await service.diagnostics?.(main, ctx);
-			expect(validate).toHaveBeenLastCalledWith(main.text, 'main.sql', [
-				{ path: 'schema copy.sql', content: 'CREATE TABLE task(next)' }
-			]);
+			expect(validate).toHaveBeenLastCalledWith(
+				main.text,
+				'main.sql',
+				[{ path: 'schema copy.sql', content: 'CREATE TABLE task(next)' }],
+				registered
+			);
 			docs.delete(schema.uri);
 			await service.diagnostics?.(main, ctx);
-			expect(validate).toHaveBeenLastCalledWith(main.text, 'main.sql', [
-				{ path: 'schema copy.sql', content: 'stale' }
-			]);
+			expect(validate).toHaveBeenLastCalledWith(
+				main.text,
+				'main.sql',
+				[{ path: 'schema copy.sql', content: 'stale' }],
+				registered
+			);
 			await service.dispose?.();
 		}
 	);
@@ -198,6 +214,7 @@ describe('createSqlWorkerService', () => {
 			selectedBundles: null as unknown,
 			instantiated: [] as Array<string | null>,
 			queried: '',
+			files: new Map<string, string>(),
 			closed: false,
 			terminated: false
 		};
@@ -220,6 +237,8 @@ describe('createSqlWorkerService', () => {
 						globalThis.${stateKey}.instantiated = [mainModule, pthreadWorker];
 					}
 					async reset() {}
+					async dropFiles() { globalThis.${stateKey}.files.clear(); }
+					async registerFileText(name, text) { globalThis.${stateKey}.files.set(name, text); }
 					async connect() {
 						return {
 							async query(code) { globalThis.${stateKey}.queried = code; },
@@ -250,8 +269,16 @@ describe('createSqlWorkerService', () => {
 		};
 
 		try {
-			await service.initialize?.({ dialect: 'duckdb', moduleUrl }, context);
-			expect(await service.diagnostics?.(document, context)).toEqual([]);
+			const csv = { ...document, uri: 'file:///workspace/input/data.csv', text: 'n\n42' };
+			const documents = new Map(context.documents);
+			const workspace = { ...context, documents };
+			documents.set(csv.uri, csv);
+			await service.initialize?.({ dialect: 'duckdb', moduleUrl }, workspace);
+			expect(await service.diagnostics?.(document, workspace)).toEqual([]);
+			expect(state.files.get('input/data.csv')).toBe(csv.text);
+			documents.delete(csv.uri);
+			expect(await service.diagnostics?.(document, workspace)).toEqual([]);
+			expect([...state.files]).toEqual([['main.sql', document.text]]);
 			await service.dispose?.();
 			expect(state.selectedBundles).toEqual({
 				mvp: {
