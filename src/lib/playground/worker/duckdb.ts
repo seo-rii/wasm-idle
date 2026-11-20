@@ -39,10 +39,15 @@ async function loadDuckDB(moduleUrl: string, log: boolean) {
 // Logical type identifiers in the Arrow IPC schema returned by the loaded DuckDB bundle.
 const arrowDecimal = 7;
 const arrowDate = 8;
+const arrowTimestamp = 10;
+const nanosPerUnit = [1_000_000_000n, 1_000_000n, 1_000n, 1n];
+const nanosPerDay = 86_400_000_000_000n;
 
 interface ArrowFieldType {
 	typeId: number;
 	scale?: number;
+	unit?: number;
+	timezone?: string;
 }
 
 function formatDecimal(value: unknown, scale: number) {
@@ -54,18 +59,36 @@ function formatDecimal(value: unknown, scale: number) {
 	return `${negative ? '-' : ''}${digits.slice(0, -scale)}.${digits.slice(-scale)}`;
 }
 
-function formatDate(milliseconds: number) {
-	const day = Math.round(milliseconds / 86_400_000);
-	// DuckDB reserves the ends of its date range for the SQL infinity literals.
-	if (day === 2_147_483_647) return 'infinity';
-	if (day === -2_147_483_647) return '-infinity';
+function calendarDate(day: number) {
 	// Gregorian months and leap years repeat every 400 years. Reduce into the JS Date
 	// range before extracting UTC components, including for DuckDB's extended years.
 	const cycles = Math.floor(day / 146_097);
 	const inCycle = new Date((day - cycles * 146_097) * 86_400_000);
 	const year = inCycle.getUTCFullYear() + cycles * 400;
 	const label = String(year > 0 ? year : 1 - year).padStart(4, '0');
-	return `${label}${inCycle.toISOString().slice(4, 10)}${year > 0 ? '' : ' (BC)'}`;
+	return { date: label + inCycle.toISOString().slice(4, 10), era: year > 0 ? '' : ' (BC)' };
+}
+
+function formatDate(milliseconds: number) {
+	const day = Math.round(milliseconds / 86_400_000);
+	if (day === 2_147_483_647) return 'infinity';
+	if (day === -2_147_483_647) return '-infinity';
+	const { date, era } = calendarDate(day);
+	return date + era;
+}
+
+function formatTimestamp(ticks: bigint, unit: number, timezone?: string) {
+	if (ticks === 9_223_372_036_854_775_807n) return 'infinity';
+	if (ticks === -9_223_372_036_854_775_807n) return '-infinity';
+	const nanos = ticks * nanosPerUnit[unit];
+	const time = ((nanos % nanosPerDay) + nanosPerDay) % nanosPerDay;
+	const { date, era } = calendarDate(Number((nanos - time) / nanosPerDay));
+	const seconds = Number(time / 1_000_000_000n);
+	const clock = [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60]
+		.map((part) => String(part).padStart(2, '0'))
+		.join(':');
+	const fraction = String(time % 1_000_000_000n).padStart(9, '0').replace(/0+$/, '');
+	return date + ' ' + clock + (fraction ? '.' + fraction : '') + (timezone ? '+00' : '') + era;
 }
 
 function stringifyCell(value: unknown, type: ArrowFieldType) {
@@ -83,18 +106,28 @@ function formatTable(table: {
 	numCols: number;
 	numRows: number;
 	schema: { fields: { name: string; type: ArrowFieldType }[] };
-	getChildAt: (column: number) => { get: (row: number) => unknown } | null;
+	getChildAt: (column: number) => {
+		get: (row: number) => unknown;
+		isValid: (row: number) => boolean;
+		toArray: () => ArrayLike<bigint>;
+	} | null;
 }) {
 	if (!table.numCols) return '';
 	const fields = table.schema.fields;
-	const vectors = fields.map((_, index) => table.getChildAt(index));
+	const readers = fields.map(({ type }, index) => {
+		const vector = table.getChildAt(index);
+		if (vector && type.typeId === arrowTimestamp && type.unit !== undefined) {
+			// Arrow's get() converts timestamps to floating-point milliseconds.
+			const ticks = vector.toArray();
+			const unit = type.unit;
+			return (row: number) =>
+				vector.isValid(row) ? formatTimestamp(ticks[row], unit, type.timezone) : 'NULL';
+		}
+		return (row: number) => stringifyCell(vector?.get(row), type);
+	});
 	const lines = [fields.map((field) => field.name).join('\t')];
 	for (let row = 0; row < table.numRows; row++) {
-		lines.push(
-			vectors
-				.map((vector, index) => stringifyCell(vector?.get(row), fields[index].type))
-				.join('\t')
-		);
+		lines.push(readers.map((read) => read(row)).join('\t'));
 	}
 	return `${lines.join('\n')}\n`;
 }
