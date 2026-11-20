@@ -19,6 +19,23 @@ describe('workspace JSON boundary', () => {
 		}
 	});
 
+	it('restores literal shell paths and bytes without changing legacy separator handling', () => {
+		const raw = { path: 'names\\one.txt', pathStyle: 'posix', content: 'literal' };
+		const nested = { path: 'names/one.txt', content: 'nested' };
+		const snapshot = {
+			files: [raw, nested, { path: 'report:2026', content: 'note', pathStyle: 'posix' }],
+			activePath: raw.path,
+			openTabs: [raw.path, nested.path]
+		};
+		expect(() => validateWorkspaceSnapshot(snapshot)).not.toThrow();
+		expect(() =>
+			validateWorkspaceSnapshot({ files: [{ ...raw, pathStyle: undefined }, nested] })
+		).toThrow();
+		for (const path of ['/absolute', 'a/../b', 'a//b', 'a/./b', 'a\0b']) {
+			expect(() => validateWorkspaceSnapshot({ files: [{ ...raw, path }] })).toThrow();
+		}
+	});
+
 	it.each([
 		null,
 		[],

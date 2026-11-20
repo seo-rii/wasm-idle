@@ -13,6 +13,7 @@ const { URI } = createRequire(import.meta.url)('monaco-editor/esm/vs/base/common
 describe('workspace model URI serialization', () => {
 	it.each([
 		'main%20draft.ts',
+		'names\\one.txt',
 		'main%23draft.ts',
 		'main#draft.ts',
 		'main?draft.ts',

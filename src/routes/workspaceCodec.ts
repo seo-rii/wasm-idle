@@ -1,6 +1,8 @@
 /** Serializable editor files. Missing encoding is accepted for older snapshots. */
 export interface WorkspaceFile {
 	path: string;
+	/** Set when a terminal filename must be interpreted literally on restore. */
+	pathStyle?: 'posix';
 	content: string;
 	encoding?: 'utf-8' | 'data-url';
 }

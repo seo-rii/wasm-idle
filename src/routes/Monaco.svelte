@@ -2714,8 +2714,7 @@
 		)
 	);
 	const normalizedFilePath = $derived(
-		(filePath || `main.${language || 'txt'}`).replace(/\\/g, '/').replace(/^\/+/, '') ||
-			'main.txt'
+		(filePath || `main.${language || 'txt'}`).replace(/^\/+/, '') || 'main.txt'
 	);
 	const editorSetting = $derived<IMonacoSetting>({
 		automaticLayout: true,
