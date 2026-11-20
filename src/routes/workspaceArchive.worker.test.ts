@@ -379,6 +379,19 @@ describe('workspace archive worker', () => {
 		}
 	);
 
+	it('imports files when an archiver includes the current directory as an entry', () => {
+		const entries: Array<[string, string]> = [
+			['./', ''],
+			['./main.py', 'from src.helper import answer'],
+			['./src/', ''],
+			['./src/helper.py', 'answer = 42']
+		];
+		expect(extractWorkspaceArchive(entryArchive(entries))).toEqual([
+			{ path: 'main.py', content: 'from src.helper import answer', encoding: 'utf-8' },
+			{ path: 'src/helper.py', content: 'answer = 42', encoding: 'utf-8' }
+		]);
+	});
+
 	it('validates directory paths before skipping their entries', () => {
 		expect(() =>
 			extractWorkspaceArchive(
