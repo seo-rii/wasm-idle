@@ -107,7 +107,12 @@ export function positionAt(text: string, offset: number): LspPosition {
 	let line = 0;
 	let lineStart = 0;
 	for (let index = 0; index < bounded; index += 1) {
-		if (text.charCodeAt(index) === 10) {
+		const code = text.charCodeAt(index);
+		if (code === 13 || code === 10) {
+			if (code === 13 && text.charCodeAt(index + 1) === 10) {
+				if (index + 1 === bounded) return { line, character: index - lineStart };
+				index++;
+			}
 			line += 1;
 			lineStart = index + 1;
 		}
@@ -116,18 +121,18 @@ export function positionAt(text: string, offset: number): LspPosition {
 }
 
 export function offsetAt(text: string, position: LspPosition): number {
-	const targetLine = Math.max(0, position.line);
+	if (position.line < 0) return 0;
+	const lineBreaks = /\r\n|[\r\n]/g;
 	let line = 0;
-	let offset = 0;
-	while (line < targetLine && offset < text.length) {
-		const next = text.indexOf('\n', offset);
-		if (next === -1) return text.length;
-		offset = next + 1;
-		line += 1;
+	let start = 0;
+	while (line < position.line) {
+		if (!lineBreaks.exec(text)) return text.length;
+		start = lineBreaks.lastIndex;
+		line++;
 	}
-	const lineEnd = text.indexOf('\n', offset);
-	const end = lineEnd === -1 ? text.length : lineEnd;
-	return Math.min(offset + Math.max(0, position.character), end);
+	if (position.character <= 0) return start;
+	const end = lineBreaks.exec(text)?.index ?? text.length;
+	return Math.min(start + position.character, end);
 }
 
 export function applyContentChanges(text: string, changes: ContentChange[]) {
