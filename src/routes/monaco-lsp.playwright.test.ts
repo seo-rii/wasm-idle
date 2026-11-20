@@ -365,6 +365,10 @@ const lspBrowserCases: LspBrowserCase[] = [
 		label: 'TypeScript',
 		fileName: 'main.ts',
 		source: 'const n: number = "not a number";\nconsole.log(n);\n',
+		validSource:
+			'import type { Value } from "./types/value";\nconst n: Value = 42;\nconsole.log(n);\n',
+		workspaceFiles: [{ path: 'types/value.ts', content: 'export type Value = number;' }],
+		errorLine: 1,
 		aliases: ['ts'],
 		expectedResponses: ['/lsp/typescript-libs.json.gz'],
 		assertNoPreEnableRequests: ['/lsp/typescript-libs.json.gz']

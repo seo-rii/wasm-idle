@@ -779,6 +779,21 @@
 			? runtimeAssets.typescript?.libUrl
 			: undefined
 	);
+	const typescriptLspExtraLibs = $derived(
+		typescriptLspLibUrl
+			? Object.fromEntries(
+					files
+						.filter(
+							(file) =>
+								file.path !== activePath &&
+								isRuntimeWorkspacePath(file.path) &&
+								!isBinaryWorkspaceFile(file) &&
+								/\.(?:[cm]?[jt]s|[jt]sx)$/iu.test(file.path)
+						)
+						.map((file) => ['/workspace/' + file.path, file.content])
+				)
+			: {}
+	);
 	const compact = $derived(examplePaneWidth > 0 && examplePaneWidth <= 760);
 	const activeFile = $derived(files.find((file) => file.path === activePath) ?? files[0]);
 	const activeFileIsBinary = $derived(!!activeFile && isBinaryWorkspaceFile(activeFile));
@@ -5589,6 +5604,7 @@
 							{fennelLspBaseUrl}
 							{pythonLspBaseUrl}
 							{typescriptLspLibUrl}
+							{typescriptLspExtraLibs}
 							breakpoints={debug.effectiveBreakpoints}
 							debugLocals={debug.locals}
 							{debugLanguage}

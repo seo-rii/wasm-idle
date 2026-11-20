@@ -2438,6 +2438,7 @@
 		rustLspEnabled?: boolean;
 		rustLspCompilerUrl?: string;
 		typescriptLspLibUrl?: string;
+		typescriptLspExtraLibs?: Record<string, string>;
 		zigLspEnabled?: boolean;
 		zigLspCompilerUrl?: string;
 		zigLspStdlibUrl?: string;
@@ -2577,6 +2578,7 @@
 		rustLspEnabled = false,
 		rustLspCompilerUrl,
 		typescriptLspLibUrl,
+		typescriptLspExtraLibs = {},
 		zigLspEnabled = false,
 		zigLspCompilerUrl,
 		zigLspStdlibUrl,
@@ -2832,7 +2834,8 @@
 			activeLspLanguage === 'rescript' ? JSON.stringify(rescriptLspWorkspaceFiles) : '',
 			activeLspLanguage,
 			lspEnabled ? 'lsp-on' : 'lsp-off',
-			typescriptLspLibUrl || ''
+			typescriptLspLibUrl || '',
+			typescriptLspLibUrl ? JSON.stringify(typescriptLspExtraLibs) : ''
 		].join('\n')
 	);
 	const activeLspStatusView = $derived.by<MonacoLspStatusView | null>(() => {
@@ -3508,21 +3511,23 @@
 			languages: ['typescript', 'javascript'],
 			isEnabled: () => true,
 			setStatus: (status) => (typescriptLspStatus = status),
-			load: async (currentUrl) => {
+			load: async (currentUrl, signal) => {
 				const { getJavaScriptLanguageServer, getTypeScriptLanguageServer } =
 					await import('@wasm-idle/lsp/typescript/client');
-				if (activeLspLanguage === 'javascript') {
-					return await getJavaScriptLanguageServer({
-						currentUrl,
-						javascript: { libUrl: typescriptLspLibUrl },
-						onStatus: (status) => (typescriptLspStatus = status)
-					});
-				}
-				return await getTypeScriptLanguageServer({
+				const config = {
+					libUrl: typescriptLspLibUrl,
+					extraLibs: $state.snapshot(typescriptLspExtraLibs)
+				};
+				const options = {
 					currentUrl,
-					typescript: { libUrl: typescriptLspLibUrl },
-					onStatus: (status) => (typescriptLspStatus = status)
-				});
+					signal,
+					onStatus: (status: LanguageServerStatus) => {
+						if (!signal?.aborted) typescriptLspStatus = status;
+					}
+				};
+				return activeLspLanguage === 'javascript'
+					? getJavaScriptLanguageServer({ ...options, javascript: config })
+					: getTypeScriptLanguageServer({ ...options, typescript: config });
 			}
 		},
 		{
