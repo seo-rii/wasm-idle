@@ -250,6 +250,10 @@ function readArchiveEntries(source: Uint8Array): ArchiveEntry[] {
 			source.subarray(localNameEnd, payload),
 			source.subarray(nameEnd, extraEnd)
 		);
+		// Unix and macOS producers place the POSIX file type in the upper mode bits.
+		const creator = source[offset + 5];
+		if ((creator === 3 || creator === 19) && u32(offset + 38) >>> 28 === 0xa)
+			throw new Error(`Workspace ZIP cannot import symbolic link: ${path}`);
 		if (rawPaths.has(rawPath)) throw new Error(`ZIP contains duplicate entry path: ${rawPath}`);
 		if (resolvedPaths.has(path)) throw new Error(`ZIP contains duplicate entry path: ${path}`);
 		rawPaths.add(rawPath);

@@ -65,6 +65,19 @@ describe('workspace archive worker', () => {
 		expect(() => extractWorkspaceArchive(entryArchive([['src/', '']]))).toThrow(/no files/u);
 	});
 
+	it.each([3, 19])('rejects symbolic links from ZIP creator %i before import', (os) => {
+		const regularFile = { os, attrs: 0o100644 * 0x10000 };
+		const link = { os, attrs: 0o120777 * 0x10000 };
+		const archive = zipSync({
+			'original.txt': [strToU8('hello'), regularFile],
+			'alias.txt': [strToU8('original.txt'), link]
+		});
+		expect(() => extractWorkspaceArchive(archive)).toThrow(/symbolic link: alias\.txt/u);
+		expect(
+			extractWorkspaceArchive(zipSync({ 'original.txt': [strToU8('hello'), regularFile] }))[0]
+		).toMatchObject({ path: 'original.txt', content: 'hello' });
+	});
+
 	it('decodes unmarked Unix UTF-8 and legacy CP437 filenames', () => {
 		const latin = Uint8Array.of(0x63, 0x61, 0x66, 0x82, 0x2e, 0x68);
 		for (const os of [0, 3]) {
