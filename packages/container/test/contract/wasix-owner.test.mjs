@@ -39,6 +39,28 @@ test('owner RPC preserves real WASI binary streaming with simultaneous stdout/st
   } finally { await client.dispose(); }
 });
 
+test('a rejected start leaves the session available for a corrected invocation', { timeout: 30000 }, async () => {
+  const { client } = owner();
+  try {
+    await assert.rejects(client.startShell({ cwd: 'relative' }), { code: 'INVALID_ARGUMENT' });
+    const starting = client.startShell({ cwd: '/workspace' });
+    await assert.rejects(client.startShell(), { code: 'INVALID_ARGUMENT' });
+    const shell = await starting;
+    await shell.stdin.close();
+    assert.equal((await shell.exited).code, 0);
+    await assert.rejects(client.startShell(), { code: 'INVALID_ARGUMENT' });
+  } finally { await client.dispose(); }
+});
+
+test('the owner releases a startup reservation when its shell factory rejects', async () => {
+  let attempts = 0;
+  const { client } = owner({ async startShell() { throw new Error('attempt ' + ++attempts); } });
+  try {
+    await assert.rejects(client.startShell(), /attempt 1/);
+    await assert.rejects(client.startShell(), /attempt 2/);
+  } finally { await client.dispose(); }
+});
+
 test('owner filesystem compare-write protects editor bytes and backup/cache actions stay separate', { timeout: 30000 }, async () => {
   const fixture = owner(), { client, container } = fixture;
   try {

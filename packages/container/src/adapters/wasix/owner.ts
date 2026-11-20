@@ -155,7 +155,8 @@ export function serveContainerOwner(port: MessagePort, options: ContainerOwnerOp
           }, error => { stop.signal.removeEventListener('abort', abort); reject(error); });
           if (stop.signal.aborted) abort();
         });
-        shell = await starting;
+        try { shell = await starting; }
+        catch (error) { starting = undefined; throw error; }
         writer = shell.stdin.getWriter(); readers.push(shell.stdout.getReader(), shell.stderr.getReader());
         return { pid: shell.pid };
       }
@@ -260,8 +261,11 @@ export function createContainerOwnerClient(port: MessagePort, options: Container
       mkdir: (path: string) => call<void>('fs.mkdir', [path]), unlink: (path: string) => call<void>('fs.unlink', [path])
     }),
     async startShell(settings: ShellStartOptions = {}) {
-      if (started) return fail('INVALID_ARGUMENT', 'Each owner supports one SDK shell session'); started = true;
-      const result = await call<{ pid: number }>('shell.start', [settings], true);
+      if (started) return fail('INVALID_ARGUMENT', 'Each owner supports one SDK shell session');
+      started = true;
+      let result: { pid: number };
+      try { result = await call<{ pid: number }>('shell.start', [settings], true); }
+      catch (error) { started = false; throw error; }
       const output = (index: number) => new ReadableStream<Uint8Array>({
         async pull(controller) {
           try { const bytes = await call<Uint8Array | null>('shell.read', [index], true); if (bytes === null) controller.close(); else if (bytes instanceof Uint8Array && bytes.length <= CHUNK_BYTES) controller.enqueue(bytes); else throw new ContainerOwnerError('RESOURCE_LIMIT', 'Invalid owner output chunk'); }
