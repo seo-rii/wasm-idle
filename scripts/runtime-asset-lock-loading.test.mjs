@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { build } from 'esbuild';
+import { compileRuntimeAssetLockModule } from './compile-runtime-asset-lock-module.mjs';
 import { createCoreSourceAliasMap } from './core-source-aliases.mjs';
 import { loadBundledProfile } from './verify-pinned-runtime-assets.mjs';
 import {
@@ -89,6 +91,35 @@ test('default sync and lazy lookups retain identical frozen release receipts', a
 		),
 		renderRuntimeAssetVersion(api.RUNTIME_ASSET_LOCK)
 	);
+});
+
+test('the published ES module preserves every frozen receipt and tree-shakes a version-only import', async (t) => {
+	const directory = await mkdtemp(path.join(os.tmpdir(), 'core-release-receipts-'));
+	t.after(() => rm(directory, { recursive: true, force: true }));
+	const outfile = path.join(directory, 'receipts.mjs');
+	await compileRuntimeAssetLockModule(outfile);
+	const { RUNTIME_ASSET_LOCK: actual } = await import(pathToFileURL(outfile).href);
+	const { RUNTIME_ASSET_LOCK: expected } = await loadBundledProfile(
+		new URL('../packages/core/src/runtime-asset-lock.generated.ts', import.meta.url)
+	);
+	assert.deepEqual(actual, expected);
+	assert.ok(Object.isFrozen(actual) && Object.isFrozen(actual.assets));
+	for (const entry of Object.values(actual.assets)) {
+		assert.ok(Object.isFrozen(entry));
+		if (entry.layer) assert.ok(Object.isFrozen(entry.layer));
+	}
+	const versionOnly = await build({
+		stdin: {
+			contents: "export { WASM_IDLE_ASSET_VERSION } from './receipts.mjs'",
+			resolveDir: directory
+		},
+		bundle: true,
+		format: 'esm',
+		write: false
+	});
+	const result = versionOnly.outputFiles[0].text;
+	assert.ok(result.includes(actual.version));
+	assert.ok(!result.includes(Object.keys(actual.assets)[0]));
 });
 
 test('concurrent lazy lookups share pending work, propagate failure and retry', async () => {
