@@ -1018,6 +1018,7 @@ it(
 					"console.log('READY_FOR_INPUT');",
 					"console.log('FIRST=' + fs.readLineSync(0).trimEnd());",
 					"console.log('SECOND=' + fs.readLineSync(0).trimEnd());",
+					"console.log('NAV=' + fs.readLineSync(0).trimEnd());",
 					"console.log('WAIT_TO_STOP');",
 					'fs.readLineSync(0);'
 				].join('\n');
@@ -1055,6 +1056,14 @@ it(
 				await expect.poll(() => output.textContent()).toContain('FIRST=alpha');
 				await page.keyboard.press('Enter');
 				await expect.poll(() => output.textContent()).toContain('SECOND=beta\r\n');
+				await page.keyboard.type('one two');
+				await page.keyboard.press('Alt+b');
+				await page.keyboard.type('X');
+				await expect
+					.poll(async () => (await readShellScreen(page)).rows.filter(Boolean).at(-1))
+					.toBe('one Xtwo');
+				await page.keyboard.press('Enter');
+				await expect.poll(() => output.textContent()).toContain('NAV=one Xtwo\r\n');
 				await expect.poll(() => output.textContent()).toContain('WAIT_TO_STOP');
 				await page.keyboard.press('Control+c');
 				await expect

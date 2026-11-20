@@ -724,6 +724,16 @@
 	function handleInputKey(key: string) {
 		const characters = getInputCharacters(input);
 		switch (key) {
+			case 'Meta-b':
+			case 'Meta-f': {
+				const step = key === 'Meta-b' ? -1 : 1;
+				let position = inputCursor;
+				const adjacent = () => characters[step < 0 ? position - 1 : position];
+				const word = /[\p{L}\p{N}_]/u;
+				while (adjacent() && !word.test(adjacent())) position += step;
+				while (adjacent() && word.test(adjacent())) position += step;
+				return moveInputCursor(characters, position);
+			}
 			case 'D':
 				return moveInputCursor(characters, Math.max(0, inputCursor - 1));
 			case 'C':
@@ -1239,15 +1249,19 @@
 					}
 					let pendingText = '';
 					for (let i = 0; i < data.length;) {
-						// Match a complete CSI or SS3 key, including modifiers and unsupported keys.
+						// Consume the whole CSI, SS3 or Meta key, even when unsupported.
 						const escapeSequence =
 							data[i] === '\x1b' &&
-							/^\x1b(?:\[|O)([0-?]*)[ -/]*([@-~])/.exec(data.slice(i));
+							/^\x1b(?:(?:\[|O)([0-?]*)[ -/]*([@-~])|([ -~]))/.exec(data.slice(i));
 						if (escapeSequence) {
 							appendInputText(pendingText);
 							pendingText = '';
-							const [, parameters, final] = escapeSequence;
-							handleInputKey(final === '~' ? parameters.split(';')[0] + '~' : final);
+							const [, parameters, final, meta] = escapeSequence;
+							if (meta) handleInputKey(`Meta-${meta}`);
+							else
+								handleInputKey(
+									final === '~' ? parameters.split(';')[0] + '~' : final
+								);
 							i += escapeSequence[0].length;
 							continue;
 						}
