@@ -41,7 +41,7 @@
 		"tag": "latest"
 	},
 	"scripts": {
-		"build": "rm -rf dist && tsc -p tsconfig.json",
+		"build": "rm -rf dist && tsc -p tsconfig.json && node ../../scripts/compile-runtime-asset-lock-module.mjs",
 		"check": "tsc -p tsconfig.json --noEmit"
 	},
 	"dependencies": {
