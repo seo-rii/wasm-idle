@@ -160,6 +160,7 @@ export function sameWorkspaceContents(left: string | null, right: string | null)
 			return result;
 		};
 		const result = withoutSelection(compact);
+		delete result.sidebarOpen;
 		if (result.workspaces && typeof result.workspaces === 'object')
 			result.workspaces = Object.fromEntries(
 				Object.entries(result.workspaces).map(([id, project]) => [

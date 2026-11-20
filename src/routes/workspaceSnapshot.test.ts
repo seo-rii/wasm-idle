@@ -91,7 +91,12 @@ it('stores active file bodies once and accepts both the compact and older repres
 	expect(JSON.parse(stored)).toEqual({ ...original, version: 7, workspaces: { PYTHON: other } });
 	expect(() => validateWorkspaceSnapshot(JSON.parse(stored))).not.toThrow();
 	expect(sameWorkspaceContents(JSON.stringify(original), stored)).toBe(true);
-	const differentTab = { ...JSON.parse(stored), activePath: 'helper.h', openTabs: ['helper.h'] };
+	const differentTab = {
+		...JSON.parse(stored),
+		activePath: 'helper.h',
+		openTabs: ['helper.h'],
+		sidebarOpen: false
+	};
 	expect(sameWorkspaceContents(JSON.stringify(differentTab), stored)).toBe(true);
 	expect(sameWorkspaceContents(JSON.stringify({ ...differentTab, files: [] }), stored)).toBe(
 		false

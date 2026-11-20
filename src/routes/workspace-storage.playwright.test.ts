@@ -83,6 +83,26 @@ async function retrySaveAfterStorageError(page: Page) {
 }
 
 describe('workspace storage browser integration', () => {
+	it('retains a hidden file sidebar on desktop reload', browserOptions, async () => {
+		await withWorkspacePage(async (page, context, browserUrl) => {
+			await disableBrowserPrewarm(context);
+			await page.setViewportSize({ width: 1460, height: 940 });
+			await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
+			const ready = page.locator('#language-select[data-workspace-ready="true"]');
+			await ready.waitFor();
+			await page.getByRole('button', { name: 'Hide files', exact: true }).click();
+			await page.getByRole('button', { name: 'Save', exact: true }).click();
+			await page.locator('[data-workspace-save-state="saved"]').waitFor();
+			await page.reload({ waitUntil: 'domcontentloaded' });
+			await ready.waitFor();
+			await expect
+				.poll(() =>
+					page.getByRole('button', { name: 'Show files', exact: true }).isVisible()
+				)
+				.toBe(true);
+		});
+	});
+
 	it(
 		'restores saved Python bytecode options and defaults for an older backup',
 		browserOptions,
@@ -122,13 +142,11 @@ describe('workspace storage browser integration', () => {
 					activePath: 'older.py',
 					files: [{ path: 'older.py', content: 'print(1)' }]
 				};
-				await page
-					.locator('input[type=file]')
-					.setInputFiles({
-						name: 'old.json',
-						mimeType: 'application/json',
-						buffer: Buffer.from(JSON.stringify(older))
-					});
+				await page.locator('input[type=file]').setInputFiles({
+					name: 'old.json',
+					mimeType: 'application/json',
+					buffer: Buffer.from(JSON.stringify(older))
+				});
 				await page.locator('.file-tab.active[title="older.py"]').waitFor();
 				expect(await mode.inputValue()).toBe('checked-hash');
 			});

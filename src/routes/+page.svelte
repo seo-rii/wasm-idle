@@ -945,8 +945,9 @@
 		if (!examplePaneWidth) return;
 		const roomy = examplePaneWidth > 1200;
 		if (roomy === lastRoomyLayout) return;
+		const hasSavedLayout = lastRoomyLayout === null && typeof initialSelection?.snapshot?.sidebarOpen === 'boolean';
 		lastRoomyLayout = roomy;
-		sidebarOpen = roomy;
+		if (!hasSavedLayout) sidebarOpen = roomy;
 	});
 	let availableRustTargetTriples = $state<RustTargetTriple[]>(['wasm32-wasip1', 'wasm32-wasip2']);
 	let availableGoTargets = $state<GoTarget[]>(['wasip1/wasm']);
