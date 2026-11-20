@@ -11,6 +11,7 @@ import {
 	type LspDocument,
 	type LspDocumentContext,
 	type LspPosition,
+	type LspTextEdit,
 	type WorkerLanguageService
 } from '../lsp.js';
 
@@ -39,6 +40,11 @@ const basename = (value: string) => {
 
 const displayParts = (parts: readonly ts.SymbolDisplayPart[] | undefined) =>
 	ts.displayPartsToString(parts ? [...parts] : undefined);
+
+const rangeForSpan = (text: string, span: ts.TextSpan) => ({
+	start: positionAt(text, span.start),
+	end: positionAt(text, span.start + span.length)
+});
 
 const diagnosticSeverity = (category: ts.DiagnosticCategory): 1 | 2 | 3 | 4 => {
 	switch (category) {
@@ -258,11 +264,19 @@ export function createTypeScriptWorkerService(
 		completion(document, position) {
 			const fileName = normalizePath(uriToPath(document.uri));
 			const offset = offsetAt(document.text, position);
-			const completions = languageService.getCompletionsAtPosition(fileName, offset, {
+			const preferences: ts.UserPreferences = {
 				includeCompletionsForModuleExports: true,
-				includeInsertTextCompletions: true
-			});
+				includeCompletionsWithInsertText: true
+			};
+			const completions = languageService.getCompletionsAtPosition(
+				fileName,
+				offset,
+				preferences
+			);
 			if (!completions) return null;
+			const format = ts.getDefaultFormatCodeSettings(
+				document.text.includes('\r\n') ? '\r\n' : '\n'
+			);
 			return {
 				isIncomplete: false,
 				items: completions.entries.map((entry) => {
@@ -270,28 +284,42 @@ export function createTypeScriptWorkerService(
 						fileName,
 						offset,
 						entry.name,
-						undefined,
+						format,
 						entry.source,
-						undefined,
+						preferences,
 						entry.data
 					);
 					const replacementSpan = entry.replacementSpan ??
 						completions.optionalReplacementSpan ?? { start: offset, length: 0 };
+					let newText = entry.insertText ?? entry.name;
+					const additionalTextEdits: LspTextEdit[] = [];
+					const action = details?.codeActions?.find(
+						({ changes, commands }) =>
+							!commands?.length &&
+							changes.every((file) => !file.isNewFile && file.fileName === fileName)
+					);
+					for (const file of action?.changes ?? []) {
+						for (const change of file.textChanges) {
+							if (
+								!change.span.length &&
+								change.span.start === replacementSpan.start
+							) {
+								newText = change.newText + newText;
+							} else {
+								additionalTextEdits.push({
+									range: rangeForSpan(document.text, change.span),
+									newText: change.newText
+								});
+							}
+						}
+					}
 					return {
 						label: entry.name,
 						kind: completionKind(entry.kind),
 						sortText: entry.sortText,
 						insertText: entry.insertText,
-						textEdit: {
-							range: {
-								start: positionAt(document.text, replacementSpan.start),
-								end: positionAt(
-									document.text,
-									replacementSpan.start + replacementSpan.length
-								)
-							},
-							newText: entry.insertText ?? entry.name
-						},
+						textEdit: { range: rangeForSpan(document.text, replacementSpan), newText },
+						...(additionalTextEdits.length ? { additionalTextEdits } : {}),
 						detail: details ? displayParts(details.displayParts) : undefined,
 						documentation: details ? displayParts(details.documentation) : undefined
 					};
