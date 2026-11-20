@@ -528,7 +528,7 @@ export function serveContainerWorker(options: ContainerWorkerOptions): {
 			if (shellClosed || shellInputClosed) return;
 			if (!shell || !shellControl) throw new Error('Shell is not running');
 			try {
-				await shellControl.requestDirectory(language);
+				return await shellControl.requestDirectory(language);
 			} catch (error) {
 				if ((shellClosed || shellInputClosed) && (error as Error)?.name === 'AbortError')
 					return;

@@ -4,7 +4,11 @@ import type { PlaygroundBinding } from '../playground/sandbox.js';
 import type { ContainerWorkerRequest, ContainerWorkerResponse } from './protocol.js';
 import type { ContainerWorkerOptions } from './owner-worker.js';
 import type { BashProfileOptions } from './bash-profile.js';
-import { SHELL_CONTROL_ROUTE, SHELL_RESIZE_REQUEST } from './shell-control.js';
+import {
+	SHELL_CONTROL_REQUEST,
+	SHELL_CONTROL_ROUTE,
+	SHELL_RESIZE_REQUEST
+} from './shell-control.js';
 
 beforeEach(() => vi.resetModules());
 afterEach(() => {
@@ -135,16 +139,16 @@ async function shellInputFixture() {
 		close,
 		resize,
 		startShell,
-		acknowledgeResize() {
+		acknowledgeRequest(requestPath: string, cwd: string) {
 			const path = SHELL_CONTROL_ROUTE;
 			const fields = new TextDecoder()
-				.decode(container.fs.readFile(SHELL_RESIZE_REQUEST))
+				.decode(container.fs.readFile(requestPath))
 				.trim()
 				.split(' ');
 			onInvocation?.({
 				path,
 				argv: [path, ...fields, 'ok'],
-				cwd: '/workspace',
+				cwd,
 				env: [],
 				stdin: null,
 				stdout: null,
@@ -159,6 +163,26 @@ async function shellInputFixture() {
 }
 
 describe('application-owned container worker', () => {
+	it('completes a directory change after the running shell acknowledges its new cwd', async () => {
+		const f = await shellInputFixture();
+		try {
+			f.initialize();
+			await f.response(0);
+			f.send(1, 'shellStart');
+			await f.response(1);
+			f.send(2, 'shellSetDirectory', ['C']);
+			await vi.waitFor(() =>
+				expect(
+					new TextDecoder().decode(f.container.fs.readFile(SHELL_CONTROL_REQUEST))
+				).toMatch(/ C\n$/)
+			);
+			f.acknowledgeRequest(SHELL_CONTROL_REQUEST, '/workspace/C');
+			expect(await f.response(2)).toMatchObject({ type: 'result' });
+		} finally {
+			await f.owner.dispose();
+		}
+	});
+
 	it('allows cold prompt control to settle and promptly refuses a busy shell after input', async () => {
 		const f = await shellInputFixture();
 		try {
@@ -214,10 +238,10 @@ describe('application-owned container worker', () => {
 			expect(f.resize).toHaveBeenCalledOnce();
 			f.releaseWrite();
 			expect(await f.response(4)).toMatchObject({ type: 'result' });
-			f.acknowledgeResize();
+			f.acknowledgeRequest(SHELL_RESIZE_REQUEST, '/workspace');
 			expect(await f.response(2)).toMatchObject({ type: 'result' });
 			await vi.waitFor(() => expect(f.resize).toHaveBeenLastCalledWith(99, 29));
-			f.acknowledgeResize();
+			f.acknowledgeRequest(SHELL_RESIZE_REQUEST, '/workspace');
 			expect(await f.response(3)).toMatchObject({ type: 'result' });
 		} finally {
 			f.releaseWrite();
