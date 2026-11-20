@@ -98,12 +98,12 @@ describe('DuckDB worker', () => {
 			numCols: 2,
 			numRows: 1,
 			schema: {
-				fields: [{ name: 'label' }, { name: 'value' }]
+				fields: [
+					{ name: 'label', type: { typeId: 5 } },
+					{ name: 'value', type: { typeId: 2 } }
+				]
 			},
-			get: () => ({
-				label: 'factorial_plus_bonus',
-				value: 27n
-			})
+			getChildAt: (column: number) => ({ get: () => ['factorial_plus_bonus', 27n][column] })
 		});
 
 		await loadWorker();
@@ -194,6 +194,37 @@ describe('DuckDB worker', () => {
 			output: 'label\tvalue\nfactorial_plus_bonus\t27\n'
 		});
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
+	});
+
+	it('prints repeated headings by ordinal and formats exact Arrow decimals and UTC dates', async () => {
+		const fields = [
+			{ name: 'twin', type: { typeId: 7, scale: 4 } },
+			{ name: 'twin', type: { typeId: 8 } },
+			{ name: 'timestamp', type: { typeId: 10 } }
+		];
+		const columns = [
+			[-1n, 12345678901234567890123456789012345600n, 0n, null],
+			[Date.UTC(1960, 1, 29), Date.UTC(2024, 0, 2), null, 0],
+			[0, 1, 2, 3]
+		];
+		duckdbMock.query.mockResolvedValue({
+			numCols: fields.length,
+			numRows: 4,
+			schema: { fields },
+			getChildAt: (index: number) => ({ get: (row: number) => columns[index][row] })
+		});
+		await loadWorker();
+		await (globalThis as any).self.onmessage({ data: { code: 'SELECT ...' } });
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			output: [
+				'twin\ttwin\ttimestamp',
+				'-0.0001\t1960-02-29\t0',
+				'1234567890123456789012345678901234.5600\t2024-01-02\t1',
+				'0.0000\tNULL\t2',
+				'NULL\t1970-01-01\t3',
+				''
+			].join('\n')
+		});
 	});
 
 	it('does not report ready when a workspace setup query fails', async () => {

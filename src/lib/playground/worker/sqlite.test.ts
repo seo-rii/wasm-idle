@@ -81,6 +81,18 @@ SELECT 'factorial_plus_bonus=' || 27 AS result;`,
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
 	}, 15000);
 
+	it('prints the exact signed 64-bit integer range without changing the other SQLite types', async () => {
+		await loadWorker();
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: "SELECT 9007199254740993 AS n, 9223372036854775807 AS hi, -9223372036854775808 AS lo, 1.25 AS f, NULL AS missing, x'00ff' AS bytes;"
+			}
+		});
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			output: "n\thi\tlo\tf\tmissing\tbytes\n9007199254740993\t9223372036854775807\t-9223372036854775808\t1.25\tNULL\tx'00ff'\n"
+		});
+	});
+
 	it.each(['query.sql', 'reports/query.sql'])(
 		'loads auxiliary main.sql and excludes the active %s from setup',
 		async (activePath) => {
@@ -140,7 +152,9 @@ SELECT 'factorial_plus_bonus=' || 27 AS result;`,
 		);
 		expect(exec).toHaveBeenNthCalledWith(1, 'CREATE TABLE numbers(n INTEGER);');
 		expect(exec).toHaveBeenNthCalledWith(2, 'INSERT INTO numbers VALUES (5);');
-		expect(exec).toHaveBeenNthCalledWith(3, 'SELECT * FROM numbers;');
+		expect(exec).toHaveBeenNthCalledWith(3, 'SELECT * FROM numbers;', undefined, {
+			useBigInt: true
+		});
 		expect(exec.mock.invocationCallOrder[1]).toBeLessThan(
 			(globalThis as any).postMessage.mock.invocationCallOrder[readyCall]
 		);
