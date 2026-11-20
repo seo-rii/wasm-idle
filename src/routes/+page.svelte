@@ -2334,6 +2334,11 @@
 			}
 			let imported: string[] = [];
 			if (plan.kind === 'backup') {
+				// A recovery copy gets a fresh container. A healthy restore keeps the live Bash session.
+				const previous =
+					unrestoredWorkspace === null
+						? { ...languageWorkspaces, [language]: currentWorkspace() }
+						: null;
 				if (unrestoredWorkspace !== null) {
 					const copyUrl = createSharedWorkspaceUrl(new URL(location.href));
 					const copyKey = workspaceStorageKey(copyUrl);
@@ -2343,6 +2348,33 @@
 					unrestoredWorkspace = null;
 				}
 				applySnapshot(plan.backup, 'Workspace backup restored');
+				if (previous) {
+					const binding = playground;
+					const revision = editorWorkspaceRevision;
+					// The active editor publishes its own changes. Restore inactive diffs as well,
+					// including files removed by a backup that resets a project to its default.
+					const changed = playgroundLanguages.filter(
+						(project) =>
+							project !== language &&
+							!sameWorkspaceFiles(
+								previous[project].files,
+								languageWorkspaces[project].files
+							)
+					);
+					try {
+						await Promise.all(
+							changed.map((project) =>
+								publishContainerWorkspace(
+									project,
+									languageWorkspaces[project].files
+								)
+							)
+						);
+					} catch (error) {
+						if (binding === playground && revision === editorWorkspaceRevision)
+							saveStatus = `Workspace backup restored. Workspace sync failed: ${String(error)}`;
+					}
+				}
 				return;
 			} else if (plan.fromZip) {
 				imported = await openImportedZipWorkspace(plan.files, destination);

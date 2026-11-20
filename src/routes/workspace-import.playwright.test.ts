@@ -62,6 +62,103 @@ async function withImportPage(run: (page: Page) => Promise<void>) {
 
 describe('workspace import browser integration', () => {
 	it(
+		'publishes an imported backup to inactive language directories before Bash edits them',
+		browserOptions,
+		async () => {
+			await withImportPage(async (page) => {
+				const project = (files: { path: string; content: string }[]) => ({
+					activePath: files[0].path,
+					files,
+					openTabs: [files[0].path]
+				});
+				const cpp = project([{ path: 'main.cpp', content: 'int main() {}\n' }]);
+				const old = { path: 'notes.py', content: '# old source\n' };
+				const restored = { path: 'notes.py', content: '# restored source\n' };
+				const extra = { path: 'new.py', content: '# new file\n' };
+				const root = page.url();
+				const upload = (snapshot: object) =>
+					page.locator('input[type="file"]').setInputFiles({
+						name: 'workspace.json',
+						mimeType: 'application/json',
+						buffer: Buffer.from(
+							serializeWorkspaceBackup({ version: 6, lspEnabled: false, ...snapshot })
+						)
+					});
+				const pythonFiles = () =>
+					page.evaluate(async () => {
+						const host = window as Window & {
+							__wasmIdleContainer?: {
+								readWorkspace(
+									language: string
+								): Promise<{ path: string; content: string | Uint8Array }[]>;
+							};
+						};
+						const files = await host.__wasmIdleContainer!.readWorkspace('PYTHON');
+						return Object.fromEntries(
+							files.map(({ path, content }) => [
+								path,
+								typeof content === 'string'
+									? content
+									: new TextDecoder().decode(content)
+							])
+						);
+					});
+				const shellCommand = async (language: string, command: string) => {
+					const rows = page.locator('.terminal-shell .xterm-rows > div');
+					await expect
+						.poll(
+							async () =>
+								(await rows.allTextContents()).map((row) =>
+									row.replaceAll('\u00a0', ' ').trimEnd()
+								),
+							{ timeout: 45_000 }
+						)
+						.toContain(`~/${language} $`);
+					await page.locator('.terminal-shell .xterm-helper-textarea').focus();
+					await page.keyboard.type(command);
+					await page.keyboard.press('Enter');
+				};
+				await upload({ language: 'PYTHON', ...project([old]) });
+				await expect
+					.poll(pythonFiles, { timeout: 30_000 })
+					.toEqual({ 'notes.py': old.content });
+				await shellCommand('PYTHON', "BACKUP_NOTE='# via bash'");
+				await page.locator('#language-select').selectOption('CPP');
+				await upload({
+					language: 'CPP',
+					...cpp,
+					workspaces: { CPP: cpp, PYTHON: project([restored, extra]) }
+				});
+				await expect
+					.poll(pythonFiles, { timeout: 12_000 })
+					.toEqual({ 'notes.py': restored.content, 'new.py': extra.content });
+				await shellCommand('CPP', 'echo "$BACKUP_NOTE" >> /workspace/PYTHON/notes.py');
+				const appended = restored.content + '# via bash\n';
+				await expect
+					.poll(pythonFiles, { timeout: 20_000 })
+					.toEqual({ 'notes.py': appended, 'new.py': extra.content });
+				await page.getByRole('button', { name: 'Save', exact: true }).click();
+				await expect
+					.poll(() =>
+						page.evaluate(
+							() =>
+								JSON.parse(localStorage.getItem('wasm-idle:example-workspace:v3')!)
+									.workspaces.PYTHON.files
+						)
+					)
+					.toContainEqual(
+						expect.objectContaining({ path: 'notes.py', content: appended })
+					);
+				await upload({ language: 'CPP', ...cpp });
+				await expect
+					.poll(async () => Object.keys(await pythonFiles()), { timeout: 15_000 })
+					.toEqual(['main.py']);
+				expect(page.url()).toBe(root);
+			});
+		}
+	);
+
+	it(
 		'keeps uploaded binary bytes intact while adjacent text remains editable',
 		browserOptions,
 		async () => {
