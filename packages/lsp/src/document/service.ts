@@ -201,6 +201,24 @@ function markdownLinkRange(doc: TextDocument, block: MarkdownToken, href: string
 	}
 }
 
+function markdownCodeSpanEnd(source: string, from: number, end: number, token: MarkdownToken) {
+	const delimiters = /`+/gu;
+	delimiters.lastIndex = from;
+	let contentStart: number | undefined;
+	for (const run of source.matchAll(delimiters)) {
+		if (run.index >= end) break;
+		if (run[0] !== token.markup) continue;
+		if (contentStart !== undefined) {
+			// CommonMark normalizes line endings and may trim one space from each side of a code span.
+			const content = source.slice(contentStart, run.index).replace(/\r\n|[\r\n]/gu, ' ');
+			if (content === token.content || content === ` ${token.content} `)
+				return run.index + run[0].length;
+		}
+		contentStart = run.index + run[0].length;
+	}
+	return from;
+}
+
 const headingLevelFromToken = (token: MarkdownToken) => {
 	const match = /^h([1-6])$/u.exec(token.tag);
 	return match ? Number(match[1]) : 1;
@@ -276,19 +294,26 @@ const markdownDiagnostics = (document: LspDocument): LspDiagnostic[] => {
 	for (const token of tokens) {
 		if (token.type !== 'inline' || !token.map) continue;
 		let from = doc.offsetAt({ line: token.map[0], character: 0 });
+		const end = doc.offsetAt({ line: token.map[1], character: 0 });
+		let openLink: MarkdownToken | undefined;
 		for (const child of token.children || []) {
 			if (child.type === 'code_inline') {
-				const code = child.markup + child.content + child.markup;
-				const offset = document.text.indexOf(code, from);
-				if (offset >= from && doc.positionAt(offset).line < token.map[1])
-					from = offset + code.length;
+				from = markdownCodeSpanEnd(document.text, from, end, child);
+				continue;
 			}
-			if (child.type !== 'link_open') continue;
-			const href = linkHrefFromToken(child);
+			if (child.type === 'link_open') {
+				openLink = child;
+				continue;
+			}
+			// The source destination follows its label, including any inline code in it.
+			if (child.type !== 'link_close' || !openLink) continue;
+			const link = openLink;
+			openLink = undefined;
+			const href = linkHrefFromToken(link);
 			if (!href?.startsWith('#')) continue;
 			const slug = decodeMarkdownAnchor(href.slice(1));
 			if (headingSlugs.has(slug)) continue;
-			const definition = child.meta?.label && definitions.get(child.meta.label);
+			const definition = link.meta?.label && definitions.get(link.meta.label);
 			const range = markdownLinkRange(doc, definition || token, href, definition ? 0 : from);
 			if (range && !definition) from = doc.offsetAt(range.end);
 			diagnostics.push({

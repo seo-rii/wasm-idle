@@ -169,6 +169,19 @@ describe('document language worker service', () => {
 		]);
 	});
 
+	it.each(['`x`', '` x `', '`\nx\n`'])(
+		'keeps link destinations in order after the inline code label %j',
+		async (label) => {
+			const service = createDocumentWorkerService(),
+				ctx = context();
+			await service.initialize?.({ language: 'markdown' }, ctx);
+			const source = document('markdown', '[' + label + '](#a) [b](#b) `x`');
+			const doc = TextDocument.create(source.uri, 'markdown', 1, source.text);
+			const diagnostics = await service.diagnostics?.(source, ctx);
+			expect(diagnostics?.map(({ range }) => doc.getText(range))).toEqual(['#a', '#b']);
+		}
+	);
+
 	it('resolves heading anchors from inline text and disambiguates repeated slugs', async () => {
 		const service = createDocumentWorkerService(),
 			ctx = context();
