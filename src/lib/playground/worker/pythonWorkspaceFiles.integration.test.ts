@@ -59,6 +59,20 @@ it('removes both imported-module state and its deleted supplied source on a reus
 	expect(runtime.runPython('import generated\ngenerated.VALUE')).toBe(2);
 }, 120_000);
 
+it('keeps the current input directory until Python leaves it', async () => {
+	const runtime = await loadPyodide();
+	const sync = createPythonWorkspaceFiles(runtime.FS);
+	sync([{ path: 'owned/child/input.txt', content: 'first' }]);
+	runtime.runPython('import os\nos.chdir("owned/child")');
+	sync([]);
+	sync([{ path: 'next.txt', content: 'next' }]);
+	expect(runtime.runPython('open("next.txt").read()')).toBe('next');
+	expect(runtime.runPython('os.path.exists("input.txt")')).toBe(false);
+	runtime.runPython('os.chdir("../..")');
+	sync([]);
+	expect(runtime.runPython('os.path.exists("owned")')).toBe(false);
+}, 120_000);
+
 it('tracks absolute ownership if user code changes its cwd or removes an input', async () => {
 	const runtime = await loadPyodide();
 	const sync = createPythonWorkspaceFiles(runtime.FS);

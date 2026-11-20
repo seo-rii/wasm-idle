@@ -34,7 +34,11 @@ export function createPythonWorkspaceFiles(fs: PyodideInterface['FS']) {
 			const exists = workspaceFs.analyzePath(path).exists;
 			if (!exists || fs.lstat(path).ino !== createdDirectories.get(path)) {
 				createdDirectories.delete(path);
-			} else if (!requiredDirectories.has(path) && fs.readdir(path).length === 2) {
+			} else if (
+				path !== root &&
+				!requiredDirectories.has(path) &&
+				fs.readdir(path).length === 2
+			) {
 				fs.rmdir(path);
 				createdDirectories.delete(path);
 			}
