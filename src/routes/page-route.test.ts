@@ -44,6 +44,7 @@ it('moves structured breakpoints on rename and clears them on deletion and filen
 		openTabs: [main.path, other.path],
 		files: [main, other],
 		runningMode: null,
+		editorComponent: { prepareFileRename: vi.fn() },
 		debug,
 		prompt: () => 'renamed.py',
 		confirm: () => true,
@@ -63,6 +64,7 @@ it('moves structured breakpoints on rename and clears them on deletion and filen
 		fn();
 	};
 	action('renameActiveFile', 'duplicateActiveFile');
+	expect(state.editorComponent.prepareFileRename).toHaveBeenCalledWith('main.py', 'renamed.py');
 	debug.setSourcePath('/workspace/' + state.activePath);
 	expect(debug.structuredBreakpoints).toEqual(specs);
 	expect(debug.effectiveBreakpoints).toEqual([2]);

@@ -300,6 +300,7 @@
 		})
 	);
 
+	let editorComponent = $state<ReturnType<typeof Monaco>>();
 	let editor = $state<monaco.editor.IStandaloneCodeEditor | null>(null),
 		terminal = $state<TerminalControl | undefined>(undefined),
 		compilerDiagnostics = $state<CompilerDiagnostic[]>([]),
@@ -1914,6 +1915,12 @@
 			return;
 		}
 		const previousPath = file.path;
+		try {
+			editorComponent?.prepareFileRename(previousPath, nextPath);
+		} catch (error) {
+			saveStatus = `Could not rename file: ${error instanceof Error ? error.message : String(error)}`;
+			return;
+		}
 		// File actions are disabled during execution. Move the saved specifications before
 		// the editor switches its active debug source, including disabled and log breakpoints.
 		void debug.setStructuredBreakpoints(debug.structuredBreakpoints, `/workspace/${nextPath}`);
@@ -5453,6 +5460,7 @@
 				<div class="editor-surface">
 					{#key editorWorkspaceKey}
 						<Monaco
+							bind:this={editorComponent}
 							language={editorLanguage}
 							lspLanguage={monacoLspLanguage}
 							filePath={activePath || defaultPathForLanguage()}
