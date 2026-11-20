@@ -225,6 +225,32 @@ describe('application-owned container worker', () => {
 		}
 	});
 
+	it('streams an entire multiline paste before later shell input', async () => {
+		const f = await shellInputFixture();
+		try {
+			f.initialize();
+			await f.response(0);
+			f.send(1, 'shellStart');
+			await f.response(1);
+			const pasted = '가'.repeat(22000) + '\r\n';
+			f.send(2, 'shellWrite', [pasted]);
+			f.send(3, 'shellWrite', ['next']);
+			await vi.waitFor(() => expect(f.write).toHaveBeenCalledOnce());
+			f.releaseWrite();
+			expect(await f.response(2)).toMatchObject({ type: 'result' });
+			expect(await f.response(3)).toMatchObject({ type: 'result' });
+			expect(f.bytes.map((b) => b.length)).toEqual([65536, 465, 4]);
+			const decoder = new TextDecoder();
+			const delivered = f.bytes
+				.map((value) => decoder.decode(value, { stream: true }))
+				.join('');
+			expect(delivered + decoder.decode()).toBe(pasted.replace('\r\n', '\n') + 'next');
+		} finally {
+			f.releaseWrite();
+			await f.owner.dispose();
+		}
+	});
+
 	it('validates geometry and settles pending, queued and later resizes when Bash exits', async () => {
 		const f = await shellInputFixture();
 		try {
