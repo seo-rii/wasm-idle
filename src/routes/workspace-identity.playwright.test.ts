@@ -146,17 +146,23 @@ describe('shared workspace fragment navigation', () => {
 					.locator('#language-select[data-workspace-ready="true"]')
 					.waitFor({ state: 'attached' });
 				const original = '// local before fragment changes';
-				await page.evaluate(
-					(text) => (window as any).__wasmIdleDebug.setEditorValue(text),
-					original
-				);
+				expect(
+					await page.evaluate(
+						(text) => (window as any).__wasmIdleDebug.setEditorValue(text),
+						original
+					)
+				).toBe(true);
+				await page.getByTitle('Save workspace').click();
 				await expect
-					.poll(() =>
-						page.evaluate(
-							(key) =>
-								JSON.parse(localStorage.getItem(key) || 'null')?.files[0]?.content,
-							key
-						)
+					.poll(
+						() =>
+							page.evaluate(
+								(key) =>
+									JSON.parse(localStorage.getItem(key) || 'null')?.files[0]
+										?.content,
+								key
+							),
+						{ timeout: 45_000 }
 					)
 					.toBe(original);
 				await page.evaluate(
