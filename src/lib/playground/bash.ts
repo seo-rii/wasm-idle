@@ -1,3 +1,4 @@
+import type { WorkspaceFile } from '@wasm-idle/core';
 import {
 	resolveBashRuntimeAssetConfig,
 	type PlaygroundRuntimeAssets
@@ -77,7 +78,7 @@ type BashRunRequest = {
 	log: boolean;
 	programArgs: string[];
 	stdin?: string;
-	workspaceFiles: Array<{ path: string; content: string }>;
+	workspaceFiles: WorkspaceFile[];
 	workspaceLimits: WorkspaceLimits;
 };
 
@@ -160,7 +161,7 @@ class Bash implements Sandbox {
 		_code = '',
 		log = true,
 		_args: string[] = [],
-		options: SandboxExecutionOptions = {},
+		options: SandboxExecutionOptions<WorkspaceFile> = {},
 		progress?: SandboxProgress
 	): Promise<void> {
 		if (this.disposed) {
@@ -266,7 +267,7 @@ class Bash implements Sandbox {
 		log = true,
 		progress?: SandboxProgress,
 		args: string[] = [],
-		options: SandboxExecutionOptions = {}
+		options: SandboxExecutionOptions<WorkspaceFile> = {}
 	): Promise<boolean | string> {
 		if (this.disposed) {
 			return Promise.reject(

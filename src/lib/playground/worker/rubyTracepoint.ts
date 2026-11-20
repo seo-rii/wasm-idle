@@ -1,3 +1,4 @@
+import type { WorkspaceFile } from '@wasm-idle/core';
 import type { DebugSourceBreakpoints } from '../options';
 import { RUBY_DEBUG_PREVIEW } from './rubyDebugPreview';
 
@@ -7,7 +8,7 @@ export interface RubyTracepointOptions {
 	breakpoints: number[];
 	sourceBreakpoints?: DebugSourceBreakpoints[];
 	pauseOnEntry: boolean;
-	files: Array<{ path: string; content: string }>;
+	files: WorkspaceFile[];
 }
 
 /** Real CRuby TracePoint and Binding APIs; user source is passed unchanged as eval data. */
@@ -23,7 +24,7 @@ export async function executeRubyTracepoint(
 	for (const file of files) {
 		const digest = await crypto.subtle.digest(
 			'SHA-256',
-			new TextEncoder().encode(file.content)
+			typeof file.content === 'string' ? new TextEncoder().encode(file.content) : file.content.slice()
 		);
 		hashes[file.path] = [...new Uint8Array(digest)]
 			.map((byte) => byte.toString(16).padStart(2, '0'))

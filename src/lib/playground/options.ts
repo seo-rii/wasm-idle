@@ -2,6 +2,7 @@ import type {
 	DebugSourceBreakpoints,
 	DebugSteppingOptions,
 	ExecutionLimits,
+	WorkspaceFile,
 	WorkspaceLimits
 } from '@wasm-idle/core';
 
@@ -58,7 +59,7 @@ export interface SandboxWorkspaceFile {
 	content: string;
 }
 
-export interface SandboxExecutionOptions {
+export interface SandboxExecutionOptions<File extends WorkspaceFile = SandboxWorkspaceFile> {
 	/** Overrides instance/global persistent asset caching for this operation. */
 	persistentCache?: import('@wasm-idle/core').RuntimeAssetCacheOptions;
 	debugMode?: BrowserDebugMode;
@@ -76,7 +77,7 @@ export interface SandboxExecutionOptions {
 	workspaceLimits?: Partial<WorkspaceLimits>;
 	activePath?: string;
 	debugPath?: string;
-	workspaceFiles?: SandboxWorkspaceFile[];
+	workspaceFiles?: File[];
 	compileArgs?: string[];
 	programArgs?: string[];
 	/** Requested environment overrides; a runtime may reject unsupported options. */
@@ -109,7 +110,7 @@ const compileArgLanguages = new Set(['C', 'CPP', 'OBJC', 'OBJECTIVECXX']);
 export function resolveSandboxExecutionArgs(
 	language: string,
 	args: string[] = [],
-	options: SandboxExecutionOptions = {}
+	options: SandboxExecutionOptions<WorkspaceFile> = {}
 ): ResolvedSandboxExecutionArgs {
 	if (compileArgLanguages.has(language)) {
 		return {

@@ -464,6 +464,8 @@ describe('Bash outer worker bridge', () => {
 	it('validates both sides of the versioned protocol', () => {
 		expect(isBashHostToWorkerMessage(loadMessage)).toBe(true);
 		expect(isBashHostToWorkerMessage(runMessage)).toBe(true);
+		expect(isBashHostToWorkerMessage({ ...runMessage, workspaceFiles: [{ path: 'image', content: new Uint8Array([0, 255]) }] })).toBe(true);
+		expect(isBashHostToWorkerMessage({ ...runMessage, workspaceFiles: [{ path: 'image', content: [0, 255] }] })).toBe(false);
 		expect(
 			isBashHostToWorkerMessage({
 				...runMessage,
