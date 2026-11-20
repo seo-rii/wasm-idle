@@ -163,6 +163,14 @@ it('moves by word on Meta+B/F without inserting unsupported Meta keys', async ()
 	expect(write.mock.calls.flat()).toEqual(['one Xtwo\n', '_가나X,do!\n', 'left\n']);
 });
 
+it('moves by word with Ctrl+Arrow while plain arrows keep moving by a grapheme', async () => {
+	const { term, write } = await runningTerminal();
+	term.input('one two\x1b[1;5DX\r');
+	term.input('one two\x1b[H\x1b[1;5CX\r');
+	term.input('가나 two\x1b[1;5D\x1b[DX\r');
+	expect(write.mock.calls.flat()).toEqual(['one Xtwo\n', 'oneX two\n', '가나X two\n']);
+});
+
 it('keeps the visual cursor, wrapped text, and submitted line together after editing', async () => {
 	const { term, sandbox, write } = await runningTerminal();
 	term.resize(8, 6);
