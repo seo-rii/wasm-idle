@@ -44,6 +44,8 @@ export interface WorkerLanguageService {
 	name: string;
 	version?: string;
 	diagnosticDelay?: number;
+	/** Open document diagnostics can depend on other documents in the project. */
+	workspaceDiagnostics?: boolean;
 	/** Serializes expensive diagnostics and coalesces waiting versions per document. */
 	diagnosticScheduling?: 'latest-only';
 	capabilities?: Record<string, unknown>;
@@ -389,6 +391,12 @@ export function startWorkerLanguageServer(
 		}
 	};
 
+	const refreshDiagnostics = (changed?: LspDocument) => {
+		if (service.workspaceDiagnostics) {
+			for (const document of documents.values()) scheduleDiagnostics(document);
+		} else if (changed) scheduleDiagnostics(changed);
+	};
+
 	const handleNotification = async (message: JsonRpcMessage) => {
 		const params = message.params || {};
 		if (shutdown) return;
@@ -414,7 +422,7 @@ export function startWorkerLanguageServer(
 					);
 				}
 				documents.set(document.uri, document);
-				scheduleDiagnostics(document);
+				refreshDiagnostics(document);
 				return;
 			}
 			case 'textDocument/didChange': {
@@ -433,7 +441,7 @@ export function startWorkerLanguageServer(
 					);
 				}
 				documents.set(document.uri, document);
-				scheduleDiagnostics(document);
+				refreshDiagnostics(document);
 				return;
 			}
 			case 'textDocument/didSave': {
@@ -442,7 +450,7 @@ export function startWorkerLanguageServer(
 				const document =
 					typeof params.text === 'string' ? { ...current, text: params.text } : current;
 				documents.set(document.uri, document);
-				scheduleDiagnostics(document);
+				refreshDiagnostics(document);
 				return;
 			}
 			case 'textDocument/didClose': {
@@ -454,6 +462,7 @@ export function startWorkerLanguageServer(
 				diagnosticTimers.delete(document.uri);
 				pendingDiagnostics.delete(document.uri);
 				publishDiagnostics(document.uri, []);
+				refreshDiagnostics();
 				await service.close?.(document, context);
 			}
 		}
