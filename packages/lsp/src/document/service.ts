@@ -7,7 +7,6 @@ import MarkdownIt from 'markdown-it';
 import { parse as parseToml } from 'smol-toml';
 import { LineCounter, parseDocument as parseYamlDocument } from 'yaml';
 import {
-	fullDocumentRange,
 	positionAt,
 	type LspDiagnostic,
 	type LspDocument,
@@ -29,6 +28,7 @@ type MarkdownToken = {
 	content: string;
 	markup: string;
 	children: MarkdownToken[] | null;
+	meta?: { label?: string } | null;
 	attrGet?: (name: string) => string | null;
 };
 
@@ -40,6 +40,8 @@ const markdownLanguageService = new MarkdownIt({
 	linkify: false,
 	typographer: false
 });
+// Keep the parser's hidden definition tokens so diagnostics can point to a reference destination.
+markdownLanguageService.core.ruler.disable('strip_references', true);
 
 jsonLanguageService.configure({
 	allowComments: false,
@@ -160,7 +162,7 @@ const markdownSlug = (value: string) =>
 		.trim()
 		.toLowerCase()
 		.replace(/<[^>]+>/gu, '')
-		.replace(/[^\p{Letter}\p{Number}\s-]/gu, '')
+		.replace(/[^\p{Letter}\p{Mark}\p{Number}\s_-]/gu, '')
 		.replace(/\s+/gu, '-');
 
 const markdownTokens = (document: LspDocument) =>
@@ -168,7 +170,7 @@ const markdownTokens = (document: LspDocument) =>
 
 const rangeFromMarkdownToken = (document: LspDocument, token: MarkdownToken): LspRange => {
 	if (!token.map) return oneCharacterRange(document.text, 0);
-	const lines = document.text.split('\n');
+	const lines = document.text.split(/\r\n|[\r\n]/u);
 	const startLine = Math.max(0, token.map[0]);
 	const endLine = Math.max(startLine, token.map[1] - 1);
 	return {
@@ -177,27 +179,27 @@ const rangeFromMarkdownToken = (document: LspDocument, token: MarkdownToken): Ls
 	};
 };
 
-const rangeFromMarkdownInlineToken = (
-	document: LspDocument,
-	parent: MarkdownToken,
-	content: string
-): LspRange => {
-	if (!parent.map) return oneCharacterRange(document.text, 0);
-	const lines = document.text.split('\n');
-	const startLine = Math.max(0, parent.map[0]);
-	const endLine = Math.max(startLine, parent.map[1] - 1);
-	const startText = lines[startLine] || '';
-	const startCharacter = Math.max(0, startText.indexOf(content));
-	const endText = lines[endLine] || '';
-	const endCharacter =
-		startLine === endLine
-			? Math.min(endText.length, startCharacter + content.length)
-			: endText.length;
-	return {
-		start: { line: startLine, character: startCharacter },
-		end: { line: endLine, character: endCharacter }
-	};
-};
+function markdownLinkRange(doc: TextDocument, block: MarkdownToken, href: string, from: number) {
+	const start = doc.offsetAt({ line: block.map![0], character: 0 });
+	const end = doc.offsetAt({ line: block.map![1], character: 0 });
+	const source = doc.getText().slice(start, end);
+	const prefixes = block.type === 'reference_definition' ? /\]:\s*/gu : /\]\(\s*/gu;
+	prefixes.lastIndex = Math.max(0, from - start);
+	while (prefixes.exec(source)) {
+		const at = prefixes.lastIndex;
+		const parsed = markdownLanguageService.helpers.parseLinkDestination(
+			source,
+			at,
+			source.length
+		);
+		if (!parsed.ok || markdownLanguageService.normalizeLink(parsed.str) !== href) continue;
+		const brackets = source[at] === '<' ? 1 : 0;
+		return {
+			start: doc.positionAt(start + at + brackets),
+			end: doc.positionAt(start + parsed.pos - brackets)
+		};
+	}
+}
 
 const headingLevelFromToken = (token: MarkdownToken) => {
 	const match = /^h([1-6])$/u.exec(token.tag);
@@ -218,6 +220,15 @@ const decodeMarkdownAnchor = (value: string) => {
 	}
 };
 
+const markdownInlineText = (tokens: MarkdownToken[]): string =>
+	tokens
+		.map((token) => {
+			if (token.children) return markdownInlineText(token.children);
+			if (token.type === 'softbreak' || token.type === 'hardbreak') return ' ';
+			return token.type === 'text' || token.type === 'code_inline' ? token.content : '';
+		})
+		.join('');
+
 const markdownHeadings = (document: LspDocument, tokens = markdownTokens(document)) => {
 	const headings: Array<{
 		level: number;
@@ -225,15 +236,23 @@ const markdownHeadings = (document: LspDocument, tokens = markdownTokens(documen
 		slug: string;
 		range: LspRange;
 	}> = [];
+	const used = new Set<string>();
+	const nextSuffix = new Map<string, number>();
 	for (let index = 0; index < tokens.length; index += 1) {
 		const token = tokens[index];
 		if (token.type !== 'heading_open') continue;
 		const inline = nextInlineToken(tokens, index);
 		const title = inline?.content.trim() || '';
+		const base = markdownSlug(markdownInlineText(inline?.children ?? []));
+		let slug = base;
+		let suffix = nextSuffix.get(base) ?? 1;
+		while (used.has(slug)) slug = base + '-' + suffix++;
+		used.add(slug);
+		nextSuffix.set(base, suffix);
 		headings.push({
 			level: headingLevelFromToken(token),
 			text: title,
-			slug: markdownSlug(title),
+			slug,
 			range: rangeFromMarkdownToken(document, token)
 		});
 	}
@@ -246,17 +265,34 @@ const markdownDiagnostics = (document: LspDocument): LspDiagnostic[] => {
 	const diagnostics: LspDiagnostic[] = [];
 	const tokens = markdownTokens(document);
 	const headingSlugs = new Set(markdownHeadings(document, tokens).map((heading) => heading.slug));
+	const doc = documentFrom(document);
+	const definitions = new Map<string, MarkdownToken>();
+	for (const token of tokens) {
+		const label = token.meta?.label;
+		if (token.type === 'reference_definition' && token.map && label && !definitions.has(label))
+			definitions.set(label, token);
+	}
 
 	for (const token of tokens) {
-		if (token.type !== 'inline') continue;
+		if (token.type !== 'inline' || !token.map) continue;
+		let from = doc.offsetAt({ line: token.map[0], character: 0 });
 		for (const child of token.children || []) {
+			if (child.type === 'code_inline') {
+				const code = child.markup + child.content + child.markup;
+				const offset = document.text.indexOf(code, from);
+				if (offset >= from && doc.positionAt(offset).line < token.map[1])
+					from = offset + code.length;
+			}
 			if (child.type !== 'link_open') continue;
 			const href = linkHrefFromToken(child);
 			if (!href?.startsWith('#')) continue;
 			const slug = decodeMarkdownAnchor(href.slice(1));
 			if (headingSlugs.has(slug)) continue;
+			const definition = child.meta?.label && definitions.get(child.meta.label);
+			const range = markdownLinkRange(doc, definition || token, href, definition ? 0 : from);
+			if (range && !definition) from = doc.offsetAt(range.end);
 			diagnostics.push({
-				range: rangeFromMarkdownInlineToken(document, token, href),
+				range: range ?? { start: doc.positionAt(from), end: doc.positionAt(from + 1) },
 				severity: 2,
 				source: 'markdown',
 				message: `No heading matches #${slug}.`
@@ -428,15 +464,36 @@ export function createDocumentWorkerService(): WorkerLanguageService {
 			if (language === 'yaml' || language === 'toml') {
 				return [];
 			}
-			const text = document.text.replace(/[ \t]+$/gmu, '');
-			return text === document.text
-				? []
-				: [
-						{
-							range: fullDocumentRange(document.text),
-							newText: text
-						}
-					];
+			const doc = documentFrom(document);
+			const codeLines = new Set<number>();
+			for (const token of markdownTokens(document)) {
+				if ((token.type === 'fence' || token.type === 'code_block') && token.map) {
+					for (let line = token.map[0]; line < token.map[1]; line++) codeLines.add(line);
+				}
+			}
+			const text = document.text.replace(/[^\r\n]+/gu, (line, offset: number) => {
+				if (
+					codeLines.has(doc.positionAt(offset).line) ||
+					(line.endsWith('  ') && line.trim())
+				)
+					return line;
+				return line.replace(/[ \t]+$/u, '');
+			});
+			if (
+				text === document.text ||
+				markdownLanguageService.render(text) !==
+					markdownLanguageService.render(document.text)
+			)
+				return [];
+			return [
+				{
+					range: {
+						start: { line: 0, character: 0 },
+						end: doc.positionAt(document.text.length)
+					},
+					newText: text
+				}
+			];
 		}
 	};
 }
