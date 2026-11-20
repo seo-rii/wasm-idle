@@ -54,6 +54,11 @@ export interface WorkerLanguageService {
 		document: LspDocument,
 		context: LspDocumentContext
 	) => LspDiagnostic[] | Promise<LspDiagnostic[]>;
+	/** A project compiler can report diagnostics for sources other than its entry point. */
+	diagnosticsByUri?: (
+		document: LspDocument,
+		context: LspDocumentContext
+	) => Promise<ReadonlyMap<string, LspDiagnostic[]>> | ReadonlyMap<string, LspDiagnostic[]>;
 	completion?: (
 		document: LspDocument,
 		position: LspPosition,
@@ -232,17 +237,48 @@ export function startWorkerLanguageServer(
 		diagnosticVersions.get(document.uri) === version &&
 		documents.get(document.uri) === document;
 
+	// Track each entry point's contribution so closing or fixing one entry preserves other errors.
+	const projectReports = new Map<string, ReadonlyMap<string, LspDiagnostic[]>>();
+	const publishResult = (
+		entry: string,
+		result: LspDiagnostic[] | ReadonlyMap<string, LspDiagnostic[]>
+	) => {
+		if (Array.isArray(result)) {
+			if (!service.diagnosticsByUri) {
+				publishDiagnostics(entry, result);
+				return;
+			}
+			result = result.length ? new Map([[entry, result]]) : new Map();
+		}
+		const affected = new Set([
+			entry,
+			...(projectReports.get(entry)?.keys() ?? []),
+			...result.keys()
+		]);
+		if (result.size) projectReports.set(entry, result);
+		else projectReports.delete(entry);
+		for (const uri of affected) {
+			const unique = new Map<string, LspDiagnostic>();
+			for (const contribution of projectReports.values()) {
+				for (const diagnostic of contribution.get(uri) ?? [])
+					unique.set(JSON.stringify(diagnostic), diagnostic);
+			}
+			publishDiagnostics(uri, [...unique.values()]);
+		}
+	};
 	const runDiagnostics = async (document: LspDocument, version: number) => {
 		if (!isCurrentDiagnostic(document, version)) return;
 		try {
-			const diagnostics = await service.diagnostics?.(document, context);
+			const diagnostics = service.diagnosticsByUri
+				? await service.diagnosticsByUri(document, context)
+				: await service.diagnostics?.(document, context);
 			if (isCurrentDiagnostic(document, version))
-				publishDiagnostics(document.uri, diagnostics || []);
+				publishResult(document.uri, diagnostics || []);
 		} catch (error) {
 			if (debug)
 				console.error(`[wasm-idle:lsp-worker:${service.name}] diagnostics failed`, error);
 			if (!isCurrentDiagnostic(document, version)) return;
-			publishDiagnostics(document.uri, [
+			publishResult(document.uri, [
 				{
 					range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } },
 					severity: 1,
@@ -276,11 +312,12 @@ export function startWorkerLanguageServer(
 	const dispose = () => {
 		shutdown = true;
 		clearDiagnosticWork();
+		projectReports.clear();
 		return (disposal ??= Promise.resolve(initialization).then(() => service.dispose?.()));
 	};
 
 	const scheduleDiagnostics = (document: LspDocument) => {
-		if (!service.diagnostics || shutdown) return;
+		if ((!service.diagnostics && !service.diagnosticsByUri) || shutdown) return;
 		const version = (diagnosticVersions.get(document.uri) || 0) + 1;
 		diagnosticVersions.set(document.uri, version);
 		clearTimeout(diagnosticTimers.get(document.uri));
@@ -461,7 +498,7 @@ export function startWorkerLanguageServer(
 				clearTimeout(diagnosticTimers.get(document.uri));
 				diagnosticTimers.delete(document.uri);
 				pendingDiagnostics.delete(document.uri);
-				publishDiagnostics(document.uri, []);
+				publishResult(document.uri, []);
 				refreshDiagnostics();
 				await service.close?.(document, context);
 			}

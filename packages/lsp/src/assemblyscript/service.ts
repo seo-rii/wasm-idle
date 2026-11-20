@@ -1,4 +1,5 @@
 import {
+	pathToUri,
 	uriToPath,
 	type LspDiagnostic,
 	type LspDocument,
@@ -143,13 +144,17 @@ const wordAt = (text: string, position: LspPosition) => {
 	);
 };
 
-function parseAssemblyScriptDiagnostics(message: string): LspDiagnostic[] {
-	const diagnostics: LspDiagnostic[] = [];
-	const pattern = /(ERROR|WARNING)\s+(TS\d+):\s*([^\n]+)[\s\S]*?└─ in ([^(]+)\((\d+),(\d+)\)/gu;
+function parseAssemblyScriptDiagnostics(message: string, uriForPath: (path: string) => string) {
+	const diagnostics = new Map<string, LspDiagnostic[]>();
+	const pattern =
+		/(ERROR|WARNING)\s+(TS\d+):\s*([^\n]+)[\s\S]*?└─ in ([^\r\n]+)\((\d+),(\d+)\)/gu;
 	for (const match of message.matchAll(pattern)) {
 		const line = Math.max(0, Number(match[5]) - 1);
 		const character = Math.max(0, Number(match[6]) - 1);
-		diagnostics.push({
+		const uri = uriForPath(normalizeFileName(match[4]));
+		const group = diagnostics.get(uri) ?? [];
+		diagnostics.set(uri, group);
+		group.push({
 			range: {
 				start: { line, character },
 				end: { line, character: character + 1 }
@@ -193,9 +198,58 @@ export function createAssemblyScriptWorkerService(
 		return files;
 	};
 
+	const compile = async (document: LspDocument) => {
+		const files = collectFiles();
+		const entry = normalizeFileName(uriToPath(document.uri)) || 'assembly/index.ts';
+		files[entry] = document.text;
+		const stdout = createStringSink();
+		const stderr = createStringSink();
+		const result = await compiler.main([entry, '--noEmit', '--runtime', 'stub'], {
+			stdout,
+			stderr,
+			readFile(filePath) {
+				return files[normalizeFileName(filePath)] ?? null;
+			},
+			writeFile() {},
+			listFiles(dirPath) {
+				const prefix = normalizeFileName(dirPath);
+				return Object.keys(files).filter((fileName) => fileName.startsWith(prefix));
+			}
+		});
+		const message = stderr.toString();
+		const paths = new Map(
+			Array.from(context.documents.values(), (open) => [
+				normalizeFileName(uriToPath(open.uri)),
+				open.uri
+			])
+		);
+		paths.set(entry, document.uri);
+		const prefix = uriToPath(document.uri).startsWith('/workspace/') ? '/workspace/' : '/';
+		const diagnostics = parseAssemblyScriptDiagnostics(
+			message,
+			(name) => paths.get(name) ?? pathToUri(prefix + name)
+		);
+		if (result.error && diagnostics.size === 0) {
+			diagnostics.set(document.uri, [
+				{
+					range: {
+						start: { line: 0, character: 0 },
+						end: { line: 0, character: 1 }
+					},
+					severity: 1,
+					source: 'assemblyscript',
+					message: message.trim() || result.error.message
+				}
+			]);
+		}
+		return diagnostics;
+	};
+
 	return {
 		name: 'wasm-idle-assemblyscript-lsp',
 		diagnosticDelay: 250,
+		diagnosticScheduling: 'latest-only',
+		workspaceDiagnostics: true,
 		capabilities: {
 			completionProvider: { triggerCharacters: ['.', '<'] },
 			hoverProvider: true
@@ -212,38 +266,9 @@ export function createAssemblyScriptWorkerService(
 			context.reportProgress('load-assemblyscript');
 			compiler = await loadCompiler(config);
 		},
-		async diagnostics(document: LspDocument) {
-			const files = collectFiles();
-			const entry = normalizeFileName(uriToPath(document.uri)) || 'assembly/index.ts';
-			files[entry] = document.text;
-			const stdout = createStringSink();
-			const stderr = createStringSink();
-			const result = await compiler.main([entry, '--noEmit', '--runtime', 'stub'], {
-				stdout,
-				stderr,
-				readFile(filePath) {
-					return files[normalizeFileName(filePath)] ?? null;
-				},
-				writeFile() {},
-				listFiles(dirPath) {
-					const prefix = normalizeFileName(dirPath);
-					return Object.keys(files).filter((fileName) => fileName.startsWith(prefix));
-				}
-			});
-			const message = stderr.toString();
-			const diagnostics = parseAssemblyScriptDiagnostics(message);
-			if (result.error && diagnostics.length === 0) {
-				diagnostics.push({
-					range: {
-						start: { line: 0, character: 0 },
-						end: { line: 0, character: 1 }
-					},
-					severity: 1,
-					source: 'assemblyscript',
-					message: message.trim() || result.error.message
-				});
-			}
-			return diagnostics;
+		diagnosticsByUri: compile,
+		async diagnostics(document) {
+			return (await compile(document)).get(document.uri) ?? [];
 		},
 		completion() {
 			return {

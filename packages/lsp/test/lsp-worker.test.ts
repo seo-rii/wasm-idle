@@ -26,6 +26,49 @@ class FakeWorkerScope {
 }
 
 describe('startWorkerLanguageServer', () => {
+	it('publishes compiler results at the owning URI and clears removed dependency errors', async () => {
+		const scope = new FakeWorkerScope();
+		const entry = 'file:///workspace/main.ts';
+		const helper = 'file:///workspace/a%20b.ts';
+		const error = {
+			range: { start: { line: 3, character: 4 }, end: { line: 3, character: 5 } },
+			message: 'Missing symbol'
+		};
+		const service = {
+			name: 'project compiler',
+			diagnosticsByUri: vi.fn((document: { text: string }) =>
+				document.text === 'invalid'
+					? new Map([[helper, [error]]])
+					: new Map<string, (typeof error)[]>()
+			)
+		};
+		startWorkerLanguageServer(service, scope);
+		const publish = (uri: string, diagnostics: unknown[]) =>
+			expect(scope.messages).toContainEqual({
+				jsonrpc: '2.0',
+				method: 'textDocument/publishDiagnostics',
+				params: { uri, diagnostics }
+			});
+		scope.dispatch({
+			jsonrpc: '2.0',
+			method: 'textDocument/didOpen',
+			params: { textDocument: { uri: entry, version: 1, text: 'invalid' } }
+		});
+		await vi.waitFor(() => publish(helper, [error]));
+		publish(entry, []);
+		scope.messages.length = 0;
+		scope.dispatch({
+			jsonrpc: '2.0',
+			method: 'textDocument/didChange',
+			params: {
+				textDocument: { uri: entry, version: 2 },
+				contentChanges: [{ text: 'valid' }]
+			}
+		});
+		await vi.waitFor(() => publish(helper, []));
+		scope.dispatch({ jsonrpc: '2.0', method: 'exit' });
+	});
+
 	it('updates TypeScript importers after dependency edits, closes and version-one reopens', async () => {
 		const scope = new FakeWorkerScope();
 		startWorkerLanguageServer(createTypeScriptWorkerService('typescript'), scope);
