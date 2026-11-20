@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { parseWorkspaceBackup, serializeWorkspaceBackup } from './workspaceBackup';
 import { normalizeWorkspaceTabs, validateWorkspaceSnapshot } from './workspaceSnapshot';
 
 const files = [
@@ -16,6 +17,23 @@ describe('workspace JSON boundary', () => {
 			const before = JSON.stringify(snapshot);
 			expect(() => validateWorkspaceSnapshot(snapshot)).not.toThrow();
 			expect(JSON.stringify(snapshot)).toBe(before);
+		}
+	});
+
+	it('restores literal shell paths and bytes without changing legacy separator handling', () => {
+		const raw = { path: 'names\\one.txt', pathStyle: 'posix', content: 'literal' };
+		const nested = { path: 'names/one.txt', content: 'nested' };
+		const snapshot = {
+			files: [raw, nested, { path: 'report:2026', content: 'note', pathStyle: 'posix' }],
+			activePath: raw.path,
+			openTabs: [raw.path, nested.path]
+		};
+		expect(parseWorkspaceBackup(serializeWorkspaceBackup(snapshot))).toEqual(snapshot);
+		expect(() =>
+			validateWorkspaceSnapshot({ files: [{ ...raw, pathStyle: undefined }, nested] })
+		).toThrow();
+		for (const path of ['/absolute', 'a/../b', 'a//b', 'a/./b', 'a\0b']) {
+			expect(() => validateWorkspaceSnapshot({ files: [{ ...raw, path }] })).toThrow();
 		}
 	});
 

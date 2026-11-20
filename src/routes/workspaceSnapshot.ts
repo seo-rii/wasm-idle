@@ -1,7 +1,7 @@
 import { playgroundLanguages } from './language-registry';
 import { readCompilerOptions } from './compilerOptions';
 import { isBinaryWorkspaceFile, workspaceFileBytes, type WorkspaceFile } from './workspaceCodec';
-import { normalizeWorkspacePath } from './workspacePath';
+import { normalizeWorkspaceFilePath } from './workspacePath';
 
 function invalid(field: string): never {
 	throw new Error(`Invalid workspace snapshot: ${field}`);
@@ -26,12 +26,13 @@ function validateWorkspace(value: Record<string, unknown>, field: string) {
 		assertRecord(file, `${field}.files[]`);
 		if (
 			typeof file.path !== 'string' ||
-			!file.path.trim() ||
+			(file.pathStyle !== 'posix' && !file.path.trim()) ||
+			(file.pathStyle !== undefined && file.pathStyle !== 'posix') ||
 			typeof file.content !== 'string'
 		) {
 			invalid(`${field}.files[]`);
 		}
-		const path = normalizeWorkspacePath(file.path);
+		const path = normalizeWorkspaceFilePath(file.path, file.pathStyle);
 		if (!path || paths.has(path)) invalid(`${field}.files[].path`);
 		paths.add(path);
 		if (

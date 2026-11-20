@@ -2,7 +2,6 @@ import {
 	assertDebugBreakpointSupport,
 	normalizeDebugSourceBreakpoints,
 	normalizeLanguageId,
-	normalizeWorkspacePath,
 	validateWorkspaceFiles,
 	type DebugSourceBreakpoint,
 	type ProgressLike,
@@ -21,6 +20,7 @@ import type {
 	PlaygroundBinding,
 	SandboxRuntimeAssets
 } from '../playground/sandbox.js';
+import { isRuntimeWorkspacePath } from './workspace.js';
 import type { SandboxExecutionOptions } from '../playground/options.js';
 import type {
 	ContainerWorkerEvent,
@@ -286,12 +286,13 @@ export class ContainerRuntimeAdapter {
 		project?: readonly ContainerWorkspaceFileMetadata[]
 	) {
 		const path = this.directoryPath(language);
-		const validated = validateWorkspaceFiles(files, {
+		const limits = {
 			maxFiles: 2048,
 			maxFileBytes: 16 * 1024 * 1024,
 			maxTotalBytes: 64 * 1024 * 1024,
 			caseSensitive: true
-		});
+		};
+		const validated = validateWorkspaceFiles(files, limits, 'posix');
 		const next = new Set(validated.map((file) => file.path));
 		let publishedNext = next;
 		if (project !== undefined) {
@@ -300,7 +301,8 @@ export class ContainerRuntimeAdapter {
 			// Keep whole-project path/count/size admission without sending unchanged bodies.
 			const paths = validateWorkspaceFiles(
 				project.map((file) => ({ path: file.path, content: '' })),
-				{ maxFiles: 2048, caseSensitive: true }
+				limits,
+				'posix'
 			);
 			const sizes = new Map<string, number>();
 			let total = 0;
@@ -341,12 +343,10 @@ export class ContainerRuntimeAdapter {
 			expectedBaseFiles === undefined
 				? undefined
 				: new Map(
-						validateWorkspaceFiles(expectedBaseFiles, {
-							maxFiles: 2048,
-							maxFileBytes: 16 * 1024 * 1024,
-							maxTotalBytes: 64 * 1024 * 1024,
-							caseSensitive: true
-						}).map((file) => [file.path, asBytes(file.content)])
+						validateWorkspaceFiles(expectedBaseFiles, limits, 'posix').map((file) => [
+							file.path,
+							asBytes(file.content)
+						])
 					);
 		const previousPaths = base?.keys() ?? this.#published.get(language) ?? [];
 		const deletions = [...previousPaths].filter((previous) => !next.has(previous));
@@ -465,7 +465,9 @@ export class ContainerRuntimeAdapter {
 	}
 	inputs(language: string, code: string, options: SandboxExecutionOptions) {
 		const root = this.directory(language);
-		const activePath = normalizeWorkspacePath(options.activePath ?? defaultSource(language));
+		const activePath = options.activePath ?? defaultSource(language);
+		if (!isRuntimeWorkspacePath(activePath))
+			throw new Error('Rename the active file to a portable relative path to run it.');
 		try {
 			this.fs.stat(activePath, { root, cwd: root });
 		} catch (error) {
@@ -478,7 +480,9 @@ export class ContainerRuntimeAdapter {
 				).values()
 			]);
 		}
-		const files = this.readWorkspace(language);
+		const files = this.readWorkspace(language).filter(({ path }) =>
+			isRuntimeWorkspacePath(path)
+		);
 		return {
 			code: new TextDecoder('utf-8', { fatal: true }).decode(
 				this.fs.readFile(activePath, { root, cwd: root })

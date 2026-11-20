@@ -11,6 +11,7 @@
 	import { compilePython, isSharedArrayBufferAvailable, type PythonCompileOptions } from '$lib';
 	import { createContainerPlaygroundBinding } from '$lib/playground/container/binding';
 	import {
+		isRuntimeWorkspacePath,
 		mergeContainerWorkspace,
 		sameWorkspaceFiles
 	} from '$lib/playground/container/workspace';
@@ -91,6 +92,7 @@
 	} from './workspaceStorage';
 	import {
 		normalizeWorkspacePath,
+		normalizeWorkspaceFilePath,
 		recoverWorkspaceFilePaths,
 		resolveCompilerDiagnosticPath,
 		workspaceFilePath
@@ -760,6 +762,9 @@
 	const sortedFiles = $derived([...files].sort((a, b) => a.path.localeCompare(b.path)));
 	const activeLines = $derived(activeFile ? activeFile.content.split(/\r\n|\r|\n/).length : 0);
 	const activeBytes = $derived(activeFile ? new Blob([activeFile.content]).size : 0);
+	const needsPosixBackup = $derived(
+		files.some((file) => file.pathStyle === 'posix' && normalizePath(file.path) !== file.path)
+	);
 	const workspaceSaveKey = $derived.by(() => {
 		try {
 			return JSON.stringify(snapshot());
@@ -1387,7 +1392,11 @@
 				})
 		);
 		const requestedActivePath =
-			typeof value?.activePath === 'string' ? normalizePath(value.activePath) : '';
+			typeof value?.activePath !== 'string'
+				? ''
+				: files.some((file) => file.path === value.activePath)
+					? value.activePath
+					: normalizePath(value.activePath);
 		const restoredPath = renamed?.get(requestedActivePath) ?? requestedActivePath;
 		const activePath = files.some((file) => file.path === restoredPath)
 			? restoredPath
@@ -1439,14 +1448,16 @@
 	const containerFiles = (values: readonly WorkspaceFile[]) =>
 		values.map((file) => ({ path: file.path, content: workspaceFileBytes(file) }));
 	const editorFiles = (values: readonly { path: string; content: string | Uint8Array }[]) =>
-		values.map((file) =>
-			workspaceFileFromBytes(
+		values.map((file) => {
+			const result = workspaceFileFromBytes(
 				file.path,
 				typeof file.content === 'string'
 					? new TextEncoder().encode(file.content)
 					: file.content
-			)
-		);
+			);
+			if (!isRuntimeWorkspacePath(file.path) || !file.path.trim()) result.pathStyle = 'posix';
+			return result;
+		});
 	async function publishContainerWorkspace(
 		selectedLanguage: string,
 		values: readonly WorkspaceFile[]
@@ -1796,12 +1807,13 @@
 		for (const file of value) {
 			if (!file || typeof file.path !== 'string' || typeof file.content !== 'string')
 				continue;
-			const safePath = normalizeWorkspacePath(file.path);
+			const safePath = normalizeWorkspaceFilePath(file.path, file.pathStyle);
 			if (!safePath) throw new Error('Workspace file path cannot be empty');
 			if (seen.includes(safePath)) throw new Error(`Duplicate workspace path: ${safePath}`);
 			seen.push(safePath);
 			nextFiles.push({
 				path: safePath,
+				...(file.pathStyle === 'posix' ? { pathStyle: 'posix' as const } : {}),
 				content: file.content,
 				...(isBinaryWorkspaceFile(file)
 					? { encoding: 'data-url' as const }
@@ -1839,14 +1851,15 @@
 		filePath: string,
 		content = '',
 		select = true,
-		encoding?: WorkspaceFile['encoding']
+		encoding?: WorkspaceFile['encoding'],
+		pathStyle?: WorkspaceFile['pathStyle']
 	) {
 		const nextPath = workspaceFilePath(
-			normalizeWorkspacePath(filePath) || 'untitled.txt',
+			normalizeWorkspaceFilePath(filePath, pathStyle) || 'untitled.txt',
 			files.map((file) => file.path),
 			true
 		);
-		files = [...files, { path: nextPath, content, encoding }];
+		files = [...files, { path: nextPath, content, encoding, pathStyle }];
 		if (select) selectFile(nextPath);
 		saveStatus = `${basename(nextPath)} added`;
 		return nextPath;
@@ -1870,7 +1883,7 @@
 		if (!requested) return;
 		let nextPath: string;
 		try {
-			nextPath = normalizeWorkspacePath(requested);
+			nextPath = normalizeWorkspaceFilePath(requested, file.pathStyle);
 			if (!nextPath || nextPath === file.path) return;
 			workspaceFilePath(
 				nextPath,
@@ -1894,7 +1907,7 @@
 	function duplicateActiveFile() {
 		const file = activeFile;
 		if (!file) return;
-		addWorkspaceFile(file.path, file.content, true, file.encoding);
+		addWorkspaceFile(file.path, file.content, true, file.encoding, file.pathStyle);
 	}
 
 	function deleteActiveFile() {
@@ -3217,10 +3230,12 @@
 			const codeToRun = activeFile.content;
 			// Tab switches and new files stay available during the LLDB check below; run what Run saw.
 			const runActivePath = activePath;
-			const runWorkspaceFiles = files.map((file) => ({
-				path: file.path,
-				content: file.path === runActivePath ? codeToRun : file.content
-			}));
+			const runWorkspaceFiles = files
+				.filter((file) => isRuntimeWorkspacePath(file.path))
+				.map((file) => ({
+					path: file.path,
+					content: file.path === runActivePath ? codeToRun : file.content
+				}));
 			const runLanguageOptions = {
 				...languageExecutionOptions,
 				...(languageExecutionOptions.compileArgs
@@ -3244,6 +3259,10 @@
 			}
 			const releaseInput = terminal.reserveInput?.(stopExecution);
 			try {
+				if (!isRuntimeWorkspacePath(runActivePath))
+					throw new Error(
+						'Rename the active file to a portable relative path to run it.'
+					);
 				await publishContainerWorkspace(
 					language,
 					files.map((file) => ({ ...file }))
@@ -5345,11 +5364,11 @@
 					</div>
 					<p class="section-label">Workspace</p>
 					<div class="workspace-sidebar__actions">
-						<button onclick={downloadZip}>
+						<button onclick={needsPosixBackup ? downloadWorkspaceBackup : downloadZip}>
 							<span class="material-symbols-outlined" aria-hidden="true"
-								>folder_zip</span
+								>{needsPosixBackup ? 'save_alt' : 'folder_zip'}</span
 							>
-							<span>ZIP</span>
+							<span>{needsPosixBackup ? 'Backup (JSON)' : 'ZIP'}</span>
 						</button>
 						<button onclick={resetWorkspace} disabled={!!runningMode}>
 							<span class="material-symbols-outlined" aria-hidden="true">history</span

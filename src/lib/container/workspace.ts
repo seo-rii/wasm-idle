@@ -1,5 +1,17 @@
+import { normalizeWorkspacePath } from '@wasm-idle/core';
+
+/** Private language workers accept portable relative paths; the shell filesystem uses POSIX names. */
+export function isRuntimeWorkspacePath(path: string) {
+	try {
+		return normalizeWorkspacePath(path) === path;
+	} catch {
+		return false;
+	}
+}
+
 export interface WorkspaceFile {
 	path: string;
+	pathStyle?: 'posix';
 	content: string;
 	encoding?: 'utf-8' | 'data-url';
 }

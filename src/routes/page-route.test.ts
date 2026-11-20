@@ -1,5 +1,5 @@
 import { createDebugSessionController } from '@wasm-idle/debug/controller';
-import { normalizeWorkspacePath, workspaceFilePath } from './workspacePath';
+import { normalizeWorkspaceFilePath, workspaceFilePath } from './workspacePath';
 import { createProjectBreakpointSelection } from './workspaceBreakpoints';
 import layoutSource from './+layout.svelte?raw';
 import source from './+page.svelte?raw';
@@ -49,7 +49,7 @@ it('moves structured breakpoints on rename and clears them on deletion and filen
 		confirm: () => true,
 		basename: (path: string) => path,
 		selectFile: vi.fn(),
-		normalizeWorkspacePath,
+		normalizeWorkspaceFilePath,
 		workspaceFilePath,
 		saveStatus: ''
 	};
@@ -1659,7 +1659,7 @@ describe('example route debug actions', () => {
 		// Tab switches and new files change activePath while the run is pending.
 		expect(snapshot).toBeLessThan(execSource.indexOf('await import('));
 		expect(execSource).toMatch(
-			/const runWorkspaceFiles = files\.map\(\(file\) => \(\{\s+path: file\.path,\s+content: file\.path === runActivePath \? codeToRun : file\.content\s+\}\)\);/
+			/const runWorkspaceFiles = files\s+\.filter\(\(file\) => isRuntimeWorkspacePath\(file\.path\)\)\s+\.map\(\(file\) => \(\{\s+path: file\.path,\s+content: file\.path === runActivePath \? codeToRun : file\.content\s+\}\)\);/
 		);
 		const runCall = execSource.slice(execSource.indexOf('await executeTerminalRun('));
 		expect(runCall).toMatch(/activePath: runActivePath,\s+workspaceFiles: runWorkspaceFiles,/);

@@ -329,6 +329,36 @@ describe('container shared editor input boundary', () => {
 		expect(() => container.fs.stat('/workspace/C/new')).toThrow();
 		expect(read(container, '/workspace/C/old')).toBe('remove');
 	});
+	it('publishes literal POSIX names while passing only unambiguous portable names to a language worker', () => {
+		const { adapter, container } = fixture();
+		const literal = 'names\\one.txt';
+		const files = [
+			f('main.c', 'source'),
+			f(literal, 'one'),
+			f('names/one.txt', 'two'),
+			f('report:2026.txt', 'data')
+		];
+		adapter.syncWorkspace('C', files, []);
+		adapter.syncWorkspace(
+			'C',
+			[f(literal, 'new')],
+			[f(literal, 'one')],
+			files.map(({ path, content }) => ({ path, bytes: content.length }))
+		);
+		expect(read(container, '/workspace/C/' + literal)).toBe('new');
+		expect(read(container, '/workspace/C/names/one.txt')).toBe('two');
+		expect(read(container, '/workspace/C/report:2026.txt')).toBe('data');
+		expect(
+			adapter
+				.inputs('C', '', { activePath: 'main.c' })
+				.options.workspaceFiles?.map((f) => f.path)
+		).toEqual(['main.c', 'names/one.txt']);
+		expect(() => adapter.inputs('C', '', { activePath: literal })).toThrow(
+			/Rename the active file/
+		);
+		expect(() => adapter.syncWorkspace('C', [f('../outside', 'x')])).toThrow();
+	});
+
 	it('retains whole-project admission limits and checks delta metadata before writing', () => {
 		const { adapter, container } = fixture();
 		adapter.syncWorkspace('C', [f('main.c', 'base')]);

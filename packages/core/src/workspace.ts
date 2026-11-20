@@ -96,21 +96,27 @@ function resolveWorkspaceLimits(limits: Partial<WorkspaceLimits>): WorkspaceLimi
 	return resolvedLimits;
 }
 
-export function normalizeWorkspacePath(path: string): string {
+// Container snapshots use literal POSIX names. Public runtime inputs use portable paths by default.
+type WorkspacePathStyle = 'portable' | 'posix';
+
+export function normalizeWorkspacePath(
+	path: string,
+	style: WorkspacePathStyle = 'portable'
+): string {
 	if (
 		typeof path !== 'string' ||
 		path.length === 0 ||
 		path.startsWith('/') ||
-		path.startsWith('\\') ||
-		URL_SCHEME.test(path) ||
-		CONTROL_CHARACTER.test(path)
+		(style === 'posix'
+			? path.includes('\0')
+			: path.startsWith('\\') || URL_SCHEME.test(path) || CONTROL_CHARACTER.test(path))
 	) {
 		throw new WorkspaceValidationError('invalid-path', `Invalid workspace path: ${path}`, {
 			path
 		});
 	}
 
-	const normalized = path.replaceAll('\\', '/');
+	const normalized = style === 'posix' ? path : path.replaceAll('\\', '/');
 	const segments = normalized.split('/');
 	if (segments.some((segment) => segment.length === 0 || segment === '.' || segment === '..')) {
 		throw new WorkspaceValidationError('invalid-path', `Invalid workspace path: ${path}`, {
@@ -122,7 +128,8 @@ export function normalizeWorkspacePath(path: string): string {
 
 export function validateWorkspaceFiles<T extends WorkspaceFile>(
 	files: readonly T[],
-	limits: Partial<WorkspaceLimits> = {}
+	limits: Partial<WorkspaceLimits> = {},
+	style: WorkspacePathStyle = 'portable'
 ): Array<T & { path: string }> {
 	const resolvedLimits = resolveWorkspaceLimits(limits);
 	if (files.length > resolvedLimits.maxFiles) {
@@ -139,7 +146,7 @@ export function validateWorkspaceFiles<T extends WorkspaceFile>(
 	const directoryPrefixes = new Map<string, string>();
 	let totalBytes = 0;
 	return files.map((file) => {
-		const path = normalizeWorkspacePath(file.path);
+		const path = normalizeWorkspacePath(file.path, style);
 		const pathBytes = textEncoder.encode(path).byteLength;
 		if (pathBytes > resolvedLimits.maxPathBytes) {
 			throw new WorkspaceValidationError(

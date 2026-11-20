@@ -1,3 +1,9 @@
+import { normalizeWorkspacePath as normalizeRuntimePath } from '@wasm-idle/core';
+
+export function normalizeWorkspaceFilePath(path: string, style?: 'posix') {
+	return style === 'posix' ? normalizeRuntimePath(path, 'posix') : normalizeWorkspacePath(path);
+}
+
 /** Normalize separators and dot components without discarding traversal or renaming files. */
 export function normalizeWorkspacePath(value: string): string {
 	if (typeof value !== 'string') throw new Error('Workspace path must be a string');
