@@ -36,27 +36,65 @@ async function loadDuckDB(moduleUrl: string, log: boolean) {
 	return await dbPromise;
 }
 
-function stringifyCell(value: unknown) {
+// Logical type identifiers in the Arrow IPC schema returned by the loaded DuckDB bundle.
+const arrowDecimal = 7;
+const arrowDate = 8;
+
+interface ArrowFieldType {
+	typeId: number;
+	scale?: number;
+}
+
+function formatDecimal(value: unknown, scale: number) {
+	// Arrow's decimal vector exposes the exact signed, unscaled integer as a string.
+	const integer = String(value);
+	if (scale === 0) return integer;
+	const negative = integer.startsWith('-');
+	const digits = (negative ? integer.slice(1) : integer).padStart(scale + 1, '0');
+	return `${negative ? '-' : ''}${digits.slice(0, -scale)}.${digits.slice(-scale)}`;
+}
+
+function formatDate(milliseconds: number) {
+	const day = Math.round(milliseconds / 86_400_000);
+	// DuckDB reserves the ends of its date range for the SQL infinity literals.
+	if (day === 2_147_483_647) return 'infinity';
+	if (day === -2_147_483_647) return '-infinity';
+	// Gregorian months and leap years repeat every 400 years. Reduce into the JS Date
+	// range before extracting UTC components, including for DuckDB's extended years.
+	const cycles = Math.floor(day / 146_097);
+	const inCycle = new Date((day - cycles * 146_097) * 86_400_000);
+	const year = inCycle.getUTCFullYear() + cycles * 400;
+	const label = String(year > 0 ? year : 1 - year).padStart(4, '0');
+	return `${label}${inCycle.toISOString().slice(4, 10)}${year > 0 ? '' : ' (BC)'}`;
+}
+
+function stringifyCell(value: unknown, type: ArrowFieldType) {
 	if (value == null) return 'NULL';
+	if (type.typeId === arrowDecimal && type.scale !== undefined)
+		return formatDecimal(value, type.scale);
+	if (type.typeId === arrowDate && typeof value === 'number') return formatDate(value);
 	if (value instanceof Uint8Array) {
 		return `x'${Array.from(value, (byte) => byte.toString(16).padStart(2, '0')).join('')}'`;
 	}
-	if (typeof value === 'bigint') return value.toString();
 	return String(value);
 }
 
 function formatTable(table: {
 	numCols: number;
 	numRows: number;
-	schema: { fields: { name: string }[] };
-	get: (row: number) => Record<string, unknown> | null;
+	schema: { fields: { name: string; type: ArrowFieldType }[] };
+	getChildAt: (column: number) => { get: (row: number) => unknown } | null;
 }) {
 	if (!table.numCols) return '';
-	const columns = table.schema.fields.map((field) => field.name);
-	const lines = [columns.join('\t')];
-	for (let rowIndex = 0; rowIndex < table.numRows; rowIndex += 1) {
-		const row = table.get(rowIndex);
-		lines.push(columns.map((column) => stringifyCell(row?.[column])).join('\t'));
+	const fields = table.schema.fields;
+	const vectors = fields.map((_, index) => table.getChildAt(index));
+	const lines = [fields.map((field) => field.name).join('\t')];
+	for (let row = 0; row < table.numRows; row++) {
+		lines.push(
+			vectors
+				.map((vector, index) => stringifyCell(vector?.get(row), fields[index].type))
+				.join('\t')
+		);
 	}
 	return `${lines.join('\n')}\n`;
 }
