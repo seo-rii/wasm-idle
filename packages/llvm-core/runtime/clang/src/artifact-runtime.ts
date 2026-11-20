@@ -1,8 +1,5 @@
 import Runtime from './incremental-runtime.js';
-import {
-	clangWorkspaceUnitLanguage,
-	isClangWorkspaceTranslationUnit
-} from '../../core/src/clang-profile.js';
+import { clangWorkspaceBuildSources } from '../../core/src/clang-profile.js';
 import { createDwarfDebugDescriptor } from './dwarf.js';
 import {
 	normalizeDwarfWorkspacePath,
@@ -139,21 +136,10 @@ export default class ArtifactRuntime extends Runtime {
 		const snapshot = [...byPath.values()].sort((a, b) =>
 			a.path < b.path ? -1 : a.path > b.path ? 1 : 0
 		);
-		const units = snapshot.filter(
-			(file) => file.path === input || isClangWorkspaceTranslationUnit(file.path)
-		);
+		const { units, cOnly } = clangWorkspaceBuildSources(snapshot, input, language, compileArgs);
 		if (debugMode === 'trace' && units.length > 1) {
 			throw new Error('Trace debug mode does not support multiple C/C++ translation units');
 		}
-		const cOnly =
-			language === 'C' &&
-			(units.length === 1 ||
-				units.every(
-					(unit) => clangWorkspaceUnitLanguage(unit.path, input, language) === 'C'
-				)) &&
-			!compileArgs.some(
-				(arg) => typeof arg !== 'string' || arg.startsWith('-x') || arg.startsWith('@')
-			);
 		this.beginTrace(debugMode === 'trace');
 		this.debugBreakpoints = new Set(debugMode === 'trace' ? breakpoints : []);
 		this.debugPauseOnEntry = debugMode === 'trace' && pauseOnEntry;
@@ -214,7 +200,14 @@ export default class ArtifactRuntime extends Runtime {
 			}
 		}
 		if (units.length === 1) {
-			await this.compile({ ...common, input, code, obj, language, workspaceFiles: files });
+			await this.compile({
+				...common,
+				input,
+				code,
+				obj,
+				language: units[0].language,
+				workspaceFiles: files
+			});
 			objects.push(obj);
 		} else {
 			this.addWorkspaceFiles(snapshot);
@@ -224,19 +217,18 @@ export default class ArtifactRuntime extends Runtime {
 			// PCH, debugging, transformations and unknown arguments retain the base path.
 			try {
 				for (const [index, unit] of units.entries()) {
-					const unitLanguage = clangWorkspaceUnitLanguage(unit.path, input, language);
 					// The pinned browser corpus showed a preprocessing penalty for tiny C units.
 					this.objectCacheEnabled =
 						debugMode === 'none' &&
 						(this.cacheTranslationUnits === true ||
-							(this.cacheTranslationUnits === 'auto' && unitLanguage === 'CPP'));
+							(this.cacheTranslationUnits === 'auto' && unit.language === 'CPP'));
 					const object = `${buildRoot}/objects/${index.toString().padStart(4, '0')}.o`;
 					await this.compile({
 						...common,
 						input: unit.path,
 						code: unit.content,
 						obj: object,
-						language: unitLanguage,
+						language: unit.language,
 						workspaceFiles: [],
 						sourceAlreadyMounted: true
 					});

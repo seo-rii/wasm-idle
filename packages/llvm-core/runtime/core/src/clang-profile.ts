@@ -23,63 +23,108 @@ export function clangWorkspaceUnitLanguage(
 	return path.endsWith('.c') ? 'C' : 'CPP';
 }
 
+const optionsWithValues = new Set([
+	'-I',
+	'-isystem',
+	'-iquote',
+	'-idirafter',
+	'-include',
+	'-include-pch',
+	'-imacros',
+	'-isysroot',
+	'--sysroot',
+	'-resource-dir',
+	'-D',
+	'-U',
+	'-o',
+	'-L',
+	'-l',
+	'-B',
+	'-target',
+	'--target',
+	'-Xclang',
+	'-Xpreprocessor',
+	'-Xassembler',
+	'-Xlinker',
+	'-mllvm',
+	'-MF',
+	'-MT',
+	'-MQ',
+	'-u',
+	'-T',
+	'-z',
+	'-framework',
+	'-F',
+	'-iframework',
+	'-isystem-after',
+	'-include-pth',
+	'-gcc-toolchain',
+	'--gcc-toolchain',
+	'-arch'
+]);
+
+export function clangOptionTakesValue(argument: string) {
+	return optionsWithValues.has(argument);
+}
+
+export function clangInputModeLanguage(mode: string) {
+	if (mode === 'c' || mode === 'c-header' || mode === 'cpp-output') return 'C';
+	if (mode === 'c++' || mode === 'c++-header' || mode === 'c++-cpp-output') return 'CPP';
+}
+
+export function clangWorkspaceBuildSources(
+	files: { path: string; content: string }[],
+	input: string,
+	language: ClangSourceLanguage,
+	compileArgs: string[]
+) {
+	const sources = files.filter(
+		(file) => file.path === input || isClangWorkspaceTranslationUnit(file.path)
+	);
+	let override: ClangSourceLanguage | undefined;
+	let explicit = false;
+	let standardLanguage: ClangSourceLanguage | undefined;
+	for (let index = 0; index < compileArgs.length; index++) {
+		const arg = compileArgs[index];
+		if (typeof arg !== 'string' || arg.startsWith('@')) {
+			// Clang resolves response files. Keep the caller's active-file default when their mode is opaque.
+			explicit = true;
+			override = undefined;
+		} else if (clangOptionTakesValue(arg)) {
+			index++;
+		} else if (/^--?std=/.test(arg)) {
+			standardLanguage = arg.includes('++') ? 'CPP' : 'C';
+		} else if (arg.startsWith('-x')) {
+			const mode = arg.slice(2) || compileArgs[++index];
+			explicit = true;
+			override = mode === 'objective-c' ? 'OBJC' : clangInputModeLanguage(mode);
+		}
+	}
+	// A raw standard applies to every cc1 invocation. Preserve the requested dialect when it matches.
+	if (!explicit && standardLanguage === language) override = language;
+	const units = sources.map((file) => ({
+		...file,
+		language:
+			override ??
+			(sources.length === 1 || (explicit && file.path === input)
+				? language
+				: clangWorkspaceUnitLanguage(file.path, input, language))
+	}));
+	return {
+		units,
+		cOnly: !explicit && language === 'C' && units.every((unit) => unit.language === 'C')
+	};
+}
+
 function normalizeStandardCode(value?: string) {
 	return (value || '').trim().toUpperCase().replaceAll(/\s+/g, '');
 }
 
 function resolveCppStandardArg(version?: string) {
-	switch (normalizeStandardCode(version)) {
-		case '98':
-		case 'CPP98':
-		case 'C++98':
-		case 'GNU++98':
-		case 'GNUC++98':
-			return '-std=gnu++98';
-		case '03':
-		case 'CPP03':
-		case 'C++03':
-		case 'GNU++03':
-		case 'GNUC++03':
-			return '-std=gnu++03';
-		case '11':
-		case 'CPP11':
-		case 'C++11':
-		case 'GNU++11':
-		case 'GNUC++11':
-			return '-std=gnu++11';
-		case '14':
-		case 'CPP14':
-		case 'C++14':
-		case 'GNU++14':
-		case 'GNUC++14':
-			return '-std=gnu++14';
-		case '17':
-		case 'CPP17':
-		case 'C++17':
-		case 'GNU++17':
-		case 'GNUC++17':
-			return '-std=gnu++17';
-		case '20':
-		case 'CPP20':
-		case 'C++20':
-		case 'GNU++20':
-		case 'GNUC++20':
-			return '-std=gnu++20';
-		case '23':
-		case 'CPP23':
-		case 'C++23':
-		case 'GNU++23':
-		case 'GNUC++23':
-			return '-std=gnu++23';
-		case '26':
-		case 'CPP26':
-		case 'C++26':
-		case 'GNU++26':
-		case 'GNUC++26':
-			return '-std=gnu++26';
-		default:
-			return defaultCppStandardArg;
-	}
+	const standard = /^(?:CPP|C\+\+|GNU\+\+|GNUC\+\+)?(98|03|11|14|17|20|23|26)$/.exec(
+		normalizeStandardCode(version)
+	);
+	return standard ? `-std=gnu++${standard[1]}` : defaultCppStandardArg;
 }
 
 function resolveCStandardArg(version?: string) {

@@ -17,6 +17,8 @@ import {
 } from '@wasm-idle/core';
 import {
 	CLANG_WASI_DRIVER_TARGET,
+	clangInputModeLanguage,
+	clangOptionTakesValue,
 	clangWorkspaceUnitLanguage,
 	isClangWorkspaceTranslationUnit,
 	type ClangSourceLanguage,
@@ -446,9 +448,7 @@ export class ContainerClangRuntime {
 						? filenameLanguage
 						: clangWorkspaceUnitLanguage(path, activePath, filenameLanguage);
 				}
-				if (mode === 'c' || mode === 'c-header' || mode === 'cpp-output') return 'C';
-				if (mode === 'c++' || mode === 'c++-header' || mode === 'c++-cpp-output')
-					return 'CPP';
+				return clangInputModeLanguage(mode);
 			};
 			let mode: string | undefined;
 			let omitBuiltinIncludes = false;
@@ -461,47 +461,7 @@ export class ContainerClangRuntime {
 			for (let index = 0; index < compileArgs.length; index++) {
 				const argument = compileArgs[index];
 				// Paths and forwarded arguments can themselves start with -x or @.
-				if (
-					[
-						'-I',
-						'-isystem',
-						'-iquote',
-						'-idirafter',
-						'-include',
-						'-include-pch',
-						'-imacros',
-						'-isysroot',
-						'--sysroot',
-						'-resource-dir',
-						'-D',
-						'-U',
-						'-o',
-						'-L',
-						'-l',
-						'-B',
-						'-target',
-						'--target',
-						'-Xclang',
-						'-Xpreprocessor',
-						'-Xassembler',
-						'-Xlinker',
-						'-mllvm',
-						'-MF',
-						'-MT',
-						'-MQ',
-						'-u',
-						'-T',
-						'-z',
-						'-framework',
-						'-F',
-						'-iframework',
-						'-isystem-after',
-						'-include-pth',
-						'-gcc-toolchain',
-						'--gcc-toolchain',
-						'-arch'
-					].includes(argument)
-				) {
+				if (clangOptionTakesValue(argument)) {
 					index++;
 					continue;
 				}

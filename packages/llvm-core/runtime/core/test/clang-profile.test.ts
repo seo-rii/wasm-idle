@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveClangLanguageArgs } from '../src/clang-profile.js';
+import { clangWorkspaceBuildSources, resolveClangLanguageArgs } from '../src/clang-profile.js';
 
 describe('Clang language standards', () => {
 	it.each([
@@ -49,7 +49,7 @@ describe('Clang language standards', () => {
 		);
 	});
 
-	it.each([undefined, '', 'unknown'])(
+	it.each([undefined, '', 'unknown', 'GNUCPP14', '17extra'])(
 		'keeps existing GNU defaults for the standard %s',
 		(version) => {
 			expect(resolveClangLanguageArgs('C', { cVersion: version }).standardArg).toBe(
@@ -63,4 +63,28 @@ describe('Clang language standards', () => {
 			);
 		}
 	);
+});
+
+describe('SDK workspace source modes', () => {
+	const files = [
+		{ path: 'main.cpp', content: '' },
+		{ path: 'helper.c', content: '' }
+	];
+	it.each([
+		{ args: [], languages: ['CPP', 'C'] },
+		{ args: ['-xc++'], languages: ['CPP', 'CPP'] },
+		{ args: ['-x', 'c-header'], languages: ['C', 'C'] },
+		{ args: ['-x', 'c++-header'], languages: ['CPP', 'CPP'] },
+		{ args: ['-xcpp-output'], languages: ['C', 'C'] },
+		{ args: ['-xc++-cpp-output'], languages: ['CPP', 'CPP'] },
+		{ args: ['-xc++', '-x', 'c'], languages: ['C', 'C'] },
+		{ args: ['-I', '-xc++'], languages: ['CPP', 'C'] },
+		{ args: ['-include-pch', '@includes.pch'], languages: ['CPP', 'C'] },
+		{ args: ['@flags.rsp'], languages: ['CPP', 'CPP'] },
+		{ args: ['-std=c++17'], languages: ['CPP', 'CPP'] },
+		{ args: ['-x', 'c', '-std=c11'], languages: ['C', 'C'] }
+	])('selects language defaults consistently for $args', ({ args, languages }) => {
+		const { units } = clangWorkspaceBuildSources(files, 'helper.c', 'CPP', args);
+		expect(units.map((unit) => unit.language)).toEqual(languages);
+	});
 });

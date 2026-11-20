@@ -472,6 +472,29 @@ describe('Clang profiled sysroot consumption', () => {
 			);
 		}
 	);
+
+	it.each([Clang, ArtifactRuntime])(
+		'keeps the C++ standard and headers for a .c tab with explicit C++ flags',
+		async (Runtime) => {
+			const runtime = new Runtime({ runtimeBaseUrl, manifest: profileManifest });
+			await runtime.ready;
+			const run = vi.spyOn(runtime, 'run').mockResolvedValue(null);
+			for (const compileArgs of [['-x', 'c++'], ['-std=c++17']]) {
+				run.mockClear();
+				await runtime.compileLink('int answer() { return 42; }', {
+					language: 'CPP',
+					activePath: 'helper.c',
+					workspaceFiles: [{ path: 'main.cpp', content: 'int main() {}' }],
+					cppVersion: '20',
+					compileArgs
+				});
+				const helper = run.mock.calls.find((args) => args.includes('helper.c'));
+				assert.ok(helper);
+				assert.ok(helper.includes('-std=gnu++20'));
+				assert.ok(helper.includes('/include/c++/v1'));
+			}
+		}
+	);
 	it('waits for the add-on before the first C++ unit in a mixed C/C++ build', async () => {
 		const order: string[] = [];
 		startup.untar.mockImplementation((bytes: Uint8Array) => {

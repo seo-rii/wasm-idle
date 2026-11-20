@@ -26,8 +26,7 @@ import {
 	CLANG_WASI_TARGET,
 	OBJECTIVE_C_RUNTIME_FLAGS,
 	clangSystemIncludePaths,
-	clangWorkspaceUnitLanguage,
-	isClangWorkspaceTranslationUnit,
+	clangWorkspaceBuildSources,
 	resolveClangLanguageArgs,
 	type ClangSourceLanguage
 } from '../../core/src/clang-profile.js';
@@ -1948,19 +1947,12 @@ class Clang {
 		const workspaceSnapshot = [...workspaceByPath.values()].sort((left, right) =>
 			left.path < right.path ? -1 : left.path > right.path ? 1 : 0
 		);
-		const translationUnits = workspaceSnapshot.filter(
-			(file) => file.path === input || isClangWorkspaceTranslationUnit(file.path)
+		const { units: translationUnits, cOnly } = clangWorkspaceBuildSources(
+			workspaceSnapshot,
+			input,
+			language,
+			compileArgs
 		);
-		// Match compile()'s effective language, not just the active editor language.
-		// -x overrides and response files may switch the effective language to C++.
-		// Keep the C++ libraries unless the arguments are inspectable here.
-		const cOnly =
-			language === 'C' &&
-			(translationUnits.length === 1 ||
-				translationUnits.every(
-					(unit) => clangWorkspaceUnitLanguage(unit.path, input, language) === 'C'
-				)) &&
-			!hasUnknownLanguageOverride(compileArgs);
 		const linkProfile: [] | ['C'] = cOnly ? ['C'] : [];
 		const traceDebug = debugMode === 'trace';
 		if (traceDebug && translationUnits.length > 1) {
@@ -2003,7 +1995,7 @@ class Clang {
 				input,
 				code,
 				obj,
-				language,
+				language: translationUnits[0].language,
 				compileArgs,
 				workspaceFiles: normalizedWorkspaceFiles,
 				cppVersion,
@@ -2026,7 +2018,7 @@ class Clang {
 					input: unit.path,
 					code: unit.content,
 					obj: unitObject,
-					language: clangWorkspaceUnitLanguage(unit.path, input, language),
+					language: unit.language,
 					compileArgs,
 					workspaceFiles: [],
 					cppVersion,
