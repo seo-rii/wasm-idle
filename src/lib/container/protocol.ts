@@ -8,6 +8,7 @@ export interface ContainerWorkerInitialization {
 	runtimeAssets: SandboxRuntimeAssets;
 	applicationRootURL: string;
 	workspaceId: string;
+	emptyDirectories?: readonly string[];
 }
 export type ContainerWorkspaceFile = WorkspaceFile;
 export interface ContainerWorkspaceFileMetadata {

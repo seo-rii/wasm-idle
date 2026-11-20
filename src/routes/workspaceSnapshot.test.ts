@@ -1,3 +1,7 @@
+import {
+	emptyProjectDirectories,
+	readWorkspaceDirectories
+} from '../lib/container/workspace-directories';
 import { describe, expect, it } from 'vitest';
 import {
 	normalizeWorkspaceTabs,
@@ -12,6 +16,32 @@ const files = [
 ];
 
 describe('workspace JSON boundary', () => {
+	it('saves only empty project directory leaves, preserving their POSIX names', () => {
+		const rows = [
+			['CPP', 'directory'],
+			['CPP/empty', 'directory'],
+			['CPP/empty/literal\\name', 'directory'],
+			['CPP/full', 'directory'],
+			['CPP/full/data', 'file'],
+			['PYTHON/cache', 'directory'],
+			['outside/sub', 'directory']
+		] as const;
+		const dirs = emptyProjectDirectories(
+			rows.map(([path, type]) => ({ path, type, size: 0 })),
+			['CPP', 'PYTHON']
+		);
+		const stored = JSON.parse(serializeStoredWorkspace({ files: [] }, dirs));
+		expect(readWorkspaceDirectories(stored.emptyDirectories)).toEqual([
+			'CPP/empty/literal\\name',
+			'PYTHON/cache'
+		]);
+		expect(() => validateWorkspaceSnapshot(stored)).not.toThrow();
+		for (const bad of ['CPP/../root', '/CPP/folder', 'CPP', 'CPP//folder'])
+			expect(() =>
+				validateWorkspaceSnapshot({ files: [], emptyDirectories: [bad] })
+			).toThrow();
+	});
+
 	it('accepts current and legacy snapshots without rewriting their input', () => {
 		for (const snapshot of [
 			{ files, activePath: 'main.cpp' },

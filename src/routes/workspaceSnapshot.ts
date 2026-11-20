@@ -1,6 +1,7 @@
 import { playgroundLanguages } from './language-registry';
 import { readCompilerOptions } from './compilerOptions';
 import { isBinaryWorkspaceFile, workspaceFileBytes, type WorkspaceFile } from './workspaceCodec';
+import { readWorkspaceDirectories } from '../lib/container/workspace-directories';
 import { normalizeWorkspaceFilePath } from './workspacePath';
 
 function invalid(field: string): never {
@@ -62,6 +63,7 @@ export function validateWorkspaceSnapshot(
 	value: unknown
 ): asserts value is Record<string, unknown> {
 	assertRecord(value, 'root');
+	readWorkspaceDirectories(value.emptyDirectories);
 	if (value.files === undefined && value.workspaces === undefined)
 		invalid('missing files or workspaces');
 	if (
@@ -121,7 +123,11 @@ export function normalizeWorkspaceTabs(
 }
 
 /** Keep the active project's files once in local storage. Portable v6 backups retain their shape. */
-export function serializeStoredWorkspace(snapshot: Record<string, unknown>): string {
+export function serializeStoredWorkspace(
+	snapshot: Record<string, unknown>,
+	emptyDirectories?: readonly string[]
+): string {
+	if (emptyDirectories?.length) snapshot = { ...snapshot, emptyDirectories };
 	const projects = snapshot.workspaces;
 	const language = snapshot.language;
 	if (

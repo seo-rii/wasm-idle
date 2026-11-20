@@ -563,10 +563,16 @@ describe('application-owned container worker', () => {
 				settings: {
 					runtimeAssets: './runtime/',
 					applicationRootURL: 'https://app.test/app/',
-					workspaceId: 'test'
+					workspaceId: 'test',
+					emptyDirectories: ['PYTHON3/cache/empty']
 				}
 			});
 			await wait(0);
+			expect(await call(20, 'listWorkspaceFiles')).toMatchObject({
+				value: expect.arrayContaining([
+					{ path: 'PYTHON3/cache/empty', type: 'directory', size: expect.any(Number) }
+				])
+			});
 			expect(createBashConfiguration).not.toHaveBeenCalled();
 			expect(createBinding).not.toHaveBeenCalled();
 			await call(1, 'syncWorkspace', [

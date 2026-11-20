@@ -129,7 +129,10 @@ export function createContainerWorkerClient(
 				settings: snapshotContainerArguments({
 					runtimeAssets: options.runtimeAssets,
 					applicationRootURL: options.applicationRootURL,
-					workspaceId: options.workspaceId
+					workspaceId: options.workspaceId,
+					...(options.emptyDirectories?.length
+						? { emptyDirectories: options.emptyDirectories }
+						: {})
 				})
 			});
 		} catch (error) {
