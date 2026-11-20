@@ -12,6 +12,7 @@ import {
 	onScopeDispose,
 	shallowRef,
 	unref,
+	watch,
 	type Ref,
 	type ShallowRef
 } from 'vue';
@@ -39,32 +40,33 @@ export function useWasmIdlePlayground(
 	loadSandbox: MaybeRef<SandboxLoader>,
 	options?: MaybeRef<PlaygroundBindingOptions | undefined>
 ): Ref<PlaygroundBinding> {
-	let currentAssets = unref(runtimeAssets);
-	let currentLoader = unref(loadSandbox);
-	let currentOptions = unref(options);
-	let currentBinding = createPlaygroundBinding(currentAssets, currentLoader, currentOptions);
-	const binding = computed(() => {
-		const nextAssets = unref(runtimeAssets);
-		const nextLoader = unref(loadSandbox);
-		const nextOptions = unref(options);
-		if (
-			nextAssets !== currentAssets ||
-			nextLoader !== currentLoader ||
-			nextOptions !== currentOptions
-		) {
-			const previousBinding = currentBinding;
-			currentAssets = nextAssets;
-			currentLoader = nextLoader;
-			currentOptions = nextOptions;
-			currentBinding = createPlaygroundBinding(nextAssets, nextLoader, nextOptions);
-			disposeInBackground(() => previousBinding.dispose());
-		}
-		return currentBinding;
-	});
-	if (getCurrentScope()) {
-		onScopeDispose(() => disposeInBackground(() => currentBinding.dispose()));
+	function createBinding(): PlaygroundBinding {
+		const next = createPlaygroundBinding(
+			unref(runtimeAssets),
+			unref(loadSandbox),
+			unref(options)
+		);
+		const dispose = next.dispose;
+		next.dispose = () => {
+			if (current.value === next) stop();
+			return dispose();
+		};
+		return next;
 	}
-	return binding;
+	const current = shallowRef(createBinding());
+	const stop = watch(
+		[() => unref(runtimeAssets), () => unref(loadSandbox), () => unref(options)],
+		() => {
+			const previous = current.value;
+			current.value = createBinding();
+			disposeInBackground(previous.dispose);
+		},
+		{ flush: 'sync' }
+	);
+	if (getCurrentScope()) {
+		onScopeDispose(() => disposeInBackground(current.value.dispose));
+	}
+	return computed(() => current.value);
 }
 
 export function useWasmIdleHost(
