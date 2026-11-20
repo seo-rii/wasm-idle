@@ -235,6 +235,7 @@
 	const preloadedStdinLanguages = new Set<PlaygroundLanguage>([
 		'GRAPHQL',
 		'BASH',
+		'DUCKDB',
 		'POSTGRESQL',
 		'SCALA',
 		'CSHARP',
@@ -5784,6 +5785,8 @@
 											? 'Scala.js accepts buffered stdin only. Enter it before Run; extra reads receive EOF. Interactive terminal input is unavailable.'
 											: language === 'BASH'
 												? 'The Bash WASIX package accepts stdin when the process starts. Enter it before Run; extra reads receive EOF.'
+												: language === 'DUCKDB'
+													? 'DuckDB reads this input from /dev/stdin. Enter it before Run.'
 												: language === 'POSTGRESQL'
 													? "PostgreSQL reads this input as the server file '/dev/blob' (COPY ... FROM '/dev/blob' or pg_read_file('/dev/blob')). Enter it before Run."
 													: language === 'CSHARP' ||

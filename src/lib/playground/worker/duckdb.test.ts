@@ -11,6 +11,7 @@ const duckdbMock = vi.hoisted(() => {
 	const db = {
 		connect: vi.fn(async () => connection),
 		instantiate: vi.fn(async () => {}),
+		dropFiles: vi.fn(async () => {}),
 		registerFileBuffer: vi.fn(async () => {}),
 		registerFileText: vi.fn(async () => {}),
 		reset: vi.fn(async () => {})
@@ -31,6 +32,7 @@ const duckdbMock = vi.hoisted(() => {
 		close.mockClear();
 		db.connect.mockClear();
 		db.instantiate.mockClear();
+		db.dropFiles.mockClear();
 		db.registerFileBuffer.mockClear();
 		db.registerFileText.mockClear();
 		db.reset.mockClear();
@@ -194,6 +196,31 @@ describe('DuckDB worker', () => {
 			output: 'label\tvalue\nfactorial_plus_bonus\t27\n'
 		});
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
+	});
+
+	it('replaces registered files on every run and mounts binary slices without transferring workspace memory', async () => {
+		duckdbMock.query.mockResolvedValue({ numCols: 0 });
+		await loadWorker();
+		const bytes = new Uint8Array([1, 80, 65, 82, 49, 2]).subarray(1, 5);
+		const workspaceFiles = [
+			{ path: 'parts/table.parquet', content: bytes },
+			{ path: 'stdin.txt', content: 'workspace file' }
+		];
+		const run = (files: typeof workspaceFiles) =>
+			(globalThis as any).self.onmessage({ data: { code: 'SELECT 1', workspaceFiles: files, stdin: 'stdin' } });
+		await run(workspaceFiles);
+		const firstRegistration = duckdbMock.db.registerFileBuffer.mock.invocationCallOrder[0];
+		expect(duckdbMock.db.dropFiles.mock.invocationCallOrder[0]).toBeLessThan(firstRegistration);
+		expect(duckdbMock.db.registerFileBuffer).toHaveBeenCalledWith('parts/table.parquet', bytes);
+		const mounted = vi.mocked(duckdbMock.db.registerFileBuffer).mock.calls[0] as unknown as [string, Uint8Array];
+		expect(mounted[1].buffer).not.toBe(bytes.buffer);
+		expect(duckdbMock.db.registerFileText).toHaveBeenCalledWith('stdin.txt', 'workspace file');
+		expect(duckdbMock.db.registerFileText).not.toHaveBeenCalledWith('stdin.txt', 'stdin');
+		expect(duckdbMock.db.registerFileBuffer).toHaveBeenCalledWith('/dev/stdin', new TextEncoder().encode('stdin'));
+		await run([]);
+		expect(duckdbMock.db.dropFiles).toHaveBeenCalledTimes(2);
+		expect(duckdbMock.db.dropFiles.mock.invocationCallOrder[1]).toBeGreaterThan(firstRegistration);
+		expect(duckdbMock.db.registerFileText).toHaveBeenCalledWith('stdin.txt', 'stdin');
 	});
 
 	it('prints repeated headings by ordinal and formats exact Arrow decimals and UTC dates', async () => {

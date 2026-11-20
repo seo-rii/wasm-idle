@@ -933,8 +933,8 @@ stdin/stdout/stderr plus the `env.readByte` import used by the WAT runner.
 DuckDB dynamically imports `static/wasm-duckdb/runtime.mjs`, produced from
 `@duckdb/duckdb-wasm`, and opens a fresh in-memory database per run. Override the module with
 `PUBLIC_WASM_DUCKDB_MODULE_URL` or `runtimeAssets.duckdb.moduleUrl`. Workspace files are registered
-before the active query; terminal input is registered as `stdin.txt` and `/dev/stdin` for queries
-that load it as a file.
+before the active query. Enter preloaded input before Run to read it from `/dev/stdin`. It is also
+available as `stdin.txt` when the workspace does not already contain that file.
 SQLite dynamically imports `static/wasm-sqlite/runtime.mjs`, produced from `sql.js`, and resolves
 its default `sql-wasm.wasm` from that static tree. Override the module and optional WASM payload
 with `runtimeAssets.sqlite.moduleUrl`/`wasmUrl` or the corresponding

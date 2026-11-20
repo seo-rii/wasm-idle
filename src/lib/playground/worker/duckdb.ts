@@ -1,4 +1,4 @@
-import type { SandboxWorkspaceFile } from '$lib/playground/options';
+import type { WorkspaceFile } from '@wasm-idle/core';
 import { importRuntimeModule } from '$lib/playground/runtimeModule';
 
 declare var self: any;
@@ -116,25 +116,34 @@ async function registerWorkspaceFiles(
 	db: any,
 	activePath: string,
 	code: string,
-	workspaceFiles: SandboxWorkspaceFile[],
+	workspaceFiles: WorkspaceFile[],
 	stdin: unknown
 ) {
 	const setupSql: { path: string; content: string }[] = [];
 	const files = workspaceFiles.length
 		? workspaceFiles
 		: [{ path: activePath || 'main.duckdb', content: code }];
+	let hasStdinFile = false;
 	for (const file of files) {
-		if (!file || typeof file.path !== 'string' || typeof file.content !== 'string') continue;
+		if (!file || typeof file.path !== 'string') continue;
 		const normalizedPath = normalizeWorkspacePath(file.path);
 		if (!normalizedPath) continue;
 		const content = normalizedPath === activePath ? code : file.content;
-		await db.registerFileText(normalizedPath, content);
-		if (isSqlPath(normalizedPath) && normalizedPath !== activePath) {
-			setupSql.push({ path: normalizedPath, content });
+		if (typeof content === 'string') {
+			await db.registerFileText(normalizedPath, content);
+			if (isSqlPath(normalizedPath) && normalizedPath !== activePath) {
+				setupSql.push({ path: normalizedPath, content });
+			}
+		} else if (content instanceof Uint8Array) {
+			// DuckDB transfers the backing buffer to its worker. Preserve other file views.
+			await db.registerFileBuffer(normalizedPath, content.slice());
+		} else {
+			continue;
 		}
+		if (normalizedPath === 'stdin.txt') hasStdinFile = true;
 	}
 	if (typeof stdin === 'string') {
-		await db.registerFileText('stdin.txt', stdin);
+		if (!hasStdinFile) await db.registerFileText('stdin.txt', stdin);
 		await db.registerFileBuffer('/dev/stdin', encoder.encode(stdin));
 	}
 	return setupSql.sort((left, right) => left.path.localeCompare(right.path));
@@ -168,6 +177,7 @@ self.onmessage = async (event: { data: any }) => {
 		}
 
 		await db.reset();
+		await db.dropFiles();
 		const normalizedActivePath = normalizeWorkspacePath(activePath || 'main.duckdb');
 		const setupSql = await registerWorkspaceFiles(
 			db,

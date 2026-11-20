@@ -1415,7 +1415,7 @@ describe('example route debug actions', () => {
 			/const sharedBufferAvailable = \$derived\(\s*!browser \|\| isSharedArrayBufferAvailable\(\)\s*\);/s
 		);
 		expect(source).toMatch(
-			/const preloadedStdinLanguages = new Set<PlaygroundLanguage>\(\[\s*'GRAPHQL',\s*'BASH',\s*'POSTGRESQL',\s*'SCALA',\s*'CSHARP',\s*'FSHARP',\s*'VBNET'\s*\]\);/
+			/const preloadedStdinLanguages = new Set<PlaygroundLanguage>\(\[\s*'GRAPHQL',\s*'BASH',\s*'DUCKDB',\s*'POSTGRESQL',\s*'SCALA',\s*'CSHARP',\s*'FSHARP',\s*'VBNET'\s*\]\);/
 		);
 		expect(source).toMatch(
 			/const preloadedStdin =\s+sharedBufferAvailable && !preloadedStdinLanguages\.has\(language\)\s+\? undefined\s+: stdinInput;/s
@@ -1430,7 +1430,7 @@ describe('example route debug actions', () => {
 		);
 	});
 
-	it.each(['CSHARP', 'FSHARP', 'VBNET'])(
+	it.each(['DUCKDB', 'CSHARP', 'FSHARP', 'VBNET'])(
 		'passes preloaded %s input and empty EOF without waiting for terminal input',
 		(language) => {
 			const languages = source.match(
