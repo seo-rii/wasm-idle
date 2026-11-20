@@ -123,7 +123,8 @@ describe('workspace import browser integration', () => {
 		browserOptions,
 		async () => {
 			await withImportPage(async (page) => {
-				const original = '\uFEFFfirst\r\nsecond\nthird\rfourth';
+				const original = '\uFEFFfirst\r\nsecond\r\nthird\r\nfourth\nlast';
+				const remaining = '\uFEFFfourth\nlast';
 				await page.locator('input[type="file"]').setInputFiles({
 					name: 'draft.txt',
 					mimeType: 'text/plain',
@@ -138,18 +139,29 @@ describe('workspace import browser integration', () => {
 					return readFile((await (await pending).path())!);
 				};
 				await focus();
+				await page.keyboard.press('Control+Home');
+				for (let i = 0; i < 3; i++) await page.keyboard.press('Shift+ArrowDown');
+				await page.keyboard.press('Backspace');
+				expect(await bytes()).toEqual(Buffer.from(remaining));
+				await focus();
 				await page.keyboard.press('Control+End');
 				await page.keyboard.insertText('!');
-				expect(await bytes()).toEqual(Buffer.from(original + '!'));
+				expect(await bytes()).toEqual(Buffer.from(remaining + '!'));
 				page.once('dialog', (dialog) => dialog.accept('renamed.txt'));
 				await page.getByRole('button', { name: 'Rename', exact: true }).click();
 				await page.locator('.file-tab.active[title="renamed.txt"]').waitFor();
 				await focus();
 				await page.keyboard.press('Control+z');
+				expect(await bytes()).toEqual(Buffer.from(remaining));
+				await focus();
+				await page.keyboard.press('Control+z');
 				expect(await bytes()).toEqual(Buffer.from(original));
 				await focus();
 				await page.keyboard.press('Control+y');
-				expect(await bytes()).toEqual(Buffer.from(original + '!'));
+				expect(await bytes()).toEqual(Buffer.from(remaining));
+				await focus();
+				await page.keyboard.press('Control+y');
+				expect(await bytes()).toEqual(Buffer.from(remaining + '!'));
 			});
 		}
 	);

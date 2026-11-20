@@ -3991,6 +3991,9 @@
 			workspaceModels.get(to) ?? Monaco.editor.createModel(text, old.getLanguageId(), uri);
 		renamed.setValue(text);
 		try {
+			// Native undo offsets refer to the source model's normalized line endings.
+			const eol = Monaco.editor.EndOfLineSequence;
+			renamed.setEOL(old.getEOL() === '\r\n' ? eol.CRLF : eol.LF);
 			moveModelHistory(old, renamed);
 		} catch (error) {
 			workspaceModels.delete(to);
