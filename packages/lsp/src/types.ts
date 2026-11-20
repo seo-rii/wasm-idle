@@ -7,6 +7,7 @@ import type { DOuterAssetReceipts } from './d/assets.js';
 import type { DocumentLanguageId } from './document/service.js';
 import type { ElixirRuntimeAssetReceipts } from './elixir/assets.js';
 import type { JavaLanguageServerConfig } from './java/language-server.js';
+import type { SqlWorkerOptions } from './sql/service.js';
 import type {
 	AwkRuntimePreflightProfile,
 	HaskellRuntimeAssetReceipts,
@@ -210,12 +211,7 @@ export interface EditorLanguageServerRuntimeOptions {
 		searchDirs?: string[];
 		ghcArgs?: string;
 	};
-	sql?: {
-		dialect?: 'sql' | 'sqlite' | 'duckdb';
-		moduleUrl?: string;
-		wasmUrl?: string;
-		duckdbBundles?: DuckDBBundles;
-	};
+	sql?: SqlWorkerOptions;
 	cobol?: {
 		baseUrl?: string;
 		workspaceFiles?: Array<{ path: string; content: string }>;

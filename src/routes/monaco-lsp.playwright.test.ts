@@ -301,7 +301,10 @@ const lspBrowserCases: LspBrowserCase[] = [
 		language: 'DUCKDB',
 		label: 'DuckDB',
 		fileName: 'main.duckdb',
-		source: 'SELECT FROM range(5);\n',
+		source: 'SELECT FROM task;\n',
+		validSource: 'SELECT n FROM task;\n',
+		workspaceFiles: [{ path: 'schema.sql', content: 'CREATE TABLE task(n INTEGER);' }],
+		errorLine: 1,
 		timeoutMs: 240_000
 	},
 	{
@@ -566,7 +569,10 @@ const lspBrowserCases: LspBrowserCase[] = [
 		language: 'SQLITE',
 		label: 'SQLite',
 		fileName: 'main.sql',
-		source: 'SELECT FROM numbers;\n',
+		source: '-- FROM is also in this comment\nSELECT FROM task;\n',
+		validSource: 'SELECT n FROM task;\n',
+		workspaceFiles: [{ path: 'schema.sql', content: 'CREATE TABLE task(n INTEGER);' }],
+		errorLine: 2,
 		aliases: ['sql'],
 		timeoutMs: 120_000
 	},

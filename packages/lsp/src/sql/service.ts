@@ -1,19 +1,23 @@
 import {
 	positionAt,
+	uriToPath,
 	type LspDiagnostic,
 	type LspDocument,
+	type LspDocumentContext,
 	type LspPosition,
 	type WorkerLanguageService
 } from '../lsp.js';
 import type { DuckDBBundles } from '../types.js';
 
 export type SqlLanguageServerDialect = 'sql' | 'sqlite' | 'duckdb';
+type SqlWorkspaceFile = { path: string; content: string };
 
 export interface SqlWorkerOptions {
 	dialect?: SqlLanguageServerDialect;
 	moduleUrl?: string;
 	wasmUrl?: string;
 	duckdbBundles?: DuckDBBundles;
+	workspaceFiles?: readonly SqlWorkspaceFile[];
 }
 
 interface SqlJsDatabase {
@@ -63,6 +67,7 @@ interface DuckDBRuntimeModule {
 export interface SqlEngineDiagnostic {
 	message: string;
 	statementOffset?: number;
+	setupFile?: string;
 	lineNumber?: number;
 	columnNumber?: number;
 	severity?: 'error' | 'warning' | 'info';
@@ -71,7 +76,8 @@ export interface SqlEngineDiagnostic {
 export interface SqlEngine {
 	validate(
 		code: string,
-		fileName: string
+		fileName: string,
+		setupFiles?: readonly SqlWorkspaceFile[]
 	): Promise<SqlEngineDiagnostic[]> | SqlEngineDiagnostic[];
 	dispose?: () => void | Promise<void>;
 }
@@ -179,15 +185,19 @@ const positionForSqlError = (text: string, diagnostic: SqlEngineDiagnostic) => {
 };
 
 const diagnosticFor = (text: string, diagnostic: SqlEngineDiagnostic): LspDiagnostic => {
-	const start = positionForSqlError(text, diagnostic);
+	const start = diagnostic.setupFile
+		? { line: 0, character: 0 }
+		: positionForSqlError(text, diagnostic);
 	return {
 		range: {
 			start,
-			end: { line: start.line, character: start.character + 1 }
+			end: diagnostic.setupFile ? start : { line: start.line, character: start.character + 1 }
 		},
 		severity: severityFor(diagnostic.severity),
 		source: 'sql',
-		message: diagnostic.message
+		message: diagnostic.setupFile
+			? 'Workspace setup (' + diagnostic.setupFile + '): ' + diagnostic.message
+			: diagnostic.message
 	};
 };
 
@@ -219,18 +229,25 @@ async function loadSqlJsEngine(options: SqlWorkerOptions): Promise<SqlEngine> {
 		await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
 
 		return {
-			async validate(code) {
+			async validate(code, _fileName, setupFiles = []) {
 				if (!code.trim()) return [];
 				let connection: Awaited<ReturnType<typeof db.connect>> | null = null;
+				let setupFile: string | undefined;
 				try {
 					await db.reset();
 					connection = await db.connect();
+					for (const file of setupFiles) {
+						setupFile = file.path;
+						await connection.query(file.content);
+					}
+					setupFile = undefined;
 					await connection.query(code);
 					return [];
 				} catch (error) {
 					return [
 						{
 							message: error instanceof Error ? error.message : String(error),
+							setupFile,
 							severity: 'error'
 						}
 					];
@@ -263,10 +280,16 @@ async function loadSqlJsEngine(options: SqlWorkerOptions): Promise<SqlEngine> {
 	});
 
 	return {
-		validate(code) {
+		validate(code, _fileName, setupFiles = []) {
 			if (!code.trim()) return [];
 			const db = new SQL.Database();
+			let setupFile: string | undefined;
 			try {
+				for (const file of setupFiles) {
+					setupFile = file.path;
+					db.exec(file.content);
+				}
+				setupFile = undefined;
 				const statements = db.iterateStatements?.(code);
 				if (!statements) {
 					db.exec(code);
@@ -298,7 +321,8 @@ async function loadSqlJsEngine(options: SqlWorkerOptions): Promise<SqlEngine> {
 				return [
 					{
 						message: error instanceof Error ? error.message : String(error),
-						severity: 'error'
+						severity: 'error',
+						setupFile
 					}
 				];
 			} finally {
@@ -313,6 +337,7 @@ export function createSqlWorkerService(
 ): WorkerLanguageService {
 	let engine: SqlEngine | null = null;
 	let dialect: SqlLanguageServerDialect = 'sqlite';
+	let workspace: readonly SqlWorkspaceFile[] = [];
 	let pending: Promise<unknown> = Promise.resolve();
 	let cached: { key: string; result: Promise<LspDiagnostic[]> } | undefined;
 
@@ -326,6 +351,7 @@ export function createSqlWorkerService(
 		async initialize(options, context) {
 			const config = (options || {}) as SqlWorkerOptions;
 			dialect = config.dialect || dialect;
+			workspace = config.workspaceFiles ?? [];
 			context.reportProgress(
 				dialect === 'duckdb'
 					? 'load-duckdb-language-service'
@@ -333,16 +359,34 @@ export function createSqlWorkerService(
 			);
 			engine = await loadEngine(config);
 		},
-		async diagnostics(document: LspDocument) {
+		async diagnostics(document: LspDocument, context: LspDocumentContext) {
 			const current = engine;
 			if (!current) return [];
 			const { uri, text } = document;
-			const key = JSON.stringify([dialect, uri, text]);
+			const root = uri.startsWith('file:///workspace/')
+				? 'file:///workspace/'
+				: uri.slice(0, uri.lastIndexOf('/') + 1);
+			const rootPath = uriToPath(root);
+			const active = uriToPath(uri).slice(rootPath.length);
+			const files = new Map(workspace.map(({ path, content }) => [path, content]));
+			for (const open of context.documents.values()) {
+				if (open.uri.startsWith(root))
+					files.set(uriToPath(open.uri).slice(rootPath.length), open.text);
+			}
+			files.delete(active);
+			const setupFiles = Array.from(files)
+				.filter(([path]) =>
+					dialect === 'duckdb' ? /\.(sql|duckdb)$/iu.test(path) : path.endsWith('.sql')
+				)
+				.map(([path, content]) => ({ path, content }));
+			if (dialect === 'duckdb') setupFiles.sort((a, b) => a.path.localeCompare(b.path));
+			const key = JSON.stringify([dialect, uri, text, setupFiles]);
 			if (cached?.key === key) return cached.result;
 			const result = pending.then(async () => {
 				const diagnostics = await current.validate(
 					text,
-					uri.split('/').pop() || 'main.sql'
+					active.split('/').pop() || 'main.sql',
+					setupFiles
 				);
 				return diagnostics.map((diagnostic) => diagnosticFor(text, diagnostic));
 			});

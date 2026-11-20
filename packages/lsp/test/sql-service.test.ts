@@ -3,6 +3,60 @@ import { describe, expect, it, vi } from 'vitest';
 import { createSqlWorkerService, type LspDocument, type LspDocumentContext } from '../src/index.js';
 
 describe('createSqlWorkerService', () => {
+	it.each(['sqlite', 'duckdb'] as const)(
+		'invalidates %s diagnostics for a sibling schema edit',
+		async (dialect) => {
+			const main = {
+				uri: 'file:///workspace/nested/main.sql',
+				languageId: 'sql',
+				version: 1,
+				text: 'SELECT n FROM task'
+			};
+			const schema = {
+				...main,
+				uri: 'file:///workspace/schema%20copy.sql',
+				text: 'CREATE TABLE task(n)'
+			};
+			const docs = new Map([
+				[main.uri, main],
+				[schema.uri, schema]
+			]);
+			const ctx: LspDocumentContext = {
+				documents: docs,
+				publishDiagnostics: vi.fn(),
+				reportProgress: vi.fn()
+			};
+			const validate = vi.fn(() => []);
+			const service = createSqlWorkerService(async () => ({ validate }));
+			await service.initialize?.(
+				{
+					dialect,
+					workspaceFiles: [
+						{ path: 'schema copy.sql', content: 'stale' },
+						{ path: 'nested/main.sql', content: 'stale main' },
+						{ path: 'data.txt', content: 'not SQL' }
+					]
+				},
+				ctx
+			);
+			await service.diagnostics?.(main, ctx);
+			expect(validate).toHaveBeenLastCalledWith(main.text, 'main.sql', [
+				{ path: 'schema copy.sql', content: schema.text }
+			]);
+			docs.set(schema.uri, { ...schema, version: 2, text: 'CREATE TABLE task(next)' });
+			await service.diagnostics?.(main, ctx);
+			expect(validate).toHaveBeenLastCalledWith(main.text, 'main.sql', [
+				{ path: 'schema copy.sql', content: 'CREATE TABLE task(next)' }
+			]);
+			docs.delete(schema.uri);
+			await service.diagnostics?.(main, ctx);
+			expect(validate).toHaveBeenLastCalledWith(main.text, 'main.sql', [
+				{ path: 'schema copy.sql', content: 'stale' }
+			]);
+			await service.dispose?.();
+		}
+	);
+
 	it('locates the syntax token after preceding comments, strings and identifiers', async () => {
 		const ctx: LspDocumentContext = {
 			documents: new Map(),

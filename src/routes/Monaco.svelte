@@ -2465,6 +2465,7 @@
 		nimLspWorkspaceFiles?: Array<{ path: string; content: string }>;
 		sqlLspEnabled?: boolean;
 		sqlLspModuleUrl?: string;
+		sqlLspWorkspaceFiles?: { path: string; content: string }[];
 		postgresqlLspEnabled?: boolean;
 		postgresqlLspModuleUrl?: string;
 		bashLspEnabled?: boolean;
@@ -2602,6 +2603,7 @@
 		nimLspWorkspaceFiles,
 		sqlLspEnabled = false,
 		sqlLspModuleUrl,
+		sqlLspWorkspaceFiles = [],
 		postgresqlLspEnabled = false,
 		postgresqlLspModuleUrl,
 		bashLspEnabled = false,
@@ -2802,6 +2804,9 @@
 			nimLspEnabled ? nimLspBaseUrl || '' : '',
 			nimLspEnabled ? JSON.stringify(nimLspWorkspaceFiles) : '',
 			sqlLspEnabled ? sqlLspModuleUrl || '' : '',
+			sqlLspEnabled || activeLspLanguage === 'duckdb'
+				? JSON.stringify(sqlLspWorkspaceFiles)
+				: '',
 			postgresqlLspEnabled ? postgresqlLspModuleUrl || '' : '',
 			bashLspEnabled ? bashLspModuleUrl || '' : '',
 			bashLspEnabled ? JSON.stringify(bashLspFiles) : '',
@@ -3695,7 +3700,8 @@
 					currentUrl,
 					sql: {
 						dialect: 'duckdb',
-						moduleUrl: duckDbLspModuleUrl || ''
+						moduleUrl: duckDbLspModuleUrl || '',
+						workspaceFiles: $state.snapshot(sqlLspWorkspaceFiles)
 					},
 					onStatus: (status) => (duckdbLspStatus = status)
 				});
@@ -3711,7 +3717,8 @@
 					currentUrl,
 					sql: {
 						dialect: 'sqlite',
-						moduleUrl: sqlLspModuleUrl || ''
+						moduleUrl: sqlLspModuleUrl || '',
+						workspaceFiles: $state.snapshot(sqlLspWorkspaceFiles)
 					},
 					onStatus: (status) => (sqlLspStatus = status)
 				});
