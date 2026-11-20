@@ -790,7 +790,7 @@
 	const editorFilePaths = $derived(files.map((file) => file.path));
 	const sortedFiles = $derived([...files].sort((a, b) => a.path.localeCompare(b.path)));
 	const activeLines = $derived(activeFile ? activeFile.content.split(/\r\n|\r|\n/).length : 0);
-	const activeBytes = $derived(activeFile ? new Blob([activeFile.content]).size : 0);
+	const activeBytes = $derived(activeFile ? workspaceFileBytes(activeFile).byteLength : 0);
 	const workspaceSaveKey = $derived(serializeStoredWorkspace(snapshot()));
 
 	const loadingProgress = createLoadingProgressController({
