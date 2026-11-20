@@ -507,6 +507,8 @@ export class MemoryFileSystem {
   applyFileChanges(changes: {
     readonly write: readonly { readonly path: string; readonly bytes: Uint8Array }[];
     readonly remove: readonly string[];
+    /** Remove these unchanged, empty directory inodes before publishing a replacement file. */
+    readonly replaceEmptyDirectories?: readonly { readonly path: string; readonly inode: number }[];
   }, options: PathOptions & { createRoot?: boolean } = {}): void {
     if (!changes || !Array.isArray(changes.write) || !Array.isArray(changes.remove)) throw new FsError('EINVAL', 'Invalid file changes');
     for (const entry of changes.write) {
@@ -514,6 +516,10 @@ export class MemoryFileSystem {
       checkPath(entry.path);
     }
     for (const path of changes.remove) checkPath(path);
+    for (const directory of changes.replaceEmptyDirectories ?? []) {
+      checkPath(directory.path);
+      integer(directory.inode, 'directory inode');
+    }
     if (options.createRoot !== undefined && typeof options.createRoot !== 'boolean') throw new FsError('EINVAL', 'Invalid root creation option');
     if (options.createRoot) {
       if (typeof options.root !== 'string' || !options.root.startsWith('/')) throw new FsError('EINVAL', 'Root creation requires an explicit absolute capability root');
@@ -542,6 +548,18 @@ export class MemoryFileSystem {
     for (const path of changes.remove) {
       try { staged.unlink(path, options); }
       catch (error) { if (!(error instanceof FsError) || error.code !== 'ENOENT') throw error; }
+    }
+    // Only the owner that originally created an implicit parent can nominate its inode.
+    // Work from children to parents. A recreated directory or remaining shell entry stays intact.
+    for (const directory of [...(changes.replaceEmptyDirectories ?? [])].sort((a, b) => b.path.length - a.path.length)) {
+      let target: Inode;
+      try { target = staged.resolve(directory.path, options, false).node; }
+      catch (error) {
+        if (error instanceof FsError && (error.code === 'ENOENT' || error.code === 'ENOTDIR')) continue;
+        throw error;
+      }
+      if (target.type === 'directory' && target.inode === directory.inode && target.children.size === 0)
+        staged.rmdir(directory.path, options);
     }
     for (const { path, bytes } of changes.write) {
       const parent = path.split('/').slice(0, -1).join('/');
