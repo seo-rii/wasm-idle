@@ -3,6 +3,7 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import { MOONBIT_SERVICE_POLICY } from '$lib/playground/moonbitServicePolicy';
 	import { parseDebugInteger } from './debugInteger';
+	import { createProjectBreakpointSelection } from './workspaceBreakpoints';
 	import Monaco from './Monaco.svelte';
 	import DebuggerLog from './DebuggerLog.svelte';
 	import Terminal, { type TerminalControl } from '@wasm-idle/terminal';
@@ -794,6 +795,7 @@
 	const debug = createDebugSessionController({
 		syncBreakpointsWhile: () => runningMode === 'debug'
 	});
+	const selectBreakpointProject = createProjectBreakpointSelection(debug);
 	const debugHoverOptions = {
 		resolve: (expression: string) => debug.resolveHover(expression),
 		loadChildren: (reference: number, start: number, count: number) =>
@@ -1871,6 +1873,10 @@
 			return;
 		}
 		const previousPath = file.path;
+		// File actions are disabled during execution. Move the saved specifications before
+		// the editor switches its active debug source, including disabled and log breakpoints.
+		void debug.setStructuredBreakpoints(debug.structuredBreakpoints, `/workspace/${nextPath}`);
+		void debug.setStructuredBreakpoints([], `/workspace/${previousPath}`);
 		file.path = nextPath;
 		activePath = nextPath;
 		openTabs = openTabs.map((tab) => (tab === previousPath ? nextPath : tab));
@@ -1892,6 +1898,7 @@
 		}
 		if (!confirm(`Delete ${file.path}?`)) return;
 		const deletedPath = file.path;
+		void debug.setStructuredBreakpoints([], `/workspace/${deletedPath}`);
 		const previousIndex = files.findIndex((item) => item.path === deletedPath);
 		files = files.filter((item) => item.path !== deletedPath);
 		openTabs = openTabs.filter((tab) => tab !== deletedPath);
@@ -3536,6 +3543,8 @@
 	});
 
 	$effect(() => {
+		const project = `${currentWorkspaceStorageKey}:${language}`;
+		untrack(() => selectBreakpointProject(project));
 		debug.setSourcePath(activeDebugSourcePath);
 	});
 

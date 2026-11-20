@@ -1,3 +1,6 @@
+import { createDebugSessionController } from '@wasm-idle/debug/controller';
+import { normalizeWorkspacePath, workspaceFilePath } from './workspacePath';
+import { createProjectBreakpointSelection } from './workspaceBreakpoints';
 import layoutSource from './+layout.svelte?raw';
 import source from './+page.svelte?raw';
 import { createApplicationRuntimeAssets } from '$lib/playground/applicationAssets';
@@ -24,6 +27,84 @@ import {
 	playgroundLanguages,
 	type PlaygroundLanguage
 } from './language-registry';
+
+it('moves structured breakpoints on rename and clears them on deletion and filename reuse', async () => {
+	const debug = createDebugSessionController({ sourcePath: '/workspace/main.py' });
+	const specs = [
+		{ line: 2, condition: 'x > 0', hitCondition: '3' },
+		{ line: 5, enabled: false, logMessage: 'x={x}' }
+	];
+	await debug.setStructuredBreakpoints(specs);
+	await debug.setStructuredBreakpoints([{ line: 3 }], '/workspace/other.py');
+	const main = { path: 'main.py', content: 'original' };
+	const other = { path: 'other.py', content: 'other' };
+	const state = {
+		activeFile: main,
+		activePath: main.path,
+		openTabs: [main.path, other.path],
+		files: [main, other],
+		runningMode: null,
+		debug,
+		prompt: () => 'renamed.py',
+		confirm: () => true,
+		basename: (path: string) => path,
+		selectFile: vi.fn(),
+		normalizeWorkspacePath,
+		workspaceFilePath,
+		saveStatus: ''
+	};
+	const action = (name: string, following: string) => {
+		const start = source.indexOf('function ' + name + '()');
+		const end = source.indexOf('function ' + following + '(', start);
+		const fn = runInNewContext(
+			stripTypeScriptTypes(source.slice(start, end)) + '\n' + name,
+			state
+		);
+		fn();
+	};
+	action('renameActiveFile', 'duplicateActiveFile');
+	debug.setSourcePath('/workspace/' + state.activePath);
+	expect(debug.structuredBreakpoints).toEqual(specs);
+	expect(debug.effectiveBreakpoints).toEqual([2]);
+	debug.setSourcePath('/workspace/main.py');
+	expect(debug.structuredBreakpoints).toEqual([]);
+	debug.setSourcePath('/workspace/renamed.py');
+	action('deleteActiveFile', 'closeTab');
+	expect(debug.structuredBreakpoints).toEqual([]);
+	debug.setSourcePath('/workspace/other.py');
+	expect(debug.breakpoints).toEqual([3]);
+});
+
+it('restores enabled and disabled breakpoints only for the selected workspace and language', async () => {
+	const path = '/workspace/shared.h';
+	const debug = createDebugSessionController({ sourcePath: path });
+	const select = createProjectBreakpointSelection(debug);
+	const disabled = [{ line: 2, enabled: false, logMessage: 'n={n}' }];
+	const conditional = [{ line: 4, hitCondition: '2', condition: 'ready' }];
+	select('original:C');
+	await debug.setStructuredBreakpoints(disabled);
+	await debug.setStructuredBreakpoints(conditional, '/workspace/other.h');
+	select('original:CPP');
+	expect(debug.structuredBreakpoints).toEqual([]);
+	debug.setBreakpoints([3]);
+	select('copy:CPP');
+	expect(debug.structuredBreakpoints).toEqual([]);
+	select('original:C');
+	expect(debug.structuredBreakpoints).toEqual(disabled);
+	expect(debug.effectiveBreakpoints).toEqual([]);
+	expect(debug.sourceBreakpoints).toContainEqual({
+		sourcePath: '/workspace/other.h',
+		lines: [4],
+		breakpoints: conditional
+	});
+	select('original:CPP');
+	expect(debug.structuredBreakpoints).toEqual([{ line: 3 }]);
+	await debug.setStructuredBreakpoints([], path);
+	select('original:C');
+	expect(debug.structuredBreakpoints).toEqual(disabled);
+	select('original:CPP');
+	expect(debug.structuredBreakpoints).toEqual([]);
+});
 
 const applicationRuntimeAssets = createApplicationRuntimeAssets('/wasm-idle');
 
@@ -1038,7 +1119,7 @@ describe('example route debug actions', () => {
 			/\$effect\(\(\) => \{\s+debug\.setAdapter\(debugLanguage\);\s+\}\);/s
 		);
 		expect(source).toMatch(
-			/\$effect\(\(\) => \{\s+debug\.setSourcePath\(activeDebugSourcePath\);\s+\}\);/s
+			/untrack\(\(\) => selectBreakpointProject\(project\)\);\s+debug\.setSourcePath\(activeDebugSourcePath\);/s
 		);
 		expect(source).toMatch(/debug\.begin\(\);/);
 		expect(source).toMatch(

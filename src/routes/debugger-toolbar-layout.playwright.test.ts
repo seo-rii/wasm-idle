@@ -157,3 +157,104 @@ describe('narrow paused debugger controls', () => {
 		}
 	);
 });
+
+it(
+	'moves the editor breakpoint to the renamed file and leaves a replacement file unmarked',
+	browserOptions,
+	async () => {
+		await withWorkspacePage(async (page, context, browserUrl, observeErrors) => {
+			await context.addInitScript(() => {
+				const key = 'wasm-idle:example-workspace:v3';
+				if (!localStorage.getItem(key))
+					localStorage.setItem(
+						key,
+						JSON.stringify({
+							version: 6,
+							language: 'PYTHON',
+							activePath: 'main.py',
+							files: [{ path: 'main.py', content: 'value = 1\nprint(value)\n' }],
+							lspEnabled: false,
+							sidebarOpen: true
+						})
+					);
+			});
+			await prepareContainerRuntimePage(page, browserUrl);
+			observeErrors();
+			await page.evaluate(() => (window as any).__wasmIdleDebug.setBreakpoints([2]));
+			const marker = page.locator('.monaco-editor .debug-breakpoint-glyph');
+			const files = page.locator('.workspace-files');
+			await marker.waitFor();
+			page.once('dialog', (dialog) => dialog.accept('renamed.py'));
+			await page.getByRole('button', { name: 'Rename', exact: true }).click();
+			await files.locator('button.active[title="renamed.py"]').waitFor();
+			await marker.waitFor();
+			page.once('dialog', (dialog) => dialog.accept('main.py'));
+			await page.getByRole('button', { name: 'New file', exact: true }).click();
+			await files.locator('button.active[title="main.py"]').waitFor();
+			await marker.waitFor({ state: 'detached' });
+			await files.locator('button[title="renamed.py"]').click();
+			await marker.waitFor();
+		});
+	}
+);
+
+it(
+	'isolates breakpoints when a different language project renames and deletes the same path',
+	browserOptions,
+	async () => {
+		await withWorkspacePage(async (page, context, browserUrl, observeErrors) => {
+			await context.addInitScript(() => {
+				const project = (header: string, main: string) => ({
+					activePath: header,
+					files: [
+						{ path: header, content: '#pragma once\nint first;\nint second;\n' },
+						{ path: main, content: 'int main(void) { return 0; }\n' }
+					],
+					openTabs: [header]
+				});
+				const c = project('shared.h', 'main.c');
+				const key = 'wasm-idle:example-workspace:v3';
+				if (!localStorage.getItem(key))
+					localStorage.setItem(
+						key,
+						JSON.stringify({
+							version: 6,
+							language: 'C',
+							...c,
+							workspaces: { C: c, CPP: project('api.h', 'main.cpp') },
+							lspEnabled: false,
+							sidebarOpen: true
+						})
+					);
+			});
+			await prepareContainerRuntimePage(page, browserUrl);
+			observeErrors();
+			const markers = page.locator('.monaco-editor .debug-breakpoint-glyph');
+			const files = page.locator('.workspace-files');
+			const selected = (path: string) => files.locator(`button.active[title="${path}"]`);
+			const choose = async (language: string, path: string) => {
+				await page.locator('.language-trigger').click();
+				await page.locator('#language-option-' + language).click();
+				await selected(path).waitFor();
+			};
+			await selected('shared.h').waitFor();
+			await page.evaluate(() => (window as any).__wasmIdleDebug.setBreakpoints([2]));
+			await expect.poll(() => markers.count()).toBe(1);
+			await choose('CPP', 'api.h');
+			page.once('dialog', (dialog) => dialog.accept('shared.h'));
+			await page.getByRole('button', { name: 'Rename', exact: true }).click();
+			await selected('shared.h').waitFor();
+			await expect.poll(() => markers.count()).toBe(0);
+			await choose('C', 'shared.h');
+			await expect.poll(() => markers.count()).toBe(1);
+			await choose('CPP', 'shared.h');
+			await page.evaluate(() => (window as any).__wasmIdleDebug.setBreakpoints([1, 3]));
+			await expect.poll(() => markers.count()).toBe(2);
+			page.once('dialog', (dialog) => dialog.accept());
+			await page.getByRole('button', { name: 'Delete', exact: true }).click();
+			await selected('main.cpp').waitFor();
+			await choose('C', 'shared.h');
+			await expect.poll(() => markers.count()).toBe(1);
+		});
+	}
+);
