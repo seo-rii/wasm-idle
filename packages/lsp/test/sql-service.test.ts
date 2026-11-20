@@ -3,6 +3,29 @@ import { describe, expect, it, vi } from 'vitest';
 import { createSqlWorkerService, type LspDocument, type LspDocumentContext } from '../src/index.js';
 
 describe('createSqlWorkerService', () => {
+	it('locates the syntax token after preceding comments, strings and identifiers', async () => {
+		const ctx: LspDocumentContext = {
+			documents: new Map(),
+			publishDiagnostics: vi.fn(),
+			reportProgress: vi.fn()
+		};
+		const doc = {
+			uri: 'file:///main.sql',
+			languageId: 'sql',
+			version: 1,
+			text: '-- FROM\n/* FROM */ SELECT \'FROM\' AS "FROM";\nSELECT FROM t;'
+		};
+		const service = createSqlWorkerService(async () => ({
+			validate: () => [{ message: 'near "FROM": syntax error' }]
+		}));
+		await service.initialize?.({}, ctx);
+		expect((await service.diagnostics?.(doc, ctx))?.[0].range.start).toEqual({
+			line: 2,
+			character: 7
+		});
+		await service.dispose?.();
+	});
+
 	it('shares pending revisions and serializes database resets across revisions', async () => {
 		const ctx: LspDocumentContext = {
 			documents: new Map(),

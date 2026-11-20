@@ -18,6 +18,7 @@ export interface SqlWorkerOptions {
 
 interface SqlJsDatabase {
 	exec(code: string): unknown;
+	iterateStatements?(code: string): Iterable<{ step(): boolean }> & { getRemainingSQL(): string };
 	close(): void;
 }
 
@@ -61,6 +62,7 @@ interface DuckDBRuntimeModule {
 
 export interface SqlEngineDiagnostic {
 	message: string;
+	statementOffset?: number;
 	lineNumber?: number;
 	columnNumber?: number;
 	severity?: 'error' | 'warning' | 'info';
@@ -162,11 +164,18 @@ const positionForSqlError = (text: string, diagnostic: SqlEngineDiagnostic) => {
 		return { line, character };
 	}
 	const token = diagnostic.message.match(/near "([^"]+)"/u)?.[1];
+	const start = diagnostic.statementOffset ?? 0;
 	if (token) {
-		const offset = text.toLowerCase().indexOf(token.toLowerCase());
-		if (offset >= 0) return positionAt(text, offset);
+		// Match whole tokens so quoted values, identifiers and comments cannot supply a keyword.
+		const tokens =
+			/--[^\r\n]*|\/\*[\s\S]*?(?:\*\/|$)|'(?:''|[^'])*(?:'|$)|"(?:""|[^"])*(?:"|$)|\x60(?:\x60\x60|[^\x60])*(?:\x60|$)|\[[^\]]*(?:\]|$)|[\p{L}\p{N}_$]+|[^\s]/gu;
+		tokens.lastIndex = start;
+		for (const match of text.matchAll(tokens)) {
+			if (match[0].toLowerCase() === token.toLowerCase())
+				return positionAt(text, match.index);
+		}
 	}
-	return { line: 0, character: 0 };
+	return positionAt(text, start);
 };
 
 const diagnosticFor = (text: string, diagnostic: SqlEngineDiagnostic): LspDiagnostic => {
@@ -258,7 +267,32 @@ async function loadSqlJsEngine(options: SqlWorkerOptions): Promise<SqlEngine> {
 			if (!code.trim()) return [];
 			const db = new SQL.Database();
 			try {
-				db.exec(code);
+				const statements = db.iterateStatements?.(code);
+				if (!statements) {
+					db.exec(code);
+					return [];
+				}
+				try {
+					for (const statement of statements) {
+						try {
+							while (statement.step()) {
+								/* Validate all rows. */
+							}
+						} catch (error) {
+							return [
+								{ message: error instanceof Error ? error.message : String(error) }
+							];
+						}
+					}
+				} catch (error) {
+					// On a prepare error sql.js retains the suffix beginning at the failed statement.
+					return [
+						{
+							message: error instanceof Error ? error.message : String(error),
+							statementOffset: code.length - statements.getRemainingSQL().length
+						}
+					];
+				}
 				return [];
 			} catch (error) {
 				return [
