@@ -1,4 +1,6 @@
-import { gzipSync } from 'node:zlib';
+import { readFileSync } from 'node:fs';
+import { gzipSync, gunzipSync } from 'node:zlib';
+import { TextDocument } from 'vscode-languageserver-textdocument';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
 	applyContentChanges,
@@ -93,6 +95,58 @@ describe('TypeScript worker service', () => {
 
 		expect(reportProgress).toHaveBeenCalledWith('load-typescript-libs');
 	});
+
+	it('completes a sibling export and inserts its import using the shipped libraries', async () => {
+		const main: LspDocument = {
+			uri: 'file:///workspace/main.ts',
+			languageId: 'typescript',
+			version: 1,
+			text: 'export {};\nexport const total = ma'
+		};
+		const sibling = {
+			...main,
+			uri: 'file:///workspace/arithmetic.ts',
+			text: 'export function makeTotal() { return 42; }'
+		};
+		const context: LspDocumentContext = {
+			documents: new Map([
+				[main.uri, main],
+				[sibling.uri, sibling]
+			]),
+			publishDiagnostics: vi.fn(),
+			reportProgress: vi.fn()
+		};
+		const libs = readFileSync(
+			new URL('../../../static/lsp/typescript-libs.json.gz', import.meta.url)
+		);
+		const service = createTypeScriptWorkerService('typescript');
+		await service.initialize?.({ libFiles: JSON.parse(gunzipSync(libs).toString()) }, context);
+		try {
+			const cursor = positionAt(main.text, main.text.length);
+			const result = (await service.completion?.(main, cursor, context)) as {
+				items: Array<{
+					label: string;
+					textEdit: LspTextEdit;
+					additionalTextEdits?: LspTextEdit[];
+				}>;
+			};
+			expect(result.items.some((item) => item.label === 'Math')).toBe(true);
+			const entry = result.items.find((item) => item.label === 'makeTotal')!;
+			expect(entry.additionalTextEdits).toHaveLength(1);
+			main.text = TextDocument.applyEdits(
+				TextDocument.create(main.uri, main.languageId, main.version, main.text),
+				[entry.textEdit, ...entry.additionalTextEdits!]
+			);
+			main.version++;
+			expect(main.text).toMatch(/import \{ makeTotal \} from ["']\.\/arithmetic["']/);
+			expect(main.text).toContain('total = makeTotal');
+			expect(
+				(await service.diagnostics?.(main, context))?.filter((d) => d.severity === 1)
+			).toEqual([]);
+		} finally {
+			await service.dispose?.();
+		}
+	}, 30000);
 
 	it('loads standard libraries from an explicit URL when provided', async () => {
 		const libraries = {
