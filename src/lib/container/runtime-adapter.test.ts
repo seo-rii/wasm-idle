@@ -69,6 +69,56 @@ function executionFixture(limits: { maxOutputBytes?: number } = {}) {
 	};
 }
 
+describe('container execution file representations', () => {
+	it.each(['BASH', 'PYTHON', 'RUBY'])(
+		'passes text siblings to %s without converting binary data',
+		(language) => {
+			const { adapter } = fixture();
+			const binary = Uint8Array.of(0, 255, 128);
+			adapter.syncWorkspace(language, [
+				f('main.txt', 'active'),
+				f('data/notes.txt', '한글'),
+				f('empty.txt', ''),
+				f('bom.txt', '\ufeffhello'),
+				{ path: 'bytes.dat', content: binary },
+				{ path: 'image.bin', content: Uint8Array.of(65) }
+			]);
+			const input = adapter.inputs(language, 'stale editor source', {
+				activePath: 'main.txt'
+			});
+			expect(input.code).toBe('active');
+			expect(input.options.workspaceFiles).toEqual(
+				expect.arrayContaining([
+					f('main.txt', 'active'),
+					f('data/notes.txt', '한글'),
+					f('empty.txt', ''),
+					f('bom.txt', '\ufeffhello'),
+					{ path: 'bytes.dat', content: binary },
+					{ path: 'image.bin', content: Uint8Array.of(65) }
+				])
+			);
+			expect(
+				adapter.readWorkspace(language).find((file) => file.path === 'data/notes.txt')
+					?.content
+			).toEqual(new TextEncoder().encode('한글'));
+		}
+	);
+
+	it('passes uploaded WASM bytes and text-form WASM sources to the runtime', () => {
+		const { adapter } = fixture();
+		const path = 'modules/answer.wasm';
+		const base64 = 'AGFzbQEAAAABBQFgAAF/AwIBAAcKAQZhbnN3ZXIAAAoGAQQAQSoL';
+		const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+		adapter.syncWorkspace('WASM', [{ path, content: bytes }]);
+		const input = adapter.inputs('WASM', '', { activePath: path });
+		expect(input.code).toBe('data:application/wasm;base64,' + base64);
+		expect(input.options.workspaceFiles).toEqual([f(path, input.code)]);
+		expect(adapter.readWorkspace('WASM')).toEqual([{ path, content: bytes }]);
+		adapter.syncWorkspace('WASM', [f(path, base64)]);
+		expect(adapter.inputs('WASM', '', { activePath: path }).code).toBe(base64);
+	});
+});
+
 describe('container runtime admission cancellation', () => {
 	it('cancels an immediate Stop before the sandbox starts and remains reusable', async () => {
 		const f = executionFixture();

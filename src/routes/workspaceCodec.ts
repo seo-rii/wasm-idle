@@ -6,7 +6,6 @@ export interface WorkspaceFile {
 }
 
 const wasmDataUrl = /^data:application\/wasm;base64,/;
-const binaryExtensions = /\.(wasm|bin|parquet|png|jpe?g|gif|webp|ico|pdf|zip|gz|br|woff2?|ttf)$/i;
 
 export function isBinaryWorkspaceFile(file: WorkspaceFile) {
 	return (
@@ -25,25 +24,7 @@ export function workspaceFileBytes(file: WorkspaceFile): Uint8Array<ArrayBuffer>
 	return Uint8Array.from(binary, (character) => character.charCodeAt(0));
 }
 
-export function workspaceFileFromBytes(path: string, bytes: Uint8Array): WorkspaceFile {
-	if (!binaryExtensions.test(path) && !bytes.includes(0)) {
-		try {
-			// Preserve a UTF-8 BOM as a character so encoding restores the same bytes.
-			const content = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(
-				bytes
-			);
-			return { path, content, encoding: 'utf-8' };
-		} catch {
-			// Non-UTF-8 input is binary; never replace undecodable bytes.
-		}
-	}
-	let binary = '';
-	for (let offset = 0; offset < bytes.length; offset += 0x8000) {
-		binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
-	}
-	const mime = /\.wasm$/i.test(path) ? 'application/wasm' : 'application/octet-stream';
-	return { path, content: `data:${mime};base64,${btoa(binary)}`, encoding: 'data-url' };
-}
+export { decodeWorkspaceText, workspaceFileFromBytes } from '../lib/container/workspace.js';
 
 export function workspaceFileBlob(file: WorkspaceFile) {
 	return new Blob([workspaceFileBytes(file)], {

@@ -22,6 +22,7 @@ import type {
 	SandboxRuntimeAssets
 } from '../playground/sandbox.js';
 import type { SandboxExecutionOptions } from '../playground/options.js';
+import { decodeWorkspaceText, workspaceFileFromBytes } from './workspace.js';
 import type {
 	ContainerWorkerEvent,
 	ContainerWorkspaceDelta,
@@ -428,9 +429,9 @@ export class ContainerRuntimeAdapter {
 		this.#workspaceReads.set(language, { revision, versions });
 		return { revision, reset, files, deleted };
 	}
-	readWorkspace(language: string): WorkspaceFile[] {
+	readWorkspace(language: string) {
 		const root = this.directory(language),
-			files: WorkspaceFile[] = [];
+			files: { path: string; content: Uint8Array }[] = [];
 		const visit = (path: string) => {
 			for (const name of this.fs.readdir(path || '.', { root, cwd: root })) {
 				const relative = path ? `${path}/${name}` : name;
@@ -478,11 +479,22 @@ export class ContainerRuntimeAdapter {
 				).values()
 			]);
 		}
-		const files = this.readWorkspace(language);
+		const bytes = this.fs.readFile(activePath, { root, cwd: root });
+		const binaryWasm =
+			language === 'WASM' &&
+			bytes[0] === 0 &&
+			bytes[1] === 0x61 &&
+			bytes[2] === 0x73 &&
+			bytes[3] === 0x6d;
+		const source = binaryWasm
+			? workspaceFileFromBytes(activePath, bytes).content
+			: new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+		const files = this.readWorkspace(language).map(({ path, content }) => ({
+			path,
+			content: path === activePath ? source : (decodeWorkspaceText(path, content) ?? content)
+		}));
 		return {
-			code: new TextDecoder('utf-8', { fatal: true }).decode(
-				this.fs.readFile(activePath, { root, cwd: root })
-			),
+			code: source,
 			options: {
 				...options,
 				activePath,
