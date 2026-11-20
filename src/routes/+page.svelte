@@ -3,7 +3,7 @@
 	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { MOONBIT_SERVICE_POLICY } from '$lib/playground/moonbitServicePolicy';
 	import { parseDebugInteger } from './debugInteger';
-	import { createProjectBreakpointSelection } from './workspaceBreakpoints';
+	import { createProjectBreakpointSelection, workspaceDebugPath } from './workspaceBreakpoints';
 	import Monaco from './Monaco.svelte';
 	import DebuggerLog from './DebuggerLog.svelte';
 	import Terminal, { type TerminalControl } from '@wasm-idle/terminal';
@@ -783,7 +783,7 @@
 	const activeFile = $derived(files.find((file) => file.path === activePath) ?? files[0]);
 	const activeFileIsBinary = $derived(!!activeFile && isBinaryWorkspaceFile(activeFile));
 	const activeDebugSourcePath = $derived(
-		`/workspace/${normalizePath(activePath) || defaultPathForLanguage()}`
+		`/workspace/${activePath || defaultPathForLanguage()}`
 	);
 	const editorFilePaths = $derived(files.map((file) => file.path));
 	const sortedFiles = $derived([...files].sort((a, b) => a.path.localeCompare(b.path)));
@@ -2873,8 +2873,8 @@
 				label: 'Debugger paused'
 			});
 			const sourcePath = event.sourcePath || event.callStack[0]?.sourcePath;
-			const workspacePath = normalizePath(sourcePath?.replace(/^\/workspace\//u, '') || '');
-			if (workspacePath && files.some((file) => file.path === workspacePath)) {
+			const workspacePath = workspaceDebugPath(sourcePath, files);
+			if (workspacePath) {
 				debug.setSourcePath(`/workspace/${workspacePath}`);
 				selectFile(workspacePath);
 			}
@@ -2886,8 +2886,8 @@
 		dataBreakpointRequestVersion += 1;
 		invalidateMemoryInspector();
 		if (!frame.id || !(await debug.selectFrame(frame.id))) return;
-		const workspacePath = normalizePath(frame.sourcePath?.replace(/^\/workspace\//u, '') || '');
-		if (!workspacePath || !files.some((file) => file.path === workspacePath)) return;
+		const workspacePath = workspaceDebugPath(frame.sourcePath, files);
+		if (!workspacePath) return;
 		selectFile(workspacePath);
 		debug.setSourcePath(`/workspace/${workspacePath}`);
 	}
@@ -3391,7 +3391,7 @@
 						breakpoints: [...debug.effectiveBreakpoints],
 						sourceBreakpoints: debug.sourceBreakpoints.filter(({ sourcePath }) =>
 							runWorkspaceFiles.some(
-								(file) => `/workspace/${normalizePath(file.path)}` === sourcePath
+								(file) => `/workspace/${file.path}` === sourcePath
 							)
 						),
 						activePath: runActivePath,

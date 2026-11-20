@@ -1,6 +1,6 @@
 import { createDebugSessionController } from '@wasm-idle/debug/controller';
 import { normalizeWorkspaceFilePath, workspaceFilePath } from './workspacePath';
-import { createProjectBreakpointSelection } from './workspaceBreakpoints';
+import { createProjectBreakpointSelection, workspaceDebugPath } from './workspaceBreakpoints';
 import layoutSource from './+layout.svelte?raw';
 import source from './+page.svelte?raw';
 import { createApplicationRuntimeAssets } from '$lib/playground/applicationAssets';
@@ -27,6 +27,16 @@ import {
 	playgroundLanguages,
 	type PlaygroundLanguage
 } from './language-registry';
+
+it('keeps literal POSIX debug filenames distinct from nested project paths', () => {
+	const literal = { path: 'names\\entry.cpp' };
+	const nested = { path: 'names/entry.cpp' };
+	const source = '/workspace/' + literal.path;
+	expect(workspaceDebugPath(source, [nested, literal])).toBe(literal.path);
+	expect(workspaceDebugPath('/workspace/' + nested.path, [literal, nested])).toBe(nested.path);
+	expect(workspaceDebugPath(source, [nested])).toBe(nested.path);
+	expect(workspaceDebugPath('/external/file.cpp', [literal, nested])).toBeUndefined();
+});
 
 it('moves structured breakpoints on rename and clears them on deletion and filename reuse', async () => {
 	const debug = createDebugSessionController({ sourcePath: '/workspace/main.py' });
@@ -1385,7 +1395,7 @@ describe('example route debug actions', () => {
 			'async function selectDebugFrame(frame: DebugFrame) {\n\t\tdataBreakpointRequestVersion += 1;'
 		);
 		expect(source).toMatch(
-			/async function selectDebugFrame\(frame: DebugFrame\) \{\s+dataBreakpointRequestVersion \+= 1;\s+invalidateMemoryInspector\(\);\s+if \(!frame\.id \|\| !\(await debug\.selectFrame\(frame\.id\)\)\) return;\s+const workspacePath = normalizePath\(\s*frame\.sourcePath\?\.replace\(\/\^\\\/workspace\\\/\/u, ''\) \|\| ''\s*\);\s+if \(!workspacePath \|\| !files\.some\(\(file\) => file\.path === workspacePath\)\) return;\s+selectFile\(workspacePath\);\s+debug\.setSourcePath\(`\/workspace\/\$\{workspacePath\}`\);\s+\}/s
+			/async function selectDebugFrame\(frame: DebugFrame\) \{\s+dataBreakpointRequestVersion \+= 1;\s+invalidateMemoryInspector\(\);\s+if \(!frame\.id \|\| !\(await debug\.selectFrame\(frame\.id\)\)\) return;\s+const workspacePath = workspaceDebugPath\(frame\.sourcePath, files\);\s+if \(!workspacePath\) return;\s+selectFile\(workspacePath\);\s+debug\.setSourcePath\(`\/workspace\/\$\{workspacePath\}`\);\s+\}/s
 		);
 		expect(source).toMatch(/onclick=\{\(\) => selectDebugFrame\(frame\)\}/);
 	});
