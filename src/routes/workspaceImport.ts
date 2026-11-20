@@ -1,6 +1,6 @@
 import { parseWorkspaceBackupBytes } from './workspaceBackup';
 import { workspaceFileFromBytes, type WorkspaceFile } from './workspaceCodec';
-import { assertWorkspaceFileHierarchy, normalizeWorkspacePath } from './workspacePath';
+import { assertWorkspaceFileHierarchy, normalizeWorkspaceFilePath } from './workspacePath';
 
 type ImportFile = Pick<File, 'name' | 'arrayBuffer'> & { webkitRelativePath?: string };
 export type WorkspaceImportPlan =
@@ -24,7 +24,7 @@ export async function stageWorkspaceImport(
 	let backup: Record<string, unknown> | null = null;
 	function append(batch: readonly WorkspaceFile[]) {
 		for (const file of batch) {
-			const path = normalizeWorkspacePath(file.path);
+			const path = normalizeWorkspaceFilePath(file.path, file.pathStyle);
 			if (!path) throw new Error('Imported file path cannot be empty');
 			if (paths.has(path)) throw new Error(`Duplicate imported path: ${path}`);
 			paths.add(path);
@@ -46,7 +46,11 @@ export async function stageWorkspaceImport(
 			fromZip = true;
 			append(extracted);
 		} else {
-			append([workspaceFileFromBytes(file.webkitRelativePath || file.name, bytes)]);
+			const path = file.webkitRelativePath || file.name;
+			const imported = workspaceFileFromBytes(path, bytes);
+			// DOM directory selections use '/' between components. A backslash in a filename is literal.
+			if (path.includes('\\')) imported.pathStyle = 'posix';
+			append([imported]);
 		}
 	}
 	assertDestination();
