@@ -44,6 +44,7 @@ vi.mock('../../core/src/gcc-compat.js', () => ({
 	installGccCompatibilityHeaders: startup.installCompatibility
 }));
 
+import ArtifactRuntime from '../src/artifact-runtime.js';
 import Clang from '../src/runtime.js';
 import type { RuntimeManifestV1 } from '../src/types.js';
 
@@ -445,6 +446,55 @@ describe('Clang profiled sysroot consumption', () => {
 		assert.deepEqual(order, ['base', 'addon', 'run']);
 	});
 
+	it.each([Clang, ArtifactRuntime])(
+		'selects the source language by filename when a C helper is active in a mixed project',
+		async (Runtime) => {
+			const runtime = new Runtime({ runtimeBaseUrl, manifest: profileManifest });
+			await runtime.ready;
+			runtime.run = vi.fn(async () => null);
+			const compile = vi.spyOn(runtime, 'compile');
+			await runtime.compileLink('int answer(void) { return 42; }', {
+				language: 'CPP',
+				activePath: 'helper.c',
+				workspaceFiles: [
+					{
+						path: 'main.C',
+						content: 'extern "C" int answer(void); int main() { return answer(); }'
+					}
+				]
+			});
+			assert.deepEqual(
+				compile.mock.calls.map(([unit]) => [unit.input, unit.language]),
+				[
+					['helper.c', 'C'],
+					['main.C', 'CPP']
+				]
+			);
+		}
+	);
+
+	it.each([Clang, ArtifactRuntime])(
+		'keeps the C++ standard and headers for a .c tab with explicit C++ flags',
+		async (Runtime) => {
+			const runtime = new Runtime({ runtimeBaseUrl, manifest: profileManifest });
+			await runtime.ready;
+			const run = vi.spyOn(runtime, 'run').mockResolvedValue(null);
+			for (const compileArgs of [['-x', 'c++'], ['-std=c++17']]) {
+				run.mockClear();
+				await runtime.compileLink('int answer() { return 42; }', {
+					language: 'CPP',
+					activePath: 'helper.c',
+					workspaceFiles: [{ path: 'main.cpp', content: 'int main() {}' }],
+					cppVersion: '20',
+					compileArgs
+				});
+				const helper = run.mock.calls.find((args) => args.includes('helper.c'));
+				assert.ok(helper);
+				assert.ok(helper.includes('-std=gnu++20'));
+				assert.ok(helper.includes('/include/c++/v1'));
+			}
+		}
+	);
 	it('waits for the add-on before the first C++ unit in a mixed C/C++ build', async () => {
 		const order: string[] = [];
 		startup.untar.mockImplementation((bytes: Uint8Array) => {

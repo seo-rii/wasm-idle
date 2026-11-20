@@ -460,9 +460,39 @@ describe('container Clang stdin completion', () => {
 });
 
 describe('website container Clang compilation', () => {
+	it.each(['main.cpp', 'helper.c'])(
+		'compiles helper.c as C with the %s tab active in a C++ project',
+		async (activePath) => {
+			const f = fixture();
+			const workspaceFiles = ['main.cpp', 'helper.c']
+				.filter((path) => path !== activePath)
+				.map((path) => ({ path, content: '' }));
+			expect(await f.prepare('', { activePath, workspaceFiles }, 'CPP')).toBe(true);
+			const commands = f.spawn.mock.calls.map(([, argv]) => argv);
+			expect(commands).toHaveLength(2);
+			const [compile, link] = commands;
+			expect(compile).toEqual(expect.arrayContaining(['-x', 'c', '-c', 'helper.c']));
+			expect(link).toEqual(
+				expect.arrayContaining(['--driver-mode=g++', 'main.cpp', compile.at(-1)])
+			);
+		}
+	);
+
+	it('keeps the selected C++ language for a standalone .c input', async () => {
+		const f = fixture();
+		const workspaceFiles = [{ path: 'value.h', content: '' }];
+		expect(
+			await f.prepare('int main() {}', { activePath: 'only.c', workspaceFiles }, 'CPP')
+		).toBe(true);
+		const commands = f.spawn.mock.calls.map(([, argv]) => argv);
+		expect(commands).toHaveLength(1);
+		expect(commands[0]).toEqual(expect.arrayContaining(['--driver-mode=g++', 'only.c']));
+	});
+
 	it.each([
 		{ activePath: 'main.cpp', language: 'CPP' },
-		{ activePath: 'helper.c', language: 'C' }
+		{ activePath: 'helper.c', language: 'C' },
+		{ activePath: 'helper.c', language: 'CPP' }
 	])('keeps an explicit C++ input in its -x scope when running $activePath', async (test) => {
 		const f = fixture();
 		const compileArgs = ['-x', 'c++', 'helper.c', '-x', 'none'];

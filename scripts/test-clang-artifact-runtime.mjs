@@ -102,6 +102,7 @@ const Runtime = load(
 	new URL('artifact-runtime.ts', dir),
 	{
 		'./incremental-runtime.js': { __esModule: true, default: LegacyRuntime },
+		'../../core/src/clang-profile.js': load(new URL('../../core/src/clang-profile.ts', dir)),
 		'./workspace.js': workspace,
 		'./types.js': { resolveDebugMode },
 		'./memory-limit.js': memoryLimit,
