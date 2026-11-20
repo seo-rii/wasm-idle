@@ -1,3 +1,5 @@
+import { createDebugSessionController } from '@wasm-idle/debug/controller';
+import { normalizeWorkspacePath, workspaceFilePath } from './workspacePath';
 import layoutSource from './+layout.svelte?raw';
 import source from './+page.svelte?raw';
 import { createApplicationRuntimeAssets } from '$lib/playground/applicationAssets';
@@ -24,6 +26,53 @@ import {
 	playgroundLanguages,
 	type PlaygroundLanguage
 } from './language-registry';
+
+it('moves structured breakpoints on rename and clears them on deletion and filename reuse', async () => {
+	const debug = createDebugSessionController({ sourcePath: '/workspace/main.py' });
+	const specs = [
+		{ line: 2, condition: 'x > 0', hitCondition: '3' },
+		{ line: 5, enabled: false, logMessage: 'x={x}' }
+	];
+	await debug.setStructuredBreakpoints(specs);
+	await debug.setStructuredBreakpoints([{ line: 3 }], '/workspace/other.py');
+	const main = { path: 'main.py', content: 'original' };
+	const other = { path: 'other.py', content: 'other' };
+	const state = {
+		activeFile: main,
+		activePath: main.path,
+		openTabs: [main.path, other.path],
+		files: [main, other],
+		runningMode: null,
+		debug,
+		prompt: () => 'renamed.py',
+		confirm: () => true,
+		basename: (path: string) => path,
+		selectFile: vi.fn(),
+		normalizeWorkspacePath,
+		workspaceFilePath,
+		saveStatus: ''
+	};
+	const action = (name: string, following: string) => {
+		const start = source.indexOf('function ' + name + '()');
+		const end = source.indexOf('function ' + following + '(', start);
+		const fn = runInNewContext(
+			stripTypeScriptTypes(source.slice(start, end)) + '\n' + name,
+			state
+		);
+		fn();
+	};
+	action('renameActiveFile', 'duplicateActiveFile');
+	debug.setSourcePath('/workspace/' + state.activePath);
+	expect(debug.structuredBreakpoints).toEqual(specs);
+	expect(debug.effectiveBreakpoints).toEqual([2]);
+	debug.setSourcePath('/workspace/main.py');
+	expect(debug.structuredBreakpoints).toEqual([]);
+	debug.setSourcePath('/workspace/renamed.py');
+	action('deleteActiveFile', 'closeTab');
+	expect(debug.structuredBreakpoints).toEqual([]);
+	debug.setSourcePath('/workspace/other.py');
+	expect(debug.breakpoints).toEqual([3]);
+});
 
 const applicationRuntimeAssets = createApplicationRuntimeAssets('/wasm-idle');
 

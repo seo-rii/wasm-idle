@@ -1871,6 +1871,10 @@
 			return;
 		}
 		const previousPath = file.path;
+		// File actions are disabled during execution. Move the saved specifications before
+		// the editor switches its active debug source, including disabled and log breakpoints.
+		void debug.setStructuredBreakpoints(debug.structuredBreakpoints, `/workspace/${nextPath}`);
+		void debug.setStructuredBreakpoints([], `/workspace/${previousPath}`);
 		file.path = nextPath;
 		activePath = nextPath;
 		openTabs = openTabs.map((tab) => (tab === previousPath ? nextPath : tab));
@@ -1892,6 +1896,7 @@
 		}
 		if (!confirm(`Delete ${file.path}?`)) return;
 		const deletedPath = file.path;
+		void debug.setStructuredBreakpoints([], `/workspace/${deletedPath}`);
 		const previousIndex = files.findIndex((item) => item.path === deletedPath);
 		files = files.filter((item) => item.path !== deletedPath);
 		openTabs = openTabs.filter((tab) => tab !== deletedPath);

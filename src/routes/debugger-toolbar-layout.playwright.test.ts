@@ -157,3 +157,43 @@ describe('narrow paused debugger controls', () => {
 		}
 	);
 });
+
+it(
+	'moves the editor breakpoint to the renamed file and leaves a replacement file unmarked',
+	browserOptions,
+	async () => {
+		await withWorkspacePage(async (page, context, browserUrl, observeErrors) => {
+			await context.addInitScript(() => {
+				const key = 'wasm-idle:example-workspace:v3';
+				if (!localStorage.getItem(key))
+					localStorage.setItem(
+						key,
+						JSON.stringify({
+							version: 6,
+							language: 'PYTHON',
+							activePath: 'main.py',
+							files: [{ path: 'main.py', content: 'value = 1\nprint(value)\n' }],
+							lspEnabled: false,
+							sidebarOpen: true
+						})
+					);
+			});
+			await prepareContainerRuntimePage(page, browserUrl);
+			observeErrors();
+			await page.evaluate(() => (window as any).__wasmIdleDebug.setBreakpoints([2]));
+			const marker = page.locator('.monaco-editor .debug-breakpoint-glyph');
+			const files = page.locator('.workspace-files');
+			await marker.waitFor();
+			page.once('dialog', (dialog) => dialog.accept('renamed.py'));
+			await page.getByRole('button', { name: 'Rename', exact: true }).click();
+			await files.locator('button.active[title="renamed.py"]').waitFor();
+			await marker.waitFor();
+			page.once('dialog', (dialog) => dialog.accept('main.py'));
+			await page.getByRole('button', { name: 'New file', exact: true }).click();
+			await files.locator('button.active[title="main.py"]').waitFor();
+			await marker.waitFor({ state: 'detached' });
+			await files.locator('button[title="renamed.py"]').click();
+			await marker.waitFor();
+		});
+	}
+);
