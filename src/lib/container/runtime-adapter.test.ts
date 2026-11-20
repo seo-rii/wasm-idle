@@ -269,6 +269,56 @@ describe('container shared editor input boundary', () => {
 		).toThrow(/quota/);
 		expect(container.fs.exportSnapshot()).toEqual(snapshot);
 	});
+	it('replaces its own empty directory tree with an editor file in the same or a later publication', () => {
+		for (const separate of [false, true]) {
+			const { adapter, container } = fixture();
+			const initial = [f('parts/nested/one.txt', 'old')];
+			const next = [f('parts', 'new')];
+			adapter.syncWorkspace('C', initial, []);
+			if (separate) adapter.syncWorkspace('C', [], initial);
+			adapter.syncWorkspace('C', next, separate ? [] : initial);
+			expect(read(container, '/workspace/C/parts')).toBe('new');
+		}
+	});
+
+	it('can turn a file into an implicit parent and restore the original layout', () => {
+		const { adapter, container } = fixture();
+		const flat = [f('parts', 'flat')],
+			nested = [f('parts/nested/source', 'deep')];
+		adapter.syncWorkspace('C', flat, []);
+		adapter.syncWorkspace('C', nested, flat);
+		expect(read(container, '/workspace/C/parts/nested/source')).toBe('deep');
+		adapter.syncWorkspace('C', flat, nested);
+		expect(read(container, '/workspace/C/parts')).toBe('flat');
+	});
+
+	it('preserves shell-created directories, replacements and unrelated content on failure', () => {
+		for (const situation of ['preexisting', 'recreated', 'occupied']) {
+			const { adapter, container } = fixture();
+			adapter.directory('C');
+			const dir = '/workspace/C/parts';
+			if (situation === 'preexisting') container.fs.mkdir(dir);
+			const original = [f('parts/one.txt', 'old')];
+			adapter.syncWorkspace('C', original, []);
+			adapter.syncWorkspace('C', [], original);
+			if (situation === 'recreated') {
+				container.fs.rmdir(dir);
+				container.fs.mkdir(dir);
+			}
+			if (situation === 'occupied')
+				container.fs.writeFile(dir + '/shell.txt', new Uint8Array([42]));
+			const before = container.fs.stat(dir);
+			expect(() =>
+				adapter.syncWorkspace('C', [f('unrelated', 'x'), f('parts', 'new')], [])
+			).toThrow();
+			expect(container.fs.stat(dir)).toEqual(before);
+			expect(container.fs.readdir(dir)).toEqual(
+				situation === 'occupied' ? ['shell.txt'] : []
+			);
+			expect(() => container.fs.stat('/workspace/C/unrelated')).toThrow();
+		}
+	});
+
 	it('rejects a conflicting editor batch before writing any of its files', () => {
 		const { adapter, container } = fixture();
 		const before = [f('main.c', 'base')];

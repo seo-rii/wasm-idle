@@ -29,6 +29,11 @@ import type {
 	ContainerWorkspaceFileMetadata
 } from './protocol.js';
 
+function* workspaceParents(path: string) {
+	for (let slash = path.indexOf('/'); slash !== -1; slash = path.indexOf('/', slash + 1))
+		yield path.slice(0, slash);
+}
+
 const COMMAND = 'website-playground-engine';
 const ADAPTER = 'website-playground-host-v1';
 const encoder = new TextEncoder();
@@ -107,6 +112,7 @@ export class ContainerRuntimeAdapter {
 	#sessions = new Map<string, Session>();
 	#jobs = new Map<string, Job>();
 	#published = new Map<string, Set<string>>();
+	#implicitDirectories = new Map<string, Map<string, number>>();
 	#workspaceReads = new Map<string, { revision: number; versions: Map<string, FileVersion> }>();
 	#nextJob = 0;
 	#disposed = false;
@@ -329,14 +335,6 @@ export class ContainerRuntimeAdapter {
 				? left === right
 				: left.length === right.length &&
 					left.every((byte, index) => byte === right[index]);
-		const current = (name: string) => {
-			try {
-				return this.fs.readFile(name, { root: path, cwd: path });
-			} catch (error) {
-				if ((error as { code?: string }).code !== 'ENOENT') throw error;
-				return undefined;
-			}
-		};
 		const base =
 			expectedBaseFiles === undefined
 				? undefined
@@ -352,6 +350,57 @@ export class ContainerRuntimeAdapter {
 		const deletions = [...previousPaths].filter((previous) => !next.has(previous));
 		if (project && deletions.some((name) => publishedNext.has(name)))
 			throw new TypeError('Deleted workspace file remains in project metadata');
+		const context = { root: path, cwd: path };
+		const implicit = this.#implicitDirectories.get(language) ?? new Map<string, number>();
+		const writes = validated.filter(
+			(file) => !base?.has(file.path) || !equal(base.get(file.path), asBytes(file.content))
+		);
+		const deletedPaths = new Set(deletions);
+		const missingDirectories = new Set<string>();
+		const replace = new Set(
+			writes.map((file) => file.path).filter((name) => implicit.has(name))
+		);
+		const replaceEmptyDirectories = replace.size
+			? [...implicit]
+					.filter(
+						([name]) =>
+							replace.has(name) ||
+							[...workspaceParents(name)].some((parent) => replace.has(parent))
+					)
+					.map(([name, inode]) => ({ path: name, inode }))
+			: [];
+		for (const parent of new Set(writes.flatMap((file) => [...workspaceParents(file.path)]))) {
+			try {
+				const stat = this.fs.lstat(parent, context);
+				if (stat.type === 'file' && deletedPaths.has(parent))
+					missingDirectories.add(parent);
+			} catch (error) {
+				if (!['ENOENT', 'ENOTDIR'].includes((error as { code: string }).code)) throw error;
+				missingDirectories.add(parent);
+			}
+		}
+		const current = (name: string, addition = false) => {
+			try {
+				return this.fs.readFile(name, { root: path, cwd: path });
+			} catch (error) {
+				const code = (error as { code?: string }).code;
+				if (
+					code === 'EISDIR' &&
+					addition &&
+					replace.has(name) &&
+					this.fs.lstat(name, context).inode === implicit.get(name)
+				)
+					return undefined;
+				if (
+					code === 'ENOTDIR' &&
+					addition &&
+					[...workspaceParents(name)].some((parent) => deletedPaths.has(parent))
+				)
+					return undefined;
+				if (code !== 'ENOENT') throw error;
+				return undefined;
+			}
+		};
 		// Compare all touched files before publishing even the first edit. Shell-created
 		// paths outside the editor's baseline are retained unless explicitly supplied.
 		if (base) {
@@ -359,7 +408,7 @@ export class ContainerRuntimeAdapter {
 				const before = base.get(file.path),
 					after = asBytes(file.content);
 				if (equal(before, after)) continue;
-				const present = current(file.path);
+				const present = current(file.path, before === undefined);
 				if (!equal(present, before) && !equal(present, after))
 					throw new ContainerError(
 						'FILESYSTEM_CONFLICT',
@@ -376,17 +425,18 @@ export class ContainerRuntimeAdapter {
 		this.fs.applyFileChanges(
 			{
 				remove: deletions,
-				write: validated
-					// Unchanged editor buffers must not overwrite newer shell revisions.
-					.filter(
-						(file) =>
-							!base?.has(file.path) ||
-							!equal(base.get(file.path), asBytes(file.content))
-					)
-					.map((file) => ({ path: file.path, bytes: asBytes(file.content) }))
+				replaceEmptyDirectories,
+				write: writes.map((file) => ({ path: file.path, bytes: asBytes(file.content) }))
 			},
 			{ root: path, cwd: path, createRoot: true }
 		);
+		// Publish provenance only after the atomic VFS operation has succeeded.
+		for (const { path: name } of replaceEmptyDirectories) implicit.delete(name);
+		for (const name of missingDirectories) {
+			const stat = this.fs.lstat(name, context);
+			if (stat.type === 'directory') implicit.set(name, stat.inode);
+		}
+		this.#implicitDirectories.set(language, implicit);
 		this.#published.set(language, publishedNext);
 	}
 	readWorkspaceDelta(language: string, since?: number): ContainerWorkspaceDelta {
