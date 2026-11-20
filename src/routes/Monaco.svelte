@@ -4101,7 +4101,9 @@
 	});
 
 	const handleEditorInput = (event: IMonacoInputEvent) => {
-		if (!applyingValue && event.model === model) onChange?.(event.value);
+		// Monaco stores a leading BOM separately from the editable text.
+		if (!applyingValue && event.model === model)
+			onChange?.(event.model.getValue(undefined, true));
 	};
 
 	$effect(() => {
@@ -4155,7 +4157,8 @@
 
 	$effect(() => {
 		const activeModel = model || editor?.getModel();
-		if (!activeModel || value === undefined || activeModel.getValue() === value) return;
+		if (!activeModel || value === undefined || activeModel.getValue(undefined, true) === value)
+			return;
 		const viewState = editor?.saveViewState();
 		applyingValue = true;
 		activeModel.setValue(value);
