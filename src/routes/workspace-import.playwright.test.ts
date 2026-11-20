@@ -5,6 +5,8 @@ import { strToU8, zipSync } from 'fflate';
 import { chromium, type Page } from 'playwright-core';
 import { describe, expect, it } from 'vitest';
 import { serializeWorkspaceBackup } from './workspaceBackup';
+import type { WorkspaceFile } from './workspaceCodec';
+import { workspaceStorageKey } from './workspaceContext';
 import { addBrowserTestCookies } from '../../scripts/browser-test-cookies.mjs';
 import {
 	runBrowserPreparationScripts,
@@ -94,10 +96,21 @@ describe('workspace import browser integration', () => {
 				await line.click();
 				await page.keyboard.press('Control+y');
 				await page.getByTitle('Save workspace').click();
-				await page
-					.locator('.statusbar__message')
-					.filter({ hasText: 'Saved locally' })
-					.waitFor();
+				const key = workspaceStorageKey(new URL(page.url()));
+				await expect
+					.poll(
+						() =>
+							page.evaluate((key) => {
+								const snapshot: { files?: WorkspaceFile[] } = JSON.parse(
+									localStorage.getItem(key) ?? '{}'
+								);
+								return snapshot.files?.find((file) => file.path === 'bom.txt')
+									?.content;
+							}, key),
+						{ timeout: 30_000 }
+					)
+					.toBe(original + '!');
+				expect(await downloadFile()).toEqual(Buffer.from(original + '!'));
 				await page.reload({ waitUntil: 'domcontentloaded' });
 				await page.locator('.file-tab.active[title="bom.txt"]').waitFor();
 				expect(await downloadFile()).toEqual(Buffer.from(original + '!'));
