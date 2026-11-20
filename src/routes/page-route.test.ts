@@ -2413,7 +2413,7 @@ describe('example route debug actions', () => {
 		expect(source).not.toContain('role="slider"');
 		expect(source).toMatch(/breakpoints=\{debug\.effectiveBreakpoints\}/);
 		expect(source).toMatch(/onCursorLineChange=\{debug\.setCursorLine\}/);
-		expect(source).toMatch(/onBreakpointsChange=\{debug\.setBreakpoints\}/);
+		expect(source).toContain('debug.setBreakpoints(lines, { preserveDisabled: true })');
 		expect(source).toMatch(/onRunToCursor=\{runToCursorWhileDataBreakpointIdle\}/);
 		expect(layoutSource).toMatch(
 			/:global\(html\),\s+:global\(body\) \{\s+margin: 0;\s+min-height: 100%;\s+\}/s

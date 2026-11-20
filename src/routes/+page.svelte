@@ -5606,7 +5606,7 @@
 								!debug.sourceRevisionStale &&
 								debug.selectedHistoryId === null}
 							debugStopKey={`${debug.history.at(-1)?.id ?? 0}:${debug.frameId ?? 0}`}
-							onBreakpointsChange={debug.setBreakpoints}
+							onBreakpointsChange={(lines) => debug.setBreakpoints(lines, { preserveDisabled: true })}
 						/>
 					{/key}
 				</div>
