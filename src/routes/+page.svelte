@@ -186,6 +186,8 @@
 		ocamlBackend: OcamlBackend;
 		ocamlWasmBinaryenMode: OcamlWasmBinaryenMode;
 		openTabs: string[];
+		pythonInvalidationMode: NonNullable<PythonCompileOptions['invalidationMode']>;
+		pythonTimestampInput: string;
 		rustTargetTriple: RustTargetTriple;
 		rustOptimizationProfile: RustOptimizationProfile;
 		sidebarOpen: boolean;
@@ -2004,6 +2006,8 @@
 			openTabs: project.openTabs.filter((tab) =>
 				project.files.some((file) => file.path === tab)
 			),
+			pythonInvalidationMode,
+			pythonTimestampInput,
 			rustTargetTriple,
 			rustOptimizationProfile,
 			sidebarOpen,
@@ -2055,6 +2059,8 @@
 			nextLanguage,
 			typeof value.argsInput === 'string' ? value.argsInput : ''
 		);
+		pythonInvalidationMode = value.pythonInvalidationMode ?? 'checked-hash';
+		pythonTimestampInput = value.pythonTimestampInput ?? '0';
 		compilerOptions = restoredCompilerOptions.compilerOptions;
 		argsInput = restoredCompilerOptions.argsInput;
 		if (knownCppVersions.includes(value?.cppVersion as CppVersion))

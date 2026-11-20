@@ -83,6 +83,58 @@ async function retrySaveAfterStorageError(page: Page) {
 }
 
 describe('workspace storage browser integration', () => {
+	it(
+		'restores saved Python bytecode options and defaults for an older backup',
+		browserOptions,
+		async () => {
+			await withWorkspacePage(async (page, context, browserUrl) => {
+				await disableBrowserPrewarm(context);
+				await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
+				const ready = page.locator('#language-select[data-workspace-ready="true"]');
+				await ready.waitFor();
+				await ready.selectOption('PYTHON');
+				await page.getByText('Python bytecode options', { exact: true }).click();
+				const mode = page.getByLabel('Bytecode invalidation mode');
+				const timestamp = page.getByLabel('Timestamp (Unix seconds)');
+				await mode.selectOption('timestamp');
+				await timestamp.fill('1700000001');
+				await expect
+					.poll(() =>
+						page.evaluate(
+							() =>
+								JSON.parse(
+									localStorage.getItem('wasm-idle:example-workspace:v3') ?? '{}'
+								).pythonTimestampInput
+						)
+					)
+					.toBe('1700000001');
+				await page.getByRole('button', { name: 'Save', exact: true }).click();
+				await page.locator('[data-workspace-save-state="saved"]').waitFor();
+				await page.reload({ waitUntil: 'domcontentloaded' });
+				await ready.waitFor();
+				expect(await ready.inputValue()).toBe('PYTHON');
+				await page.getByText('Python bytecode options', { exact: true }).click();
+				expect(await mode.inputValue()).toBe('timestamp');
+				expect(await timestamp.inputValue()).toBe('1700000001');
+				const older = {
+					version: 4,
+					language: 'PYTHON',
+					activePath: 'older.py',
+					files: [{ path: 'older.py', content: 'print(1)' }]
+				};
+				await page
+					.locator('input[type=file]')
+					.setInputFiles({
+						name: 'old.json',
+						mimeType: 'application/json',
+						buffer: Buffer.from(JSON.stringify(older))
+					});
+				await page.locator('.file-tab.active[title="older.py"]').waitFor();
+				expect(await mode.inputValue()).toBe('checked-hash');
+			});
+		}
+	);
+
 	it.each([false, true])(
 		'restores a valid backup into a saved copy during recovery (storage initially full: %s)',
 		browserOptions,

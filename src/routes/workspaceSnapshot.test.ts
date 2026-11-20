@@ -52,6 +52,8 @@ describe('workspace JSON boundary', () => {
 		{ files, version: 8 },
 		{ files, version: 4.5 },
 		{ files, cppVersion: 'CPP99' },
+		{ files, pythonInvalidationMode: 'unknown' },
+		{ files, pythonTimestampInput: 1700000001 },
 		{ files, rustOptimizationProfile: 'unknown' },
 		{ files: [{ path: 'main.cpp', content: 42 }] },
 		{ files: [{ path: 'main.cpp', content: '', encoding: 'other' }] },
