@@ -98,6 +98,19 @@ describe('clangd worker asset integrity', () => {
 		]);
 	});
 
+	it('validates project text files before loading the runtime', async () => {
+		await scope.dispatch({
+			type: 'init',
+			baseUrl: 'https://assets.example.com/clangd/',
+			workspaceFiles: [{ path: 'include/header.h', content: Uint8Array.of(0, 255) }]
+		});
+		expect(scope.messages).toContainEqual({
+			type: 'error',
+			message: 'Clangd workspace files must contain text'
+		});
+		expect(mocks.decompressGzip).not.toHaveBeenCalled();
+	});
+
 	it('validates but does not reserve a workspace file before runtime initialization', async () => {
 		await scope.dispatch({ type: 'sync-file', name: 'include\\header.hpp' });
 
@@ -230,6 +243,11 @@ describe('clangd worker asset integrity', () => {
 			await scope.dispatch({
 				type: 'init',
 				baseUrl: 'https://assets.example.com/clangd/',
+				workspaceFiles: [
+					{ path: 'include/lib/answer', content: '#define ANSWER 42' },
+					{ path: '.clangd', content: 'ignore' },
+					{ path: 'src/compile_flags.txt', content: 'ignore' }
+				],
 				assets: {
 					clangdJs: new ArrayBuffer(0),
 					clangdModule: module,
@@ -241,6 +259,9 @@ describe('clangd worker asset integrity', () => {
 			expect(factory).toHaveBeenCalledOnce();
 			expect(receiveInstance).toHaveBeenCalledOnce();
 			expect(runtime.callMain).toHaveBeenCalledWith([]);
+			await scope.dispatch({ type: 'sync-file', name: 'include/lib/answer' });
+			expect(files.get('/workspace/include/lib/answer')).toBe('#define ANSWER 42');
+			expect(files.has('/workspace/src/compile_flags.txt')).toBe(false);
 			expect(mocks.decompressGzip).not.toHaveBeenCalled();
 			expect(mocks.verifyRuntimeAssetIntegrity).not.toHaveBeenCalled();
 			expect(scope.messages).toContainEqual({ type: 'ready', value: 8 });

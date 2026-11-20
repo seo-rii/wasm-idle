@@ -16,7 +16,7 @@ import { createLanguageServerProgressReporter } from '../worker-client.js';
 import type { ClangdCompileProfile, ClangdStatus } from './config.js';
 import type { ClangdPreloadedAssets, ClangdWorkerOutboundMessage } from './protocol.js';
 import { createClangdRequestPolicy, type ClangdRequestTrace } from './request-policy.js';
-import { ClangdWorkspaceFileRegistry } from './workspace.js';
+import { prepareClangdWorkspace, type ClangdWorkspaceFile } from './workspace.js';
 import { prepareClangdWasm } from './wasm.js';
 import { parseClangdHeaders } from './headers.js';
 import { decompressGzip } from '@wasm-idle/llvm-core';
@@ -27,6 +27,8 @@ export interface ClangdLanguageServerOptions extends EditorLanguageServerRuntime
 	currentUrl?: string;
 	onStatus?: (status: ClangdStatus) => void;
 	compileProfile?: ClangdCompileProfile;
+	/** Workspace-relative text files available to includes when the server starts. */
+	workspaceFiles?: readonly ClangdWorkspaceFile[];
 	objectiveC?: {
 		baseUrl: string;
 		headersUrl: string;
@@ -171,7 +173,8 @@ async function createServer(
 		'signal' | 'assetTimeoutMs' | 'startupTimeoutMs'
 	>,
 	debug = false,
-	hostOptions?: ClangdLanguageServerOptions
+	hostOptions?: ClangdLanguageServerOptions,
+	workspaceFiles?: ClangdWorkspaceFile[]
 ) {
 	// Reactive framework values may be proxies, and callers can edit them while
 	// assets load. Snapshot only the public fields into cloneable worker data.
@@ -266,6 +269,7 @@ async function createServer(
 							baseUrl: assetConfig.baseUrl,
 							...(debug ? { debug } : {}),
 							compileProfile,
+							...(workspaceFiles ? { workspaceFiles } : {}),
 							assets: preloaded.assets
 						},
 						preloaded.transfer
@@ -315,6 +319,7 @@ export async function createClangdLanguageServer(
 		}
 		hostOptions?.onStatus?.(status);
 	};
+	const workspace = prepareClangdWorkspace(hostOptions?.workspaceFiles);
 	const worker = await createServer(
 		assetConfig,
 		hostOptions?.createWorker || createDefaultClangdWorker,
@@ -325,7 +330,8 @@ export async function createClangdLanguageServer(
 			startupTimeoutMs: hostOptions?.startupTimeoutMs
 		},
 		debug,
-		hostOptions
+		hostOptions,
+		workspace.files
 	);
 	const reader = new BrowserMessageReader(worker);
 	const writer = new BrowserMessageWriter(worker);
@@ -334,7 +340,6 @@ export async function createClangdLanguageServer(
 		{ requestTimeoutMs, onDelay: hostOptions?.onRequestDelay }
 	);
 	policy.trace.push(...startupTrace);
-	const workspaceFiles = new ClangdWorkspaceFileRegistry();
 
 	let disposed = false;
 	return {
@@ -342,11 +347,11 @@ export async function createClangdLanguageServer(
 		cancelEditorRequests: policy.cancelEditorRequests,
 		getDiagnosticTrace: () => policy.trace.map((entry) => ({ ...entry })),
 		syncFile: (path: string) => {
-			const registered = workspaceFiles.register(path);
+			const registered = workspace.registry.register(path);
 			try {
 				worker.postMessage({ type: 'sync-file', name: registered.path });
 			} catch (error) {
-				if (registered.added) workspaceFiles.unregister(registered.path);
+				if (registered.added) workspace.registry.unregister(registered.path);
 				throw error;
 			}
 		},

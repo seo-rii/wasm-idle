@@ -548,6 +548,13 @@
 	const clangdLspEnabled = $derived(
 		lspEnabled && (clangdRequested || clangdLspLanguages.has(language))
 	);
+	const clangdWorkspaceFiles = $derived(
+		clangdLspEnabled
+			? files
+					.filter((file) => file.path !== activePath && !isBinaryWorkspaceFile(file))
+					.map((file) => ({ path: file.path, content: file.content }))
+			: []
+	);
 	const dotnetLspEnabled = $derived(lspEnabled && dotnetLspLanguages.has(language));
 	const dotnetLspModuleUrl = $derived(
 		dotnetLspEnabled ? runtimeAssets.dotnet?.moduleUrl : undefined
@@ -5397,6 +5404,7 @@
 							{javaLspRuntime}
 							{javaLspWorkspaceFiles}
 							clangdEnabled={clangdLspEnabled}
+							{clangdWorkspaceFiles}
 							{clangdBaseUrl}
 							clangdRuntimeAssets={runtimeAssets}
 							clangdCppVersion={cppVersion}
