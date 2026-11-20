@@ -129,3 +129,20 @@ test('disposing a shell binding closes only its descriptors and frees unlinked s
   assert.equal(fs.fstat(other).size, 0, 'descriptors owned outside the binding remain open');
   fs.close(other);
 });
+
+test('a directory symlink can serve as the shell mount root', () => {
+  const fs = new MemoryFileSystem();
+  fs.mkdir('sources');
+  fs.writeFile('sources/file', encode('data'));
+  fs.symlink('sources', 'project');
+  const shell = createShellFilesystem(fs, { root: '/workspace/project' });
+  try {
+    assert.deepEqual(shell.readdir('/'), [{ name: 'file', type: 'file' }]);
+    const handle = shell.open('/file', flags());
+    assert.equal(decode(shell.read(handle, 0, 8)), 'data');
+    shell.close(handle);
+    shell.mkdir('/created');
+    assert.equal(fs.stat('sources/created').type, 'directory');
+    assert.throws(() => shell.stat('/../sibling'), code('EACCES'));
+  } finally { shell.dispose(); }
+});

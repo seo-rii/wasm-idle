@@ -674,9 +674,9 @@ export class MemoryFileSystem {
     }
     this.writable(source.node);
     this.writable(destination.node);
+    if ((from.endsWith('/') || to.endsWith('/')) && node.type !== 'directory') throw new FsError('ENOTDIR', 'Trailing slash requires a directory');
     if (source.node === destination.node && source.name === destination.name) return;
     const old = destination.node.children.get(destination.name);
-    if ((from.endsWith('/') || to.endsWith('/')) && node.type !== 'directory') throw new FsError('ENOTDIR', 'Trailing slash requires a directory');
     const sourcePath = childPath(source.path, source.name);
     if (node.type === 'directory' && within(destination.path, sourcePath)) throw new FsError('EINVAL', 'Cannot move a directory inside itself');
     this.checkPlacement(childPath(destination.path, destination.name), node);
@@ -692,9 +692,10 @@ export class MemoryFileSystem {
     }
     source.node.children.delete(source.name);
     this.attach(destination.node, destination.name, node);
-    this.changed(source.node, destination.node, node);
-    // Moving a directory away and back must invalidate captured descendant paths too.
-    for (const child of node.children.values()) this.invalidateVersion(child, true);
+    this.changed(source.node, destination.node);
+    // The inode's name changed, but its contents and modification time did not.
+    node.ctimeMs = source.node.ctimeMs;
+    this.invalidateVersion(node, true);
     this.notify({ kind: 'rename', path: `${destination.path === '/' ? '' : destination.path}/${destination.name}`, previousPath: sourcePath, inode: node.inode });
   }
 

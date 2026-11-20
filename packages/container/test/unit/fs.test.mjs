@@ -689,3 +689,24 @@ test('mkdir of the root, "." or ".." reports EEXIST once the path resolves', () 
   fs.mkdir('/workspace/x/y', { recursive: true });
   assert.equal(fs.stat('/workspace/x/y').type, 'directory');
 });
+
+test('rename preserves the modification time of the moved inode and requires a directory for a trailing slash', () => {
+  const fs = new MemoryFileSystem();
+  fs.writeFile('source', bytes('unchanged'));
+  fs.setTimes('source', { mtimeMs: 123 });
+  const before = fs.stat('source');
+  for (const [from, to] of [['source', 'source/'], ['source/', 'source'], ['source/', 'source/']]) {
+    assert.throws(() => fs.rename(from, to), error('ENOTDIR'));
+  }
+  assert.deepEqual(fs.stat('source'), before);
+  fs.mkdir('destination');
+  fs.rename('source', 'destination/moved');
+  const after = fs.stat('destination/moved');
+  assert.equal(after.inode, before.inode);
+  assert.equal(after.mtimeMs, 123);
+  assert.equal(after.ctimeMs, fs.stat('destination').mtimeMs);
+  fs.setTimes('destination', { mtimeMs: 456 });
+  fs.rename('destination/', 'renamed/');
+  assert.equal(fs.stat('renamed').mtimeMs, 456);
+  assert.equal(fs.stat('renamed/moved').mtimeMs, 123);
+});
