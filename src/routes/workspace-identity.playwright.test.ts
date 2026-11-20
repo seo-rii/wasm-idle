@@ -137,6 +137,44 @@ describe('shared workspace fragment navigation', () => {
 		page.evaluate(() => (window as any).__wasmIdleDebug?.getEditorValue());
 
 	it(
+		'restores the local URL when an invalid share supersedes a queued fragment',
+		browserOptions,
+		async () => {
+			await withWorkspacePage(async (page, _context, browserUrl) => {
+				await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
+				await page
+					.locator('#language-select[data-workspace-ready="true"]')
+					.waitFor({ state: 'attached' });
+				const original = '// local before fragment changes';
+				await page.evaluate(
+					(text) => (window as any).__wasmIdleDebug.setEditorValue(text),
+					original
+				);
+				await expect
+					.poll(() =>
+						page.evaluate(
+							(key) =>
+								JSON.parse(localStorage.getItem(key) || 'null')?.files[0]?.content,
+							key
+						)
+					)
+					.toBe(original);
+				await page.evaluate(
+					(hash) => {
+						location.hash = hash;
+						location.hash = 'workspace=broken';
+					},
+					new URL(sharedUrl(browserUrl)).hash
+				);
+				await page.getByText('Invalid share URL', { exact: true }).waitFor();
+				expect(page.url()).toBe(browserUrl);
+				await page.reload({ waitUntil: 'domcontentloaded' });
+				await expect.poll(() => value(page), { timeout: 30_000 }).toBe(original);
+			});
+		}
+	);
+
+	it(
 		'opens a shared fragment in this tab after persisting the current edit and preserves browser history',
 		{ ...browserOptions, timeout: 180_000 },
 		async () => {

@@ -2140,13 +2140,13 @@
 	let shareNavigationSource: string | undefined;
 	async function openSharedWorkspace(event: HashChangeEvent) {
 		const target = new URL(event.newURL);
-		if (location.href !== target.href) return;
 		if (!target.hash.startsWith('#' + SHARE_PREFIX)) {
 			shareNavigationSource = undefined;
 			return;
 		}
-		const previous = shareNavigationSource ?? event.oldURL;
-		shareNavigationSource = previous;
+		// Hash changes are queued. Remember the first source even if a newer URL is already visible.
+		const previous = (shareNavigationSource ??= event.oldURL);
+		if (location.href !== target.href) return;
 		const incoming = selectWorkspaceAt(target);
 		if (incoming.source === 'share' && incoming.replacementUrl) {
 			// A fragment-only navigation leaves the editor mounted. Flush the current
