@@ -515,7 +515,7 @@ describe('workspace import browser integration', () => {
 							])
 						);
 					});
-				const shellCommand = async (language: string, command: string) => {
+				const waitForShellLine = async (line: string) => {
 					const rows = page.locator('.terminal-shell .xterm-rows > div');
 					await expect
 						.poll(
@@ -525,7 +525,10 @@ describe('workspace import browser integration', () => {
 								),
 							{ timeout: 45_000 }
 						)
-						.toContain(`~/${language} $`);
+						.toContain(line);
+				};
+				const shellCommand = async (language: string, command: string) => {
+					await waitForShellLine(`~/${language} $`);
 					await page.locator('.terminal-shell .xterm-helper-textarea').focus();
 					await page.keyboard.type(command);
 					await page.keyboard.press('Enter');
@@ -561,6 +564,28 @@ describe('workspace import browser integration', () => {
 					.toContainEqual(
 						expect.objectContaining({ path: 'notes.py', content: appended })
 					);
+				const blocked = { path: 'retry.py', content: '# restored on retry\n' };
+				const retryBackup = {
+					language: 'CPP',
+					...cpp,
+					workspaces: {
+						CPP: cpp,
+						PYTHON: project([{ ...restored, content: appended }, extra, blocked])
+					}
+				};
+				await shellCommand('CPP', 'mkdir /workspace/PYTHON/retry.py && echo retry-blocked');
+				await waitForShellLine('retry-blocked');
+				await upload(retryBackup);
+				await page.getByText(/Workspace backup restored\. Workspace sync failed/).waitFor();
+				expect(await pythonFiles()).not.toHaveProperty('retry.py');
+				await shellCommand('CPP', 'rmdir /workspace/PYTHON/retry.py && echo retry-ready');
+				await waitForShellLine('retry-ready');
+				await upload(retryBackup);
+				await expect.poll(pythonFiles, { timeout: 12_000 }).toEqual({
+					'notes.py': appended,
+					'new.py': extra.content,
+					'retry.py': blocked.content
+				});
 				await upload({ language: 'CPP', ...cpp });
 				await expect
 					.poll(async () => Object.keys(await pythonFiles()), { timeout: 15_000 })
