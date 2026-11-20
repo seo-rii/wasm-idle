@@ -1175,6 +1175,80 @@ describe('workspace storage browser integration', () => {
 
 describe('workspace editor model lifetime', () => {
 	it(
+		'keeps undo and redo separate when language projects share a filename',
+		browserOptions,
+		async () => {
+			await withWorkspacePage(async (page, context, browserUrl) => {
+				await disableBrowserPrewarm(context);
+				await context.addInitScript(() => {
+					const project = {
+						activePath: 'shared.txt',
+						openTabs: ['shared.txt'],
+						files: [{ path: 'shared.txt', content: 'base' }]
+					};
+					localStorage.setItem(
+						'wasm-idle:example-workspace:v3',
+						JSON.stringify({
+							version: 6,
+							language: 'CPP',
+							lspEnabled: false,
+							...project,
+							workspaces: { CPP: project, PYTHON: project }
+						})
+					);
+				});
+				const url = new URL(browserUrl);
+				url.searchParams.set('lsp-test', '1');
+				await page.goto(url.href, { waitUntil: 'domcontentloaded' });
+				const value = () =>
+					page.evaluate(() => (window as any).__wasmIdleMonacoEditor?.getValue());
+				await expect.poll(value, { timeout: 60000 }).toBe('base');
+				const select = async (language: string, contents: string) => {
+					await page.evaluate(() => {
+						(window as any).__previousProjectEditor = (
+							window as any
+						).__wasmIdleMonacoEditor;
+					});
+					await page.locator('#language-select').selectOption(language);
+					await page.waitForFunction((text) => {
+						const target = window as any;
+						return (
+							target.__wasmIdleMonacoEditor !== target.__previousProjectEditor &&
+							target.__wasmIdleMonacoEditor?.getValue() === text
+						);
+					}, contents);
+				};
+				const focus = () =>
+					page.evaluate(() => (window as any).__wasmIdleMonacoEditor.focus());
+				const append = async (text: string) => {
+					await focus();
+					await page.keyboard.press('Control+End');
+					await page.keyboard.insertText(text);
+				};
+				await append('1');
+				expect(await value()).toBe('base1');
+				await select('PYTHON', 'base');
+				await focus();
+				await page.keyboard.press('Control+z');
+				expect(await value()).toBe('base');
+				await append('2');
+				await select('CPP', 'base1');
+				await focus();
+				await page.keyboard.press('Control+z');
+				expect(await value()).toBe('base');
+				await select('PYTHON', 'base2');
+				await focus();
+				await page.keyboard.press('Control+z');
+				expect(await value()).toBe('base');
+				await select('CPP', 'base');
+				await focus();
+				await page.keyboard.press('Control+y');
+				expect(await value()).toBe('base1');
+			});
+		}
+	);
+
+	it(
 		'saves the first edit in an empty project under the language entry path',
 		browserOptions,
 		async () => {

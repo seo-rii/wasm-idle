@@ -5,6 +5,7 @@
 	import { parseDebugInteger } from './debugInteger';
 	import { createProjectBreakpointSelection } from './workspaceBreakpoints';
 	import Monaco from './Monaco.svelte';
+	import type { ProjectModelHistories } from './workspace-model-history';
 	import DebuggerLog from './DebuggerLog.svelte';
 	import Terminal, { type TerminalControl } from '@wasm-idle/terminal';
 	import type { ProgressLike } from '@wasm-idle/core';
@@ -439,9 +440,20 @@
 		? { source: location.href, target: initialSelection.replacementUrl }
 		: null;
 	let editorWorkspaceRevision = $state(0);
-	const editorWorkspaceKey = $derived(
-		`${currentWorkspaceStorageKey}:${language}:${editorWorkspaceRevision}`
-	);
+	const editorHistoryScope = $derived({
+		key: `${currentWorkspaceStorageKey}:${editorWorkspaceRevision}`,
+		projects: new Map<PlaygroundLanguage, ProjectModelHistories>()
+	});
+	const editorWorkspaceKey = $derived(`${editorHistoryScope.key}:${language}`);
+	const projectHistory = $derived.by(() => {
+		const projects = editorHistoryScope.projects;
+		let history = projects.get(language);
+		if (!history) {
+			history = new Map();
+			projects.set(language, history);
+		}
+		return history;
+	});
 	let zipExportRequest = 0;
 	const workspaceStorage = createWorkspaceStorage(
 		(value, key) => localStorage.setItem(key, value),
@@ -5465,6 +5477,7 @@
 							lspLanguage={monacoLspLanguage}
 							filePath={activePath || defaultPathForLanguage()}
 							workspacePaths={editorFilePaths}
+							{projectHistory}
 							rustTargetTriple={languageExecutionOptions.rustTargetTriple}
 							goTarget={languageExecutionOptions.goTarget}
 							bind:editor
