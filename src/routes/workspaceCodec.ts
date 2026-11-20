@@ -25,18 +25,21 @@ export function workspaceFileBytes(file: WorkspaceFile): Uint8Array<ArrayBuffer>
 	return Uint8Array.from(binary, (character) => character.charCodeAt(0));
 }
 
-export function workspaceFileFromBytes(path: string, bytes: Uint8Array): WorkspaceFile {
+export function decodeWorkspaceText(path: string, bytes: Uint8Array): string | null {
 	if (!binaryExtensions.test(path) && !bytes.includes(0)) {
 		try {
 			// Preserve a UTF-8 BOM as a character so encoding restores the same bytes.
-			const content = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(
-				bytes
-			);
-			return { path, content, encoding: 'utf-8' };
+			return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
 		} catch {
 			// Non-UTF-8 input is binary; never replace undecodable bytes.
 		}
 	}
+	return null;
+}
+
+export function workspaceFileFromBytes(path: string, bytes: Uint8Array): WorkspaceFile {
+	const content = decodeWorkspaceText(path, bytes);
+	if (content !== null) return { path, content, encoding: 'utf-8' };
 	let binary = '';
 	for (let offset = 0; offset < bytes.length; offset += 0x8000) {
 		binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
