@@ -310,6 +310,7 @@ function readArchiveEntries(source: Uint8Array): ArchiveEntry[] {
 		}
 		expectedOffset = nextOffset;
 	}
+	if (expectedOffset !== directory) throw new Error('Inconsistent ZIP entry offsets');
 	return entries;
 }
 
@@ -368,7 +369,9 @@ export function extractWorkspaceArchive(source: Uint8Array) {
 		} while (offset < entry.payloadEnd);
 		if (!completed) throw new Error(`Unfinished ZIP entry: ${path}`);
 	}
-	if (files.length === 0) throw new Error('ZIP archive contains no files');
+	// The workspace can represent an empty root, but cannot retain named empty directories.
+	if (!files.length && entries.some((entry) => entry.path !== '' || entry.originalSize !== 0))
+		throw new Error('ZIP archive contains no files');
 	return files;
 }
 

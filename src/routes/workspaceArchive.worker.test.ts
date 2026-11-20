@@ -58,6 +58,13 @@ function unicodePathField(name: Uint8Array, path: string) {
 }
 
 describe('workspace archive worker', () => {
+	it('round trips an empty workspace ZIP', () => {
+		expect(extractWorkspaceArchive(createWorkspaceArchive([]))).toEqual([]);
+		expect(extractWorkspaceArchive(entryArchive([['./', '']]))).toEqual([]);
+		// An editor workspace cannot retain a named empty directory.
+		expect(() => extractWorkspaceArchive(entryArchive([['src/', '']]))).toThrow(/no files/u);
+	});
+
 	it('decodes unmarked Unix UTF-8 and legacy CP437 filenames', () => {
 		const latin = Uint8Array.of(0x63, 0x61, 0x66, 0x82, 0x2e, 0x68);
 		for (const os of [0, 3]) {
