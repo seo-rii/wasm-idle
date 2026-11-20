@@ -6,7 +6,7 @@ import {
 	type SandboxRuntimeAssets,
 	type TerminalControl
 } from '@wasm-idle/core';
-import { writable, type Writable } from 'svelte/store';
+import { get, writable, type Writable } from 'svelte/store';
 
 export interface SvelteWasmIdleHost {
 	binding: PlaygroundBinding;
@@ -28,10 +28,8 @@ export function createSvelteWasmIdleHost(
 	const { registerDispose, ...bindingOptions } = options;
 	const binding = createPlaygroundBinding(runtimeAssets, loadSandbox, bindingOptions);
 	const terminal = writable<TerminalControl | undefined>(undefined);
-	let currentTerminal: TerminalControl | undefined;
 	const dispose = async () => {
-		const terminalToDispose = currentTerminal;
-		currentTerminal = undefined;
+		const terminalToDispose = get(terminal);
 		terminal.set(undefined);
 		const failures: unknown[] = [];
 		try {
@@ -53,10 +51,7 @@ export function createSvelteWasmIdleHost(
 		binding,
 		terminal,
 		terminalProps: binding.terminalProps,
-		setTerminal(nextTerminal) {
-			currentTerminal = nextTerminal;
-			terminal.set(nextTerminal);
-		},
+		setTerminal: terminal.set,
 		dispose
 	};
 	registerDispose?.(() => {
