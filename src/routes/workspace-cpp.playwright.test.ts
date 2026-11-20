@@ -194,6 +194,11 @@ it(
 					)
 				).toBe(initialSource);
 				await run(page, 'cpp_workspace_1');
+				const showFiles = page.getByRole('button', { name: 'Show files', exact: true });
+				if (await showFiles.count()) await showFiles.click();
+				await page.locator('.workspace-files button[title="c/value.c"]').click();
+				await run(page, 'cpp_workspace_1');
+				await page.locator('.workspace-files button[title="main.cpp"]').click();
 				await saveAndCheckFiles(page, initialSource);
 
 				const revisedSource = source(2);

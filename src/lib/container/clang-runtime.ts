@@ -17,7 +17,9 @@ import {
 } from '@wasm-idle/core';
 import {
 	CLANG_WASI_DRIVER_TARGET,
+	clangWorkspaceUnitLanguage,
 	isClangWorkspaceTranslationUnit,
+	type ClangSourceLanguage,
 	resolveClangLanguageArgs
 } from '@wasm-idle/llvm-core/core/clang-profile';
 import { CLANG_SIMD_INCLUDE_PATH } from '@wasm-idle/llvm-core/core/clang-simd';
@@ -438,10 +440,11 @@ export class ContainerClangRuntime {
 			const filenameCpp = /\.(?:cc|cpp|cxx|C)$/.test(activePath);
 			const filenameLanguage = language === 'CPP' || filenameCpp ? 'CPP' : 'C';
 			type Source = { path: string; mode: string | undefined };
-			const sourceLanguage = ({ path, mode }: Source): 'C' | 'CPP' | undefined => {
+			const sourceLanguage = ({ path, mode }: Source): ClangSourceLanguage | undefined => {
 				if (!mode) {
-					if (path === activePath) return filenameLanguage;
-					return path.endsWith('.c') ? 'C' : 'CPP';
+					return sources.length === 1
+						? filenameLanguage
+						: clangWorkspaceUnitLanguage(path, activePath, filenameLanguage);
 				}
 				if (mode === 'c' || mode === 'c-header' || mode === 'cpp-output') return 'C';
 				if (mode === 'c++' || mode === 'c++-header' || mode === 'c++-cpp-output')

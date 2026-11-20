@@ -1,4 +1,8 @@
 import Runtime from './incremental-runtime.js';
+import {
+	clangWorkspaceUnitLanguage,
+	isClangWorkspaceTranslationUnit
+} from '../../core/src/clang-profile.js';
 import { createDwarfDebugDescriptor } from './dwarf.js';
 import {
 	normalizeDwarfWorkspacePath,
@@ -20,7 +24,6 @@ interface LinkedArtifact {
 	bytes: Uint8Array;
 	module?: WebAssembly.Module;
 }
-const translationUnitPattern = /\.(?:c|cc|cpp|cxx)$/;
 
 /**
  * Public build orchestration. The legacy runtime continues to own compiler invocation,
@@ -137,14 +140,17 @@ export default class ArtifactRuntime extends Runtime {
 			a.path < b.path ? -1 : a.path > b.path ? 1 : 0
 		);
 		const units = snapshot.filter(
-			(file) => file.path === input || translationUnitPattern.test(file.path)
+			(file) => file.path === input || isClangWorkspaceTranslationUnit(file.path)
 		);
 		if (debugMode === 'trace' && units.length > 1) {
 			throw new Error('Trace debug mode does not support multiple C/C++ translation units');
 		}
 		const cOnly =
 			language === 'C' &&
-			units.every((unit) => unit.path === input || unit.path.endsWith('.c')) &&
+			(units.length === 1 ||
+				units.every(
+					(unit) => clangWorkspaceUnitLanguage(unit.path, input, language) === 'C'
+				)) &&
 			!compileArgs.some(
 				(arg) => typeof arg !== 'string' || arg.startsWith('-x') || arg.startsWith('@')
 			);
@@ -218,8 +224,7 @@ export default class ArtifactRuntime extends Runtime {
 			// PCH, debugging, transformations and unknown arguments retain the base path.
 			try {
 				for (const [index, unit] of units.entries()) {
-					const unitLanguage =
-						unit.path === input ? language : unit.path.endsWith('.c') ? 'C' : 'CPP';
+					const unitLanguage = clangWorkspaceUnitLanguage(unit.path, input, language);
 					// The pinned browser corpus showed a preprocessing penalty for tiny C units.
 					this.objectCacheEnabled =
 						debugMode === 'none' &&

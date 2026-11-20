@@ -186,7 +186,7 @@ describe('package install budgets', () => {
 			Object.fromEntries(scenarios.map((scenario) => [scenario.name, scenario.budget]))
 		).toEqual({
 			'wasm-idle root install': {
-				maxBytes: 7652352,
+				maxBytes: 7653149,
 				maxFiles: 865,
 				maxPackages: 6
 			},

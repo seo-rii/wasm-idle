@@ -26,6 +26,7 @@ import {
 	CLANG_WASI_TARGET,
 	OBJECTIVE_C_RUNTIME_FLAGS,
 	clangSystemIncludePaths,
+	clangWorkspaceUnitLanguage,
 	isClangWorkspaceTranslationUnit,
 	resolveClangLanguageArgs,
 	type ClangSourceLanguage
@@ -1955,7 +1956,10 @@ class Clang {
 		// Keep the C++ libraries unless the arguments are inspectable here.
 		const cOnly =
 			language === 'C' &&
-			translationUnits.every((unit) => unit.path === input || unit.path.endsWith('.c')) &&
+			(translationUnits.length === 1 ||
+				translationUnits.every(
+					(unit) => clangWorkspaceUnitLanguage(unit.path, input, language) === 'C'
+				)) &&
 			!hasUnknownLanguageOverride(compileArgs);
 		const linkProfile: [] | ['C'] = cOnly ? ['C'] : [];
 		const traceDebug = debugMode === 'trace';
@@ -2022,8 +2026,7 @@ class Clang {
 					input: unit.path,
 					code: unit.content,
 					obj: unitObject,
-					language:
-						unit.path === input ? language : unit.path.endsWith('.c') ? 'C' : 'CPP',
+					language: clangWorkspaceUnitLanguage(unit.path, input, language),
 					compileArgs,
 					workspaceFiles: [],
 					cppVersion,

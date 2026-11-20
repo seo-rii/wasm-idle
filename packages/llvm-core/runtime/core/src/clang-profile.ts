@@ -12,6 +12,17 @@ export function isClangWorkspaceTranslationUnit(path: string) {
 
 export type ClangSourceLanguage = 'C' | 'CPP' | 'OBJC';
 
+/** In a multi-file build, the active editor and its siblings use the same filename rules. */
+export function clangWorkspaceUnitLanguage(
+	path: string,
+	activePath: string,
+	language: ClangSourceLanguage
+) {
+	if (path === activePath && (language === 'OBJC' || !isClangWorkspaceTranslationUnit(path)))
+		return language;
+	return path.endsWith('.c') ? 'C' : 'CPP';
+}
+
 function normalizeStandardCode(value?: string) {
 	return (value || '').trim().toUpperCase().replaceAll(/\s+/g, '');
 }

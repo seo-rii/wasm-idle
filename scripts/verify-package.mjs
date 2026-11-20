@@ -78,7 +78,8 @@ export const scenarios = [
 		// Cross-project reconciliation and cancellable terminal ownership measure 7,644,207 installed bytes (865 files).
 		// Serializing Bash prompt and directory requests adds 1,289 bytes. The root install measures 7,645,519 bytes.
 		// Linking workspace sources with per-input Clang modes measures 7,652,352 bytes.
-		budget: { maxBytes: 7652352, maxFiles: 865, maxPackages: 6 },
+		// Filename inference for the active tab measures 7,653,149 bytes with the same files.
+		budget: { maxBytes: 7653149, maxFiles: 865, maxPackages: 6 },
 		absentPackageNames: [
 			'@katana-project/asm',
 			'java-parser',
