@@ -43,10 +43,26 @@ describe('useWasmIdlePlayground', () => {
 
 		options.value = undefined;
 
+		await vi.waitFor(() => expect(terminate).toHaveBeenCalledTimes(1));
 		expect(binding.value).not.toBe(first);
 		expect(binding.value.trustProfile).toBeUndefined();
-		await vi.waitFor(() => expect(terminate).toHaveBeenCalledTimes(1));
 		await binding.value.dispose();
+	});
+
+	it('stops replacing the binding after explicit teardown outside an effect scope', async () => {
+		const assets = shallowRef('/first');
+		const binding = useWasmIdlePlayground(assets, vi.fn() as SandboxLoader);
+		const first = binding.value;
+		assets.value = '/second';
+		const last = binding.value;
+		expect(last).not.toBe(first);
+		await first.dispose();
+		assets.value = '/third';
+		const active = binding.value;
+		expect(active).not.toBe(last);
+		await active.dispose();
+		assets.value = '/fourth';
+		expect(binding.value).toBe(active);
 	});
 
 	it('passes binding options through useWasmIdleHost', async () => {

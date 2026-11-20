@@ -95,6 +95,20 @@ describe('Svelte playground factories', () => {
 		expect(terminate).toHaveBeenCalledTimes(1);
 	});
 
+	it('disposes the current writable store value even when it was set directly', async () => {
+		const host = createSvelteWasmIdleHost('/runtime', vi.fn() as SandboxLoader);
+		const original = { destroy: vi.fn() };
+		const replacement = { destroy: vi.fn() };
+		host.setTerminal(original as never);
+		host.terminal.update(() => replacement as never);
+
+		await Promise.all([host.dispose(), host.dispose()]);
+
+		expect(original.destroy).not.toHaveBeenCalled();
+		expect(replacement.destroy).toHaveBeenCalledTimes(1);
+		expect(get(host.terminal)).toBeUndefined();
+	});
+
 	it('still disposes the binding when terminal destruction fails', async () => {
 		const terminalError = new Error('terminal destroy failed');
 		const terminate = vi.fn();
