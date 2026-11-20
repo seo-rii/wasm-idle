@@ -3,6 +3,7 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import { MOONBIT_SERVICE_POLICY } from '$lib/playground/moonbitServicePolicy';
 	import { parseDebugInteger } from './debugInteger';
+	import { createProjectBreakpointSelection } from './workspaceBreakpoints';
 	import Monaco from './Monaco.svelte';
 	import DebuggerLog from './DebuggerLog.svelte';
 	import Terminal, { type TerminalControl } from '@wasm-idle/terminal';
@@ -794,6 +795,7 @@
 	const debug = createDebugSessionController({
 		syncBreakpointsWhile: () => runningMode === 'debug'
 	});
+	const selectBreakpointProject = createProjectBreakpointSelection(debug);
 	const debugHoverOptions = {
 		resolve: (expression: string) => debug.resolveHover(expression),
 		loadChildren: (reference: number, start: number, count: number) =>
@@ -3542,6 +3544,8 @@
 	});
 
 	$effect(() => {
+		const project = `${currentWorkspaceStorageKey}:${language}`;
+		untrack(() => selectBreakpointProject(project));
 		debug.setSourcePath(activeDebugSourcePath);
 	});
 

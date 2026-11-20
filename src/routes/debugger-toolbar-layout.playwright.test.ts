@@ -197,3 +197,64 @@ it(
 		});
 	}
 );
+
+it(
+	'isolates breakpoints when a different language project renames and deletes the same path',
+	browserOptions,
+	async () => {
+		await withWorkspacePage(async (page, context, browserUrl, observeErrors) => {
+			await context.addInitScript(() => {
+				const project = (header: string, main: string) => ({
+					activePath: header,
+					files: [
+						{ path: header, content: '#pragma once\nint first;\nint second;\n' },
+						{ path: main, content: 'int main(void) { return 0; }\n' }
+					],
+					openTabs: [header]
+				});
+				const c = project('shared.h', 'main.c');
+				const key = 'wasm-idle:example-workspace:v3';
+				if (!localStorage.getItem(key))
+					localStorage.setItem(
+						key,
+						JSON.stringify({
+							version: 6,
+							language: 'C',
+							...c,
+							workspaces: { C: c, CPP: project('api.h', 'main.cpp') },
+							lspEnabled: false,
+							sidebarOpen: true
+						})
+					);
+			});
+			await prepareContainerRuntimePage(page, browserUrl);
+			observeErrors();
+			const markers = page.locator('.monaco-editor .debug-breakpoint-glyph');
+			const files = page.locator('.workspace-files');
+			const selected = (path: string) => files.locator(`button.active[title="${path}"]`);
+			const choose = async (language: string, path: string) => {
+				await page.locator('.language-trigger').click();
+				await page.locator('#language-option-' + language).click();
+				await selected(path).waitFor();
+			};
+			await selected('shared.h').waitFor();
+			await page.evaluate(() => (window as any).__wasmIdleDebug.setBreakpoints([2]));
+			await expect.poll(() => markers.count()).toBe(1);
+			await choose('CPP', 'api.h');
+			page.once('dialog', (dialog) => dialog.accept('shared.h'));
+			await page.getByRole('button', { name: 'Rename', exact: true }).click();
+			await selected('shared.h').waitFor();
+			await expect.poll(() => markers.count()).toBe(0);
+			await choose('C', 'shared.h');
+			await expect.poll(() => markers.count()).toBe(1);
+			await choose('CPP', 'shared.h');
+			await page.evaluate(() => (window as any).__wasmIdleDebug.setBreakpoints([1, 3]));
+			await expect.poll(() => markers.count()).toBe(2);
+			page.once('dialog', (dialog) => dialog.accept());
+			await page.getByRole('button', { name: 'Delete', exact: true }).click();
+			await selected('main.cpp').waitFor();
+			await choose('C', 'shared.h');
+			await expect.poll(() => markers.count()).toBe(1);
+		});
+	}
+);

@@ -1,5 +1,6 @@
 import { createDebugSessionController } from '@wasm-idle/debug/controller';
 import { normalizeWorkspacePath, workspaceFilePath } from './workspacePath';
+import { createProjectBreakpointSelection } from './workspaceBreakpoints';
 import layoutSource from './+layout.svelte?raw';
 import source from './+page.svelte?raw';
 import { createApplicationRuntimeAssets } from '$lib/playground/applicationAssets';
@@ -72,6 +73,37 @@ it('moves structured breakpoints on rename and clears them on deletion and filen
 	expect(debug.structuredBreakpoints).toEqual([]);
 	debug.setSourcePath('/workspace/other.py');
 	expect(debug.breakpoints).toEqual([3]);
+});
+
+it('restores enabled and disabled breakpoints only for the selected workspace and language', async () => {
+	const path = '/workspace/shared.h';
+	const debug = createDebugSessionController({ sourcePath: path });
+	const select = createProjectBreakpointSelection(debug);
+	const disabled = [{ line: 2, enabled: false, logMessage: 'n={n}' }];
+	const conditional = [{ line: 4, hitCondition: '2', condition: 'ready' }];
+	select('original:C');
+	await debug.setStructuredBreakpoints(disabled);
+	await debug.setStructuredBreakpoints(conditional, '/workspace/other.h');
+	select('original:CPP');
+	expect(debug.structuredBreakpoints).toEqual([]);
+	debug.setBreakpoints([3]);
+	select('copy:CPP');
+	expect(debug.structuredBreakpoints).toEqual([]);
+	select('original:C');
+	expect(debug.structuredBreakpoints).toEqual(disabled);
+	expect(debug.effectiveBreakpoints).toEqual([]);
+	expect(debug.sourceBreakpoints).toContainEqual({
+		sourcePath: '/workspace/other.h',
+		lines: [4],
+		breakpoints: conditional
+	});
+	select('original:CPP');
+	expect(debug.structuredBreakpoints).toEqual([{ line: 3 }]);
+	await debug.setStructuredBreakpoints([], path);
+	select('original:C');
+	expect(debug.structuredBreakpoints).toEqual(disabled);
+	select('original:CPP');
+	expect(debug.structuredBreakpoints).toEqual([]);
 });
 
 const applicationRuntimeAssets = createApplicationRuntimeAssets('/wasm-idle');
@@ -1071,7 +1103,7 @@ describe('example route debug actions', () => {
 			/\$effect\(\(\) => \{\s+debug\.setAdapter\(debugLanguage\);\s+\}\);/s
 		);
 		expect(source).toMatch(
-			/\$effect\(\(\) => \{\s+debug\.setSourcePath\(activeDebugSourcePath\);\s+\}\);/s
+			/untrack\(\(\) => selectBreakpointProject\(project\)\);\s+debug\.setSourcePath\(activeDebugSourcePath\);/s
 		);
 		expect(source).toMatch(/debug\.begin\(\);/);
 		expect(source).toMatch(
