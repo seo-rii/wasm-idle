@@ -63,8 +63,9 @@ export function createShellFilesystem(fs: MemoryFileSystem, options: ShellFilesy
   const root = options.root ?? '/workspace', maxIo = options.maxIoBytes ?? 1024 * 1024, maxHandles = options.maxHandles ?? 1024;
   if (typeof root !== 'string' || !root.startsWith('/') || !Number.isSafeInteger(maxIo) || maxIo < 1 || maxIo > 16 * 1024 * 1024 ||
       !Number.isSafeInteger(maxHandles) || maxHandles < 1 || maxHandles > 4096) throw new ContainerError('INVALID_ARGUMENT', 'Invalid shell filesystem options');
-  if (fs.stat(root).type !== 'directory') throw new ContainerError('INVALID_ARGUMENT', 'Shell filesystem root must be a directory');
-  const context = { cwd: root, root };
+  const canonicalRoot = fs.realpath(root);
+  if (fs.stat(canonicalRoot).type !== 'directory') throw new ContainerError('INVALID_ARGUMENT', 'Shell filesystem root must be a directory');
+  const context = { cwd: canonicalRoot, root: canonicalRoot };
   let disposed = false;
   // The root capability confines every path and symlink to the mount.
   const local = (path: unknown) => {
