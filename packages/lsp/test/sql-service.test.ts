@@ -3,6 +3,72 @@ import { describe, expect, it, vi } from 'vitest';
 import { createSqlWorkerService, type LspDocument, type LspDocumentContext } from '../src/index.js';
 
 describe('createSqlWorkerService', () => {
+	it('shares pending revisions and serializes database resets across revisions', async () => {
+		const ctx: LspDocumentContext = {
+			documents: new Map(),
+			publishDiagnostics: vi.fn(),
+			reportProgress: vi.fn()
+		};
+		const doc = (text: string): LspDocument => ({
+			uri: 'file:///workspace/main.sql',
+			languageId: 'sql',
+			version: 1,
+			text
+		});
+		let release!: () => void;
+		const gate = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const validate = vi.fn(async (text: string) => {
+			if (text === 'invalid') {
+				await gate;
+				return [{ message: 'test syntax error' }];
+			}
+			return [];
+		});
+		const service = createSqlWorkerService(async () => ({ validate }));
+		await service.initialize?.({}, ctx);
+		await service.diagnostics?.(doc('seed'), ctx);
+		const a = service.diagnostics?.(doc('invalid'), ctx);
+		const b = service.diagnostics?.(doc('invalid'), ctx);
+		const next = service.diagnostics?.(doc('new revision'), ctx);
+		await vi.waitFor(() => expect(validate).toHaveBeenCalledTimes(2));
+		release();
+		const [left, right, other] = await Promise.all([a, b, next]);
+		expect(left).toHaveLength(1);
+		expect(right).toEqual(left);
+		expect(other).toEqual([]);
+		expect(validate.mock.calls.map(([text]) => text)).toEqual([
+			'seed',
+			'invalid',
+			'new revision'
+		]);
+		await service.dispose?.();
+	});
+
+	it('retries after an engine validation rejects', async () => {
+		const ctx: LspDocumentContext = {
+			documents: new Map(),
+			publishDiagnostics: vi.fn(),
+			reportProgress: vi.fn()
+		};
+		const doc = {
+			uri: 'file:///main.sql',
+			languageId: 'sql',
+			version: 1,
+			text: 'SELECT FROM;'
+		};
+		const validate = vi
+			.fn()
+			.mockRejectedValueOnce(new Error('interrupted'))
+			.mockResolvedValue([{ message: 'syntax error' }]);
+		const service = createSqlWorkerService(async () => ({ validate }));
+		await service.initialize?.({}, ctx);
+		await expect(service.diagnostics?.(doc, ctx)).rejects.toThrow('interrupted');
+		expect(await service.diagnostics?.(doc, ctx)).toHaveLength(1);
+		await service.dispose?.();
+	});
+
 	it('uses the SQLite WASM URL exported by the static runtime module', async () => {
 		const stateKey = '__wasmIdleSqliteLspRuntimeTest';
 		const state = {

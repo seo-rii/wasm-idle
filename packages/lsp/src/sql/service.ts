@@ -279,8 +279,8 @@ export function createSqlWorkerService(
 ): WorkerLanguageService {
 	let engine: SqlEngine | null = null;
 	let dialect: SqlLanguageServerDialect = 'sqlite';
-	let lastKey = '';
-	let lastDiagnostics: LspDiagnostic[] = [];
+	let pending: Promise<unknown> = Promise.resolve();
+	let cached: { key: string; result: Promise<LspDiagnostic[]> } | undefined;
 
 	return {
 		name: 'wasm-idle-sql-lsp',
@@ -300,18 +300,23 @@ export function createSqlWorkerService(
 			engine = await loadEngine(config);
 		},
 		async diagnostics(document: LspDocument) {
-			if (!engine) return [];
-			const key = `${dialect}\n${document.uri}\n${document.text}`;
-			if (key === lastKey) return lastDiagnostics;
-			lastKey = key;
-			const diagnostics = await engine.validate(
-				document.text,
-				document.uri.split('/').pop() || 'main.sql'
-			);
-			lastDiagnostics = diagnostics.map((diagnostic) =>
-				diagnosticFor(document.text, diagnostic)
-			);
-			return lastDiagnostics;
+			const current = engine;
+			if (!current) return [];
+			const { uri, text } = document;
+			const key = JSON.stringify([dialect, uri, text]);
+			if (cached?.key === key) return cached.result;
+			const result = pending.then(async () => {
+				const diagnostics = await current.validate(
+					text,
+					uri.split('/').pop() || 'main.sql'
+				);
+				return diagnostics.map((diagnostic) => diagnosticFor(text, diagnostic));
+			});
+			cached = { key, result };
+			pending = result.catch(() => {
+				if (cached?.result === result) cached = undefined;
+			});
+			return result;
 		},
 		completion() {
 			return {
@@ -342,8 +347,11 @@ export function createSqlWorkerService(
 			};
 		},
 		async dispose() {
-			await engine?.dispose?.();
+			const current = engine;
 			engine = null;
+			cached = undefined;
+			await pending;
+			await current?.dispose?.();
 		}
 	};
 }
