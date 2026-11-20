@@ -86,7 +86,7 @@ describe('workspace backup format', () => {
 	it.each([
 		{ format: WORKSPACE_BACKUP_FORMAT },
 		{ format: WORKSPACE_BACKUP_FORMAT, snapshot: null },
-		{ format: WORKSPACE_BACKUP_FORMAT, snapshot: { ...snapshot, version: 7 } },
+		{ format: WORKSPACE_BACKUP_FORMAT, snapshot: { ...snapshot, version: 8 } },
 		{ format: WORKSPACE_BACKUP_FORMAT, snapshot: { ...snapshot, version: 0 } },
 		{ format: WORKSPACE_BACKUP_FORMAT, snapshot: { ...snapshot, openTabs: 'main.cpp' } }
 	])('rejects malformed marked backup %j', (backup) => {

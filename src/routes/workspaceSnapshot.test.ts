@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeWorkspaceTabs, validateWorkspaceSnapshot } from './workspaceSnapshot';
+import {
+	normalizeWorkspaceTabs,
+	sameWorkspaceContents,
+	serializeStoredWorkspace,
+	validateWorkspaceSnapshot
+} from './workspaceSnapshot';
 
 const files = [
 	{ path: 'main.cpp', content: 'int main() {}' },
@@ -27,7 +32,7 @@ describe('workspace JSON boundary', () => {
 		{ files, openTabs: 'main.cpp' },
 		{ files, openTabs: ['main.cpp', 3] },
 		{ files, sidebarOpen: 'true' },
-		{ files, version: 7 },
+		{ files, version: 8 },
 		{ files, version: 4.5 },
 		{ files, cppVersion: 'CPP99' },
 		{ files, rustOptimizationProfile: 'unknown' },
@@ -52,4 +57,31 @@ describe('workspace tab invariants', () => {
 			normalizeWorkspaceTabs(['main.cpp', 'helper.h', 'main.cpp'], files, 'main.cpp')
 		).toEqual(['main.cpp', 'helper.h']);
 	});
+});
+
+it('stores active file bodies once and accepts both the compact and older representations', () => {
+	const active = { activePath: 'main.cpp', openTabs: ['main.cpp'], files };
+	const other = { activePath: 'main.py', files: [{ path: 'main.py', content: 'print(1)' }] };
+	const original = {
+		version: 6,
+		language: 'CPP',
+		...active,
+		workspaces: { CPP: active, PYTHON: other }
+	};
+	const stored = serializeStoredWorkspace(original);
+	expect(JSON.parse(stored)).toEqual({ ...original, version: 7, workspaces: { PYTHON: other } });
+	expect(() => validateWorkspaceSnapshot(JSON.parse(stored))).not.toThrow();
+	expect(sameWorkspaceContents(JSON.stringify(original), stored)).toBe(true);
+	const differentTab = { ...JSON.parse(stored), activePath: 'helper.h', openTabs: ['helper.h'] };
+	expect(sameWorkspaceContents(JSON.stringify(differentTab), stored)).toBe(true);
+	expect(sameWorkspaceContents(JSON.stringify({ ...differentTab, files: [] }), stored)).toBe(
+		false
+	);
+	expect(
+		sameWorkspaceContents(JSON.stringify({ ...differentTab, argsInput: '--other' }), stored)
+	).toBe(false);
+	expect(
+		JSON.parse(serializeStoredWorkspace({ ...original, workspaces: { CPP: active } }))
+			.workspaces
+	).toBeUndefined();
 });

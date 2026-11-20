@@ -96,27 +96,27 @@ async function saveAndCheckFiles(page: Page, expectedSource: string) {
 		(key) => JSON.parse(localStorage.getItem(key)!) as SavedWorkspace,
 		storageKey
 	);
-	for (const files of [saved.files, saved.workspaces.CPP.files]) {
-		// program.wasm belongs to the user. Compiler output must neither replace it
-		// nor add another generated binary to the editable project or its snapshot.
-		expect(files.map((file) => file.path).sort()).toEqual([
-			'c/value.c',
-			'cpp/value.cpp',
-			'generated.bin',
-			'main.cpp',
-			'program.wasm'
-		]);
-		expect(files.find((file) => file.path === 'main.cpp')?.content).toBe(expectedSource);
-		expect(files.find((file) => file.path === 'program.wasm')).toMatchObject({
-			content: ownedWasm,
-			encoding: 'data-url'
-		});
-		const generated = files.find((file) => file.path === 'generated.bin')!;
-		expect(generated.encoding).toBe('data-url');
-		expect(Buffer.from(generated.content.split(',')[1], 'base64')).toEqual(
-			Buffer.from([0, 255, 65])
-		);
-	}
+	expect(saved.workspaces.CPP).toBeUndefined();
+	const files = saved.files;
+	// program.wasm belongs to the user. Compiler output must neither replace it
+	// nor add another generated binary to the editable project or its snapshot.
+	expect(files.map((file) => file.path).sort()).toEqual([
+		'c/value.c',
+		'cpp/value.cpp',
+		'generated.bin',
+		'main.cpp',
+		'program.wasm'
+	]);
+	expect(files.find((file) => file.path === 'main.cpp')?.content).toBe(expectedSource);
+	expect(files.find((file) => file.path === 'program.wasm')).toMatchObject({
+		content: ownedWasm,
+		encoding: 'data-url'
+	});
+	const generated = files.find((file) => file.path === 'generated.bin')!;
+	expect(generated.encoding).toBe('data-url');
+	expect(Buffer.from(generated.content.split(',')[1], 'base64')).toEqual(
+		Buffer.from([0, 255, 65])
+	);
 	expect(
 		(await page.getByRole('alert').allTextContents()).map((text) => text.trim()).filter(Boolean)
 	).toEqual([]);
