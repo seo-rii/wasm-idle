@@ -38,6 +38,45 @@ it('keeps literal POSIX debug filenames distinct from nested project paths', () 
 	expect(workspaceDebugPath('/external/file.cpp', [literal, nested])).toBeUndefined();
 });
 
+it('moves an edited breakpoint and keeps an occupied destination intact', async () => {
+	const debug = createDebugSessionController({ sourcePath: '/workspace/main.py' });
+	await debug.setStructuredBreakpoints([
+		{ line: 3, enabled: false, condition: 'n > 1' },
+		{ line: 8 }
+	]);
+	const state = {
+		debug,
+		language: 'PYTHON',
+		currentWorkspaceStorageKey: 'demo',
+		editingBreakpoint: null,
+		breakpointEditOpen: false,
+		breakpointLine: 1,
+		breakpointEnabled: true,
+		breakpointCondition: '',
+		breakpointHitCondition: '',
+		breakpointLogMessage: '',
+		debugInteractionError: ''
+	};
+	const start = source.indexOf('function editDebugBreakpoint(');
+	const end = source.indexOf('let memoryReference', start);
+	const ops = runInNewContext(
+		stripTypeScriptTypes(source.slice(start, end)) +
+			'\n({ editDebugBreakpoint, saveDebugBreakpoint })',
+		state
+	);
+	ops.editDebugBreakpoint(3);
+	state.breakpointLine = 8;
+	await ops.saveDebugBreakpoint();
+	expect(state.debugInteractionError).toContain('already');
+	expect(debug.structuredBreakpoints.map((spec) => spec.line)).toEqual([3, 8]);
+	state.breakpointLine = 4;
+	await ops.saveDebugBreakpoint();
+	expect([...debug.structuredBreakpoints].sort((left, right) => left.line - right.line)).toEqual([
+		{ line: 4, enabled: false, condition: 'n > 1' },
+		{ line: 8 }
+	]);
+});
+
 it('moves structured breakpoints on rename and clears them on deletion and filename reuse', async () => {
 	const debug = createDebugSessionController({ sourcePath: '/workspace/main.py' });
 	const specs = [

@@ -2,7 +2,10 @@ import type { DebugSessionController } from '@wasm-idle/debug/controller';
 import { normalizeWorkspacePath } from './workspacePath';
 
 /** Runtime frame paths can use portable separators. A literal project filename wins. */
-export function workspaceDebugPath(sourcePath: string | undefined, files: readonly { path: string }[]) {
+export function workspaceDebugPath(
+	sourcePath: string | undefined,
+	files: readonly { path: string }[]
+) {
 	const path = sourcePath?.replace(/^\/workspace\//u, '');
 	if (!path) return;
 	if (files.some((file) => file.path === path)) return path;
@@ -13,7 +16,6 @@ export function workspaceDebugPath(sourcePath: string | undefined, files: readon
 		return;
 	}
 }
-
 
 /** The debugger receives /workspace paths. Save their specifications when the editor changes project. */
 export function createProjectBreakpointSelection(debug: DebugSessionController) {

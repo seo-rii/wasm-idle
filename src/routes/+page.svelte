@@ -782,9 +782,7 @@
 	const compact = $derived(examplePaneWidth > 0 && examplePaneWidth <= 760);
 	const activeFile = $derived(files.find((file) => file.path === activePath) ?? files[0]);
 	const activeFileIsBinary = $derived(!!activeFile && isBinaryWorkspaceFile(activeFile));
-	const activeDebugSourcePath = $derived(
-		`/workspace/${activePath || defaultPathForLanguage()}`
-	);
+	const activeDebugSourcePath = $derived(`/workspace/${activePath || defaultPathForLanguage()}`);
 	const editorFilePaths = $derived(files.map((file) => file.path));
 	const sortedFiles = $derived([...files].sort((a, b) => a.path.localeCompare(b.path)));
 	const activeLines = $derived(activeFile ? activeFile.content.split(/\r\n|\r|\n/).length : 0);
@@ -836,6 +834,12 @@
 	};
 	let debugInteractionError = $state('');
 	let breakpointEditOpen = $state(false);
+	let editingBreakpoint = $state<{
+		line: number;
+		sourcePath: string;
+		language: PlaygroundLanguage;
+		workspace: string;
+	} | null>(null);
 	let breakpointLine = $state(1);
 	let breakpointEnabled = $state(true);
 	let breakpointCondition = $state('');
@@ -843,6 +847,14 @@
 	let breakpointLogMessage = $state('');
 	function editDebugBreakpoint(line: number) {
 		const spec = debug.structuredBreakpoints.find((entry) => entry.line === line);
+		editingBreakpoint = spec
+			? {
+					line,
+					sourcePath: debug.sourcePath,
+					language,
+					workspace: currentWorkspaceStorageKey
+				}
+			: null;
 		breakpointLine = line;
 		breakpointEnabled = spec?.enabled !== false;
 		breakpointCondition = spec?.condition ?? '';
@@ -853,8 +865,28 @@
 	async function saveDebugBreakpoint() {
 		debugInteractionError = '';
 		try {
-			const next = debug.structuredBreakpoints.filter(
-				(entry) => entry.line !== breakpointLine
+			const original = editingBreakpoint;
+			const specs = debug.structuredBreakpoints;
+			if (
+				original &&
+				(original.sourcePath !== debug.sourcePath ||
+					original.language !== language ||
+					original.workspace !== currentWorkspaceStorageKey)
+			) {
+				debugInteractionError = 'Select a breakpoint in the current file before saving.';
+				return;
+			}
+			if (
+				original &&
+				original.line !== breakpointLine &&
+				specs.some((entry) => entry.line === original.line) &&
+				specs.some((entry) => entry.line === breakpointLine)
+			) {
+				debugInteractionError = 'There is already a breakpoint on that line.';
+				return;
+			}
+			const next = specs.filter(
+				(entry) => entry.line !== breakpointLine && entry.line !== original?.line
 			);
 			next.push({
 				line: breakpointLine,
@@ -4489,7 +4521,13 @@
 						{/if}
 					</section>
 					<section class="debug-panel">
-						<details class="debug-feature-panel" bind:open={breakpointEditOpen}>
+						<details
+							class="debug-feature-panel"
+							bind:open={breakpointEditOpen}
+							ontoggle={(event) => {
+								if (!event.currentTarget.open) editingBreakpoint = null;
+							}}
+						>
 							<summary>Breakpoints</summary>
 							<ul>
 								{#each debug.structuredBreakpoints as spec (spec.line)}<li>
@@ -5606,7 +5644,8 @@
 								!debug.sourceRevisionStale &&
 								debug.selectedHistoryId === null}
 							debugStopKey={`${debug.history.at(-1)?.id ?? 0}:${debug.frameId ?? 0}`}
-							onBreakpointsChange={(lines) => debug.setBreakpoints(lines, { preserveDisabled: true })}
+							onBreakpointsChange={(lines) =>
+								debug.setBreakpoints(lines, { preserveDisabled: true })}
 						/>
 					{/key}
 				</div>
