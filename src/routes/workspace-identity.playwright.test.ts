@@ -117,3 +117,141 @@ describe('ZIP workspace storage identity', () => {
 		}
 	);
 });
+
+describe('shared workspace fragment navigation', () => {
+	const key = 'wasm-idle:example-workspace:v3';
+	const snapshot = (content: string) => ({
+		version: 6,
+		language: 'CPP',
+		activePath: 'main.cpp',
+		files: [{ path: 'main.cpp', content }],
+		lspEnabled: false
+	});
+	const sharedUrl = (base: string) => {
+		const target = new URL(base);
+		target.hash =
+			'workspace=' + Buffer.from(JSON.stringify(snapshot('// shared'))).toString('base64url');
+		return target.href;
+	};
+	const value = (page: Page) =>
+		page.evaluate(() => (window as any).__wasmIdleDebug?.getEditorValue());
+
+	it(
+		'restores the local URL when an invalid share supersedes a queued fragment',
+		browserOptions,
+		async () => {
+			await withWorkspacePage(async (page, _context, browserUrl) => {
+				await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
+				await page
+					.locator('#language-select[data-workspace-ready="true"]')
+					.waitFor({ state: 'attached' });
+				const original = '// local before fragment changes';
+				expect(
+					await page.evaluate(
+						(text) => (window as any).__wasmIdleDebug.setEditorValue(text),
+						original
+					)
+				).toBe(true);
+				await page.getByTitle('Save workspace').click();
+				await expect
+					.poll(
+						() =>
+							page.evaluate(
+								(key) =>
+									JSON.parse(localStorage.getItem(key) || 'null')?.files[0]
+										?.content,
+								key
+							),
+						{ timeout: 45_000 }
+					)
+					.toBe(original);
+				await page.evaluate(
+					(hash) => {
+						location.hash = hash;
+						location.hash = 'workspace=broken';
+					},
+					new URL(sharedUrl(browserUrl)).hash
+				);
+				await page.getByText('Invalid share URL', { exact: true }).waitFor();
+				expect(page.url()).toBe(browserUrl);
+				await page.reload({ waitUntil: 'domcontentloaded' });
+				await expect.poll(() => value(page), { timeout: 30_000 }).toBe(original);
+			});
+		}
+	);
+
+	it(
+		'opens a shared fragment in this tab after persisting the current edit and preserves browser history',
+		{ ...browserOptions, timeout: 180_000 },
+		async () => {
+			await withWorkspacePage(async (page, _context, browserUrl) => {
+				await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
+				await page
+					.locator('#language-select[data-workspace-ready="true"]')
+					.waitFor({ state: 'attached' });
+				const invalid = new URL(browserUrl);
+				invalid.hash = 'workspace=broken';
+				await page.goto(invalid.href, { waitUntil: 'domcontentloaded' });
+				await page.getByText('Invalid share URL', { exact: true }).waitFor();
+				expect(page.url()).toBe(browserUrl);
+				await page.evaluate(() =>
+					(window as any).__wasmIdleDebug.setEditorValue('// edit before navigation')
+				);
+				await page.goto(sharedUrl(browserUrl), { waitUntil: 'domcontentloaded' });
+				await page.waitForURL((url) => !url.hash && !!url.searchParams.get('workspace'), {
+					timeout: 60_000
+				});
+				await expect.poll(() => value(page), { timeout: 30_000 }).toBe('// shared');
+				const editableUrl = page.url();
+				expect(
+					await page.evaluate(
+						(key) => JSON.parse(localStorage.getItem(key)!).files[0].content,
+						key
+					)
+				).toBe('// edit before navigation');
+				await page.goBack({ waitUntil: 'domcontentloaded' });
+				await expect
+					.poll(() => value(page), { timeout: 45_000 })
+					.toBe('// edit before navigation');
+				await page.goForward({ waitUntil: 'domcontentloaded' });
+				await expect.poll(() => value(page), { timeout: 45_000 }).toBe('// shared');
+				expect(page.url()).toBe(editableUrl);
+			});
+		}
+	);
+
+	it(
+		'keeps a conflicting workspace open when a share cannot safely replace it',
+		browserOptions,
+		async () => {
+			await withWorkspacePage(async (page, context, browserUrl) => {
+				await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
+				await page.locator('[data-workspace-save-state="saved"]').waitFor();
+				const other = await context.newPage();
+				try {
+					await other.goto(browserUrl, { waitUntil: 'domcontentloaded' });
+					await other.locator('[data-workspace-save-state="saved"]').waitFor();
+					await other.evaluate(() =>
+						(window as any).__wasmIdleDebug.setEditorValue('// saved in other tab')
+					);
+					await page.locator('[data-workspace-save-state="conflict"]').waitFor();
+					await page.evaluate(() =>
+						(window as any).__wasmIdleDebug.setEditorValue('// keep this local edit')
+					);
+					await page.goto(sharedUrl(browserUrl), { waitUntil: 'domcontentloaded' });
+					await expect.poll(() => page.url(), { timeout: 12_000 }).toBe(browserUrl);
+					expect(await value(page)).toBe('// keep this local edit');
+					expect(
+						await page.evaluate(
+							(key) => JSON.parse(localStorage.getItem(key)!).files[0].content,
+							key
+						)
+					).toBe('// saved in other tab');
+					await page.locator('[data-workspace-save-state="conflict"]').waitFor();
+				} finally {
+					await other.close();
+				}
+			});
+		}
+	);
+});

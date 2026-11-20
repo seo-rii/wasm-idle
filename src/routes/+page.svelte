@@ -352,16 +352,17 @@
 		controller?.abort();
 	});
 
-	const initialSelection = browser
-		? resolveInitialWorkspace({
-				url: new URL(location.href),
-				readStorage: (key) => localStorage.getItem(key),
-				isolateStorage: !navigator.locks,
-				normalizeLanguage: normalizeRequestedLanguage,
-				languageForPath,
-				fallbackLanguage: 'CPP' as PlaygroundLanguage
-			})
-		: null;
+	function selectWorkspaceAt(url: URL) {
+		return resolveInitialWorkspace({
+			url,
+			readStorage: (key) => localStorage.getItem(key),
+			isolateStorage: !navigator.locks,
+			normalizeLanguage: normalizeRequestedLanguage,
+			languageForPath,
+			fallbackLanguage: 'CPP' as PlaygroundLanguage
+		});
+	}
+	const initialSelection = browser ? selectWorkspaceAt(new URL(location.href)) : null;
 	const initialLanguage = initialSelection?.language ?? 'CPP';
 	if (initialSelection) language = initialLanguage;
 	const initialWorkspace = createDefaultWorkspace(initialLanguage);
@@ -2144,6 +2145,42 @@
 		);
 	}
 
+	let shareNavigationSource: string | undefined;
+	async function openSharedWorkspace(event: HashChangeEvent) {
+		const target = new URL(event.newURL);
+		if (!target.hash.startsWith('#' + SHARE_PREFIX)) {
+			shareNavigationSource = undefined;
+			return;
+		}
+		// Hash changes are queued. Remember the first source even if a newer URL is already visible.
+		const previous = (shareNavigationSource ??= event.oldURL);
+		if (location.href !== target.href) return;
+		const incoming = selectWorkspaceAt(target);
+		if (incoming.source === 'share' && incoming.replacementUrl) {
+			// A fragment-only navigation leaves the editor mounted. Flush the current
+			// identity, including an edit that supersedes a pending save.
+			const identity = currentWorkspaceStorageKey;
+			while (!runningMode && unrestoredWorkspace === null && workspaceEditorInitialized) {
+				const saved = await saveWorkspace(true);
+				if (location.href !== target.href || identity !== currentWorkspaceStorageKey)
+					return;
+				if (saved === 'failed') break;
+				if (!runningMode && isCurrentWorkspaceSaved()) {
+					// Use a distinct document URL so Back restores the original workspace.
+					// Its fragment remains recoverable until the incoming app saves it.
+					incoming.replacementUrl.hash = target.hash;
+					location.replace(incoming.replacementUrl);
+					return;
+				}
+			}
+		}
+		replaceState(new URL(previous), page.state);
+		shareNavigationSource = undefined;
+		saveStatus = incoming.invalidShare
+			? 'Invalid share URL'
+			: 'Shared workspace could not be opened. Keep this workspace open or open the link in a new tab.';
+	}
+
 	function warnUnsavedChanges(event: BeforeUnloadEvent) {
 		if (!workspaceEditorInitialized || isCurrentWorkspaceSaved()) return;
 		// An asynchronous cross-tab lock cannot finish reliably during unload.
@@ -3804,6 +3841,7 @@
 
 <svelte:window
 	onbeforeunload={warnUnsavedChanges}
+	onhashchange={openSharedWorkspace}
 	onstorage={handleWorkspaceStorageChange}
 	onpointerdown={(event) => {
 		if (languageMenuOpen && !languagePicker?.contains(event.target as Node))
