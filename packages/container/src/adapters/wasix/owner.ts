@@ -66,13 +66,20 @@ const fail = (code: string, message: string): never => { throw new ContainerOwne
 const equal = (a: Uint8Array, b: Uint8Array) => a.length === b.length && a.every((value, index) => value === b[index]);
 const control = new Set(['dispose', 'shell.interrupt', 'shell.terminate', 'shell.cancel']);
 
+// Bound the one lifetime subscription separately from operations that can finish while the guest runs.
+function hasRequestCapacity(op: string, count: number, max: number, awaitingExit: boolean) {
+  if (op === 'shell.exit') return !awaitingExit;
+  const operations = count - (awaitingExit ? 1 : 0);
+  return operations < max + (control.has(op) ? 4 : 0);
+}
+
 /** Bind a private MessagePort to exactly one owner/container generation. */
 export function serveContainerOwner(port: MessagePort, options: ContainerOwnerOptions): { dispose(): Promise<void> } {
   const generation = options.generation ?? 1, maxFile = options.maxFileBytes ?? 8 * 1024 * 1024;
   const maxBackup = options.maxBackupBytes ?? 32 * 1024 * 1024, maxPending = options.maxPendingRequests ?? 32;
   if (![generation, maxFile, maxBackup, maxPending].every(validNumber) || maxFile > 256 * 1024 * 1024 || maxBackup > 512 * 1024 * 1024 || maxPending > 256) throw new ContainerError('INVALID_ARGUMENT', 'Invalid owner protocol budgets');
   const container = options.container, active = new Set<number>(), stop = new AbortController();
-  let sequence = 0, closed = false, starting: Promise<WasixShellSession> | undefined, shell: WasixShellSession | undefined;
+  let exitRequest = 0, sequence = 0, closed = false, starting: Promise<WasixShellSession> | undefined, shell: WasixShellSession | undefined;
   let writer: WritableStreamDefaultWriter<Uint8Array> | undefined;
   const readers: ReadableStreamDefaultReader<Uint8Array>[] = [], reading = [false, false], inputBusy = { value: false };
   let disposing: Promise<void> | undefined;
@@ -195,8 +202,9 @@ export function serveContainerOwner(port: MessagePort, options: ContainerOwnerOp
       void dispose().catch(() => {}); port.close(); return;
     }
     sequence = request.id;
-    const capacity = maxPending + (control.has(request.op) ? 4 : 0);
-    const work = active.size >= capacity ? Promise.reject(new ContainerOwnerError('RESOURCE_LIMIT', 'Too many pending owner requests')) : dispatch(request.op, request.args);
+    const allowed = hasRequestCapacity(request.op, active.size, maxPending, active.has(exitRequest));
+    if (allowed && request.op === 'shell.exit') exitRequest = request.id;
+    const work = !allowed ? Promise.reject(new ContainerOwnerError('RESOURCE_LIMIT', 'Too many pending owner requests')) : dispatch(request.op, request.args);
     active.add(request.id);
     const reply = (ok: boolean, value: unknown) => {
       active.delete(request.id);
@@ -216,7 +224,7 @@ export function createContainerOwnerClient(port: MessagePort, options: Container
   const maxFile = options.maxFileBytes ?? 8 * 1024 * 1024, maxBackup = options.maxBackupBytes ?? 32 * 1024 * 1024;
   if (![generation, timeout, maxPending, maxFile, maxBackup].every(validNumber) || maxPending > 256 || timeout > 3600000 || maxFile > 256 * 1024 * 1024 || maxBackup > 512 * 1024 * 1024) throw new ContainerError('INVALID_ARGUMENT', 'Invalid owner client limits');
   const pending = new Map<number, { resolve: (value: any) => void; reject: (error: unknown) => void; timer?: ReturnType<typeof setTimeout> }>();
-  let sequence = 0, closed = false, disposal: Promise<void> | undefined, started = false;
+  let exitRequest = 0, sequence = 0, closed = false, disposal: Promise<void> | undefined, started = false;
   const close = (error: ContainerOwnerError, unexpected = false) => {
     if (closed) return;
     closed = true;
@@ -232,8 +240,9 @@ export function createContainerOwnerClient(port: MessagePort, options: Container
   const abort = () => close(new ContainerOwnerError('ABORTED', 'Owner Worker lifetime ended; cleanup is unconfirmed'), true);
   const call = <T = any>(op: string, args: unknown[] = [], long = false): Promise<T> => {
     if (closed) return Promise.reject(new ContainerOwnerError('DISPOSED', 'Owner client is closed'));
-    if (pending.size >= maxPending + (control.has(op) ? 4 : 0) || sequence >= Number.MAX_SAFE_INTEGER) return Promise.reject(new ContainerOwnerError('RESOURCE_LIMIT', 'Owner request budget exceeded'));
+    if (!hasRequestCapacity(op, pending.size, maxPending, pending.has(exitRequest)) || sequence >= Number.MAX_SAFE_INTEGER) return Promise.reject(new ContainerOwnerError('RESOURCE_LIMIT', 'Owner request budget exceeded'));
     const id = ++sequence;
+    if (op === 'shell.exit') exitRequest = id;
     return new Promise((resolve, reject) => {
       const timer = long ? undefined : setTimeout(() => close(new ContainerOwnerError('ABORTED', 'Owner request deadline exceeded; cleanup is unconfirmed'), true), timeout);
       pending.set(id, { resolve, reject, timer });

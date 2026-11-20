@@ -93,6 +93,22 @@ test('owner filesystem compare-write protects editor bytes and backup/cache acti
   } finally { await client.dispose(); }
 });
 
+for (const side of ['client', 'server']) {
+  test('a pending exit leaves the single ' + side + ' operation slot available', { timeout: 30000 }, async () => {
+    const limits = { maxPendingRequests: 1 };
+    const { client } = owner(side === 'server' ? limits : {}, side === 'client' ? limits : {});
+    try {
+      const session = await client.startShell();
+      assert.equal((await client.fs.stat('/workspace')).type, 'directory');
+      const writer = session.stdin.getWriter();
+      await writer.write(encode('hello'));
+      await writer.close();
+      assert.equal(await new Response(session.stdout).text(), 'hello');
+      assert.equal((await session.exited).code, 0);
+    } finally { await client.dispose(); }
+  });
+}
+
 test('owner interrupt remains available with pending output reads and exit', { timeout: 30000 }, async () => {
   const { client } = owner({ maxPendingRequests: 3 });
   try {
