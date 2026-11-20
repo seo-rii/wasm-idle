@@ -194,6 +194,13 @@ it(
 			await marker.waitFor({ state: 'detached' });
 			await files.locator('button[title="renamed.py"]').click();
 			await marker.waitFor();
+			page.once('dialog', (dialog) => dialog.accept());
+			await page.getByRole('button', { name: 'Reset', exact: true }).click();
+			await files.locator('button.active[title="main.py"]').waitFor();
+			page.once('dialog', (dialog) => dialog.accept('renamed.py'));
+			await page.getByRole('button', { name: 'New file', exact: true }).click();
+			await files.locator('button.active[title="renamed.py"]').waitFor();
+			await marker.waitFor({ state: 'detached' });
 		});
 	}
 );

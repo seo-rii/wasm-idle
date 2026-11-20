@@ -2007,6 +2007,8 @@
 			);
 		}
 		editorWorkspaceRevision += 1;
+		// Buffered stdin is session input for the current project, never part of a backup.
+		stdinInput = '';
 		languageWorkspaces = nextWorkspaces;
 		language = nextLanguage;
 		activateWorkspace(nextWorkspaces[nextLanguage]);
@@ -2495,6 +2497,9 @@
 		if (runningMode) return;
 		if (!confirm(`Reset ${languageLabels[language]} workspace?`)) return;
 		const nextWorkspace = createDefaultWorkspace(language);
+		for (const { sourcePath } of debug.sourceBreakpoints)
+			void debug.setStructuredBreakpoints([], sourcePath);
+		stdinInput = '';
 		editorWorkspaceRevision += 1;
 		languageWorkspaces = {
 			...languageWorkspaces,
