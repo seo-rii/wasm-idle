@@ -1,6 +1,35 @@
 import type { PyodideInterface } from 'pyodide';
 
-export const PYTHON_EXECUTION_FACTORY = String.raw`
+export const PYTHON_SCRIPT_PROCESS = String.raw`
+def __wasm_idle_make_script_process():
+    import os
+    import sys
+    from contextlib import contextmanager
+
+    @contextmanager
+    def script_process(filename):
+        previous_argv, previous_cwd = sys.argv, os.getcwd()
+        status = [0]
+        sys.argv = [filename]
+        try:
+            yield status
+        except SystemExit as stop:
+            code = stop.code
+            if isinstance(code, int):
+                value = int.__index__(code)
+                status[0] = value & 255 if -(1 << 63) <= value < (1 << 63) else 255
+            elif code is not None:
+                sys.stderr.write(str(code) + "\n")
+                status[0] = 1
+        finally:
+            sys.argv = previous_argv
+            os.chdir(previous_cwd)
+    return script_process
+
+__wasm_idle_script_process = __wasm_idle_make_script_process()
+`;
+
+export const PYTHON_EXECUTION_FACTORY = PYTHON_SCRIPT_PROCESS + String.raw`
 def __wasm_idle_make_execution_helpers(image_source, max_entries=8, max_bytes=4194304,
                                         max_import_entries=32, max_import_bytes=2097152):
     import ast
@@ -101,10 +130,12 @@ def __wasm_idle_make_execution_helpers(image_source, max_entries=8, max_bytes=41
             # Script siblings take precedence; shared workspace-root modules follow.
             run_paths = list(dict.fromkeys((os.path.dirname(os.path.abspath(filename)), os.getcwd())))
             sys.path = run_paths + [path for path in previous_path if path not in run_paths]
-            ready()
-            result = evaluate(compiled, scope, scope)
-            if inspect.isawaitable(result):
-                await result
+            with __wasm_idle_script_process(filename) as status:
+                ready()
+                result = evaluate(compiled, scope, scope)
+                if inspect.isawaitable(result):
+                    await result
+            return status[0]
         finally:
             sys.path = previous_path
             if previous_main is missing_main:
@@ -157,7 +188,7 @@ export function createPythonExecutionHelpers(runtime: PyodideInterface, imageHoo
 				const call = input || output
 					? `await runner(source, filename, ready, ${input ? 'input_bridge' : 'None'}, ${output ? 'output_bridge' : 'None'})`
 					: 'await runner(source, filename, ready)';
-				await runtime.runPythonAsync(call, { globals });
+				return (await runtime.runPythonAsync(call, { globals })) as number;
 			} finally { globals.destroy(); }
 		},
 		dispose() {

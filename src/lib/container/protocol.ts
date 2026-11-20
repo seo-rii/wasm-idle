@@ -1,3 +1,4 @@
+import { ScriptExitError } from '../playground/scriptExit.js';
 import type { ProgressLike, RuntimeProgressEvent, WorkspaceFile } from '@wasm-idle/core';
 import type { SandboxRuntimeAssets } from '../playground/sandbox.js';
 
@@ -44,6 +45,7 @@ export interface ContainerWorkerError {
 	name: string;
 	message: string;
 	code?: string;
+	exitCode?: number;
 }
 export type ContainerWorkerRequest = {
 	version: typeof CONTAINER_WORKER_PROTOCOL;
@@ -70,6 +72,7 @@ export function serializeContainerWorkerError(error: unknown): ContainerWorkerEr
 	return {
 		name: typeof value?.name === 'string' ? value.name : 'Error',
 		message: typeof value?.message === 'string' ? value.message : String(error),
+		...(error instanceof ScriptExitError ? { exitCode: error.exitCode } : {}),
 		...(typeof value?.code === 'string' ? { code: value.code } : {})
 	};
 }

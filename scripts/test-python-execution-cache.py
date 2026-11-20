@@ -9,7 +9,10 @@ import tempfile
 import unittest
 
 source = (Path(__file__).resolve().parents[1] / 'src/lib/playground/worker/pythonExecution.ts').read_text()
-helper = source.split('String.raw`', 1)[1].split('`;', 1)[0]
+def embedded_python(name):
+    return source.split(f'export const {name} = ', 1)[1].split('String.raw`', 1)[1].split('`;', 1)[0]
+
+helper = embedded_python('PYTHON_SCRIPT_PROCESS') + embedded_python('PYTHON_EXECUTION_FACTORY')
 
 class ExecutionTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
@@ -38,7 +41,7 @@ class ExecutionTests(unittest.IsolatedAsyncioTestCase):
         self.ready += 1
 
     async def execute(self, code, filename='main.py', helpers=None, input=lambda prompt: None):
-        await (helpers or self.helpers)['run'](code, filename, self.mark_ready, input,
+        return await (helpers or self.helpers)['run'](code, filename, self.mark_ready, input,
             lambda *args, **kwargs: self.output.append((args, kwargs)))
 
     async def test_same_code_reuses_compilation_but_has_fresh_globals(self):
@@ -49,6 +52,27 @@ class ExecutionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([item[0] for item in self.output], [(3, '__main__')] * 2)
         self.assertEqual(self.ready, 2)
         self.assertEqual(self.ns['image_count'], 1)
+
+    async def test_script_exit_codes_and_process_state(self):
+        from contextlib import redirect_stderr
+        from io import StringIO
+        argv, cwd = sys.argv, os.getcwd()
+        with tempfile.TemporaryDirectory() as directory:
+            for value, expected in [('None', 0), ('0', 0), ('7', 7), ('-1', 255),
+                                    ('1 << 100', 255), ("'stopping'", 1)]:
+                source = (f'import asyncio, os, sys\nassert sys.argv == [__file__]\n'
+                          f'sys.argv = ["mutated"]\nos.chdir({directory!r})\n'
+                          f'await asyncio.sleep(0)\nsys.exit({value})')
+                stderr = StringIO()
+                with redirect_stderr(stderr):
+                    self.assertEqual(await self.execute(source, 'tools/script.py'), expected)
+                self.assertEqual(stderr.getvalue(), 'stopping\n' if expected == 1 else '')
+                self.assertIs(sys.argv, argv)
+                self.assertEqual(os.getcwd(), cwd)
+            with self.assertRaisesRegex(ValueError, 'failure'):
+                await self.execute(f'import os\nos.chdir({directory!r})\nraise ValueError("failure")')
+            self.assertIs(sys.argv, argv)
+            self.assertEqual(os.getcwd(), cwd)
 
     async def test_filename_is_part_of_cache_key_and_traceback(self):
         code = 'raise ValueError("failure")'

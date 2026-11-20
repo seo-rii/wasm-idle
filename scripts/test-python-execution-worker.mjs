@@ -219,6 +219,7 @@ function workerFixture() {
 			if (id === './pythonWorkspaceFiles') return workspaceExports;
 			if (id === './pythonExecution')
 				return {
+					...helperExports,
 					createPythonExecutionHelpers() {
 						initialized++;
 						return {
@@ -350,10 +351,10 @@ test('debug execution retains the legacy trace wrapper', async () => {
 	assert.match(f.legacyRuns[0], /sys.settrace\(__wasm_idle_debug_trace\)/);
 	assert.equal(f.messages.at(-1).results, true);
 });
-test('the actual debug wrapper gives user code its active filename', async () => {
+test('the actual debug wrapper gives user code its active filename and restores its process state at exit', async () => {
 	const f = workerFixture();
 	await f.send({
-		code: 'assert __file__ == "subdir/main.py"\nprint(__file__)',
+		code: 'import os, sys\nassert sys.argv == [__file__]\nprint(__file__)\nos.chdir("/")\nsys.argv = []\nsys.exit(7)',
 		activePath: 'subdir/main.py',
 		debug: true
 	});
@@ -362,11 +363,13 @@ test('the actual debug wrapper gives user code its active filename', async () =>
 		process.env.PYTHON ?? 'python3',
 		[
 			'-c',
-			`import ast, asyncio, sys, types
+			`import ast, asyncio, os, sys, types
 bridge = types.ModuleType("js")
 bridge.__getattr__ = lambda name: types.SimpleNamespace(version=0) if name.startswith("__wasm_idle_python_debug_breakpoint_state_") else lambda *args: None
 sys.modules["js"] = bridge
+cwd, argv = os.getcwd(), sys.argv
 asyncio.run(eval(compile(sys.stdin.read(), "<debug-worker>", "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)))
+assert __wasm_idle_status == [7] and os.getcwd() == cwd and sys.argv is argv
 `
 		],
 		{ input: f.legacyRuns[0], encoding: 'utf8' }

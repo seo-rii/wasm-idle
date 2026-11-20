@@ -5,6 +5,11 @@ import { execFileSync } from 'node:child_process';
 import { test } from 'node:test';
 import vm from 'node:vm';
 const ts = createRequire(import.meta.url)('typescript');
+const executionExports = {};
+vm.runInNewContext(
+	transpile(readFileSync(new URL('../src/lib/playground/worker/pythonExecution.ts', import.meta.url), 'utf8')),
+	{ exports: executionExports }
+);
 const workspaceExports = {};
 vm.runInNewContext(
 	transpile(
@@ -102,7 +107,7 @@ async function run(check, { runs = 1, fail = false } = {}) {
 				};
 			if (id === './pythonDebugPreview') return preview;
 			if (id === './pythonExecution')
-				return { createPythonExecutionHelpers: () => ({ importSource: () => '' }) };
+				return { ...executionExports, createPythonExecutionHelpers: () => ({ importSource: () => '' }) };
 			if (id === './pythonStdio') return stdio;
 			if (id === './pythonWorkspaceImports') return importsExports;
 			if (id === './pythonWorkspaceFiles') return workspaceExports;

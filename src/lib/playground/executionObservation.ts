@@ -1,3 +1,4 @@
+import { ScriptExitError } from './scriptExit';
 import type { ProgressLike, RuntimeProgressEvent } from '@wasm-idle/core';
 
 export interface ExecutionObservation {
@@ -13,7 +14,7 @@ export interface ExecutionObservation {
 		| 'failed'
 		| 'cancelled'
 		| 'timed-out';
-	/** The legacy runner only confirms zero on success; failed/unfinished runs have no known exit code. */
+	/** The process status when known. Startup failures and unfinished runs have no exit code. */
 	exitCode: number | null;
 	startedAt: number | null;
 	endedAt: number | null;
@@ -79,7 +80,10 @@ export function createExecutionObserver() {
 		) {
 			if (current.id !== id || current.endedAt !== null) return;
 			current.status = status;
-			current.exitCode = status === 'completed' ? 0 : null;
+			current.exitCode =
+				status === 'completed' ? 0 : status === 'failed' && error instanceof ScriptExitError
+					? error.exitCode
+					: null;
 			current.endedAt = Date.now();
 			if (error !== undefined) current.error = String(error).slice(0, 2048);
 		}
