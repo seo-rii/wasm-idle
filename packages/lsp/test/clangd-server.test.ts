@@ -195,7 +195,7 @@ describe('getCppLanguageServer', () => {
 		expect(worker?.terminated).toBe(true);
 		expect(status).toHaveBeenCalledWith({ state: 'disabled' });
 	});
-	it('snapshots proxied compile profiles before asset loading and sends cloneable values', async () => {
+	it('snapshots proxied compile profiles and workspace files before asset loading', async () => {
 		let release!: () => void;
 		const pending = new Promise<void>((resolve) => {
 			release = resolve;
@@ -212,6 +212,15 @@ describe('getCppLanguageServer', () => {
 			},
 			{}
 		);
+		const header = new Proxy({ path: 'include/answer.h', content: '#define ANSWER 42' }, {});
+		const workspaceFiles = new Proxy(
+			[
+				header,
+				{ path: '.clangd', content: 'local' },
+				{ path: 'nested/compile_commands.json', content: '[]' }
+			],
+			{}
+		);
 		class CloningWorker extends mockState.FakeWorker {
 			postMessage(message: any, transfer: Transferable[] = []) {
 				super.postMessage(structuredClone(message), transfer);
@@ -224,9 +233,12 @@ describe('getCppLanguageServer', () => {
 		const starting = getCppLanguageServer({
 			cpp: { baseUrl: 'https://assets.example.com/proxied-profile/', loader },
 			compileProfile,
+			workspaceFiles,
 			createWorker: () => new CloningWorker() as unknown as Worker
 		});
 		await vi.waitFor(() => expect(loader).toHaveBeenCalledTimes(2));
+		header.content = '#define ANSWER 99';
+		workspaceFiles.pop();
 		compileProfile.cppVersion = 'CPP98';
 		compileProfile.cVersion = 'C23';
 		compileProfile.sourceLanguage = 'C';
@@ -235,6 +247,9 @@ describe('getCppLanguageServer', () => {
 		compileProfile.compileArgs = new Proxy(['-DREPLACED=1'], {});
 		release();
 		const handle = await starting;
+		expect(mockState.workers[0].messages[0].workspaceFiles).toEqual([
+			{ path: 'include/answer.h', content: '#define ANSWER 42' }
+		]);
 		expect(mockState.workers[0].messages[0].compileProfile).toEqual({
 			cppVersion: 'CPP20',
 			cVersion: 'C11',

@@ -2388,6 +2388,7 @@
 		javaLspRuntime?: JavaLspRuntimeConfig;
 		javaLspWorkspaceFiles?: ReadonlyArray<{ path: string; content: string }>;
 		clangdEnabled?: boolean;
+		clangdWorkspaceFiles?: ReadonlyArray<{ path: string; content: string }>;
 		clangdBaseUrl?: string;
 		clangdRuntimeAssets?: PlaygroundRuntimeAssets;
 		clangdCppVersion?: string;
@@ -2526,6 +2527,7 @@
 		javaLspRuntime,
 		javaLspWorkspaceFiles = [],
 		clangdEnabled = false,
+		clangdWorkspaceFiles = [],
 		clangdBaseUrl,
 		clangdRuntimeAssets,
 		clangdCppVersion,
@@ -2749,6 +2751,7 @@
 			javaLspEnabled ? JSON.stringify(javaLspRuntime) : '',
 			javaLspEnabled ? JSON.stringify(javaLspWorkspaceFiles) : '',
 			clangdEnabled ? clangdBaseUrl || '' : '',
+			clangdEnabled ? JSON.stringify(clangdWorkspaceFiles) : '',
 			clangdCppVersion || '',
 			clangdCVersion || '',
 			clangdSourceLanguage || '',
@@ -3253,6 +3256,7 @@
 				const { getCppLanguageServer } = await import('@wasm-idle/lsp/clangd');
 				const handle = await getCppLanguageServer({
 					cpp: { baseUrl: clangdBaseUrl || '' },
+					workspaceFiles: clangdWorkspaceFiles,
 					currentUrl,
 					signal,
 					compileProfile: {

@@ -21,7 +21,11 @@ import {
 import { ClangdStdinQueue } from './stdin-queue.js';
 import { JsonStream } from '@wasm-idle/llvm-core/core/json-stream';
 import type { ClangdWorkerInboundMessage } from './protocol.js';
-import { ClangdWorkspaceFileRegistry, normalizeClangdWorkspaceFilePath } from './workspace.js';
+import {
+	ClangdWorkspaceFileRegistry,
+	normalizeClangdWorkspaceFilePath,
+	prepareClangdWorkspace
+} from './workspace.js';
 import { mountClangdHeaders } from './headers.js';
 
 interface ClangdWorkerScope {
@@ -65,7 +69,7 @@ const stdinReady = () => stdinQueue.ready();
 
 let writer: BrowserMessageWriterInstance | null = null;
 let clangdRuntime: any = null;
-const workspaceFiles = new ClangdWorkspaceFileRegistry();
+let workspaceFiles = new ClangdWorkspaceFileRegistry();
 
 const stdout = (charCode: number) => {
 	const json = jsonStream.insert(charCode);
@@ -90,7 +94,7 @@ const onAbort = () => {
 	self.reportError?.('clangd aborted');
 };
 
-const syncWorkspaceFile = (filePath: string) => {
+const syncWorkspaceFile = (filePath: string, content?: string) => {
 	const normalizedPath = normalizeClangdWorkspaceFilePath(filePath);
 	if (!clangdRuntime) return;
 	const registered = workspaceFiles.register(normalizedPath);
@@ -98,8 +102,9 @@ const syncWorkspaceFile = (filePath: string) => {
 	const directoryPath =
 		lastSlash > 0 ? registered.path.slice(0, lastSlash) : CLANGD_WORKSPACE_PATH;
 	try {
+		if (content === undefined && clangdRuntime.FS.analyzePath(registered.path).exists) return;
 		clangdRuntime.FS.mkdirTree(directoryPath);
-		clangdRuntime.FS.writeFile(registered.path, '');
+		clangdRuntime.FS.writeFile(registered.path, content ?? '');
 	} catch (error) {
 		if (registered.added) workspaceFiles.unregister(registered.path);
 		throw error;
@@ -128,6 +133,8 @@ self.addEventListener('message', async (event: MessageEvent<ClangdWorkerInboundM
 		if (typeof event.data.baseUrl !== 'string' || !event.data.baseUrl.trim()) {
 			throw new Error('clangd init requires an explicit baseUrl');
 		}
+		const workspace = prepareClangdWorkspace(event.data.workspaceFiles);
+		workspaceFiles = workspace.registry;
 		const baseUrl = normalizeClangdBaseUrl(event.data.baseUrl.trim()) + '/';
 		debugLog('init', baseUrl);
 		if (!event.data.assets) throw new Error('clangd init requires preloaded runtime assets');
@@ -247,6 +254,7 @@ self.addEventListener('message', async (event: MessageEvent<ClangdWorkerInboundM
 		const simd = isPinnedClangd && resourceDir === CLANG_RESOURCE_HEADER_DIRECTORY;
 		if (simd) installClangSimdHeaders(clangdRuntime.FS, '/usr');
 		syncWorkspaceFile(CLANGD_CPP_FILE_PATH);
+		for (const file of workspace.files ?? []) syncWorkspaceFile(file.path, file.content);
 		clangdRuntime.FS.writeFile(
 			`${CLANGD_WORKSPACE_PATH}/.clangd`,
 			createClangdConfiguration({ ...event.data.compileProfile, resourceDir, simd })

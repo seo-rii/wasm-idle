@@ -1,6 +1,7 @@
 import type { RuntimeAssetIntegrityEntry } from '@wasm-idle/core';
 import type { ClangdCompileProfile } from './config.js';
 import type { ClangdHeaderAsset } from './headers.js';
+import type { ClangdWorkspaceFile } from './workspace.js';
 
 export interface ClangdPreloadedAssets {
 	objectiveCHeaders?: Record<string, string>;
@@ -20,6 +21,7 @@ export interface ClangdWorkerInitMessage {
 	assets: ClangdPreloadedAssets;
 	debug?: boolean;
 	compileProfile?: ClangdCompileProfile;
+	workspaceFiles?: ClangdWorkspaceFile[];
 }
 
 export interface ClangdWorkerSyncFileMessage {
