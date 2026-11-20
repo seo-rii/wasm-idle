@@ -2375,6 +2375,7 @@
 			}
 			let imported: string[] = [];
 			if (plan.kind === 'backup') {
+				destination.assertBackupUnedited();
 				// A recovery copy gets a fresh container. A healthy restore keeps the live Bash session.
 				const previous =
 					unrestoredWorkspace === null

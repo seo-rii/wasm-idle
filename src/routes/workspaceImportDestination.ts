@@ -17,6 +17,12 @@ export function captureWorkspaceImportDestination(
 	}
 ) {
 	let destination = current();
+	// Keep immutable strings, without copying file bodies, to detect in-place editor changes.
+	const initialFiles = destination.files.map(({ path, content, encoding }) => ({
+		path,
+		content,
+		encoding
+	}));
 	return {
 		assertCurrent() {
 			const target = current();
@@ -31,6 +37,22 @@ export function captureWorkspaceImportDestination(
 			) {
 				throw new WorkspaceImportCancelled();
 			}
+		},
+		assertBackupUnedited() {
+			this.assertCurrent();
+			if (
+				destination.files.some((file, index) => {
+					const before = initialFiles[index];
+					return (
+						!before ||
+						file.path !== before.path ||
+						file.content !== before.content ||
+						file.encoding !== before.encoding
+					);
+				}) ||
+				destination.files.length !== initialFiles.length
+			)
+				throw new WorkspaceImportCancelled();
 		},
 		advance() {
 			destination = current();
