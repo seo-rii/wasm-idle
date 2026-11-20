@@ -1258,6 +1258,8 @@
 							pendingText = '';
 							const [, parameters, final, meta] = escapeSequence;
 							if (meta) handleInputKey(`Meta-${meta}`);
+							else if (parameters === '1;5' && (final === 'C' || final === 'D'))
+								handleInputKey(final === 'D' ? 'Meta-b' : 'Meta-f');
 							else
 								handleInputKey(
 									final === '~' ? parameters.split(';')[0] + '~' : final

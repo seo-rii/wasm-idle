@@ -309,11 +309,17 @@ export function serveContainerWorker(options: ContainerWorkerOptions): {
 			typeof text === 'string'
 				? new TextEncoder().encode(text.replaceAll('\r\n', '\n').replaceAll('\r', '\n'))
 				: text;
-		if (bytes.length > 65536) throw new Error('Terminal input exceeds 64 KiB');
 		if (!bytes.length) return;
+		const writer = shellWriter;
 		const next = Promise.resolve(shellWrites)
 			.catch(() => {})
-			.then(() => shellWriter!.write(bytes));
+			.then(async () => {
+				// The WASIX stream accepts at most 64 KiB per write. Preserve the paste
+				// as one queued operation even when a Unicode character crosses a chunk.
+				const chunkSize = 64 * 1024;
+				for (let offset = 0; offset < bytes.length; offset += chunkSize)
+					await writer.write(bytes.subarray(offset, offset + chunkSize));
+			});
 		shellWrites = next;
 		await next;
 	}
@@ -519,8 +525,15 @@ export function serveContainerWorker(options: ContainerWorkerOptions): {
 		}
 		if (method === 'shellSetDirectory') {
 			await shellStarting;
-			if (!shell || shellClosed || !shellControl) throw new Error('Shell is not running');
-			return await shellControl.requestDirectory(language);
+			if (shellClosed || shellInputClosed) return;
+			if (!shell || !shellControl) throw new Error('Shell is not running');
+			try {
+				return await shellControl.requestDirectory(language);
+			} catch (error) {
+				if ((shellClosed || shellInputClosed) && (error as Error)?.name === 'AbortError')
+					return;
+				throw error;
+			}
 		}
 		if (method === 'shellSuspend' || method === 'shellResume') {
 			await shellStarting;
