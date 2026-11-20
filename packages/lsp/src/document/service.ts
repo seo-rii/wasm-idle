@@ -401,7 +401,8 @@ export function createDocumentWorkerService(): WorkerLanguageService {
 			if (language === 'markdown') {
 				return completionItems(['# ', '## ', '[]()', '```'], 'Markdown snippet');
 			}
-			return completionItems(['true', 'false', 'null'], `${language.toUpperCase()} literal`);
+			const literals = language === 'toml' ? ['true', 'false'] : ['true', 'false', 'null'];
+			return completionItems(literals, `${language.toUpperCase()} literal`);
 		},
 		async hover(document, position) {
 			if (language === 'json') {

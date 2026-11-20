@@ -195,4 +195,23 @@ describe('document language worker service', () => {
 			(await service.diagnostics?.(source, ctx))?.map(({ range }) => doc.getText(range))
 		).toEqual(['#한글', '#absent']);
 	});
+	it.each(['toml', 'yaml'])('offers only parseable %s literal values', async (language) => {
+		const service = createDocumentWorkerService(),
+			ctx = context();
+		await service.initialize?.({ language }, ctx);
+		const source = document(language, language === 'toml' ? 'value = ' : 'value: ');
+		const result = (await service.completion?.(
+			source,
+			{ line: 0, character: source.text.length },
+			ctx
+		)) as { items: { label: string }[] };
+		expect(result.items.map(({ label }) => label)).toEqual(
+			language === 'toml' ? ['true', 'false'] : ['true', 'false', 'null']
+		);
+		for (const { label } of result.items) {
+			expect(
+				await service.diagnostics?.({ ...source, text: source.text + label }, ctx)
+			).toEqual([]);
+		}
+	});
 });
