@@ -75,6 +75,14 @@ it('moves an edited breakpoint and keeps an occupied destination intact', async 
 		{ line: 4, enabled: false, condition: 'n > 1' },
 		{ line: 8 }
 	]);
+	ops.editDebugBreakpoint(4);
+	// Two gutter clicks enable the disabled breakpoint and then remove it while the form is open.
+	debug.setBreakpoints([4, 8], { preserveDisabled: true });
+	debug.setBreakpoints([8], { preserveDisabled: true });
+	state.breakpointLine = 8;
+	await ops.saveDebugBreakpoint();
+	expect(debug.structuredBreakpoints).toEqual([{ line: 8 }]);
+	expect(state.debugInteractionError).toContain('removed');
 });
 
 it('moves structured breakpoints on rename and clears them on deletion and filename reuse', async () => {

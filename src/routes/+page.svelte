@@ -876,10 +876,13 @@
 				debugInteractionError = 'Select a breakpoint in the current file before saving.';
 				return;
 			}
+			if (original && !specs.some((entry) => entry.line === original.line)) {
+				debugInteractionError = 'This breakpoint was removed. Select a breakpoint before saving.';
+				return;
+			}
 			if (
 				original &&
 				original.line !== breakpointLine &&
-				specs.some((entry) => entry.line === original.line) &&
 				specs.some((entry) => entry.line === breakpointLine)
 			) {
 				debugInteractionError = 'There is already a breakpoint on that line.';
