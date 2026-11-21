@@ -100,7 +100,11 @@ export interface ContainerPlaygroundBinding extends PlaygroundBinding {
 	beginTerminalExecution(signal?: AbortSignal): Promise<void>;
 	/** Redraw the actual Bash prompt after the Terminal has written its execution footer. */
 	endTerminalExecution(): Promise<void>;
-	syncWorkspace(language: string, files: readonly ContainerWorkspaceFile[]): Promise<void>;
+	syncWorkspace(
+		language: string,
+		files: readonly ContainerWorkspaceFile[],
+		restoreDirectories?: readonly SavedWorkspaceDirectory[]
+	): Promise<void>;
 	readWorkspace(language: string): Promise<ContainerWorkspaceFile[]>;
 	/**
 	 * Reconcile synchronously before the next publish. Return true from the callback to
@@ -234,7 +238,12 @@ export function createContainerPlaygroundBinding(
 		queues.set(language, next);
 		return next;
 	};
-	const syncWorkspace = (language: string, files: readonly ContainerWorkspaceFile[]) => {
+	const syncWorkspace = (
+		language: string,
+		files: readonly ContainerWorkspaceFile[],
+		restoreDirectories?: readonly SavedWorkspaceDirectory[]
+	) => {
+		const directoryArgument = restoreDirectories === undefined ? [] : [[...restoreDirectories]];
 		const snapshot = copyFiles(files);
 		publishRequests.set(language, (publishRequests.get(language) ?? 0) + 1);
 		return enqueueWorkspace(language, async () => {
@@ -251,7 +260,7 @@ export function createContainerPlaygroundBinding(
 					if (previous) expected.push(previous);
 				}
 				expected.push(...before.values());
-				if (!changed.length && !expected.length) return;
+				if (!changed.length && !expected.length && !directoryArgument.length) return;
 				await connection().call('syncWorkspaceDelta', [
 					language,
 					changed,
@@ -259,11 +268,17 @@ export function createContainerPlaygroundBinding(
 					snapshot.map((file) => ({
 						path: file.path,
 						bytes: bytes(file.content).byteLength
-					}))
+					})),
+					...directoryArgument
 				]);
 			} else {
 				// A project can already contain shell files before its first editor publish.
-				await connection().call('syncWorkspace', [language, snapshot, []]);
+				await connection().call('syncWorkspace', [
+					language,
+					snapshot,
+					[],
+					...directoryArgument
+				]);
 			}
 			// snapshot already owns its bytes, including while queued behind another write.
 			published.set(language, snapshot);

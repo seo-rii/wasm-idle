@@ -826,7 +826,14 @@
 	const sortedFiles = $derived([...files].sort((a, b) => a.path.localeCompare(b.path)));
 	const activeLines = $derived(activeFile ? activeFile.content.split(/\r\n|\r|\n/).length : 0);
 	const activeBytes = $derived(activeFile ? new Blob([activeFile.content]).size : 0);
-	const workspaceSaveKey = $derived(serializeStoredWorkspace(snapshot(), savedDirectories));
+	const workspaceSaveKey = $derived.by(() => {
+		try {
+			return serializeStoredWorkspace(snapshot(), savedDirectories);
+		} catch {
+			// A refresh can briefly pair incoming files with the outgoing folder list.
+			return undefined;
+		}
+	});
 
 	const loadingProgress = createLoadingProgressController({
 		onChange(state) {
@@ -916,8 +923,7 @@
 				return;
 			}
 			if (original && !specs.some((entry) => entry.line === original.line)) {
-				debugInteractionError =
-					'This breakpoint was removed. Select a breakpoint before saving.';
+				debugInteractionError = 'This breakpoint was removed. Select a breakpoint before saving.';
 				return;
 			}
 			if (
@@ -1573,13 +1579,18 @@
 		});
 	async function publishContainerWorkspace(
 		selectedLanguage: string,
-		values: readonly WorkspaceFile[]
+		values: readonly WorkspaceFile[],
+		restoreDirectories?: readonly SavedWorkspaceDirectory[]
 	) {
 		if (containerWorkspaceConflicts.has(selectedLanguage))
 			throw new Error(
 				'An editor buffer conflicts with terminal edits. Refresh files to resolve it.'
 			);
-		await playground.syncWorkspace(selectedLanguage, containerFiles(values));
+		await playground.syncWorkspace(
+			selectedLanguage,
+			containerFiles(values),
+			restoreDirectories
+		);
 	}
 	async function refreshContainerWorkspace(force = false, scanAll = false) {
 		if (!browser || !workspaceInitialized) return;
@@ -2221,13 +2232,15 @@
 				return 'failed';
 			}
 		}
+		// A failed or in-flight backup publication is not a durable workspace yet.
+		if (pendingBackupProjects.size) return 'failed';
 		if (containerWorkspaceConflicts.size) {
 			workspaceStorage.fail(
 				`Editor and terminal changes conflict in ${[...containerWorkspaceConflicts].join(', ')}. Open the project and refresh files to resolve them.`
 			);
 			return 'failed';
 		}
-		const result = await workspaceStorage.saveRevision(readWorkspaceSaveKey(), identity);
+		const result = await workspaceStorage.saveRevision(workspaceSaveKey, identity);
 		if (result === 'saved' && identity === currentWorkspaceStorageKey && pendingWorkspaceUrl) {
 			if (location.href === pendingWorkspaceUrl.source)
 				replaceState(pendingWorkspaceUrl.target, page.state);
@@ -2235,14 +2248,6 @@
 		}
 		if (result === 'saved' && showStatus) saveStatus = 'Saved locally';
 		return result;
-	}
-
-	function readWorkspaceSaveKey() {
-		try {
-			return workspaceSaveKey;
-		} catch {
-			return undefined;
-		}
 	}
 
 	async function saveWorkspaceCopy() {
@@ -2289,7 +2294,7 @@
 	}
 
 	function isCurrentWorkspaceSaved() {
-		workspaceStorage.observe(readWorkspaceSaveKey(), currentWorkspaceStorageKey);
+		workspaceStorage.observe(workspaceSaveKey, currentWorkspaceStorageKey);
 		workspaceStorage.checkExternalChanges(currentWorkspaceStorageKey);
 		const state = workspaceStorage.getState();
 		return (
@@ -2541,6 +2546,17 @@
 			}
 			let imported: string[] = [];
 			if (plan.kind === 'backup') {
+				const directories = readWorkspaceDirectories(
+					plan.backup.emptyDirectories,
+					playgroundLanguages
+				);
+				const previousDirectories =
+					unrestoredWorkspace === null
+						? emptyProjectDirectories(
+								await playground.listWorkspaceFiles(),
+								playgroundLanguages
+							)
+						: [];
 				destination.assertBackupUnedited();
 				// A recovery copy gets a fresh container. A healthy restore keeps the live Bash session.
 				const previous =
@@ -2555,20 +2571,26 @@
 					replaceState(copyUrl, page.state);
 					unrestoredWorkspace = null;
 				}
+				savedDirectories = directories;
 				applySnapshot(plan.backup, 'Workspace backup restored');
 				if (previous) {
 					const binding = playground;
 					const revision = editorWorkspaceRevision;
-					// The active editor publishes its own changes. Restore inactive diffs as well,
-					// including files removed by a backup that resets a project to its default.
+					const directoryPath = (entry: SavedWorkspaceDirectory) =>
+						typeof entry === 'string' ? entry : entry.path;
+					const directoryProjects = new Set(
+						[...previousDirectories, ...directories].map(
+							(entry) => directoryPath(entry).split('/')[0]
+						)
+					);
 					const changed = playgroundLanguages.filter(
 						(project) =>
-							project !== language &&
-							(pendingBackupProjects.has(project) ||
-								!sameWorkspaceFiles(
-									previous[project].files,
-									languageWorkspaces[project].files
-								))
+							directoryProjects.has(project) ||
+							pendingBackupProjects.has(project) ||
+							!sameWorkspaceFiles(
+								previous[project].files,
+								languageWorkspaces[project].files
+							)
 					);
 					try {
 						await Promise.all(
@@ -2577,15 +2599,22 @@
 								pendingBackupProjects.set(project, revision);
 								await publishContainerWorkspace(
 									project,
-									languageWorkspaces[project].files
+									languageWorkspaces[project].files,
+									directories.filter((entry) =>
+										directoryPath(entry).startsWith(project + '/')
+									)
 								);
 								if (pendingBackupProjects.get(project) === revision)
 									pendingBackupProjects.delete(project);
 							})
 						);
-					} catch (error) {
 						if (binding === playground && revision === editorWorkspaceRevision)
+							scheduleWorkspaceSave();
+					} catch (error) {
+						if (binding === playground && revision === editorWorkspaceRevision) {
 							saveStatus = `Workspace backup restored. Workspace sync failed: ${String(error)}`;
+							workspaceStorage.fail(saveStatus);
+						}
 					}
 				}
 				return;
@@ -3380,7 +3409,7 @@
 
 	$effect(() => {
 		if (!browser || !workspaceEditorInitialized || unrestoredWorkspace !== null) return;
-		const key = readWorkspaceSaveKey();
+		const key = workspaceSaveKey;
 		workspaceStorage.observe(key, currentWorkspaceStorageKey);
 		if (!key) return;
 		scheduleWorkspaceSave();
@@ -5733,13 +5762,13 @@
 												? 'The Bash WASIX package accepts stdin when the process starts. Enter it before Run; extra reads receive EOF.'
 												: language === 'DUCKDB'
 													? 'DuckDB reads this input from /dev/stdin. Enter it before Run.'
-													: language === 'POSTGRESQL'
-														? "PostgreSQL reads this input as the server file '/dev/blob' (COPY ... FROM '/dev/blob' or pg_read_file('/dev/blob')). Enter it before Run."
-														: language === 'CSHARP' ||
-															  language === 'FSHARP' ||
-															  language === 'VBNET'
-															? 'C#, F#, and VB.NET read all stdin when the program starts. Enter it before Run; extra reads receive EOF. Output appears when the program finishes.'
-															: 'SharedArrayBuffer is unavailable here, so terminal input cannot be sent while the program is running. Enter stdin before Run; extra reads receive EOF.'}
+												: language === 'POSTGRESQL'
+													? "PostgreSQL reads this input as the server file '/dev/blob' (COPY ... FROM '/dev/blob' or pg_read_file('/dev/blob')). Enter it before Run."
+													: language === 'CSHARP' ||
+														  language === 'FSHARP' ||
+														  language === 'VBNET'
+														? 'C#, F#, and VB.NET read all stdin when the program starts. Enter it before Run; extra reads receive EOF. Output appears when the program finishes.'
+														: 'SharedArrayBuffer is unavailable here, so terminal input cannot be sent while the program is running. Enter stdin before Run; extra reads receive EOF.'}
 								</span>
 							</div>
 							<textarea

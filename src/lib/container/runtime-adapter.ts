@@ -293,7 +293,8 @@ export class ContainerRuntimeAdapter {
 		language: string,
 		files: readonly WorkspaceFile[],
 		expectedBaseFiles?: readonly WorkspaceFile[],
-		project?: readonly ContainerWorkspaceFileMetadata[]
+		project?: readonly ContainerWorkspaceFileMetadata[],
+		restoreDirectories?: readonly SavedWorkspaceDirectory[]
 	) {
 		const path = this.directoryPath(language);
 		const limits = {
@@ -375,6 +376,32 @@ export class ContainerRuntimeAdapter {
 					)
 					.map(([name, inode]) => ({ path: name, inode }))
 			: [];
+		const replaceableInodes = new Map(
+			replaceEmptyDirectories.map(({ path, inode }) => [path, inode])
+		);
+		// The backup owns named project directories as well as files. Remove only
+		// still-empty directory inodes; other shell entries remain independently owned.
+		const restored = new Map<string, boolean>();
+		if (restoreDirectories !== undefined) {
+			const keep = new Set([...publishedNext].flatMap((file) => [...workspaceParents(file)]));
+			for (const entry of restoreDirectories) {
+				const fullPath = typeof entry === 'string' ? entry : entry.path;
+				const name = fullPath.slice(language.length + 1);
+				for (const parent of workspaceParents(name)) {
+					keep.add(parent);
+					if (!restored.has(parent)) restored.set(parent, false);
+				}
+				keep.add(name);
+				restored.set(name, typeof entry !== 'string');
+			}
+			for (const entry of this.listWorkspaceFiles()) {
+				if (entry.type !== 'directory' || !entry.path.startsWith(language + '/')) continue;
+				const name = entry.path.slice(language.length + 1);
+				if (!keep.has(name) && !replaceableInodes.has(name))
+					replaceableInodes.set(name, this.fs.lstat(name, context).inode);
+			}
+		}
+
 		for (const parent of new Set(writes.flatMap((file) => [...workspaceParents(file.path)]))) {
 			try {
 				const stat = this.fs.lstat(parent, context);
@@ -393,8 +420,7 @@ export class ContainerRuntimeAdapter {
 				if (
 					code === 'EISDIR' &&
 					addition &&
-					replace.has(name) &&
-					this.fs.lstat(name, context).inode === implicit.get(name)
+					this.fs.lstat(name, context).inode === replaceableInodes.get(name)
 				)
 					return undefined;
 				if (
@@ -431,16 +457,24 @@ export class ContainerRuntimeAdapter {
 		this.fs.applyFileChanges(
 			{
 				remove: deletions,
-				replaceEmptyDirectories,
+				replaceEmptyDirectories: [...replaceableInodes].map(([path, inode]) => ({
+					path,
+					inode
+				})),
+				createDirectories: [...restored.keys()],
 				write: writes.map((file) => ({ path: file.path, bytes: asBytes(file.content) }))
 			},
 			{ root: path, cwd: path, createRoot: true }
 		);
 		// Publish provenance only after the atomic VFS operation has succeeded.
-		for (const { path: name } of replaceEmptyDirectories) implicit.delete(name);
+		for (const name of replaceableInodes.keys()) implicit.delete(name);
 		for (const name of missingDirectories) {
 			const stat = this.fs.lstat(name, context);
 			if (stat.type === 'directory') implicit.set(name, stat.inode);
+		}
+		for (const [name, editorOwned] of restored) {
+			if (editorOwned) implicit.set(name, this.fs.lstat(name, context).inode);
+			else implicit.delete(name);
 		}
 		this.#implicitDirectories.set(language, implicit);
 		this.#published.set(language, publishedNext);

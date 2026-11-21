@@ -111,6 +111,7 @@ it('moves structured breakpoints on rename and clears them on deletion and filen
 		selectFile: vi.fn(),
 		normalizeWorkspaceFilePath,
 		workspaceFilePath,
+		reservedProjectDirectories: new Set<string>(),
 		saveStatus: ''
 	};
 	const action = (name: string, following: string) => {
@@ -624,6 +625,7 @@ describe('shared workspace refresh scheduling', () => {
 			unrestoredWorkspace: null,
 			currentWorkspaceStorageKey: 'source',
 			pendingWorkspaceUrl: null,
+			pendingBackupProjects: new Map(),
 			workspaceStorage,
 			refreshContainerWorkspace: refresh,
 			captureWorkspaceImportDestination,
