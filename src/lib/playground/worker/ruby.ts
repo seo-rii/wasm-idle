@@ -1,4 +1,4 @@
-import { rubyStringLiteral } from './rubyScriptProcess';
+import { RUBY_SCRIPT_PROCESS, rubyExitCode, rubyStringLiteral } from './rubyScriptProcess';
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 import type { WorkspaceFile } from '@wasm-idle/core';
 import { importRuntimeModule } from '$lib/playground/runtimeModule';
@@ -643,6 +643,7 @@ self.onmessage = async (event: { data: any }) => {
 				label: 'Ruby program started'
 			}
 		});
+		let exitCode = 0;
 		execution.mountActiveSource(code);
 		if (loadedRuntime.golfscriptBytes) {
 			// Single-quoted Ruby literals keep interpolation markers in filenames/args as data.
@@ -664,7 +665,7 @@ end`);
 			}
 		} else if (message.rubyDebug) {
 			const debug = message.rubyDebug;
-			await executeRubyTracepoint(
+			exitCode = await executeRubyTracepoint(
 				vm,
 				code,
 				{
@@ -687,16 +688,17 @@ end`);
 		} else {
 			const path = rubyStringLiteral(normalizeWorkspacePath(activePath));
 			const source = rubyStringLiteral(JSON.stringify(code));
-			vm.eval(`require 'json'
-$0 = ${path}
-eval(JSON.parse(${source}), TOPLEVEL_BINDING, ${path}, 1)`);
+			exitCode = rubyExitCode(vm.eval(`require 'json'
+(${RUBY_SCRIPT_PROCESS}).call(${path}) do
+  eval(JSON.parse(${source}), TOPLEVEL_BINDING, ${path}, 1)
+end`));
 		}
 		if (log) {
 			console.log(
 				`[wasm-idle:ruby-worker] eval settled stdout=${String(execution.hasOutput().stdout)} stderr=${String(execution.hasOutput().stderr)}`
 			);
 		}
-		postMessage({ results: true });
+		postMessage(exitCode ? { results: false, exitCode } : { results: true });
 	} catch (error: any) {
 		if (log) {
 			console.error('[wasm-idle:ruby-worker] failed', error);

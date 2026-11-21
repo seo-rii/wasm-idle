@@ -99,6 +99,8 @@ require 'zlib'
 require 'stringio'
 require 'logger'
 require 'test/unit'
+# Exercise the library without treating this plain script's ARGV as test runner options.
+Test::Unit::AutoRunner.need_auto_run = false
 STDOUT.sync = true
 raise 'json' unless JSON.parse(JSON.generate({'a'=>1}))['a'] == 1
 raise 'set' unless Set[1,1,2].size == 2
@@ -156,9 +158,26 @@ puts 'ruby-split-ok'
 			code: `require_relative 'helper'
 raise 'script identity' unless __FILE__ == 'app/main.rb' && $0 == __FILE__
 raise 'unmounted source' unless File.read(__FILE__).include?('require_relative')
-puts HELPER`
+at_exit { puts "first:#{$!.status}" }
+Kernel.at_exit { puts "last:#{HELPER}" }
+exit 7`
 		});
 		expect(messages.filter((x) => x.error)).toEqual([]);
-		expect(messages.filter((x) => x.output).map((x) => x.output).join('')).toBe('42\n');
+		expect(
+			messages
+				.filter((x) => x.output)
+				.map((x) => x.output)
+				.join('')
+		).toBe('last:42\nfirst:7\n');
+		expect(messages.at(-1)).toEqual({ results: false, exitCode: 7 });
+		messages.length = 0;
+		await send({ ...options, code: 'at_exit { puts "clean" }; exit 0' });
+		expect(
+			messages
+				.filter((x) => x.output)
+				.map((x) => x.output)
+				.join('')
+		).toBe('clean\n');
+		expect(messages.at(-1)).toEqual({ results: true });
 	}, 30000);
 });

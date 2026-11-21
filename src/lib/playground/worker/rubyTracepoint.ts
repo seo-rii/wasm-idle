@@ -1,3 +1,4 @@
+import { RUBY_SCRIPT_PROCESS, rubyExitCode, rubyStringLiteral } from './rubyScriptProcess';
 import type { WorkspaceFile } from '@wasm-idle/core';
 import type { DebugSourceBreakpoints } from '../options';
 import { RUBY_DEBUG_PREVIEW } from './rubyDebugPreview';
@@ -46,9 +47,9 @@ export async function executeRubyTracepoint(
 		content: typeof content === 'string' ? content : null
 	}));
 	const data = JSON.stringify({ ...options, source, files: sources, hashes, key });
-	const literal = `'${data.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
+	const literal = rubyStringLiteral(data);
 	try {
-		vm.eval(String.raw`
+		return rubyExitCode(vm.eval(String.raw`
 require 'json'
 require 'js'
 Class.new do
@@ -177,7 +178,9 @@ trace = TracePoint.new(:line, :call, :return, :b_call, :b_return, :class, :end) 
 end
 begin
   trace.enable
-  eval(settings['source'], TOPLEVEL_BINDING, settings['path'], 1)
+  (${RUBY_SCRIPT_PROCESS}).call(settings['path']) do
+    eval(settings['source'], TOPLEVEL_BINDING, settings['path'], 1)
+  end
 ensure
   trace.disable
   STDOUT.flush
@@ -185,7 +188,7 @@ ensure
 end
 end
 end.run(JSON.parse(${literal}))
-`);
+`));
 	} finally {
 		delete globals[key];
 	}

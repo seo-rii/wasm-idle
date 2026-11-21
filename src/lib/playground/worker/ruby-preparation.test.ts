@@ -111,7 +111,7 @@ describe('Ruby untouched VM preparation', () => {
 		mocks.verifyRubyRuntimePreflightPayload.mockReset();
 		mocks.rewriteVerifiedRubyRuntimeModule.mockReset();
 		mocks.importRuntimeModule.mockReset();
-		rubyEvalMock.mockReset();
+		rubyEvalMock.mockReset().mockReturnValue(0);
 		rubyInstantiateMock.mockReset();
 		rubyInstantiateMock.mockImplementation(async () => ({
 			vm: { eval: rubyEvalMock }
