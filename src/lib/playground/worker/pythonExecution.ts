@@ -9,6 +9,8 @@ def __wasm_idle_make_script_process():
     @contextmanager
     def script_process(filename):
         previous_argv, previous_cwd = sys.argv, os.getcwd()
+        environment = os.environ
+        previous_environment = environment.copy()
         status = [0]
         sys.argv = [filename]
         try:
@@ -23,6 +25,12 @@ def __wasm_idle_make_script_process():
                 status[0] = 1
         finally:
             sys.argv = previous_argv
+            os.environ = environment
+            for name in environment.keys() - previous_environment.keys():
+                del environment[name]
+            for name, value in previous_environment.items():
+                if environment.get(name) != value:
+                    environment[name] = value
             os.chdir(previous_cwd)
     return script_process
 
