@@ -112,6 +112,52 @@ describe('workspace import staging', () => {
 		).rejects.toThrow('Duplicate imported path: a/b.txt');
 	});
 
+	it('keeps literal backslashes in loose and directory uploads alongside a nested archive path', async () => {
+		const archives = createWorkspaceArchive([{ path: 'notes/final.txt', content: 'nested' }]);
+		const directoryFile = Object.assign(new File(['folder'], 'part\\one.txt'), {
+			webkitRelativePath: 'folder/part\\one.txt'
+		});
+		const plan = await stageWorkspaceImport(
+			[
+				new File(['literal'], 'notes\\final.txt'),
+				directoryFile,
+				new File([archives], 'nested.zip')
+			],
+			{ extractZip, assertDestination: () => {} }
+		);
+		expect(plan).toMatchObject({
+			kind: 'files',
+			files: [
+				{ path: 'notes\\final.txt', pathStyle: 'posix', content: 'literal' },
+				{ path: 'folder/part\\one.txt', pathStyle: 'posix', content: 'folder' },
+				{ path: 'notes/final.txt', content: 'nested' }
+			]
+		});
+	});
+
+	it('preserves loose POSIX filenames that look like drive names or contain only whitespace', async () => {
+		const names = ['C:notes.txt', '   '];
+		const plan = await stageWorkspaceImport(
+			names.map((name) => new File(['raw'], name)),
+			{
+				extractZip,
+				assertDestination: () => {}
+			}
+		);
+		expect(plan).toMatchObject({
+			kind: 'files',
+			files: names.map((path) => ({ path, pathStyle: 'posix', content: 'raw' }))
+		});
+		for (const invalid of ['/outside', '../outside', 'bad\0name']) {
+			await expect(
+				stageWorkspaceImport([new File(['bad'], invalid)], {
+					extractZip,
+					assertDestination: () => {}
+				})
+			).rejects.toThrow();
+		}
+	});
+
 	it('rejects mixed backup and file selections before returning a plan', async () => {
 		const snapshot = {
 			version: 6,

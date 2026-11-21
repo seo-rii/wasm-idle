@@ -12,6 +12,7 @@
 	import { createContainerPlaygroundBinding } from '$lib/playground/container/binding';
 	import {
 		isRuntimeWorkspacePath,
+		runtimeWorkspacePathHint,
 		mergeContainerWorkspace,
 		sameWorkspaceFiles
 	} from '$lib/playground/container/workspace';
@@ -3153,9 +3154,7 @@
 			const releaseInput = terminal.reserveInput?.(stopExecution);
 			try {
 				if (!isRuntimeWorkspacePath(runActivePath))
-					throw new Error(
-						'Rename the active file to a portable relative path to run it.'
-					);
+					throw new Error(runtimeWorkspacePathHint);
 				await publishContainerWorkspace(
 					language,
 					files.map((file) => ({ ...file }))
