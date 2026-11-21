@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { ScriptExitError } from '../playground/scriptExit.js';
+import { ScriptExitError } from '../playground/executionObservation.js';
 import { serializeContainerWorkerError, snapshotContainerArguments } from './protocol.js';
 describe('container call snapshot', () => {
 	it('transfers the actual program exit code without treating an arbitrary exception as an exit', () => {

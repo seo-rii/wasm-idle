@@ -1,6 +1,5 @@
-import { ScriptExitError } from './scriptExit';
 import { describe, expect, it } from 'vitest';
-import { createExecutionObserver } from './executionObservation';
+import { ScriptExitError, createExecutionObserver } from './executionObservation';
 
 describe('execution observation', () => {
 	it('retains an explicit failed process exit status and leaves cancelled runs without one', () => {

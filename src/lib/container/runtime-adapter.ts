@@ -1,4 +1,4 @@
-import { ScriptExitError } from '../playground/scriptExit.js';
+import { ScriptExitError } from '../playground/executionObservation.js';
 import {
 	assertDebugBreakpointSupport,
 	normalizeDebugSourceBreakpoints,

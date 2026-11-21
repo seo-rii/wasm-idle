@@ -1,4 +1,4 @@
-import { ScriptExitError } from '../playground/scriptExit.js';
+import { ScriptExitError } from '../playground/executionObservation.js';
 import type { ProgressLike, RuntimeProgressEvent, WorkspaceFile } from '@wasm-idle/core';
 import type { SandboxRuntimeAssets } from '../playground/sandbox.js';
 

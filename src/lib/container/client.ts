@@ -1,4 +1,4 @@
-import { ScriptExitError } from '../playground/scriptExit.js';
+import { ScriptExitError } from '../playground/executionObservation.js';
 import {
 	CONTAINER_WORKER_PROTOCOL,
 	OWNER_CLEANUP_DEADLINE_MS,

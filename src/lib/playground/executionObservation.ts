@@ -1,5 +1,13 @@
-import { ScriptExitError } from './scriptExit';
 import type { ProgressLike, RuntimeProgressEvent } from '@wasm-idle/core';
+
+/** A program completed normally through its language's nonzero process-exit API. */
+export class ScriptExitError extends Error {
+	readonly name = 'ScriptExitError';
+
+	constructor(readonly exitCode: number) {
+		super(`Program exited with code ${exitCode}`);
+	}
+}
 
 export interface ExecutionObservation {
 	id: number;

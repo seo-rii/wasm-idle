@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createContainer, type Container } from '@wasm-idle/container';
-import { ScriptExitError } from '../playground/scriptExit.js';
+import { ScriptExitError } from '../playground/executionObservation.js';
 import { WebsiteRuntimeAdapter } from './runtime-adapter.js';
 import type { PlaygroundBinding } from '../playground/sandbox.js';
 
