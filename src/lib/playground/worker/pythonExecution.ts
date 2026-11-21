@@ -5,8 +5,23 @@ def __wasm_idle_make_script_process():
     import atexit
     import os
     import sys
+    import sysconfig
     import traceback
     from contextlib import contextmanager
+
+    # Python and installed packages remain loaded between runs. Their shutdown
+    # hooks (including weakref.finalize's lazy dispatcher) belong to the interpreter.
+    paths = sysconfig.get_paths()
+    libraries = {paths[key] for key in ("stdlib", "platstdlib", "purelib", "platlib")}
+    if getattr(sys, "_stdlib_dir", None):
+        libraries.add(sys._stdlib_dir)  # Pyodide ships its standard library in a zip.
+    prefixes = tuple(os.path.realpath(path) + os.sep for path in libraries)
+
+    def interpreter_module(namespace):
+        origin = getattr(namespace.get("__spec__"), "origin", None)
+        return origin in ("built-in", "frozen") or (
+            isinstance(origin, str) and os.path.realpath(origin).startswith(prefixes)
+        )
 
     @contextmanager
     def script_exit_callbacks():
@@ -16,6 +31,8 @@ def __wasm_idle_make_script_process():
         previous_register, previous_unregister = atexit.register, atexit.unregister
 
         def register(callback, /, *args, **kwargs):
+            if interpreter_module(sys._getframe(1).f_globals):
+                return previous_register(callback, *args, **kwargs)
             if atexit.register is not register:
                 # An imported module may retain this function across runs.
                 return atexit.register(callback, *args, **kwargs)
@@ -25,6 +42,8 @@ def __wasm_idle_make_script_process():
             return callback
 
         def unregister(callback, /):
+            if interpreter_module(sys._getframe(1).f_globals):
+                return previous_unregister(callback)
             if atexit.unregister is not unregister:
                 return atexit.unregister(callback)
             callbacks[:] = [entry for entry in callbacks if entry[0] != callback]

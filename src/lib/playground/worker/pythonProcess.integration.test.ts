@@ -77,3 +77,23 @@ sys.exit(7)`);
 		helpers.dispose();
 	}
 }, 120_000);
+
+it('keeps lazy interpreter finalizers alive across script runs', async () => {
+	const runtime = await loadPyodide();
+	const helpers = createPythonExecutionHelpers(runtime, '');
+	try {
+		await helpers.run('from tempfile import TemporaryDirectory\nfirst = TemporaryDirectory()', 'first.py', () => {});
+		await helpers.run(
+			`import gc, os, tempfile
+directory = tempfile.TemporaryDirectory()
+path = directory.name
+del directory
+gc.collect()
+assert not os.path.exists(path), "the interpreter stopped running weakref finalizers"`,
+			'second.py',
+			() => {}
+		);
+	} finally {
+		helpers.dispose();
+	}
+}, 120_000);
