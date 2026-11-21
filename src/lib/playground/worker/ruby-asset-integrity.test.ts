@@ -167,6 +167,7 @@ describe('Ruby execution worker verified-payload boundary', () => {
 		expect((globalThis as any).postMessage).not.toHaveBeenCalledWith({
 			progress: expect.objectContaining({ kind: 'ready' })
 		});
+		rubyEvalMock.mockReturnValueOnce(0);
 		await onmessage({ data: { ...request, prepare: false } });
 
 		const readyCallIndex = (globalThis as any).postMessage.mock.calls.findIndex(
@@ -188,7 +189,10 @@ describe('Ruby execution worker verified-payload boundary', () => {
 			(globalThis as any).postMessage.mock.invocationCallOrder[readyCallIndex]
 		).toBeLessThan(rubyEvalMock.mock.invocationCallOrder[0]);
 		expect(rubyEvalMock).toHaveBeenCalledOnce();
-		expect(rubyEvalMock).toHaveBeenCalledWith('puts 42');
+		expect(rubyEvalMock).toHaveBeenCalledWith(
+			expect.stringContaining(`eval(JSON.parse('"puts 42"'), TOPLEVEL_BINDING, 'main.rb', 1)`)
+		);
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
 	});
 
 	it('rejects duplicate load while ready and never reimports or recompiles the runtime', async () => {

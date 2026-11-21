@@ -1,3 +1,4 @@
+import { ScriptExitError } from './executionObservation';
 import type { WorkspaceFile } from '@wasm-idle/core';
 import {
 	resolveRubyRuntimeAssetConfig,
@@ -839,7 +840,7 @@ class Ruby implements Sandbox {
 						runDebugSession.handle(event.data.rubyDebug);
 						return;
 					}
-					const { output, results, error, buffer, diagnostic, progress } = event.data;
+					const { output, results, exitCode, error, buffer, diagnostic, progress } = event.data;
 					if (buffer && !hasExplicitStdin) {
 						this.waitingForInput = true;
 						if (!prepare) {
@@ -898,7 +899,8 @@ class Ruby implements Sandbox {
 					}
 					if (results !== undefined) {
 						if (!claimRun()) return;
-						resolve(results as boolean | string);
+						if (Number.isInteger(exitCode) && exitCode > 0) reject(new ScriptExitError(exitCode));
+						else resolve(results as boolean | string);
 						return;
 					}
 					if (error !== undefined) failRun(error);
