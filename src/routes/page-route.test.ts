@@ -2369,6 +2369,12 @@ describe('example route debug actions', () => {
 	});
 
 	it('renders retained watch subtrees in history without requesting live children', () => {
+		expect(source).toMatch(
+			/\{:else if debugLanguage && breakpointEditOpen\}\s*<section class="debug-panel">\s*\{@render breakpointEditor\(\)\}/u
+		);
+		expect(source).toContain(
+			'onEditBreakpoint={debugLanguage ? editDebugBreakpoint : undefined}'
+		);
 		const historyStart = source.indexOf('<summary>Recent stops (');
 		const historyPanel = source.slice(historyStart, source.indexOf('</details>', historyStart));
 		const watchMarkup = historyPanel.match(

@@ -916,7 +916,8 @@
 				return;
 			}
 			if (original && !specs.some((entry) => entry.line === original.line)) {
-				debugInteractionError = 'This breakpoint was removed. Select a breakpoint before saving.';
+				debugInteractionError =
+					'This breakpoint was removed. Select a breakpoint before saving.';
 				return;
 			}
 			if (
@@ -3942,6 +3943,83 @@
 			{/each}
 		{/snippet}
 
+		{#snippet breakpointEditor()}
+			<details
+				class="debug-feature-panel"
+				bind:open={breakpointEditOpen}
+				ontoggle={(event) => {
+					if (!event.currentTarget.open) editingBreakpoint = null;
+				}}
+			>
+				<summary>Breakpoints</summary>
+				<ul>
+					{#each debug.structuredBreakpoints as spec (spec.line)}<li>
+							<button onclick={() => editDebugBreakpoint(spec.line)}
+								>Line {spec.line}{spec.enabled === false
+									? ' (disabled)'
+									: ''}{spec.hitCondition
+									? ` · hit ${spec.hitCondition}`
+									: ''}{spec.condition
+									? ` · ${spec.condition}`
+									: ''}{spec.logMessage ? ' · log' : ''}</button
+							>
+						</li>{/each}
+				</ul>
+				<form
+					class="debug-breakpoint-editor"
+					onsubmit={(event) => {
+						event.preventDefault();
+						void saveDebugBreakpoint();
+					}}
+				>
+					<label
+						>Line<input
+							aria-label="Breakpoint line"
+							type="number"
+							min="1"
+							required
+							value={breakpointLine}
+							oninput={(event) =>
+								(breakpointLine = Number(event.currentTarget.value))}
+						/></label
+					>
+					<label><input type="checkbox" bind:checked={breakpointEnabled} /> Enabled</label
+					>
+					{#if debug.capabilities.hitConditionalBreakpoints}<label
+							>Hit count<input
+								aria-label="Breakpoint hit count"
+								bind:value={breakpointHitCondition}
+								maxlength={4096}
+								placeholder="100"
+							/></label
+						>{/if}
+					{#if debug.capabilities.conditionalBreakpoints}<label
+							>Condition<input
+								aria-label="Breakpoint condition"
+								bind:value={breakpointCondition}
+								maxlength={4096}
+							/></label
+						>{/if}
+					{#if debug.capabilities.logPoints}<label
+							>Log message<input
+								aria-label="Breakpoint log message"
+								bind:value={breakpointLogMessage}
+								maxlength={4096}
+							/></label
+						>{/if}
+					<button
+						type="submit"
+						disabled={!Number.isSafeInteger(breakpointLine) ||
+							breakpointLine < 1 ||
+							dataBreakpointLoading}>Save breakpoint</button
+					>
+				</form>
+				{#if debug.breakpointError}<p role="alert">
+						{debug.breakpointError}
+					</p>{/if}
+			</details>
+		{/snippet}
+
 		{#if debugLanguage && (debug.active || debug.history.length > 0)}
 			<section
 				class={[
@@ -4404,81 +4482,7 @@
 						{/if}
 					</section>
 					<section class="debug-panel">
-						<details
-							class="debug-feature-panel"
-							bind:open={breakpointEditOpen}
-							ontoggle={(event) => {
-								if (!event.currentTarget.open) editingBreakpoint = null;
-							}}
-						>
-							<summary>Breakpoints</summary>
-							<ul>
-								{#each debug.structuredBreakpoints as spec (spec.line)}<li>
-										<button onclick={() => editDebugBreakpoint(spec.line)}
-											>Line {spec.line}{spec.enabled === false
-												? ' (disabled)'
-												: ''}{spec.hitCondition
-												? ` · hit ${spec.hitCondition}`
-												: ''}{spec.condition
-												? ` · ${spec.condition}`
-												: ''}{spec.logMessage ? ' · log' : ''}</button
-										>
-									</li>{/each}
-							</ul>
-							<form
-								class="debug-breakpoint-editor"
-								onsubmit={(event) => {
-									event.preventDefault();
-									void saveDebugBreakpoint();
-								}}
-							>
-								<label
-									>Line<input
-										aria-label="Breakpoint line"
-										type="number"
-										min="1"
-										required
-										value={breakpointLine}
-										oninput={(event) =>
-											(breakpointLine = Number(event.currentTarget.value))}
-									/></label
-								>
-								<label
-									><input type="checkbox" bind:checked={breakpointEnabled} /> Enabled</label
-								>
-								{#if debug.capabilities.hitConditionalBreakpoints}<label
-										>Hit count<input
-											aria-label="Breakpoint hit count"
-											bind:value={breakpointHitCondition}
-											maxlength={4096}
-											placeholder="100"
-										/></label
-									>{/if}
-								{#if debug.capabilities.conditionalBreakpoints}<label
-										>Condition<input
-											aria-label="Breakpoint condition"
-											bind:value={breakpointCondition}
-											maxlength={4096}
-										/></label
-									>{/if}
-								{#if debug.capabilities.logPoints}<label
-										>Log message<input
-											aria-label="Breakpoint log message"
-											bind:value={breakpointLogMessage}
-											maxlength={4096}
-										/></label
-									>{/if}
-								<button
-									type="submit"
-									disabled={!Number.isSafeInteger(breakpointLine) ||
-										breakpointLine < 1 ||
-										dataBreakpointLoading}>Save breakpoint</button
-								>
-							</form>
-							{#if debug.breakpointError}<p role="alert">
-									{debug.breakpointError}
-								</p>{/if}
-						</details>
+						{@render breakpointEditor()}
 						{#if debug.capabilities.skipLibraryCode}<label class="debug-feature-panel"
 								><input
 									type="checkbox"
@@ -4730,6 +4734,11 @@
 						</section>
 					{/if}
 				</div>
+			</section>
+		{:else if debugLanguage && breakpointEditOpen}
+			<section class="debug-panel">
+				{@render breakpointEditor()}
+				{#if debugInteractionError}<p role="alert">{debugInteractionError}</p>{/if}
 			</section>
 		{/if}
 		<DebuggerLog
@@ -5523,7 +5532,7 @@
 							onAddWatch={(expression) => {
 								debug.addWatchExpression(expression);
 							}}
-							onEditBreakpoint={editDebugBreakpoint}
+							onEditBreakpoint={debugLanguage ? editDebugBreakpoint : undefined}
 							{debugHoverOptions}
 							debugHoverEnabled={debug.paused &&
 								!debug.sourceRevisionStale &&
@@ -5710,13 +5719,13 @@
 												? 'The Bash WASIX package accepts stdin when the process starts. Enter it before Run; extra reads receive EOF.'
 												: language === 'DUCKDB'
 													? 'DuckDB reads this input from /dev/stdin. Enter it before Run.'
-												: language === 'POSTGRESQL'
-													? "PostgreSQL reads this input as the server file '/dev/blob' (COPY ... FROM '/dev/blob' or pg_read_file('/dev/blob')). Enter it before Run."
-													: language === 'CSHARP' ||
-														  language === 'FSHARP' ||
-														  language === 'VBNET'
-														? 'C#, F#, and VB.NET read all stdin when the program starts. Enter it before Run; extra reads receive EOF. Output appears when the program finishes.'
-														: 'SharedArrayBuffer is unavailable here, so terminal input cannot be sent while the program is running. Enter stdin before Run; extra reads receive EOF.'}
+													: language === 'POSTGRESQL'
+														? "PostgreSQL reads this input as the server file '/dev/blob' (COPY ... FROM '/dev/blob' or pg_read_file('/dev/blob')). Enter it before Run."
+														: language === 'CSHARP' ||
+															  language === 'FSHARP' ||
+															  language === 'VBNET'
+															? 'C#, F#, and VB.NET read all stdin when the program starts. Enter it before Run; extra reads receive EOF. Output appears when the program finishes.'
+															: 'SharedArrayBuffer is unavailable here, so terminal input cannot be sent while the program is running. Enter stdin before Run; extra reads receive EOF.'}
 								</span>
 							</div>
 							<textarea
