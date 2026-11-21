@@ -10,7 +10,7 @@ import {
 import type { DuckDBBundles } from '../types.js';
 
 export type SqlLanguageServerDialect = 'sql' | 'sqlite' | 'duckdb';
-type SqlWorkspaceFile = { path: string; content: string };
+type SqlWorkspaceFile = { path: string; content: string; encoding?: 'base64' };
 
 export interface SqlWorkerOptions {
 	dialect?: SqlLanguageServerDialect;
@@ -51,6 +51,7 @@ interface DuckDBDatabase {
 	reset(): Promise<void>;
 	dropFiles(): Promise<unknown>;
 	registerFileText(name: string, text: string): Promise<void>;
+	registerFileBuffer(name: string, bytes: Uint8Array): Promise<void>;
 	connect(): Promise<DuckDBConnection>;
 	terminate(): Promise<void>;
 }
@@ -242,7 +243,12 @@ async function loadSqlJsEngine(options: SqlWorkerOptions): Promise<SqlEngine> {
 					await db.dropFiles();
 					for (const file of workspaceFiles) {
 						setupFile = file.path;
-						await db.registerFileText(file.path, file.content);
+						if (file.encoding === 'base64') {
+							const bytes = Uint8Array.from(atob(file.content), (c) => c.charCodeAt(0));
+							await db.registerFileBuffer(file.path, bytes);
+						} else {
+							await db.registerFileText(file.path, file.content);
+						}
 					}
 					setupFile = undefined;
 					connection = await db.connect();
@@ -378,22 +384,21 @@ export function createSqlWorkerService(
 				: uri.slice(0, uri.lastIndexOf('/') + 1);
 			const rootPath = uriToPath(root);
 			const active = uriToPath(uri).slice(rootPath.length);
-			const files = new Map(workspace.map(({ path, content }) => [path, content]));
+			const files = new Map(workspace.map((file) => [file.path, file]));
 			for (const open of context.documents.values()) {
-				if (open.uri.startsWith(root))
-					files.set(uriToPath(open.uri).slice(rootPath.length), open.text);
+				if (open.uri.startsWith(root)) {
+					const path = uriToPath(open.uri).slice(rootPath.length);
+					files.set(path, { path, content: open.text });
+				}
 			}
-			files.set(active, text);
-			const workspaceFiles =
-				dialect === 'duckdb'
-					? Array.from(files, ([path, content]) => ({ path, content }))
-					: undefined;
+			files.set(active, { path: active, content: text });
+			const workspaceFiles = dialect === 'duckdb' ? [...files.values()] : undefined;
 			files.delete(active);
-			const setupFiles = Array.from(files)
-				.filter(([path]) =>
-					dialect === 'duckdb' ? /\.(sql|duckdb)$/iu.test(path) : path.endsWith('.sql')
-				)
-				.map(([path, content]) => ({ path, content }));
+			const setupFiles = [...files.values()].filter(
+				(file) =>
+					!file.encoding &&
+					(dialect === 'duckdb' ? /\.(sql|duckdb)$/iu : /\.sql$/iu).test(file.path)
+			);
 			if (dialect === 'duckdb') setupFiles.sort((a, b) => a.path.localeCompare(b.path));
 			const key = JSON.stringify([dialect, uri, workspaceFiles ?? [text, setupFiles]]);
 			if (cached?.key === key) return cached.result;

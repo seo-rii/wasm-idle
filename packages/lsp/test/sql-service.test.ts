@@ -214,7 +214,7 @@ describe('createSqlWorkerService', () => {
 			selectedBundles: null as unknown,
 			instantiated: [] as Array<string | null>,
 			queried: '',
-			files: new Map<string, string>(),
+			files: new Map<string, string | Uint8Array>(),
 			closed: false,
 			terminated: false
 		};
@@ -239,6 +239,7 @@ describe('createSqlWorkerService', () => {
 					async reset() {}
 					async dropFiles() { globalThis.${stateKey}.files.clear(); }
 					async registerFileText(name, text) { globalThis.${stateKey}.files.set(name, text); }
+					async registerFileBuffer(name, text) { globalThis.${stateKey}.files.set(name, text); }
 					async connect() {
 						return {
 							async query(code) { globalThis.${stateKey}.queried = code; },
@@ -273,12 +274,15 @@ describe('createSqlWorkerService', () => {
 			const documents = new Map(context.documents);
 			const workspace = { ...context, documents };
 			documents.set(csv.uri, csv);
-			await service.initialize?.({ dialect: 'duckdb', moduleUrl }, workspace);
+			const binary = { path: 'inputs/value.parquet', content: 'AAH/', encoding: 'base64' };
+			await service.initialize?.({ dialect: 'duckdb', moduleUrl, workspaceFiles: [binary] }, workspace);
 			expect(await service.diagnostics?.(document, workspace)).toEqual([]);
 			expect(state.files.get('input/data.csv')).toBe(csv.text);
+			expect(state.files.get(binary.path)).toEqual(Uint8Array.of(0, 1, 255));
 			documents.delete(csv.uri);
 			expect(await service.diagnostics?.(document, workspace)).toEqual([]);
-			expect([...state.files]).toEqual([['main.sql', document.text]]);
+			expect(state.files.has('input/data.csv')).toBe(false);
+			expect(state.files.get('main.sql')).toBe(document.text);
 			await service.dispose?.();
 			expect(state.selectedBundles).toEqual({
 				mvp: {

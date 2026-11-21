@@ -23,7 +23,8 @@
 	import type {
 		EditorLanguageServerHandle,
 		EditorLanguageServerRuntimeOptions,
-		LanguageServerStatus
+		LanguageServerStatus,
+		SqlWorkerOptions
 	} from '@wasm-idle/lsp';
 	import type { HaskellRuntimeAssetReceipts } from '@wasm-idle/core';
 	import type { DOuterAssetReceipts } from '$lib/playground/dOuterAssets';
@@ -2475,7 +2476,7 @@
 		nimLspWorkspaceFiles?: Array<{ path: string; content: string }>;
 		sqlLspEnabled?: boolean;
 		sqlLspModuleUrl?: string;
-		sqlLspWorkspaceFiles?: { path: string; content: string }[];
+		sqlLspWorkspaceFiles?: SqlWorkerOptions['workspaceFiles'];
 		postgresqlLspEnabled?: boolean;
 		postgresqlLspModuleUrl?: string;
 		bashLspEnabled?: boolean;
