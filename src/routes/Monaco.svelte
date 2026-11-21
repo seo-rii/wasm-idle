@@ -40,7 +40,7 @@
 		type PlaygroundRuntimeAssets
 	} from '$lib/playground/assets';
 	import type monaco from 'monaco-editor';
-	import { onMount, untrack } from 'svelte';
+	import { onMount, tick, untrack } from 'svelte';
 	import { SvelteURL } from 'svelte/reactivity';
 	import { createWorkspaceModelUri } from './workspace-model-uri';
 	import { createOriginalLineEndings } from './workspace-model-eol';
@@ -4031,6 +4031,13 @@
 		else originalEndings.delete(model);
 	}
 
+	// Read the live view before switching the keyed editor can dispose its child.
+	export function rememberProjectView() {
+		const active = editor?.getModel();
+		const view = editor?.saveViewState();
+		if (active && view) modelViewStates.set(active, view);
+	}
+
 	// A Monaco URI is immutable. Give the renamed file its real URI while its source still
 	// owns the native history, view state and any original per-line separators.
 	export function prepareFileRename(from: string, to: string) {
@@ -4079,8 +4086,10 @@
 				const saved = savedHistories?.get(path);
 				savedHistories?.delete(path);
 				if (saved?.text === initialValue) {
-					restoreModelHistory(nextModel, saved.history);
+					if (saved.history) restoreModelHistory(nextModel, saved.history);
+					if (saved.view) modelViewStates.set(nextModel, saved.view);
 					if (saved.endings) originalEndings.set(nextModel, saved.endings);
+					else rememberText(nextModel, initialValue);
 				} else {
 					rememberText(nextModel, initialValue);
 				}
@@ -4137,6 +4146,15 @@
 
 	const handleEditorLoad = (nextEditor: monaco.editor.IStandaloneCodeEditor) => {
 		editor = nextEditor;
+		// The wrapper applies the model and font metrics after onload. Restoring
+		// against its placeholder's line height shifts the saved viewport.
+		const loadedModel = model;
+		const view = loadedModel && modelViewStates.get(loadedModel);
+		if (view)
+			void tick().then(() => {
+				if (editor === nextEditor && nextEditor.getModel() === loadedModel)
+					nextEditor.restoreViewState(view);
+			});
 		if (monacoTestHooksEnabled()) {
 			(globalThis as MonacoTestGlobal).__wasmIdleMonacoEditor = nextEditor;
 		}
@@ -4616,10 +4634,12 @@
 			for (const [path, cachedModel] of workspaceModels) {
 				if (cachedModel.isDisposed()) continue;
 				const history = savedHistories && captureModelHistory(cachedModel);
-				if (history) {
+				const view = modelViewStates.get(cachedModel);
+				if (savedHistories && (history || view)) {
 					const endings = originalEndings.get(cachedModel);
 					savedHistories.set(path, {
 						history,
+						view,
 						endings,
 						text: endings?.text ?? cachedModel.getValue(undefined, true)
 					});

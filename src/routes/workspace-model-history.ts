@@ -76,7 +76,8 @@ export type ProjectModelHistories = Map<
 	{
 		text: string;
 		endings?: ReturnType<typeof createOriginalLineEndings>;
-		history: NonNullable<ReturnType<typeof captureModelHistory>>;
+		history?: ReturnType<typeof captureModelHistory>;
+		view?: editor.ICodeEditorViewState;
 	}
 >;
 
