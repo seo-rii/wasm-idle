@@ -3706,7 +3706,10 @@
 				const { getGraphqlLanguageServer } = await import('@wasm-idle/lsp/graphql');
 				return await getGraphqlLanguageServer({
 					currentUrl,
-					graphql: { workspaceFiles: $state.snapshot(graphqlLspWorkspaceFiles) },
+					graphql: {
+						workspaceRootUri: 'file:///workspace',
+						workspaceFiles: $state.snapshot(graphqlLspWorkspaceFiles)
+					},
 					onStatus: (status) => (graphqlLspStatus = status)
 				});
 			}

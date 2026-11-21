@@ -24,6 +24,7 @@ export async function getGraphqlLanguageServer(
 		createWorker: hostOptions?.createWorker || createDefaultWorker,
 		initOptions: {
 			schema: config.schema,
+			workspaceRootUri: config.workspaceRootUri,
 			workspaceFiles: config.workspaceFiles
 		},
 		onStatus: hostOptions?.onStatus,

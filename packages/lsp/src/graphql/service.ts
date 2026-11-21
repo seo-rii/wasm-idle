@@ -19,6 +19,8 @@ import {
 
 export interface GraphqlWorkerOptions {
 	schema?: string;
+	/** Base URI for workspaceFiles. Defaults to the client's project root. */
+	workspaceRootUri?: string;
 	workspaceFiles?: ReadonlyArray<{ path: string; content: string }>;
 }
 
@@ -79,6 +81,7 @@ const diagnosticFor = (error: GraphQLError): LspDiagnostic => {
 export function createGraphqlWorkerService(): WorkerLanguageService {
 	let schema: GraphQLSchema | null = null;
 	let workspace: GraphqlWorkerOptions['workspaceFiles'];
+	let workspaceRootUri: string | undefined;
 
 	return {
 		name: 'wasm-idle-graphql-lsp',
@@ -95,6 +98,7 @@ export function createGraphqlWorkerService(): WorkerLanguageService {
 			const config = (options || {}) as GraphqlWorkerOptions;
 			context.reportProgress('load-graphql-language-service');
 			workspace = config.workspaceFiles;
+			workspaceRootUri = config.workspaceRootUri;
 			schema = config.schema?.trim() ? buildSchema(config.schema) : null;
 		},
 		diagnostics(document: LspDocument, context) {
@@ -112,7 +116,10 @@ export function createGraphqlWorkerService(): WorkerLanguageService {
 				if (definitions.length) {
 					activeSchema = buildASTSchema({ ...ast, definitions });
 				} else {
-					const root = '/workspace/';
+					const rootPath = uriToPath(
+						workspaceRootUri ?? context.rootUri ?? 'file:///workspace'
+					);
+					const root = rootPath.endsWith('/') ? rootPath : rootPath + '/';
 					const path = uriToPath(document.uri);
 					const sibling = path.slice(0, path.lastIndexOf('/') + 1) + 'schema.graphql';
 					const files = new Map(workspace.map((f) => [root + f.path, f.content]));

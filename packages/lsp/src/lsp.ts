@@ -35,6 +35,8 @@ export interface LspDocument {
 }
 
 export interface LspDocumentContext {
+	/** Project root supplied by the LSP client during initialization. */
+	rootUri?: string;
 	documents: ReadonlyMap<string, LspDocument>;
 	publishDiagnostics: (uri: string, diagnostics: LspDiagnostic[]) => void;
 	reportProgress: (stage: string, loaded?: number, total?: number) => void;
@@ -355,7 +357,9 @@ export function startWorkerLanguageServer(
 				return;
 			}
 			switch (message.method) {
-				case 'initialize':
+				case 'initialize': {
+					const rootUri = params.rootUri ?? params.workspaceFolders?.[0]?.uri;
+					if (typeof rootUri === 'string') context.rootUri = rootUri;
 					respond(id, {
 						capabilities: {
 							textDocumentSync: {
@@ -371,6 +375,7 @@ export function startWorkerLanguageServer(
 						}
 					});
 					return;
+				}
 				case 'shutdown':
 					await dispose();
 					respond(id, null);
