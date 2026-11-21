@@ -1772,7 +1772,7 @@ describe('example route debug actions', () => {
 		);
 		expect(source).toMatch(/CPP: \(\) => \(\{ cppVersion \}\)/);
 		expect(source).toMatch(/cppVersion,/);
-		expect(source).toMatch(/knownCppVersions\.includes\(value\?\.cppVersion as CppVersion\)/);
+		expect(source).toContain("cppVersion = value.cppVersion ?? 'CPP20';");
 		expect(source).toMatch(/<select id="cpp-version" bind:value=\{cppVersion\}>/);
 		expect(source).toMatch(
 			/\{#each knownCppVersions as version \(version\)\}\s+<option value=\{version\}>\{cppVersionLabels\[version\]\}<\/option>\s+\{\/each\}/s
@@ -1850,9 +1850,7 @@ describe('example route debug actions', () => {
 		const snapshotStart = source.indexOf('function snapshot(');
 		const snapshotBody = source.slice(snapshotStart, source.indexOf('\n\t}\n', snapshotStart));
 		expect(snapshotBody).toMatch(/log,\s+lspEnabled,[\s\S]*version: 6,/);
-		expect(source).toMatch(
-			/if \(typeof value\?\.lspEnabled === 'boolean'\) lspEnabled = value\.lspEnabled;/
-		);
+		expect(source).toContain('lspEnabled = value.lspEnabled ?? true;');
 		expect(source).toMatch(
 			/<input id="lsp-toggle" type="checkbox" bind:checked=\{lspEnabled\} \/>/
 		);

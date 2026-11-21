@@ -1493,20 +1493,19 @@
 					defaultSource: defaultSourceForLanguage(nextLanguage)
 				})
 		);
-		const requestedActivePath =
-			typeof value?.activePath !== 'string'
-				? ''
-				: files.some((file) => file.path === value.activePath)
-					? value.activePath
-					: normalizePath(value.activePath);
-		const restoredPath = renamed?.get(requestedActivePath) ?? requestedActivePath;
+		const filePaths = new Set(files.map((file) => file.path));
+		function restoredFilePath(path: string) {
+			// A literal POSIX name takes precedence over its legacy separator spelling.
+			const requested =
+				filePaths.has(path) || renamed?.has(path) ? path : normalizePath(path);
+			return renamed?.get(requested) ?? requested;
+		}
+		const restoredPath = restoredFilePath(value?.activePath ?? '');
 		const activePath = files.some((file) => file.path === restoredPath)
 			? restoredPath
 			: (files[0]?.path ?? '');
 		const openTabs = normalizeWorkspaceTabs(
-			Array.isArray(value?.openTabs)
-				? value.openTabs.map((tab) => renamed?.get(tab) ?? tab)
-				: value?.openTabs,
+			value?.openTabs?.map(restoredFilePath),
 			files,
 			activePath
 		);
@@ -2096,6 +2095,7 @@
 			) ??
 			languageForPath(typeof value?.activePath === 'string' ? value.activePath : '') ??
 			'CPP';
+		rustTargetTriple = value.rustTargetTriple ?? 'wasm32-wasip1';
 		const nextWorkspaces = createDefaultLanguageWorkspaces();
 		const recovered: string[] = [];
 		for (const nextLanguageKey of playgroundLanguages) {
@@ -2135,33 +2135,13 @@
 		pythonTimestampInput = value.pythonTimestampInput ?? '0';
 		compilerOptions = restoredCompilerOptions.compilerOptions;
 		argsInput = restoredCompilerOptions.argsInput;
-		if (knownCppVersions.includes(value?.cppVersion as CppVersion))
-			cppVersion = value?.cppVersion as CppVersion;
-		if (typeof value?.log === 'boolean') log = value.log;
-		if (typeof value?.lspEnabled === 'boolean') lspEnabled = value.lspEnabled;
-		if (
-			value?.rustTargetTriple === 'wasm32-wasip1' ||
-			value?.rustTargetTriple === 'wasm32-wasip2' ||
-			value?.rustTargetTriple === 'wasm32-wasip3'
-		)
-			rustTargetTriple = value.rustTargetTriple;
-		if (
-			value?.rustOptimizationProfile === 'interactive' ||
-			value?.rustOptimizationProfile === 'speed' ||
-			value?.rustOptimizationProfile === 'size'
-		)
-			rustOptimizationProfile = value.rustOptimizationProfile;
-		if (
-			value?.goTarget === 'wasip1/wasm' ||
-			value?.goTarget === 'wasip2/wasm' ||
-			value?.goTarget === 'wasip3/wasm' ||
-			value?.goTarget === 'js/wasm'
-		)
-			goTarget = value.goTarget;
-		if (value?.ocamlBackend === 'js' || value?.ocamlBackend === 'wasm')
-			ocamlBackend = value.ocamlBackend;
-		if (value?.ocamlWasmBinaryenMode === 'fast' || value?.ocamlWasmBinaryenMode === 'full')
-			ocamlWasmBinaryenMode = value.ocamlWasmBinaryenMode;
+		cppVersion = value.cppVersion ?? 'CPP20';
+		log = value.log ?? true;
+		lspEnabled = value.lspEnabled ?? true;
+		rustOptimizationProfile = value.rustOptimizationProfile ?? 'interactive';
+		goTarget = value.goTarget ?? 'wasip1/wasm';
+		ocamlBackend = value.ocamlBackend ?? 'wasm';
+		ocamlWasmBinaryenMode = value.ocamlWasmBinaryenMode ?? 'fast';
 		sidebarOpen = value?.sidebarOpen ?? desktopExampleLayout;
 		saveStatus = recovered.length
 			? `${message}. Renamed conflicting files: ${recovered.join(', ')}`

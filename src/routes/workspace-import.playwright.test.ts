@@ -85,6 +85,64 @@ describe('workspace import browser integration', () => {
 	});
 
 	it(
+		'restores the default dialect for a legacy C++ backup that omits its standard',
+		browserOptions,
+		async () => {
+			await withImportPage(async (page) => {
+				await page.locator('#cpp-version').selectOption('CPP98');
+				await page.locator('#lsp-toggle').uncheck();
+				const backup = {
+					language: 'CPP',
+					version: 4,
+					activePath: 'build.cpp',
+					files: [{ path: 'build.cpp', content: 'int main() {}' }]
+				};
+				await page.locator('input[type="file"]').setInputFiles({
+					name: 'legacy.json',
+					mimeType: 'application/json',
+					buffer: Buffer.from(serializeWorkspaceBackup(backup))
+				});
+				await page.locator('.file-tab.active[title="build.cpp"]').waitFor();
+				expect(await page.locator('#cpp-version').inputValue()).toBe('CPP20');
+				expect(await page.locator('#lsp-toggle').isChecked()).toBe(true);
+			});
+		}
+	);
+
+	it(
+		'normalizes legacy tab paths while preserving explicit POSIX names',
+		browserOptions,
+		async () => {
+			await withImportPage(async (page) => {
+				const backup = {
+					language: 'CPP',
+					version: 4,
+					lspEnabled: false,
+					activePath: 'src\\main.cpp',
+					files: [
+						{ path: 'src\\main.cpp', content: 'int main() {}' },
+						{ path: 'src\\lib.h', content: 'int f();' },
+						{ path: 'literal\\name.txt', pathStyle: 'posix', content: 'literal' }
+					],
+					openTabs: ['src\\lib.h', 'literal\\name.txt', 'src\\main.cpp']
+				};
+				await page.locator('input[type="file"]').setInputFiles({
+					name: 'legacy.json',
+					mimeType: 'application/json',
+					buffer: Buffer.from(serializeWorkspaceBackup(backup))
+				});
+				await page.locator('.file-tab.active[title="src/main.cpp"]').waitFor();
+				expect(await page.locator('#lsp-toggle').isChecked()).toBe(false);
+				expect(
+					await page
+						.locator('.file-tab')
+						.evaluateAll((tabs) => tabs.map((tab) => tab.getAttribute('title')))
+				).toEqual(['src/lib.h', 'literal\\name.txt', 'src/main.cpp']);
+			});
+		}
+	);
+
+	it(
 		'preserves the UTF-8 BOM and line endings across edits, undo, save and download',
 		browserOptions,
 		async () => {
