@@ -366,8 +366,8 @@ const lspBrowserCases: LspBrowserCase[] = [
 		fileName: 'main.ts',
 		source: 'const n: number = "not a number";\nconsole.log(n);\n',
 		validSource:
-			'import type { Value } from "./types/value";\nconst n: Value = 42;\nconsole.log(n);\n',
-		workspaceFiles: [{ path: 'types/value.ts', content: 'export type Value = number;' }],
+			'import type { Value } from "./Types/value";\nconst n: Value = 42;\nconsole.log(n);\n',
+		workspaceFiles: [{ path: 'Types/value.ts', content: 'export type Value = number;' }],
 		errorLine: 1,
 		aliases: ['ts'],
 		expectedResponses: ['/lsp/typescript-libs.json.gz'],
@@ -1820,6 +1820,20 @@ async function runLspCase(
 				{ timeout: testCase.timeoutMs ?? browserTimeoutMs }
 			);
 		expect((await readDiagnosticCounts(page)).markers).toBe(0);
+	}
+	if (testCase.language === 'TYPESCRIPT') {
+		await page.evaluate(() => {
+			const editor = Reflect.get(globalThis, '__wasmIdleMonacoEditor');
+			editor.setPosition({ lineNumber: 2, column: 11 });
+			editor.focus();
+		});
+		await page.keyboard.press('F12');
+		await waitForSelectedEditorModel(page, 'TYPESCRIPT', 'Types/value.ts');
+		await page.waitForFunction(() => {
+			const editor = Reflect.get(globalThis, '__wasmIdleMonacoEditor');
+			const position = editor.getPosition();
+			return position.lineNumber === 1 && position.column === 13;
+		});
 	}
 	if (testCase.language === 'POSTGRESQL')
 		await checkPostgresqlKeyboardSync(page, testCase.validSource!);

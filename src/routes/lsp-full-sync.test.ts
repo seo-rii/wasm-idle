@@ -42,7 +42,7 @@ function setup() {
 	};
 }
 
-function change(uri = 'file:///workspace/main.res') {
+function change(uri = 'file:///workspace/Main.res') {
 	return {
 		method: 'textDocument/didChange',
 		params: {
@@ -113,6 +113,14 @@ describe('Monaco negotiated document synchronization', () => {
 				params: expect.objectContaining({ contentChanges: [{ text: 'let answer = 42\n' }] })
 			})
 		);
+	});
+
+	it('preserves a change for a different case-sensitive project path', async () => {
+		const host = setup();
+		await host.negotiate(1);
+		const message = change('file:///workspace/main.res');
+		await host.send(message);
+		expect(host.write).toHaveBeenLastCalledWith({ jsonrpc: '2.0', ...message });
 	});
 
 	it('keeps notifications for other documents and missing models intact', async () => {

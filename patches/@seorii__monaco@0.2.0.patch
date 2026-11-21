@@ -10,3 +10,35 @@ diff --git a/dist/customLanguages.js b/dist/customLanguages.js
  }
  function createTokenizer({ keywords, lineComment, blockComment, brackets = [
      ['{', '}'],
+diff --git a/dist/extensions/lsp.js b/dist/extensions/lsp.js
+--- a/dist/extensions/lsp.js
++++ b/dist/extensions/lsp.js
+@@ -460,12 +460,16 @@
+ function traceMessage(options, direction, message) {
+     options?.trace?.({ direction, message });
+ }
++function documentUriKey(uri) {
++    return uri.replace(/%[0-9a-f]{2}/gi, (escape) => escape.toUpperCase());
++}
+ function withMessageInterceptors(transports, options) {
+     const documentSync = resolveDocumentSyncOptions(options);
+     if (!documentSync && !options?.trace)
+         return transports;
+     const model = documentSync?.model;
+-    const documentUri = model?.uri.toString(true).toLowerCase() ?? '';
++    const documentUri = model?.uri.toString(true) ?? '';
++    const currentUriKey = documentUriKey(documentUri);
+     const workspaceUri = documentUri.replace(/\/[^/]*$/u, '') || 'file:///workspace';
+     let disposed = false;
+     let opened = false;
+@@ -568,8 +572,8 @@
+                 const textDocument = params && typeof params.textDocument === 'object'
+                     ? params.textDocument
+                     : null;
+-                const outgoingUri = typeof textDocument?.uri === 'string' ? textDocument.uri.toLowerCase() : '';
+-                if (documentSync && outgoingUri === documentUri) {
++                const outgoingUri = typeof textDocument?.uri === 'string' ? documentUriKey(textDocument.uri) : '';
++                if (documentSync && outgoingUri === currentUriKey) {
+                     if (method === 'textDocument/didOpen') {
+                         if (opened)
+                             return Promise.resolve();

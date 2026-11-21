@@ -100,11 +100,14 @@ describe('Monaco LSP session model ownership', () => {
 					model,
 					signal: new AbortController().signal
 				});
-				const message = await host.change('file:///workspace/main.nim');
+				const message = await host.change(model.uri.toString());
 				expect(host.write).toHaveBeenLastCalledWith({
 					...message,
 					params: { ...message.params, contentChanges: [{ text: model.getValue() }] }
 				});
+				const other = model === upper ? lower : upper;
+				const foreignChange = await host.change(other.uri.toString());
+				expect(host.write).toHaveBeenLastCalledWith(foreignChange);
 			}
 		}
 	);
@@ -127,8 +130,8 @@ describe('Monaco LSP session model ownership', () => {
 		await resolve('nim', { model: lower, signal: new AbortController().signal });
 		finishUpper(upperHost.handle);
 		await first;
-		await upperHost.change('file:///workspace/main.nim');
-		await lowerHost.change('file:///workspace/main.nim');
+		await upperHost.change(upper.uri.toString());
+		await lowerHost.change(lower.uri.toString());
 		for (const [host, text] of [
 			[upperHost, upper.getValue()],
 			[lowerHost, lower.getValue()]

@@ -2386,6 +2386,7 @@
 		lspLanguage?: string;
 		filePath?: string;
 		workspacePaths?: readonly string[];
+		onOpenFile?: (path: string) => void;
 		projectHistory?: ProjectModelHistories;
 		value?: string;
 		onChange?: (value: string) => void;
@@ -2529,6 +2530,7 @@
 		lspLanguage,
 		filePath,
 		workspacePaths,
+		onOpenFile,
 		projectHistory,
 		value,
 		onChange,
@@ -3953,6 +3955,8 @@
 					? monacoApi.typescript.javascriptDefaults
 					: undefined;
 		if (!defaults) return;
+		const previousMode = defaults.modeConfiguration;
+		const mode = { ...previousMode, definitions: false };
 		const previous = defaults.getDiagnosticsOptions();
 		const options = {
 			...previous,
@@ -3960,8 +3964,12 @@
 			noSemanticValidation: true,
 			noSuggestionDiagnostics: true
 		};
+		// The project language server owns definitions while ready; the built-in provider
+		// sees only visited models and can return the import statement as a second target.
+		defaults.setModeConfiguration(mode);
 		defaults.setDiagnosticsOptions(options);
 		return () => {
+			if (defaults.modeConfiguration === mode) defaults.setModeConfiguration(previousMode);
 			if (!activeModel.isDisposed()) monacoApi.editor.setModelMarkers(activeModel, 'lsp', []);
 			if (defaults.getDiagnosticsOptions() === options)
 				defaults.setDiagnosticsOptions(previous);
@@ -3999,7 +4007,7 @@
 				adaptMonacoFullDocumentSync(connection, (uri) => {
 					if (
 						sessionModel.isDisposed() ||
-						sessionModel.uri.toString(true).toLowerCase() !== uri.toLowerCase()
+						sessionModel.uri.toString(true) !== uri
 					)
 						return undefined;
 					return { uri: sessionModel.uri.toString(true), text: sessionModel.getValue() };
@@ -4111,6 +4119,39 @@
 				if (view) activeEditor.restoreViewState(view);
 			}
 		});
+	});
+
+	$effect(() => {
+		const api = Monaco;
+		const owner = editor;
+		const openFile = onOpenFile;
+		if (!api || !owner || !openFile) return;
+		const opener = api.editor.registerEditorOpener({
+			async openCodeEditor(source, resource, target) {
+				if (
+					source !== owner ||
+					resource.scheme !== 'file' ||
+					resource.authority ||
+					!resource.path.startsWith('/workspace/')
+				)
+					return false;
+				const path = resource.path.slice('/workspace/'.length);
+				if (!workspacePaths?.includes(path)) return false;
+				openFile(path);
+				await tick();
+				if (owner.getModel()?.uri.path !== resource.path) return false;
+				if (target && 'startLineNumber' in target) {
+					owner.setSelection(target);
+					owner.revealRangeInCenterIfOutsideViewport(target);
+				} else if (target) {
+					owner.setPosition(target);
+					owner.revealPositionInCenterIfOutsideViewport(target);
+				}
+				owner.focus();
+				return true;
+			}
+		});
+		return () => opener.dispose();
 	});
 
 	$effect(() => {
