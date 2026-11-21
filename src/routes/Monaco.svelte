@@ -3992,7 +3992,7 @@
 				adaptMonacoFullDocumentSync(connection, (uri) => {
 					if (
 						sessionModel.isDisposed() ||
-						sessionModel.uri.toString(true).toLowerCase() !== uri.toLowerCase()
+						sessionModel.uri.toString(true) !== uri
 					)
 						return undefined;
 					return { uri: sessionModel.uri.toString(true), text: sessionModel.getValue() };

@@ -18,12 +18,12 @@ describe('workspace model URI serialization', () => {
 		'main#draft.ts',
 		'main?draft.ts',
 		'main draft.ts',
-		'한글.ts'
+		'한글.ts',
+		'Lib/Main.ts'
 	])('preserves %s through native LSP synchronization and requests', (path) => {
 		const uri = createWorkspaceModelUri(URI, path);
-		const openedUri = uri.toString(true).toLowerCase();
-		const requestedUri = uri.toString(true);
-		expect(requestedUri).toBe(openedUri);
+		const openedUri = uri.toString(true);
+		expect(openedUri).toBe(uri.toString());
 		expect(decodeURIComponent(new URL(openedUri).pathname)).toBe(`/workspace/${path}`);
 		expect(uri.path).toBe(`/workspace/${path}`);
 		expect(uri.toString()).toBe(URI.file(`/workspace/${path}`).toString());

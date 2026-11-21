@@ -52,12 +52,12 @@ export function adaptMonacoFullDocumentSync(
 			const document = record(params?.textDocument);
 			const snapshot =
 				typeof document?.uri === 'string' ? getDocument(document.uri) : undefined;
-			// ManagedModel lowercases notification URIs; retain its URI and version.
+			// Only substitute the snapshot belonging to this exact workspace document.
 			if (
 				params &&
 				typeof document?.uri === 'string' &&
 				snapshot &&
-				document.uri.toLowerCase() === snapshot.uri.toLowerCase()
+				document.uri === snapshot.uri
 			) {
 				const outgoing = {
 					...message,
