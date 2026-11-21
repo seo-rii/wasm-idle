@@ -1,6 +1,16 @@
-import { buildSchema, GraphQLError, parse, Source, validate, type GraphQLSchema } from 'graphql';
+import {
+	buildASTSchema,
+	buildSchema,
+	GraphQLError,
+	isExecutableDefinitionNode,
+	parse,
+	Source,
+	validate,
+	type GraphQLSchema
+} from 'graphql';
 import {
 	positionAt,
+	uriToPath,
 	type LspDiagnostic,
 	type LspDocument,
 	type LspPosition,
@@ -9,6 +19,9 @@ import {
 
 export interface GraphqlWorkerOptions {
 	schema?: string;
+	/** Base URI for workspaceFiles. Defaults to the client's project root. */
+	workspaceRootUri?: string;
+	workspaceFiles?: ReadonlyArray<{ path: string; content: string }>;
 }
 
 const GRAPHQL_KEYWORDS = [
@@ -67,10 +80,15 @@ const diagnosticFor = (error: GraphQLError): LspDiagnostic => {
 
 export function createGraphqlWorkerService(): WorkerLanguageService {
 	let schema: GraphQLSchema | null = null;
+	let workspace: GraphqlWorkerOptions['workspaceFiles'];
+	let workspaceRootUri: string | undefined;
 
 	return {
 		name: 'wasm-idle-graphql-lsp',
 		diagnosticDelay: 150,
+		get workspaceDiagnostics() {
+			return workspace !== undefined;
+		},
 		capabilities: {
 			completionProvider: { triggerCharacters: [' ', '{', '('] },
 			hoverProvider: true,
@@ -79,15 +97,54 @@ export function createGraphqlWorkerService(): WorkerLanguageService {
 		initialize(options, context) {
 			const config = (options || {}) as GraphqlWorkerOptions;
 			context.reportProgress('load-graphql-language-service');
+			workspace = config.workspaceFiles;
+			workspaceRootUri = config.workspaceRootUri;
 			schema = config.schema?.trim() ? buildSchema(config.schema) : null;
 		},
-		diagnostics(document: LspDocument) {
+		diagnostics(document: LspDocument, context) {
 			if (!document.text.trim()) return [];
 			try {
 				const ast = parse(
 					new Source(document.text, document.uri.split('/').pop() || 'main.graphql')
 				);
-				return schema ? validate(schema, ast).map(diagnosticFor) : [];
+				if (!workspace) return schema ? validate(schema, ast).map(diagnosticFor) : [];
+				const operations = ast.definitions.filter(isExecutableDefinitionNode);
+				const definitions = ast.definitions.filter(
+					(node) => !isExecutableDefinitionNode(node)
+				);
+				let activeSchema = schema;
+				if (definitions.length) {
+					activeSchema = buildASTSchema({ ...ast, definitions });
+				} else {
+					const rootPath = uriToPath(
+						workspaceRootUri ?? context.rootUri ?? 'file:///workspace'
+					);
+					const root = rootPath.endsWith('/') ? rootPath : rootPath + '/';
+					const path = uriToPath(document.uri);
+					const sibling = path.slice(0, path.lastIndexOf('/') + 1) + 'schema.graphql';
+					const files = new Map(workspace.map((f) => [root + f.path, f.content]));
+					for (const open of context.documents.values())
+						files.set(uriToPath(open.uri), open.text);
+					const fallback =
+						sibling !== path && files.has(sibling) ? sibling : root + 'schema.graphql';
+					const text = fallback === path ? undefined : files.get(fallback);
+					if (text !== undefined) {
+						try {
+							activeSchema = buildSchema(new Source(text, fallback));
+						} catch (error) {
+							// The invalid source is a sibling. Keep its location off the query.
+							throw new GraphQLError(
+								'Workspace schema (' +
+									fallback +
+									'): ' +
+									(error instanceof Error ? error.message : String(error))
+							);
+						}
+					}
+				}
+				return activeSchema && operations.length
+					? validate(activeSchema, { ...ast, definitions: operations }).map(diagnosticFor)
+					: [];
 			} catch (error) {
 				return error instanceof GraphQLError
 					? [diagnosticFor(error)]

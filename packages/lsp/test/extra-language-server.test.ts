@@ -824,9 +824,14 @@ describe('additional language server workers', () => {
 		handle.dispose();
 	});
 
-	it('starts GraphQL with an optional schema', async () => {
+	it('forwards the GraphQL schema and workspace options to the worker', async () => {
+		const graphql = {
+			schema: 'type Query { hello: String }',
+			workspaceRootUri: 'file:///project',
+			workspaceFiles: [{ path: 'src/schema.graphql', content: 'type Query { nested: Int }' }]
+		};
 		const handle = await getGraphqlLanguageServer({
-			graphql: { schema: 'type Query { hello: String }' },
+			graphql,
 			createWorker: () => new mockState.FakeWorker() as unknown as Worker
 		});
 
@@ -835,9 +840,7 @@ describe('additional language server workers', () => {
 			persistentAssets: expect.objectContaining({
 				persistentCache: expect.objectContaining({ enabled: true })
 			}),
-			options: {
-				schema: 'type Query { hello: String }'
-			}
+			options: graphql
 		});
 
 		handle.dispose();

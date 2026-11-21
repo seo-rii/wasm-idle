@@ -1,9 +1,7 @@
 import type { EditorLanguageServerOptions, EditorLanguageServerRuntimeOptions } from '../types.js';
 import { createWorkerLanguageServerClient, type LanguageServerStatus } from '../worker-client.js';
 
-export interface GraphqlLanguageServerConfig {
-	schema?: string;
-}
+export type { GraphqlWorkerOptions as GraphqlLanguageServerConfig } from './service.js';
 
 export interface GraphqlLanguageServerOptions extends EditorLanguageServerRuntimeOptions {
 	createWorker?: () => Worker;
@@ -25,7 +23,9 @@ export async function getGraphqlLanguageServer(
 	return await createWorkerLanguageServerClient({
 		createWorker: hostOptions?.createWorker || createDefaultWorker,
 		initOptions: {
-			schema: config.schema
+			schema: config.schema,
+			workspaceRootUri: config.workspaceRootUri,
+			workspaceFiles: config.workspaceFiles
 		},
 		onStatus: hostOptions?.onStatus,
 		lifecycle: {

@@ -40,6 +40,45 @@ describe('createGraphqlWorkerService', () => {
 		);
 	});
 
+	it('validates workspace queries against inline, sibling or root schemas in that order', async () => {
+		const service = createGraphqlWorkerService();
+		const ctx: LspDocumentContext = {
+			documents: new Map(),
+			publishDiagnostics: vi.fn(),
+			reportProgress: vi.fn()
+		};
+		await service.initialize?.(
+			{
+				workspaceFiles: [
+					{ path: 'schema.graphql', content: 'type Query { root: String }' },
+					{ path: 'nested/schema.graphql', content: 'type Query { nested: String }' }
+				]
+			},
+			ctx
+		);
+		const diagnose = (path: string, text: string) =>
+			service.diagnostics?.(
+				{
+					uri: 'file:///workspace/' + path,
+					languageId: 'graphql',
+					version: 1,
+					text
+				},
+				ctx
+			);
+		expect(await diagnose('nested/q.graphql', '{ nested }')).toEqual([]);
+		expect(await diagnose('q.graphql', '{ root }')).toEqual([]);
+		expect(await diagnose('nested/q.graphql', '{ root }')).toEqual([
+			expect.objectContaining({
+				message: expect.stringContaining('Cannot query field "root"')
+			})
+		]);
+		expect(
+			await diagnose('nested/q.graphql', 'type Query { own: String } query { own }')
+		).toEqual([]);
+		expect(await diagnose('schema.graphql', 'type Query { root: String }')).toEqual([]);
+	});
+
 	it('uses the GraphQL parser and schema validator for diagnostics', async () => {
 		const service = createGraphqlWorkerService();
 		const context: LspDocumentContext = {

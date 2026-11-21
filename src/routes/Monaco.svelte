@@ -2466,6 +2466,7 @@
 		haskellLspIntegrity?: HaskellRuntimeAssetReceipts;
 		fortranLspAnalyzerUrl?: string;
 		assemblyScriptLspModuleUrl?: string;
+		graphqlLspWorkspaceFiles?: ReadonlyArray<{ path: string; content: string }>;
 		duckDbLspModuleUrl?: string;
 		cobolLspEnabled?: boolean;
 		cobolLspBaseUrl?: string;
@@ -2607,6 +2608,7 @@
 		haskellLspIntegrity,
 		fortranLspAnalyzerUrl,
 		assemblyScriptLspModuleUrl,
+		graphqlLspWorkspaceFiles,
 		duckDbLspModuleUrl,
 		cobolLspEnabled = false,
 		cobolLspBaseUrl,
@@ -2811,6 +2813,7 @@
 			haskellLspEnabled ? JSON.stringify(haskellLspIntegrity) : '',
 			fortranLspAnalyzerUrl || '',
 			assemblyScriptLspModuleUrl || '',
+			activeLspLanguage === 'graphql' ? JSON.stringify(graphqlLspWorkspaceFiles) : '',
 			duckDbLspModuleUrl || '',
 			cobolLspEnabled ? cobolLspBaseUrl || '' : '',
 			cobolLspEnabled ? JSON.stringify(cobolLspWorkspaceFiles) : '',
@@ -3703,6 +3706,10 @@
 				const { getGraphqlLanguageServer } = await import('@wasm-idle/lsp/graphql');
 				return await getGraphqlLanguageServer({
 					currentUrl,
+					graphql: {
+						workspaceRootUri: 'file:///workspace',
+						workspaceFiles: $state.snapshot(graphqlLspWorkspaceFiles)
+					},
 					onStatus: (status) => (graphqlLspStatus = status)
 				});
 			}
