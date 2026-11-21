@@ -43,12 +43,12 @@ export interface InitialWorkspaceOptions<Language extends string> {
 	isolateStorage?: boolean;
 }
 
-function decodeBase64Url(value: string | null) {
+function decodeBase64Url(value: string | null, options?: TextDecoderOptions) {
 	if (value === null) return null;
 	try {
 		const normalized = value.replaceAll('-', '+').replaceAll('_', '/');
 		const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
-		return new TextDecoder().decode(
+		return new TextDecoder('utf-8', options).decode(
 			Uint8Array.from(atob(padded), (character) => character.charCodeAt(0))
 		);
 	} catch {
@@ -142,9 +142,11 @@ function selectInitialWorkspace<Language extends string>(
 			replacementUrl,
 			overrides: {
 				code:
-					decodeBase64Url(url.searchParams.get('code64')) ?? url.searchParams.get('code'),
+					decodeBase64Url(url.searchParams.get('code64'), { ignoreBOM: true }) ??
+					url.searchParams.get('code'),
 				argsInput:
-					decodeBase64Url(url.searchParams.get('args64')) ?? url.searchParams.get('args'),
+					decodeBase64Url(url.searchParams.get('args64'), { ignoreBOM: true }) ??
+					url.searchParams.get('args'),
 				rustTargetTriple: url.searchParams.get('rustTargetTriple'),
 				rustOptimizationProfile: url.searchParams.get('rustOptimizationProfile'),
 				goTarget: url.searchParams.get('goTarget'),

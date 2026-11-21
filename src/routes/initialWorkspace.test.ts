@@ -139,6 +139,18 @@ describe('initial workspace selection before the editor and container mount', ()
 		).toMatchObject({ code: '', argsInput: '' });
 	});
 
+	it('keeps a leading BOM in query text and accepts it as a shared JSON envelope signature', () => {
+		const text = '\uFEFF안녕하세요\r\n';
+		const plain = initial(`?code=${encodeURIComponent(text)}&args=${encodeURIComponent(text)}`);
+		const base64 = initial(`?code64=${encoded(text)}&args64=${encoded(text)}`);
+		expect(base64.selection.overrides).toEqual(plain.selection.overrides);
+		expect(base64.selection.overrides).toMatchObject({ code: text, argsInput: text });
+		const saved = snapshot('C');
+		expect(
+			initial(`#workspace=${encoded('\uFEFF' + JSON.stringify(saved))}`).selection.snapshot
+		).toEqual(saved);
+	});
+
 	it('retains existing query settings and consumes only workspace import parameters', () => {
 		const { selection } = initial(
 			'?lang=rust&rustTargetTriple=wasm32-wasip2&rustOptimizationProfile=speed&goTarget=js/wasm&ocamlBackend=js&ocamlWasmBinaryenMode=full&theme=dark'

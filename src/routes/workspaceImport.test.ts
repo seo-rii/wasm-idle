@@ -30,6 +30,30 @@ describe('workspace import staging', () => {
 		});
 	});
 
+	it('imports a catalogue with snapshot-shaped fields as a file and restores a legacy project', async () => {
+		const catalogue = {
+			version: 1,
+			language: 'fr-FR',
+			activePath: 'bonjour.txt',
+			files: [{ path: 'bonjour.txt', content: 'Bonjour !' }]
+		};
+		const content = JSON.stringify(catalogue);
+		const options = { extractZip, assertDestination: () => {} };
+		expect(
+			await stageWorkspaceImport([new File([content], 'catalogue.json')], options)
+		).toMatchObject({
+			kind: 'files',
+			files: [{ path: 'catalogue.json', content }]
+		});
+		const legacy = { ...catalogue, language: 'PYTHON' };
+		expect(
+			await stageWorkspaceImport([new File([JSON.stringify(legacy)], 'saved.json')], options)
+		).toEqual({
+			kind: 'backup',
+			backup: legacy
+		});
+	});
+
 	it('never commits preceding files when a later ZIP is corrupt', async () => {
 		const commit = vi.fn();
 		const importing = stageWorkspaceImport(
