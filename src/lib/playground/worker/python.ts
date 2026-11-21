@@ -1053,7 +1053,7 @@ __wasm_idle_previous_main = sys.modules.get("__main__", __wasm_idle_missing_main
 __wasm_idle_previous_path = sys.path
 try:
     __wasm_idle_module = types.ModuleType("__main__")
-    __wasm_idle_module.__file__ = ${executionFilenameLiteral}
+    __wasm_idle_module.__file__ = os.path.abspath(${executionFilenameLiteral})
     __wasm_idle_globals = __wasm_idle_module.__dict__
     __wasm_idle_globals.update({
         ${JSON.stringify(executionReadyName)}: __wasm_idle_execution_ready,

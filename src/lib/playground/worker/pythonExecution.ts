@@ -124,7 +124,7 @@ def __wasm_idle_make_execution_helpers(image_source, max_entries=8, max_bytes=41
                 weight = sys.getsizeof(source) + sys.getsizeof(filename) + len(marshal.dumps(compiled))
                 code_cache.put(key, compiled, weight)
             main_module = types.ModuleType("__main__")
-            main_module.__file__ = filename
+            main_module.__file__ = os.path.abspath(filename)
             scope = main_module.__dict__
             sys.modules["__main__"] = main_module
             # Script siblings take precedence; shared workspace-root modules follow.
