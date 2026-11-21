@@ -79,7 +79,8 @@ export const scenarios = [
 		// Serializing Bash prompt and directory requests adds 1,289 bytes. The root install measures 7,645,519 bytes.
 		// Linking workspace sources with per-input Clang modes measures 7,652,352 bytes.
 		// Filename inference for the active tab measures 7,653,149 bytes with the same files.
-		budget: { maxBytes: 7653149, maxFiles: 865, maxPackages: 6 },
+		// The PHP and Ruby worker helpers add four files. The root install measures 7,651,041 bytes.
+		budget: { maxBytes: 7653149, maxFiles: 869, maxPackages: 6 },
 		absentPackageNames: [
 			'@katana-project/asm',
 			'java-parser',
@@ -495,7 +496,9 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Multi-source Clang, foreground terminal editing, and reactive breakpoints measure 43,393,107 installed bytes.
 		// The reviewed workspace, runtime and LSP fixes add 16,689 bytes to the pinned install:
 		// 43,401,987 bytes in 3,494 files and 66 packages. Round the byte limit up to the next KiB.
-		budget: { maxBytes: 43402240, maxFiles: 3494, maxPackages: 70 },
+		// With the PHP and Ruby helpers and updated language services, the pinned install measures
+		// 43,420,505 bytes in 3,498 files and 66 packages.
+		budget: { maxBytes: 43420672, maxFiles: 3498, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
