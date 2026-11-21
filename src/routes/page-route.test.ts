@@ -24,6 +24,7 @@ import {
 	editorLanguages,
 	editorOnlyLanguages,
 	languageLabels,
+	normalizeRequestedLanguage,
 	playgroundLanguages,
 	type PlaygroundLanguage
 } from './language-registry';
@@ -1857,8 +1858,8 @@ describe('example route debug actions', () => {
 	it('surfaces D through bundled LDC and Emscripten LLD browser assets', () => {
 		expect(applicationRuntimeAssets.d?.moduleUrl).toContain('/wasm-d/index.js?');
 		expectPlaygroundLanguage('D');
-		expect(source).toMatch(/d: 'D'/);
-		expect(source).toMatch(/dlang: 'D'/);
+		expect(normalizeRequestedLanguage('d')).toBe('D');
+		expect(normalizeRequestedLanguage('dlang')).toBe('D');
 		expectEditorLanguage('D', 'd');
 		expect(source).toMatch(/'.d': 'D'/);
 		expect(source).toMatch(/D: 'main\.d'/);
@@ -1872,15 +1873,15 @@ describe('example route debug actions', () => {
 		expectPlaygroundLanguage('CSHARP');
 		expectPlaygroundLanguage('FSHARP');
 		expectPlaygroundLanguage('VBNET');
-		expect(source).toMatch(/csharp: 'CSHARP'/);
-		expect(source).toMatch(/'c#': 'CSHARP'/);
-		expect(source).toMatch(/cs: 'CSHARP'/);
-		expect(source).toMatch(/fsharp: 'FSHARP'/);
-		expect(source).toMatch(/'f#': 'FSHARP'/);
-		expect(source).toMatch(/fs: 'FSHARP'/);
-		expect(source).toMatch(/vbnet: 'VBNET'/);
-		expect(source).toMatch(/vb: 'VBNET'/);
-		expect(source).toMatch(/visualbasic: 'VBNET'/);
+		expect(normalizeRequestedLanguage('csharp')).toBe('CSHARP');
+		expect(normalizeRequestedLanguage('c#')).toBe('CSHARP');
+		expect(normalizeRequestedLanguage('cs')).toBe('CSHARP');
+		expect(normalizeRequestedLanguage('fsharp')).toBe('FSHARP');
+		expect(normalizeRequestedLanguage('f#')).toBe('FSHARP');
+		expect(normalizeRequestedLanguage('fs')).toBe('FSHARP');
+		expect(normalizeRequestedLanguage('vbnet')).toBe('VBNET');
+		expect(normalizeRequestedLanguage('vb')).toBe('VBNET');
+		expect(normalizeRequestedLanguage('visualbasic')).toBe('VBNET');
 		expectEditorLanguage('CSHARP', 'csharp');
 		expectEditorLanguage('FSHARP', 'fsharp');
 		expectEditorLanguage('VBNET', 'vb');
@@ -1902,10 +1903,10 @@ describe('example route debug actions', () => {
 		);
 		expectPlaygroundLanguage('JAVASCRIPT');
 		expectPlaygroundLanguage('TYPESCRIPT');
-		expect(source).toMatch(/javascript: 'JAVASCRIPT'/);
-		expect(source).toMatch(/js: 'JAVASCRIPT'/);
-		expect(source).toMatch(/typescript: 'TYPESCRIPT'/);
-		expect(source).toMatch(/ts: 'TYPESCRIPT'/);
+		expect(normalizeRequestedLanguage('javascript')).toBe('JAVASCRIPT');
+		expect(normalizeRequestedLanguage('js')).toBe('JAVASCRIPT');
+		expect(normalizeRequestedLanguage('typescript')).toBe('TYPESCRIPT');
+		expect(normalizeRequestedLanguage('ts')).toBe('TYPESCRIPT');
 		expectEditorLanguage('JAVASCRIPT', 'javascript');
 		expectEditorLanguage('TYPESCRIPT', 'typescript');
 		expect(source).toMatch(/JAVASCRIPT: 'main\.js'/);
@@ -1919,8 +1920,8 @@ describe('example route debug actions', () => {
 			'/wasm-assemblyscript/runtime.mjs?'
 		);
 		expectPlaygroundLanguage('ASSEMBLYSCRIPT');
-		expect(source).toMatch(/assemblyscript: 'ASSEMBLYSCRIPT'/);
-		expect(source).toMatch(/as: 'ASSEMBLYSCRIPT'/);
+		expect(normalizeRequestedLanguage('assemblyscript')).toBe('ASSEMBLYSCRIPT');
+		expect(normalizeRequestedLanguage('as')).toBe('ASSEMBLYSCRIPT');
 		expectEditorLanguage('ASSEMBLYSCRIPT', 'typescript');
 		expect(source).toMatch(/endsWith\('\.as\.ts'\)\) return 'ASSEMBLYSCRIPT'/);
 		expect(source).toMatch(/ASSEMBLYSCRIPT: 'main\.as\.ts'/);
@@ -1930,8 +1931,8 @@ describe('example route debug actions', () => {
 	it('surfaces WAT through the wasm-wat browser compiler contract', () => {
 		expect(applicationRuntimeAssets.wat?.moduleUrl).toContain('/wasm-wat/index.js?');
 		expectPlaygroundLanguage('WAT');
-		expect(source).toMatch(/wat: 'WAT'/);
-		expect(source).toMatch(/wast: 'WAT'/);
+		expect(normalizeRequestedLanguage('wat')).toBe('WAT');
+		expect(normalizeRequestedLanguage('wast')).toBe('WAT');
 		expectEditorLanguage('WAT', 'wat');
 		expect(source).toMatch(/'.wat': 'WAT'/);
 		expect(source).toMatch(/WAT: 'main\.wat'/);
@@ -1940,8 +1941,8 @@ describe('example route debug actions', () => {
 
 	it('surfaces WASM through the binary WebAssembly runner contract', () => {
 		expectPlaygroundLanguage('WASM');
-		expect(source).toMatch(/wasm: 'WASM'/);
-		expect(source).toMatch(/wasm32: 'WASM'/);
+		expect(normalizeRequestedLanguage('wasm')).toBe('WASM');
+		expect(normalizeRequestedLanguage('wasm32')).toBe('WASM');
 		expectEditorLanguage('WASM', 'wasm');
 		expect(source).toMatch(/'.wasm': 'WASM'/);
 		expect(source).toMatch(/WASM: 'main\.wasm'/);
@@ -1951,7 +1952,7 @@ describe('example route debug actions', () => {
 	it('surfaces Lua through the wasm-lua browser runtime contract', () => {
 		expect(applicationRuntimeAssets.lua?.moduleUrl).toContain('/wasm-lua/index.js?');
 		expectPlaygroundLanguage('LUA');
-		expect(source).toMatch(/lua: 'LUA'/);
+		expect(normalizeRequestedLanguage('lua')).toBe('LUA');
 		expectEditorLanguage('LUA', 'lua');
 		expect(source).toMatch(/'.lua': 'LUA'/);
 		expect(source).toMatch(/LUA: 'main\.lua'/);
@@ -1961,7 +1962,7 @@ describe('example route debug actions', () => {
 	it('surfaces BQN through the CBQN wasm worker runtime contract', () => {
 		expect(applicationRuntimeAssets.bqn?.workerUrl).toContain('/wasm-bqn/runner-worker.js?');
 		expectPlaygroundLanguage('BQN');
-		expect(source).toMatch(/bqn: 'BQN'/);
+		expect(normalizeRequestedLanguage('bqn')).toBe('BQN');
 		expectEditorLanguage('BQN', 'bqn');
 		expect(source).toMatch(/'.bqn': 'BQN'/);
 		expect(source).toMatch(/BQN: 'main\.bqn'/);
@@ -1973,7 +1974,7 @@ describe('example route debug actions', () => {
 			'/wasm-janet/runner-worker.js?'
 		);
 		expectPlaygroundLanguage('JANET');
-		expect(source).toMatch(/janet: 'JANET'/);
+		expect(normalizeRequestedLanguage('janet')).toBe('JANET');
 		expectEditorLanguage('JANET', 'janet');
 		expect(source).toMatch(/'.janet': 'JANET'/);
 		expect(source).toMatch(/JANET: 'main\.janet'/);
@@ -1982,8 +1983,8 @@ describe('example route debug actions', () => {
 
 	it('surfaces Hy through the shared Pyodide runtime', () => {
 		expectPlaygroundLanguage('HY');
-		expect(source).toMatch(/hy: 'HY'/);
-		expect(source).toMatch(/hylang: 'HY'/);
+		expect(normalizeRequestedLanguage('hy')).toBe('HY');
+		expect(normalizeRequestedLanguage('hylang')).toBe('HY');
 		expectEditorLanguage('HY', 'clojure');
 		expect(source).toMatch(/'.hy': 'HY'/);
 		expect(source).toMatch(/HY: 'main\.hy'/);
@@ -1995,8 +1996,8 @@ describe('example route debug actions', () => {
 			'/wasm-julia/runner-worker.js?'
 		);
 		expectPlaygroundLanguage('JULIA');
-		expect(source).toMatch(/julia: 'JULIA'/);
-		expect(source).toMatch(/jl: 'JULIA'/);
+		expect(normalizeRequestedLanguage('julia')).toBe('JULIA');
+		expect(normalizeRequestedLanguage('jl')).toBe('JULIA');
 		expectEditorLanguage('JULIA', 'julia');
 		expect(source).toMatch(/'.jl': 'JULIA'/);
 		expect(source).toMatch(/JULIA: 'main\.jl'/);
@@ -2006,8 +2007,8 @@ describe('example route debug actions', () => {
 	it('surfaces Nim through the Nim wasm compiler worker runtime contract', () => {
 		expect(applicationRuntimeAssets.nim?.workerUrl).toContain('/wasm-nim/runner-worker.js?');
 		expectPlaygroundLanguage('NIM');
-		expect(source).toMatch(/nim: 'NIM'/);
-		expect(source).toMatch(/nimrod: 'NIM'/);
+		expect(normalizeRequestedLanguage('nim')).toBe('NIM');
+		expect(normalizeRequestedLanguage('nimrod')).toBe('NIM');
 		expectEditorLanguage('NIM', 'nim');
 		expect(source).toMatch(/'.nim': 'NIM'/);
 		expect(source).toMatch(/NIM: 'main\.nim'/);
@@ -2018,7 +2019,7 @@ describe('example route debug actions', () => {
 		expect(applicationRuntimeAssets.zig?.compilerUrl).toContain('/wasm-zig/zig_small.wasm?');
 		expect(applicationRuntimeAssets.zig?.stdlibUrl).toContain('/wasm-zig/std.tar.gz?');
 		expectPlaygroundLanguage('ZIG');
-		expect(source).toMatch(/zig: 'ZIG'/);
+		expect(normalizeRequestedLanguage('zig')).toBe('ZIG');
 		expectEditorLanguage('ZIG', 'zig');
 		expect(source).toMatch(/'.zig': 'ZIG'/);
 		expect(source).toMatch(/ZIG: 'main\.zig'/);
@@ -2034,8 +2035,8 @@ describe('example route debug actions', () => {
 		);
 		expect(applicationRuntimeAssets.lisp?.manifestFingerprint).toMatch(/^[a-f0-9]{64}$/u);
 		expectPlaygroundLanguage('LISP');
-		expect(source).toMatch(/lisp: 'LISP'/);
-		expect(source).toMatch(/scheme: 'LISP'/);
+		expect(normalizeRequestedLanguage('lisp')).toBe('LISP');
+		expect(normalizeRequestedLanguage('scheme')).toBe('LISP');
 		expectEditorLanguage('LISP', 'lisp');
 		expect(source).toMatch(/'.scm': 'LISP'/);
 		expect(source).toMatch(/LISP: 'main\.scm'/);
@@ -2052,8 +2053,8 @@ describe('example route debug actions', () => {
 			'/wasm-ruby/assets/ruby_stdlib-D8-A_OuU.wasm.gz.bin?'
 		);
 		expectPlaygroundLanguage('RUBY');
-		expect(source).toMatch(/ruby: 'RUBY'/);
-		expect(source).toMatch(/rb: 'RUBY'/);
+		expect(normalizeRequestedLanguage('ruby')).toBe('RUBY');
+		expect(normalizeRequestedLanguage('rb')).toBe('RUBY');
 		expectEditorLanguage('RUBY', 'ruby');
 		expect(source).toMatch(/'.rb': 'RUBY'/);
 		expect(source).toMatch(/RUBY: 'main\.rb'/);
@@ -2067,8 +2068,8 @@ describe('example route debug actions', () => {
 		);
 		expect(applicationRuntimeAssets.haskell?.bsdtarUrl).toContain('/wasm-haskell/bsdtar.wasm?');
 		expectPlaygroundLanguage('HASKELL');
-		expect(source).toMatch(/haskell: 'HASKELL'/);
-		expect(source).toMatch(/hs: 'HASKELL'/);
+		expect(normalizeRequestedLanguage('haskell')).toBe('HASKELL');
+		expect(normalizeRequestedLanguage('hs')).toBe('HASKELL');
 		expectEditorLanguage('HASKELL', 'haskell');
 		expect(source).toMatch(/'.hs': 'HASKELL'/);
 		expect(source).toMatch(/HASKELL: 'main\.hs'/);
@@ -2080,7 +2081,7 @@ describe('example route debug actions', () => {
 	it('surfaces R through the bundled webR runtime contract', () => {
 		expect(applicationRuntimeAssets.r?.baseUrl).toMatch(/^\/wasm-idle\/webr\/[a-f0-9]+\/$/u);
 		expectPlaygroundLanguage('R');
-		expect(source).toMatch(/r: 'R'/);
+		expect(normalizeRequestedLanguage('r')).toBe('R');
 		expectEditorLanguage('R', 'r');
 		expect(source).toMatch(/'.r': 'R'/);
 		expect(source).toMatch(/R: 'main\.R'/);
@@ -2095,8 +2096,8 @@ describe('example route debug actions', () => {
 			'/wasm-octave/runtime/runtime-manifest.v1.json?'
 		);
 		expectPlaygroundLanguage('OCTAVE');
-		expect(source).toMatch(/octave: 'OCTAVE'/);
-		expect(source).toMatch(/matlab: 'OCTAVE'/);
+		expect(normalizeRequestedLanguage('octave')).toBe('OCTAVE');
+		expect(normalizeRequestedLanguage('matlab')).toBe('OCTAVE');
 		expectEditorLanguage('OCTAVE', 'octave');
 		expect(source).toMatch(/'.m': 'OCTAVE'/);
 		expect(source).toMatch(/OCTAVE: 'main\.m'/);
@@ -2106,8 +2107,8 @@ describe('example route debug actions', () => {
 	it('surfaces SQLite through the bundled sql.js worker runtime contract', () => {
 		expect(applicationRuntimeAssets.sqlite?.moduleUrl).toContain('/wasm-sqlite/runtime.mjs?');
 		expectPlaygroundLanguage('SQLITE');
-		expect(source).toMatch(/sqlite: 'SQLITE'/);
-		expect(source).toMatch(/sql: 'SQLITE'/);
+		expect(normalizeRequestedLanguage('sqlite')).toBe('SQLITE');
+		expect(normalizeRequestedLanguage('sql')).toBe('SQLITE');
 		expectEditorLanguage('SQLITE', 'sql');
 		expect(source).toMatch(/'.sql': 'SQLITE'/);
 		expect(source).toMatch(/'.sqlite': 'SQLITE'/);
@@ -2120,8 +2121,8 @@ describe('example route debug actions', () => {
 			'/wasm-postgresql/runtime.mjs?'
 		);
 		expectPlaygroundLanguage('POSTGRESQL');
-		expect(source).toMatch(/postgresql: 'POSTGRESQL'/);
-		expect(source).toMatch(/pgsql: 'POSTGRESQL'/);
+		expect(normalizeRequestedLanguage('postgresql')).toBe('POSTGRESQL');
+		expect(normalizeRequestedLanguage('pgsql')).toBe('POSTGRESQL');
 		expectEditorLanguage('POSTGRESQL', 'pgsql');
 		expect(source).toMatch(/'.pgsql': 'POSTGRESQL'/);
 		expect(source).toMatch(/POSTGRESQL: 'main\.sql'/);
@@ -2131,7 +2132,7 @@ describe('example route debug actions', () => {
 	it('surfaces DuckDB through the bundled DuckDB-Wasm worker runtime contract', () => {
 		expect(applicationRuntimeAssets.duckdb?.moduleUrl).toContain('/wasm-duckdb/runtime.mjs?');
 		expectPlaygroundLanguage('DUCKDB');
-		expect(source).toMatch(/duckdb: 'DUCKDB'/);
+		expect(normalizeRequestedLanguage('duckdb')).toBe('DUCKDB');
 		expectEditorLanguage('DUCKDB', 'sql');
 		expect(source).toMatch(/'.duckdb': 'DUCKDB'/);
 		expect(source).toMatch(/DUCKDB: 'main\.duckdb'/);
@@ -2142,7 +2143,7 @@ describe('example route debug actions', () => {
 	it('surfaces V through the V compiler llvm-core runtime contract', () => {
 		expect(applicationRuntimeAssets.v?.baseUrl).toBe('/wasm-idle/wasm-v/');
 		expectPlaygroundLanguage('V');
-		expect(source).toMatch(/vlang: 'V'/);
+		expect(normalizeRequestedLanguage('vlang')).toBe('V');
 		expect(source).toMatch(/'.v': 'V'/);
 		expect(source).toMatch(/V: 'main\.v'/);
 		expect(source).toMatch(/V: 'v'/);
@@ -2152,8 +2153,8 @@ describe('example route debug actions', () => {
 	it('surfaces COBOL through the GnuCOBOL llvm-core runtime contract', () => {
 		expect(applicationRuntimeAssets.cobol?.baseUrl).toBe('/wasm-idle/wasm-cobol/');
 		expectPlaygroundLanguage('COBOL');
-		expect(source).toMatch(/cobol: 'COBOL'/);
-		expect(source).toMatch(/gnucobol: 'COBOL'/);
+		expect(normalizeRequestedLanguage('cobol')).toBe('COBOL');
+		expect(normalizeRequestedLanguage('gnucobol')).toBe('COBOL');
 		expect(source).toMatch(/'.cob': 'COBOL'/);
 		expect(source).toMatch(/COBOL: 'main\.cob'/);
 		expect(source).toMatch(/COBOL: 'cobol'/);
@@ -2186,18 +2187,18 @@ describe('example route debug actions', () => {
 			/const executionAvailable = \$derived\(\s*!editorOnlyLanguages\.has\(language\) && !executionUnavailableReason\s*\);/
 		);
 		expect(source).toMatch(/if \(!executionAvailable\) return Promise\.resolve\(\);/);
-		expect(source).toMatch(/fortran: 'FORTRAN'/);
-		expect(source).toMatch(/graphql: 'GRAPHQL'/);
-		expect(source).toMatch(/json: 'JSON'/);
-		expect(source).toMatch(/jsonc: 'JSON'/);
-		expect(source).toMatch(/yaml: 'YAML'/);
-		expect(source).toMatch(/yml: 'YAML'/);
-		expect(source).toMatch(/toml: 'TOML'/);
-		expect(source).toMatch(/html: 'HTML'/);
-		expect(source).toMatch(/htm: 'HTML'/);
-		expect(source).toMatch(/css: 'CSS'/);
-		expect(source).toMatch(/markdown: 'MARKDOWN'/);
-		expect(source).toMatch(/md: 'MARKDOWN'/);
+		expect(normalizeRequestedLanguage('fortran')).toBe('FORTRAN');
+		expect(normalizeRequestedLanguage('graphql')).toBe('GRAPHQL');
+		expect(normalizeRequestedLanguage('json')).toBe('JSON');
+		expect(normalizeRequestedLanguage('jsonc')).toBe('JSON');
+		expect(normalizeRequestedLanguage('yaml')).toBe('YAML');
+		expect(normalizeRequestedLanguage('yml')).toBe('YAML');
+		expect(normalizeRequestedLanguage('toml')).toBe('TOML');
+		expect(normalizeRequestedLanguage('html')).toBe('HTML');
+		expect(normalizeRequestedLanguage('htm')).toBe('HTML');
+		expect(normalizeRequestedLanguage('css')).toBe('CSS');
+		expect(normalizeRequestedLanguage('markdown')).toBe('MARKDOWN');
+		expect(normalizeRequestedLanguage('md')).toBe('MARKDOWN');
 		expect(source).toMatch(/FORTRAN: 'main\.f'/);
 		expect(source).toMatch(/GRAPHQL: 'main\.graphql'/);
 		expect(source).toMatch(/JSON: 'main\.json'/);
@@ -2221,7 +2222,7 @@ describe('example route debug actions', () => {
 	it('surfaces PHP through the php-wasm browser runtime contract', () => {
 		expect(applicationRuntimeAssets.php?.moduleUrl).toContain('/wasm-php/startup.mjs?');
 		expectPlaygroundLanguage('PHP');
-		expect(source).toMatch(/php: 'PHP'/);
+		expect(normalizeRequestedLanguage('php')).toBe('PHP');
 		expectEditorLanguage('PHP', 'php');
 		expect(source).toMatch(/'.php': 'PHP'/);
 		expect(source).toMatch(/PHP: 'main\.php'/);
@@ -2231,15 +2232,15 @@ describe('example route debug actions', () => {
 	it('surfaces Elixir through the shared language selector and Popcorn runtime', () => {
 		expect(applicationRuntimeAssets.elixir?.bundleUrl).toContain('/wasm-elixir/bundle.avm?');
 		expectPlaygroundLanguage('ELIXIR');
-		expect(source).toMatch(/elixir: 'ELIXIR'/);
+		expect(normalizeRequestedLanguage('elixir')).toBe('ELIXIR');
 		expectEditorLanguage('ELIXIR', 'elixir');
 	});
 
 	it('surfaces Erlang through the shared language selector and Popcorn runtime', () => {
 		expect(applicationRuntimeAssets.erlang?.bundleUrl).toContain('/wasm-elixir/bundle.avm?');
 		expectPlaygroundLanguage('ERLANG');
-		expect(source).toMatch(/erlang: 'ERLANG'/);
-		expect(source).toMatch(/erl: 'ERLANG'/);
+		expect(normalizeRequestedLanguage('erlang')).toBe('ERLANG');
+		expect(normalizeRequestedLanguage('erl')).toBe('ERLANG');
 		expect(source).toMatch(/'.erl': 'ERLANG'/);
 		expect(source).toMatch(/ERLANG: 'main\.erl'/);
 		expect(source).toMatch(/ERLANG: 'erlang'/);
@@ -2257,12 +2258,12 @@ describe('example route debug actions', () => {
 		expectPlaygroundLanguage('PROLOG');
 		expectPlaygroundLanguage('GLEAM');
 		expectPlaygroundLanguage('PERL');
-		expect(source).toMatch(/prolog: 'PROLOG'/);
-		expect(source).toMatch(/swipl: 'PROLOG'/);
-		expect(source).toMatch(/swi: 'PROLOG'/);
-		expect(source).toMatch(/gleam: 'GLEAM'/);
-		expect(source).toMatch(/grain: 'GRAIN'/);
-		expect(source).toMatch(/perl: 'PERL'/);
+		expect(normalizeRequestedLanguage('prolog')).toBe('PROLOG');
+		expect(normalizeRequestedLanguage('swipl')).toBe('PROLOG');
+		expect(normalizeRequestedLanguage('swi')).toBe('PROLOG');
+		expect(normalizeRequestedLanguage('gleam')).toBe('GLEAM');
+		expect(normalizeRequestedLanguage('grain')).toBe('GRAIN');
+		expect(normalizeRequestedLanguage('perl')).toBe('PERL');
 		expect(source).toMatch(/'.prolog': 'PROLOG'/);
 		expect(source).toMatch(/'.pro': 'PROLOG'/);
 		expect(source).toMatch(/'.gleam': 'GLEAM'/);

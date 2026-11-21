@@ -1,5 +1,4 @@
-import { isSupportedLanguageId, normalizeLanguageId } from '@wasm-idle/core';
-import { editorOnlyLanguages, type PlaygroundLanguage } from './language-registry';
+import { normalizeRequestedLanguage } from './language-registry';
 import { validateWorkspaceSnapshot } from './workspaceSnapshot';
 
 const BACKUP_FORMAT_PREFIX = 'wasm-idle-workspace-backup';
@@ -38,8 +37,7 @@ export function parseWorkspaceBackup(text: string): Record<string, unknown> | nu
 	if (
 		typeof candidate.version !== 'number' ||
 		typeof candidate.language !== 'string' ||
-		(!isSupportedLanguageId(normalizeLanguageId(candidate.language)) &&
-			!editorOnlyLanguages.has(candidate.language.toUpperCase() as PlaygroundLanguage)) ||
+		!normalizeRequestedLanguage(candidate.language) ||
 		typeof candidate.activePath !== 'string' ||
 		(candidate.files === undefined && candidate.workspaces === undefined)
 	)

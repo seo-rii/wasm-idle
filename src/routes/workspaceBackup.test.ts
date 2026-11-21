@@ -35,6 +35,20 @@ describe('workspace backup format', () => {
 		expect(parseWorkspaceBackup(serializeWorkspaceBackup(project))).toEqual(project);
 	});
 
+	it.each([' md ', 'jsonc', 'htm', 'pypy3'])(
+		'restores a legacy backup under playground alias %j',
+		(language) => {
+			const legacy = { ...snapshot, language };
+			expect(parseWorkspaceBackup(JSON.stringify(legacy))).toEqual(legacy);
+		}
+	);
+
+	it('leaves unknown or inherited language names in ordinary JSON files', () => {
+		for (const language of ['fr-FR', 'constructor', '__proto__']) {
+			expect(parseWorkspaceBackup(JSON.stringify({ ...snapshot, language }))).toBeNull();
+		}
+	});
+
 	it('sniffs UTF-8 BOM/whitespace backups while leaving binary ZIP input alone', () => {
 		const bytes = new TextEncoder().encode(' \n\t' + serializeWorkspaceBackup(snapshot));
 		expect(parseWorkspaceBackupBytes(Uint8Array.from([0xef, 0xbb, 0xbf, ...bytes]))).toEqual(
