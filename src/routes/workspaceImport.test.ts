@@ -111,6 +111,29 @@ describe('workspace import staging', () => {
 		});
 	});
 
+	it('preserves loose POSIX filenames that look like drive names or contain only whitespace', async () => {
+		const names = ['C:notes.txt', '   '];
+		const plan = await stageWorkspaceImport(
+			names.map((name) => new File(['raw'], name)),
+			{
+				extractZip,
+				assertDestination: () => {}
+			}
+		);
+		expect(plan).toMatchObject({
+			kind: 'files',
+			files: names.map((path) => ({ path, pathStyle: 'posix', content: 'raw' }))
+		});
+		for (const invalid of ['/outside', '../outside', 'bad\0name']) {
+			await expect(
+				stageWorkspaceImport([new File(['bad'], invalid)], {
+					extractZip,
+					assertDestination: () => {}
+				})
+			).rejects.toThrow();
+		}
+	});
+
 	it('rejects mixed backup and file selections before returning a plan', async () => {
 		const snapshot = {
 			version: 6,

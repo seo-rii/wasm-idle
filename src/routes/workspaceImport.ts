@@ -48,8 +48,9 @@ export async function stageWorkspaceImport(
 		} else {
 			const path = file.webkitRelativePath || file.name;
 			const imported = workspaceFileFromBytes(path, bytes);
-			// DOM directory selections use '/' between components. A backslash in a filename is literal.
-			if (path.includes('\\')) imported.pathStyle = 'posix';
+			// Native names can contain a backslash, a drive-like prefix, or just whitespace.
+			if (path.includes('\\') || /^[a-z]:/iu.test(path) || !path.trim())
+				imported.pathStyle = 'posix';
 			append([imported]);
 		}
 	}
