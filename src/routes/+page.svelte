@@ -2330,8 +2330,13 @@
 		shareNotice = null;
 		void saveWorkspace();
 		const url = consumeWorkspaceQueryInput(new URL(location.href));
-		url.hash = SHARE_PREFIX + encodeBase64Url(JSON.stringify(snapshot()));
 		url.searchParams.delete('workspace');
+		const project = snapshot();
+		url.hash = SHARE_PREFIX + encodeBase64Url(JSON.stringify(project));
+		// Keep the portable v6 shape for older receivers when it fits. v7 avoids
+		// including active files twice and restores the same selected language.
+		if (!isNavigableWorkspaceShare(url.href))
+			url.hash = SHARE_PREFIX + encodeBase64Url(serializeStoredWorkspace(project));
 		const link = url.toString();
 		if (!isNavigableWorkspaceShare(link)) {
 			shareNotice = { workspace };
