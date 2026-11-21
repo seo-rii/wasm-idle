@@ -626,6 +626,20 @@ describe('workspace import browser integration', () => {
 			await withImportPage(async (page) => {
 				const key = 'wasm-idle:example-workspace:v3';
 				const before = page.url();
+				const saveSnapshot = async () => {
+					await page.getByRole('button', { name: 'Save', exact: true }).click();
+					await page.locator('[data-workspace-save-state="saved"]').waitFor();
+					return page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), key);
+				};
+				const downloadBackup = async () => {
+					const [download] = await Promise.all([
+						page.waitForEvent('download'),
+						page.getByRole('button', { name: 'Backup (JSON)', exact: true }).click()
+					]);
+					const backupPath = await download.path();
+					if (!backupPath) throw new Error('Missing workspace backup');
+					return readFile(backupPath);
+				};
 				await page.goto(new URL('favicon.png', before).href);
 				await page.evaluate(
 					(key) =>
@@ -655,14 +669,9 @@ describe('workspace import browser integration', () => {
 				await page.goto(before, { waitUntil: 'domcontentloaded' });
 				await page.locator('#language-select[data-workspace-ready="true"]').waitFor();
 				await page.locator('[data-container-directory="CPP/build"]').waitFor();
-				const [download] = await Promise.all([
-					page.waitForEvent('download'),
-					page.getByRole('button', { name: 'Backup (JSON)', exact: true }).click()
-				]);
-				const backupPath = await download.path();
-				if (!backupPath) throw new Error('Missing workspace backup');
-				const portable = await readFile(backupPath);
-				expect(JSON.parse(portable.toString()).snapshot.emptyDirectories).toEqual([
+				const portable = await downloadBackup();
+				const original = JSON.parse(portable.toString()).snapshot;
+				expect(original.emptyDirectories).toEqual([
 					'CPP/build',
 					'CPP/keep',
 					{ path: 'PYTHON/pkg', implicit: true }
@@ -680,14 +689,11 @@ describe('workspace import browser integration', () => {
 					)
 				});
 				await page.locator('.file-tab.active[title="build"]').waitFor();
-				await page.getByRole('button', { name: 'Save', exact: true }).click();
-				await expect
-					.poll(() =>
-						page.evaluate((key) => JSON.parse(localStorage.getItem(key)!).files, key)
-					)
-					.toContainEqual(
-						expect.objectContaining({ path: 'build', content: 'restored' })
-					);
+				expect(await saveSnapshot()).toMatchObject({
+					activePath: 'build',
+					files: [{ path: 'build', content: 'restored' }],
+					emptyDirectories: ['CPP/keep', { path: 'PYTHON/pkg', implicit: true }]
+				});
 				await page.reload({ waitUntil: 'domcontentloaded' });
 				await page.locator('.file-tab.active[title="build"]').waitFor();
 				expect(await page.locator('[data-workspace-recovery]').count()).toBe(0);
@@ -699,15 +705,19 @@ describe('workspace import browser integration', () => {
 				});
 				await page.locator('.file-tab.active[title="main.cpp"]').waitFor();
 				await page.locator('[data-container-directory="CPP/build"]').waitFor();
-				await page.getByRole('button', { name: 'Save', exact: true }).click();
-				await expect
-					.poll(() =>
-						page.evaluate(
-							(key) => JSON.parse(localStorage.getItem(key)!).emptyDirectories,
-							key
-						)
-					)
-					.toEqual(['CPP/build', 'CPP/keep', { path: 'PYTHON/pkg', implicit: true }]);
+				expect(await saveSnapshot()).toMatchObject({
+					version: 7,
+					activePath: 'main.cpp',
+					openTabs: original.openTabs,
+					files: original.files,
+					emptyDirectories: original.emptyDirectories
+				});
+				await page.reload({ waitUntil: 'domcontentloaded' });
+				await page.locator('.file-tab.active[title="main.cpp"]').waitFor();
+				await page.locator('[data-container-directory="CPP/build"]').waitFor();
+				await page.locator('[data-container-directory="CPP/keep"]').waitFor();
+				const reloaded = JSON.parse((await downloadBackup()).toString()).snapshot;
+				expect(reloaded.emptyDirectories).toEqual(original.emptyDirectories);
 				expect(page.url()).toBe(before);
 			});
 		}
