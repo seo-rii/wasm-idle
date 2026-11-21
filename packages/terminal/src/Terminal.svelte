@@ -730,7 +730,8 @@
 				const step = key === 'Meta-f' ? 1 : -1;
 				let position = inputCursor;
 				const adjacent = () => characters[step < 0 ? position - 1 : position];
-				const word = /[\p{L}\p{N}_]/u;
+				// Canonical word erase groups non-ASCII input, including symbols, with word characters.
+				const word = key === '\x17' ? /[\w\u0080-\u{10ffff}]/u : /[\p{L}\p{N}_]/u;
 				while (adjacent() && !word.test(adjacent())) position += step;
 				while (adjacent() && word.test(adjacent())) position += step;
 				if (key === '\x17') return eraseInput(characters, position, inputCursor);
