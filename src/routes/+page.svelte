@@ -916,7 +916,8 @@
 				return;
 			}
 			if (original && !specs.some((entry) => entry.line === original.line)) {
-				debugInteractionError = 'This breakpoint was removed. Select a breakpoint before saving.';
+				debugInteractionError =
+					'This breakpoint was removed. Select a breakpoint before saving.';
 				return;
 			}
 			if (
@@ -2101,6 +2102,7 @@
 			) ??
 			languageForPath(typeof value?.activePath === 'string' ? value.activePath : '') ??
 			'CPP';
+		rustTargetTriple = value.rustTargetTriple ?? 'wasm32-wasip1';
 		const nextWorkspaces = createDefaultLanguageWorkspaces();
 		const recovered: string[] = [];
 		for (const nextLanguageKey of playgroundLanguages) {
@@ -2140,33 +2142,13 @@
 		pythonTimestampInput = value.pythonTimestampInput ?? '0';
 		compilerOptions = restoredCompilerOptions.compilerOptions;
 		argsInput = restoredCompilerOptions.argsInput;
-		if (knownCppVersions.includes(value?.cppVersion as CppVersion))
-			cppVersion = value?.cppVersion as CppVersion;
-		if (typeof value?.log === 'boolean') log = value.log;
-		if (typeof value?.lspEnabled === 'boolean') lspEnabled = value.lspEnabled;
-		if (
-			value?.rustTargetTriple === 'wasm32-wasip1' ||
-			value?.rustTargetTriple === 'wasm32-wasip2' ||
-			value?.rustTargetTriple === 'wasm32-wasip3'
-		)
-			rustTargetTriple = value.rustTargetTriple;
-		if (
-			value?.rustOptimizationProfile === 'interactive' ||
-			value?.rustOptimizationProfile === 'speed' ||
-			value?.rustOptimizationProfile === 'size'
-		)
-			rustOptimizationProfile = value.rustOptimizationProfile;
-		if (
-			value?.goTarget === 'wasip1/wasm' ||
-			value?.goTarget === 'wasip2/wasm' ||
-			value?.goTarget === 'wasip3/wasm' ||
-			value?.goTarget === 'js/wasm'
-		)
-			goTarget = value.goTarget;
-		if (value?.ocamlBackend === 'js' || value?.ocamlBackend === 'wasm')
-			ocamlBackend = value.ocamlBackend;
-		if (value?.ocamlWasmBinaryenMode === 'fast' || value?.ocamlWasmBinaryenMode === 'full')
-			ocamlWasmBinaryenMode = value.ocamlWasmBinaryenMode;
+		cppVersion = value.cppVersion ?? 'CPP20';
+		log = value.log ?? true;
+		lspEnabled = value.lspEnabled ?? true;
+		rustOptimizationProfile = value.rustOptimizationProfile ?? 'interactive';
+		goTarget = value.goTarget ?? 'wasip1/wasm';
+		ocamlBackend = value.ocamlBackend ?? 'wasm';
+		ocamlWasmBinaryenMode = value.ocamlWasmBinaryenMode ?? 'fast';
 		sidebarOpen = value?.sidebarOpen ?? desktopExampleLayout;
 		saveStatus = recovered.length
 			? `${message}. Renamed conflicting files: ${recovered.join(', ')}`
@@ -5710,13 +5692,13 @@
 												? 'The Bash WASIX package accepts stdin when the process starts. Enter it before Run; extra reads receive EOF.'
 												: language === 'DUCKDB'
 													? 'DuckDB reads this input from /dev/stdin. Enter it before Run.'
-												: language === 'POSTGRESQL'
-													? "PostgreSQL reads this input as the server file '/dev/blob' (COPY ... FROM '/dev/blob' or pg_read_file('/dev/blob')). Enter it before Run."
-													: language === 'CSHARP' ||
-														  language === 'FSHARP' ||
-														  language === 'VBNET'
-														? 'C#, F#, and VB.NET read all stdin when the program starts. Enter it before Run; extra reads receive EOF. Output appears when the program finishes.'
-														: 'SharedArrayBuffer is unavailable here, so terminal input cannot be sent while the program is running. Enter stdin before Run; extra reads receive EOF.'}
+													: language === 'POSTGRESQL'
+														? "PostgreSQL reads this input as the server file '/dev/blob' (COPY ... FROM '/dev/blob' or pg_read_file('/dev/blob')). Enter it before Run."
+														: language === 'CSHARP' ||
+															  language === 'FSHARP' ||
+															  language === 'VBNET'
+															? 'C#, F#, and VB.NET read all stdin when the program starts. Enter it before Run; extra reads receive EOF. Output appears when the program finishes.'
+															: 'SharedArrayBuffer is unavailable here, so terminal input cannot be sent while the program is running. Enter stdin before Run; extra reads receive EOF.'}
 								</span>
 							</div>
 							<textarea

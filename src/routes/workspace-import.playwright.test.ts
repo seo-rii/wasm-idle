@@ -620,6 +620,29 @@ describe('workspace import browser integration', () => {
 	);
 
 	it(
+		'restores the default dialect for a legacy C++ backup that omits its standard',
+		browserOptions,
+		async () => {
+			await withImportPage(async (page) => {
+				await page.locator('#cpp-version').selectOption('CPP98');
+				const backup = {
+					language: 'CPP',
+					version: 4,
+					activePath: 'build.cpp',
+					files: [{ path: 'build.cpp', content: 'int main() {}' }]
+				};
+				await page.locator('input[type="file"]').setInputFiles({
+					name: 'legacy.json',
+					mimeType: 'application/json',
+					buffer: Buffer.from(serializeWorkspaceBackup(backup))
+				});
+				await page.locator('.file-tab.active[title="build.cpp"]').waitFor();
+				expect(await page.locator('#cpp-version').inputValue()).toBe('CPP20');
+			});
+		}
+	);
+
+	it(
 		'publishes an imported backup to inactive language directories before Bash edits them',
 		browserOptions,
 		async () => {
