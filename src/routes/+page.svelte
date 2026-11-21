@@ -874,7 +874,7 @@
 	let debugInteractionError = $state('');
 	let breakpointEditOpen = $state(false);
 	let editingBreakpoint = $state<{
-		line: number;
+		line?: number;
 		sourcePath: string;
 		language: PlaygroundLanguage;
 		workspace: string;
@@ -886,14 +886,13 @@
 	let breakpointLogMessage = $state('');
 	function editDebugBreakpoint(line: number) {
 		const spec = debug.structuredBreakpoints.find((entry) => entry.line === line);
-		editingBreakpoint = spec
-			? {
-					line,
-					sourcePath: debug.sourcePath,
-					language,
-					workspace: currentWorkspaceStorageKey
-				}
-			: null;
+		debugInteractionError = '';
+		editingBreakpoint = {
+			line: spec?.line,
+			sourcePath: debug.sourcePath,
+			language,
+			workspace: currentWorkspaceStorageKey
+		};
 		breakpointLine = line;
 		breakpointEnabled = spec?.enabled !== false;
 		breakpointCondition = spec?.condition ?? '';
@@ -915,7 +914,10 @@
 				debugInteractionError = 'Select a breakpoint in the current file before saving.';
 				return;
 			}
-			if (original && !specs.some((entry) => entry.line === original.line)) {
+			if (
+				original?.line !== undefined &&
+				!specs.some((entry) => entry.line === original.line)
+			) {
 				debugInteractionError =
 					'This breakpoint was removed. Select a breakpoint before saving.';
 				return;
@@ -940,7 +942,10 @@
 					: {}),
 				...(breakpointLogMessage.trim() ? { logMessage: breakpointLogMessage.trim() } : {})
 			});
-			if (await debug.setStructuredBreakpoints(next)) breakpointEditOpen = false;
+			if (await debug.setStructuredBreakpoints(next)) {
+				editingBreakpoint = null;
+				breakpointEditOpen = false;
+			}
 		} catch (error) {
 			debugInteractionError = error instanceof Error ? error.message : String(error);
 		}
@@ -3949,6 +3954,7 @@
 				bind:open={breakpointEditOpen}
 				ontoggle={(event) => {
 					if (!event.currentTarget.open) editingBreakpoint = null;
+					else if (!editingBreakpoint) editDebugBreakpoint(breakpointLine);
 				}}
 			>
 				<summary>Breakpoints</summary>
@@ -5719,13 +5725,13 @@
 												? 'The Bash WASIX package accepts stdin when the process starts. Enter it before Run; extra reads receive EOF.'
 												: language === 'DUCKDB'
 													? 'DuckDB reads this input from /dev/stdin. Enter it before Run.'
-													: language === 'POSTGRESQL'
-														? "PostgreSQL reads this input as the server file '/dev/blob' (COPY ... FROM '/dev/blob' or pg_read_file('/dev/blob')). Enter it before Run."
-														: language === 'CSHARP' ||
-															  language === 'FSHARP' ||
-															  language === 'VBNET'
-															? 'C#, F#, and VB.NET read all stdin when the program starts. Enter it before Run; extra reads receive EOF. Output appears when the program finishes.'
-															: 'SharedArrayBuffer is unavailable here, so terminal input cannot be sent while the program is running. Enter stdin before Run; extra reads receive EOF.'}
+												: language === 'POSTGRESQL'
+													? "PostgreSQL reads this input as the server file '/dev/blob' (COPY ... FROM '/dev/blob' or pg_read_file('/dev/blob')). Enter it before Run."
+													: language === 'CSHARP' ||
+														  language === 'FSHARP' ||
+														  language === 'VBNET'
+														? 'C#, F#, and VB.NET read all stdin when the program starts. Enter it before Run; extra reads receive EOF. Output appears when the program finishes.'
+														: 'SharedArrayBuffer is unavailable here, so terminal input cannot be sent while the program is running. Enter stdin before Run; extra reads receive EOF.'}
 								</span>
 							</div>
 							<textarea
