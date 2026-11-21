@@ -1244,6 +1244,14 @@ describe('workspace editor model lifetime', () => {
 				await focus();
 				await page.keyboard.press('Control+y');
 				expect(await value()).toBe('base1');
+
+				page.once('dialog', (dialog) => dialog.accept());
+				await page.getByRole('button', { name: 'Reset', exact: true }).click();
+				await page.locator('.file-tab.active[title="main.cpp"]').waitFor();
+				await select('PYTHON', 'base');
+				await focus();
+				await page.keyboard.press('Control+y');
+				expect(await value()).toBe('base2');
 			});
 		}
 	);
