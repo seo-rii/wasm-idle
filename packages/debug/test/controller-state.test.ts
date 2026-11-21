@@ -1011,6 +1011,17 @@ describe('shared structured breakpoint and stepping state', () => {
 		controller.setBreakpoints([]);
 		expect(controller.structuredBreakpoints).toEqual([]);
 	});
+	it('preserves disabled specifications through unrelated gutter toggles', async () => {
+		const controller = controllerWith({});
+		const disabled = { line: 2, enabled: false, condition: 'n == 7' };
+		await controller.setStructuredBreakpoints([disabled]);
+		controller.setBreakpoints([3], { preserveDisabled: true });
+		expect(controller.structuredBreakpoints).toEqual([disabled, { line: 3 }]);
+		controller.setBreakpoints([], { preserveDisabled: true });
+		expect(controller.structuredBreakpoints).toEqual([disabled]);
+		controller.setBreakpoints([2], { preserveDisabled: true });
+		expect(controller.structuredBreakpoints).toEqual([{ ...disabled, enabled: true }]);
+	});
 	it('restores a hit-count breakpoint after unconditional run-to-cursor on the same line', async () => {
 		const setSourceBreakpoints = vi.fn(async () => {});
 		const controller = controllerWith({ setSourceBreakpoints }, { syncBreakpointsWhile: true });

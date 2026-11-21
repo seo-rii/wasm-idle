@@ -3,7 +3,7 @@
 	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { MOONBIT_SERVICE_POLICY } from '$lib/playground/moonbitServicePolicy';
 	import { parseDebugInteger } from './debugInteger';
-	import { createProjectBreakpointSelection } from './workspaceBreakpoints';
+	import { createProjectBreakpointSelection, workspaceDebugPath } from './workspaceBreakpoints';
 	import Monaco from './Monaco.svelte';
 	import DebuggerLog from './DebuggerLog.svelte';
 	import Terminal, { type TerminalControl } from '@wasm-idle/terminal';
@@ -802,9 +802,7 @@
 	const compact = $derived(examplePaneWidth > 0 && examplePaneWidth <= 760);
 	const activeFile = $derived(files.find((file) => file.path === activePath) ?? files[0]);
 	const activeFileIsBinary = $derived(!!activeFile && isBinaryWorkspaceFile(activeFile));
-	const activeDebugSourcePath = $derived(
-		`/workspace/${normalizePath(activePath) || defaultPathForLanguage()}`
-	);
+	const activeDebugSourcePath = $derived(`/workspace/${activePath || defaultPathForLanguage()}`);
 	const editorFilePaths = $derived(files.map((file) => file.path));
 	const sortedFiles = $derived([...files].sort((a, b) => a.path.localeCompare(b.path)));
 	const activeLines = $derived(activeFile ? activeFile.content.split(/\r\n|\r|\n/).length : 0);
@@ -856,6 +854,12 @@
 	};
 	let debugInteractionError = $state('');
 	let breakpointEditOpen = $state(false);
+	let editingBreakpoint = $state<{
+		line: number;
+		sourcePath: string;
+		language: PlaygroundLanguage;
+		workspace: string;
+	} | null>(null);
 	let breakpointLine = $state(1);
 	let breakpointEnabled = $state(true);
 	let breakpointCondition = $state('');
@@ -863,6 +867,14 @@
 	let breakpointLogMessage = $state('');
 	function editDebugBreakpoint(line: number) {
 		const spec = debug.structuredBreakpoints.find((entry) => entry.line === line);
+		editingBreakpoint = spec
+			? {
+					line,
+					sourcePath: debug.sourcePath,
+					language,
+					workspace: currentWorkspaceStorageKey
+				}
+			: null;
 		breakpointLine = line;
 		breakpointEnabled = spec?.enabled !== false;
 		breakpointCondition = spec?.condition ?? '';
@@ -873,8 +885,31 @@
 	async function saveDebugBreakpoint() {
 		debugInteractionError = '';
 		try {
-			const next = debug.structuredBreakpoints.filter(
-				(entry) => entry.line !== breakpointLine
+			const original = editingBreakpoint;
+			const specs = debug.structuredBreakpoints;
+			if (
+				original &&
+				(original.sourcePath !== debug.sourcePath ||
+					original.language !== language ||
+					original.workspace !== currentWorkspaceStorageKey)
+			) {
+				debugInteractionError = 'Select a breakpoint in the current file before saving.';
+				return;
+			}
+			if (original && !specs.some((entry) => entry.line === original.line)) {
+				debugInteractionError = 'This breakpoint was removed. Select a breakpoint before saving.';
+				return;
+			}
+			if (
+				original &&
+				original.line !== breakpointLine &&
+				specs.some((entry) => entry.line === breakpointLine)
+			) {
+				debugInteractionError = 'There is already a breakpoint on that line.';
+				return;
+			}
+			const next = specs.filter(
+				(entry) => entry.line !== breakpointLine && entry.line !== original?.line
 			);
 			next.push({
 				line: breakpointLine,
@@ -2727,8 +2762,8 @@
 				label: 'Debugger paused'
 			});
 			const sourcePath = event.sourcePath || event.callStack[0]?.sourcePath;
-			const workspacePath = normalizePath(sourcePath?.replace(/^\/workspace\//u, '') || '');
-			if (workspacePath && files.some((file) => file.path === workspacePath)) {
+			const workspacePath = workspaceDebugPath(sourcePath, files);
+			if (workspacePath) {
 				debug.setSourcePath(`/workspace/${workspacePath}`);
 				selectFile(workspacePath);
 			}
@@ -2740,8 +2775,8 @@
 		dataBreakpointRequestVersion += 1;
 		invalidateMemoryInspector();
 		if (!frame.id || !(await debug.selectFrame(frame.id))) return;
-		const workspacePath = normalizePath(frame.sourcePath?.replace(/^\/workspace\//u, '') || '');
-		if (!workspacePath || !files.some((file) => file.path === workspacePath)) return;
+		const workspacePath = workspaceDebugPath(frame.sourcePath, files);
+		if (!workspacePath) return;
 		selectFile(workspacePath);
 		debug.setSourcePath(`/workspace/${workspacePath}`);
 	}
@@ -3243,7 +3278,7 @@
 						breakpoints: [...debug.effectiveBreakpoints],
 						sourceBreakpoints: debug.sourceBreakpoints.filter(({ sourcePath }) =>
 							runWorkspaceFiles.some(
-								(file) => `/workspace/${normalizePath(file.path)}` === sourcePath
+								(file) => `/workspace/${file.path}` === sourcePath
 							)
 						),
 						activePath: runActivePath,
@@ -4341,7 +4376,13 @@
 						{/if}
 					</section>
 					<section class="debug-panel">
-						<details class="debug-feature-panel" bind:open={breakpointEditOpen}>
+						<details
+							class="debug-feature-panel"
+							bind:open={breakpointEditOpen}
+							ontoggle={(event) => {
+								if (!event.currentTarget.open) editingBreakpoint = null;
+							}}
+						>
 							<summary>Breakpoints</summary>
 							<ul>
 								{#each debug.structuredBreakpoints as spec (spec.line)}<li>
@@ -5459,7 +5500,8 @@
 								!debug.sourceRevisionStale &&
 								debug.selectedHistoryId === null}
 							debugStopKey={`${debug.history.at(-1)?.id ?? 0}:${debug.frameId ?? 0}`}
-							onBreakpointsChange={debug.setBreakpoints}
+							onBreakpointsChange={(lines) =>
+								debug.setBreakpoints(lines, { preserveDisabled: true })}
 						/>
 					{/key}
 				</div>

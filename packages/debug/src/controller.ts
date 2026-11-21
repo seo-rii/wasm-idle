@@ -1323,13 +1323,19 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		}
 	}
 
-	function setBreakpoints(lines: number[]) {
+	function setBreakpoints(lines: number[], options: { preserveDisabled?: boolean } = {}) {
 		const sourcePath = get(sourcePathStore);
 		const previous = get(structuredBreakpointsStore).get(sourcePath);
 		const nextSpecifications = lines.map((line) => {
 			const spec = previous?.find((entry) => entry.line === line);
 			return { ...(spec ?? { line }), ...(spec?.enabled === false ? { enabled: true } : {}) };
 		});
+		if (options.preserveDisabled && previous) {
+			nextSpecifications.push(
+				...previous.filter((spec) => spec.enabled === false && !lines.includes(spec.line))
+			);
+			nextSpecifications.sort((left, right) => left.line - right.line);
+		}
 		if (get(pausedStore))
 			assertDebugBreakpointSupport(nextSpecifications, get(capabilitiesStore));
 		structuredBreakpointsStore.update((current) =>

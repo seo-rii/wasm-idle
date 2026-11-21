@@ -1,6 +1,6 @@
 import { createDebugSessionController } from '@wasm-idle/debug/controller';
 import { normalizeWorkspaceFilePath, workspaceFilePath } from './workspacePath';
-import { createProjectBreakpointSelection } from './workspaceBreakpoints';
+import { createProjectBreakpointSelection, workspaceDebugPath } from './workspaceBreakpoints';
 import layoutSource from './+layout.svelte?raw';
 import source from './+page.svelte?raw';
 import { createApplicationRuntimeAssets } from '$lib/playground/applicationAssets';
@@ -28,6 +28,63 @@ import {
 	playgroundLanguages,
 	type PlaygroundLanguage
 } from './language-registry';
+
+it('keeps literal POSIX debug filenames distinct from nested project paths', () => {
+	const literal = { path: 'names\\entry.cpp' };
+	const nested = { path: 'names/entry.cpp' };
+	const source = '/workspace/' + literal.path;
+	expect(workspaceDebugPath(source, [nested, literal])).toBe(literal.path);
+	expect(workspaceDebugPath('/workspace/' + nested.path, [literal, nested])).toBe(nested.path);
+	expect(workspaceDebugPath(source, [nested])).toBe(nested.path);
+	expect(workspaceDebugPath('/external/file.cpp', [literal, nested])).toBeUndefined();
+});
+
+it('moves an edited breakpoint and keeps an occupied destination intact', async () => {
+	const debug = createDebugSessionController({ sourcePath: '/workspace/main.py' });
+	await debug.setStructuredBreakpoints([
+		{ line: 3, enabled: false, condition: 'n > 1' },
+		{ line: 8 }
+	]);
+	const state = {
+		debug,
+		language: 'PYTHON',
+		currentWorkspaceStorageKey: 'demo',
+		editingBreakpoint: null,
+		breakpointEditOpen: false,
+		breakpointLine: 1,
+		breakpointEnabled: true,
+		breakpointCondition: '',
+		breakpointHitCondition: '',
+		breakpointLogMessage: '',
+		debugInteractionError: ''
+	};
+	const start = source.indexOf('function editDebugBreakpoint(');
+	const end = source.indexOf('let memoryReference', start);
+	const ops = runInNewContext(
+		stripTypeScriptTypes(source.slice(start, end)) +
+			'\n({ editDebugBreakpoint, saveDebugBreakpoint })',
+		state
+	);
+	ops.editDebugBreakpoint(3);
+	state.breakpointLine = 8;
+	await ops.saveDebugBreakpoint();
+	expect(state.debugInteractionError).toContain('already');
+	expect(debug.structuredBreakpoints.map((spec) => spec.line)).toEqual([3, 8]);
+	state.breakpointLine = 4;
+	await ops.saveDebugBreakpoint();
+	expect([...debug.structuredBreakpoints].sort((left, right) => left.line - right.line)).toEqual([
+		{ line: 4, enabled: false, condition: 'n > 1' },
+		{ line: 8 }
+	]);
+	ops.editDebugBreakpoint(4);
+	// Two gutter clicks enable the disabled breakpoint and then remove it while the form is open.
+	debug.setBreakpoints([4, 8], { preserveDisabled: true });
+	debug.setBreakpoints([8], { preserveDisabled: true });
+	state.breakpointLine = 8;
+	await ops.saveDebugBreakpoint();
+	expect(debug.structuredBreakpoints).toEqual([{ line: 8 }]);
+	expect(state.debugInteractionError).toContain('removed');
+});
 
 it('moves structured breakpoints on rename and clears them on deletion and filename reuse', async () => {
 	const debug = createDebugSessionController({ sourcePath: '/workspace/main.py' });
@@ -1386,7 +1443,7 @@ describe('example route debug actions', () => {
 			'async function selectDebugFrame(frame: DebugFrame) {\n\t\tdataBreakpointRequestVersion += 1;'
 		);
 		expect(source).toMatch(
-			/async function selectDebugFrame\(frame: DebugFrame\) \{\s+dataBreakpointRequestVersion \+= 1;\s+invalidateMemoryInspector\(\);\s+if \(!frame\.id \|\| !\(await debug\.selectFrame\(frame\.id\)\)\) return;\s+const workspacePath = normalizePath\(\s*frame\.sourcePath\?\.replace\(\/\^\\\/workspace\\\/\/u, ''\) \|\| ''\s*\);\s+if \(!workspacePath \|\| !files\.some\(\(file\) => file\.path === workspacePath\)\) return;\s+selectFile\(workspacePath\);\s+debug\.setSourcePath\(`\/workspace\/\$\{workspacePath\}`\);\s+\}/s
+			/async function selectDebugFrame\(frame: DebugFrame\) \{\s+dataBreakpointRequestVersion \+= 1;\s+invalidateMemoryInspector\(\);\s+if \(!frame\.id \|\| !\(await debug\.selectFrame\(frame\.id\)\)\) return;\s+const workspacePath = workspaceDebugPath\(frame\.sourcePath, files\);\s+if \(!workspacePath\) return;\s+selectFile\(workspacePath\);\s+debug\.setSourcePath\(`\/workspace\/\$\{workspacePath\}`\);\s+\}/s
 		);
 		expect(source).toMatch(/onclick=\{\(\) => selectDebugFrame\(frame\)\}/);
 	});
@@ -2404,7 +2461,7 @@ describe('example route debug actions', () => {
 		expect(source).not.toContain('role="slider"');
 		expect(source).toMatch(/breakpoints=\{debug\.effectiveBreakpoints\}/);
 		expect(source).toMatch(/onCursorLineChange=\{debug\.setCursorLine\}/);
-		expect(source).toMatch(/onBreakpointsChange=\{debug\.setBreakpoints\}/);
+		expect(source).toContain('debug.setBreakpoints(lines, { preserveDisabled: true })');
 		expect(source).toMatch(/onRunToCursor=\{runToCursorWhileDataBreakpointIdle\}/);
 		expect(layoutSource).toMatch(
 			/:global\(html\),\s+:global\(body\) \{\s+margin: 0;\s+min-height: 100%;\s+\}/s
