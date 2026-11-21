@@ -128,6 +128,8 @@ export function createTypeScriptWorkerService(
 	let compilerOptions: ts.CompilerOptions;
 	let libFiles: Record<string, string> = {};
 	let extraLibs: Record<string, string> = {};
+	const versions = new WeakMap<LspDocument, number>();
+	let nextVersion = 0;
 
 	const documentForFileName = (fileName: string) => {
 		const normalized = normalizePath(fileName);
@@ -152,8 +154,17 @@ export function createTypeScriptWorkerService(
 				...Object.keys(extraLibs).map(normalizePath)
 			])
 		],
-		getScriptVersion: (fileName) =>
-			String(documentForFileName(fileName)?.version ?? (fileName in extraLibs ? 1 : 0)),
+		getScriptVersion(fileName) {
+			const document = documentForFileName(fileName);
+			if (!document) return 'static';
+			// LSP document versions can restart at one after a close and reopen.
+			let revision = versions.get(document);
+			if (revision === undefined) {
+				revision = ++nextVersion;
+				versions.set(document, revision);
+			}
+			return revision + ':' + document.version;
+		},
 		getScriptSnapshot(fileName) {
 			const source = sourceTextForFileName(fileName);
 			return source === undefined ? undefined : ts.ScriptSnapshot.fromString(source);
@@ -203,6 +214,7 @@ export function createTypeScriptWorkerService(
 			defaultLanguage === 'typescript'
 				? 'wasm-idle-typescript-lsp'
 				: 'wasm-idle-javascript-lsp',
+		workspaceDiagnostics: true,
 		version: ts.version,
 		capabilities: {
 			completionProvider: {

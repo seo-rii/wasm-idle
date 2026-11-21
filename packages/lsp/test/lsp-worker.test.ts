@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { startWorkerLanguageServer, type WorkerLanguageService } from '../src/index.js';
+import {
+	createTypeScriptWorkerService,
+	startWorkerLanguageServer,
+	type WorkerLanguageService
+} from '../src/index.js';
 
 class FakeWorkerScope {
 	readonly messages: unknown[] = [];
@@ -22,6 +26,104 @@ class FakeWorkerScope {
 }
 
 describe('startWorkerLanguageServer', () => {
+	it('publishes compiler results at the owning URI and clears removed dependency errors', async () => {
+		const scope = new FakeWorkerScope();
+		const entry = 'file:///workspace/main.ts';
+		const helper = 'file:///workspace/a%20b.ts';
+		const error = {
+			range: { start: { line: 3, character: 4 }, end: { line: 3, character: 5 } },
+			message: 'Missing symbol'
+		};
+		const service = {
+			name: 'project compiler',
+			diagnosticsByUri: vi.fn((document: { text: string }) =>
+				document.text === 'invalid'
+					? new Map([[helper, [error]]])
+					: new Map<string, (typeof error)[]>()
+			)
+		};
+		startWorkerLanguageServer(service, scope);
+		const publish = (uri: string, diagnostics: unknown[]) =>
+			expect(scope.messages).toContainEqual({
+				jsonrpc: '2.0',
+				method: 'textDocument/publishDiagnostics',
+				params: { uri, diagnostics }
+			});
+		scope.dispatch({
+			jsonrpc: '2.0',
+			method: 'textDocument/didOpen',
+			params: { textDocument: { uri: entry, version: 1, text: 'invalid' } }
+		});
+		await vi.waitFor(() => publish(helper, [error]));
+		publish(entry, []);
+		scope.messages.length = 0;
+		scope.dispatch({
+			jsonrpc: '2.0',
+			method: 'textDocument/didChange',
+			params: {
+				textDocument: { uri: entry, version: 2 },
+				contentChanges: [{ text: 'valid' }]
+			}
+		});
+		await vi.waitFor(() => publish(helper, []));
+		scope.dispatch({ jsonrpc: '2.0', method: 'exit' });
+	});
+
+	it('updates TypeScript importers after dependency edits, closes and version-one reopens', async () => {
+		const scope = new FakeWorkerScope();
+		startWorkerLanguageServer(createTypeScriptWorkerService('typescript'), scope);
+		scope.dispatch({
+			type: 'init',
+			options: { libFiles: {}, compilerOptions: { noLib: true } }
+		});
+		await vi.waitFor(() => expect(scope.messages).toContainEqual({ type: 'ready' }));
+		const main = 'file:///workspace/main.ts',
+			helper = 'file:///workspace/value.ts';
+		const open = (uri: string, text: string) =>
+			scope.dispatch({
+				jsonrpc: '2.0',
+				method: 'textDocument/didOpen',
+				params: { textDocument: { uri, languageId: 'typescript', version: 1, text } }
+			});
+		const has = (uri: string, code?: number) =>
+			expect(scope.messages).toContainEqual(
+				expect.objectContaining({
+					method: 'textDocument/publishDiagnostics',
+					params: {
+						uri,
+						diagnostics: code
+							? expect.arrayContaining([expect.objectContaining({ code })])
+							: []
+					}
+				})
+			);
+		open(helper, 'export const value = 42;');
+		open(main, 'import { value } from "./value"; export const n: number = value;');
+		await vi.waitFor(() => has(main), { timeout: 4000 });
+		scope.messages.length = 0;
+		scope.dispatch({
+			jsonrpc: '2.0',
+			method: 'textDocument/didChange',
+			params: {
+				textDocument: { uri: helper, version: 2 },
+				contentChanges: [{ text: 'export const value = "changed";' }]
+			}
+		});
+		await vi.waitFor(() => has(main, 2322), { timeout: 4000 });
+		scope.messages.length = 0;
+		scope.dispatch({
+			jsonrpc: '2.0',
+			method: 'textDocument/didClose',
+			params: { textDocument: { uri: helper } }
+		});
+		await vi.waitFor(() => has(main, 2307), { timeout: 4000 });
+		scope.messages.length = 0;
+		open(helper, 'export const value: number = "reopened";');
+		await vi.waitFor(() => has(helper, 2322), { timeout: 4000 });
+		await vi.waitFor(() => has(main), { timeout: 4000 });
+		scope.dispatch({ jsonrpc: '2.0', method: 'exit' });
+	});
+
 	it('waits for service disposal once across shutdown and exit', async () => {
 		const scope = new FakeWorkerScope();
 		let release!: () => void;

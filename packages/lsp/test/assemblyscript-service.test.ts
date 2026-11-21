@@ -7,6 +7,33 @@ import {
 } from '../src/index.js';
 
 describe('createAssemblyScriptWorkerService', () => {
+	it('keeps diagnostics in an imported module on its own path', async () => {
+		const service = createAssemblyScriptWorkerService(async () => ({
+			main: (_args, io) => {
+				io.stderr?.write(
+					"ERROR TS2304: Cannot find name 'missing'.\n └─ in util/with (space).ts(4,10)\n"
+				);
+				return { error: new Error('compile failed') };
+			}
+		}));
+		const document = {
+			uri: 'file:///workspace/main.ts',
+			languageId: 'assemblyscript',
+			version: 1,
+			text: 'export function run(): void {}'
+		};
+		const ctx = {
+			documents: new Map([[document.uri, document]]),
+			publishDiagnostics: vi.fn(),
+			reportProgress: vi.fn()
+		};
+		await service.initialize?.({}, ctx);
+		const reports = await service.diagnosticsByUri?.(document, ctx);
+		expect([...reports!.keys()]).toEqual(['file:///workspace/util/with%20(space).ts']);
+		expect([...reports!.values()][0][0].range.start).toEqual({ line: 3, character: 9 });
+		expect(await service.diagnostics?.(document, ctx)).toEqual([]);
+	});
+
 	it('loads the compiler through the configured static runtime module', async () => {
 		const stateKey = '__wasmIdleAssemblyScriptLspRuntimeTest';
 		const state = {
