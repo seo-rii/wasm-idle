@@ -64,6 +64,43 @@ describe('createWatWorkerService', () => {
 		expect(diagnostic.range.start).toEqual({ line: 0, character: invalid.indexOf('bogus') });
 	});
 
+	it('formats commented modules without changing comments, literals, or executable behavior', async () => {
+		const block = '(; outer "quoted"\n(; nested note ;) end ;)';
+		const text = [
+			';; Reviewer  notes',
+			'(module     ' + block + '   (memory (export "mem") 1) ;; trailing  note',
+			'(data(i32.const 0) ";; (; \\" ;)")    (func(export "answer") (result i32) i32.const 42))'
+		].join('\n');
+		const service = await fixture(text);
+		const formatted = await service.format();
+		expect(formatted).not.toBe(text);
+		expect(formatted).toContain(';; Reviewer  notes\n(module ' + block + '\n  (memory');
+		expect(formatted).toContain('1) ;; trailing  note\n  (data');
+		expect(formatted).toContain('";; (; \\" ;)"');
+		expect(formatted).toContain('\n  (func (export "answer")');
+		expect(await service.format(formatted)).toBe(formatted);
+		expect(await service.format(text, false)).toContain('\n\t(data');
+		expect(await service.format(text.replaceAll('\n', '\r'))).toContain(
+			'1) ;; trailing  note\n  (data'
+		);
+		const exports = await instantiate(formatted);
+		expect((exports.answer as () => number)()).toBe(42);
+		const value = ';; (; " ;)';
+		expect(
+			new TextDecoder().decode(
+				new Uint8Array((exports.mem as WebAssembly.Memory).buffer, 0, value.length)
+			)
+		).toBe(value);
+	});
+
+	it('keeps using the WABT printer when comment delimiters occur only in strings', async () => {
+		const text = '(module (func (export ";; (; ;)")))';
+		const service = await fixture(text);
+		const formatted = await service.format();
+		expect(formatted).toContain('(export ";; (; ;)" (func 0))');
+		expect(await service.format(formatted)).toBe(formatted);
+	});
+
 	it('uses wabt for diagnostics, formatting, completion, and hover', async () => {
 		const context: LspDocumentContext = {
 			documents: new Map(),

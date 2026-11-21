@@ -172,6 +172,66 @@ function parseWatDiagnostics(message: string, document: LspDocument): LspDiagnos
 		: [];
 }
 
+// WABT validates the document, but its semantic printer omits source comments.
+// Preserve literal tokens and change only the whitespace separating them.
+function formatCommentedWat(source: string, options: Record<string, unknown>): string | undefined {
+	if (!source.includes(';;') && !source.includes('(;')) return;
+	const tokens = /[ \t\r\n]+|;;[^\r\n]*|\(;|[()]|"(?:\\[\s\S]|[^"\\])*"|[^ \t\r\n()";]+|;/guy;
+	const blockDelimiters = /\(;|;\)/gu;
+	const tabSize =
+		typeof options.tabSize === 'number' &&
+		Number.isSafeInteger(options.tabSize) &&
+		options.tabSize > 0
+			? options.tabSize
+			: 2;
+	const indent = options.insertSpaces === false ? '\t' : ' '.repeat(tabSize);
+	const parts: string[] = [];
+	let depth = 0,
+		gap = '',
+		previous = '',
+		hasComment = false;
+	for (let token = tokens.exec(source); token; token = tokens.exec(source)) {
+		let value = token[0];
+		if (/^[ \t\r\n]/u.test(value)) {
+			gap = value;
+			continue;
+		}
+		if (value === '(;') {
+			blockDelimiters.lastIndex = tokens.lastIndex;
+			let nesting = 1;
+			while (nesting) {
+				const delimiter = blockDelimiters.exec(source);
+				if (!delimiter) return;
+				nesting += delimiter[0] === '(;' ? 1 : -1;
+			}
+			tokens.lastIndex = blockDelimiters.lastIndex;
+			value = source.slice(token.index, tokens.lastIndex);
+			hasComment = true;
+		} else if (value.startsWith(';;')) {
+			hasComment = true;
+		}
+
+		if (value === ')') depth--;
+		if (previous) {
+			const newlines = gap.match(/\r\n|[\r\n]/gu)?.length ?? 0;
+			if (newlines || (depth === 1 && value === '(')) {
+				parts.push(newlines > 1 ? '\n\n' : '\n', indent.repeat(depth));
+			} else if (
+				previous !== '(' &&
+				value !== ')' &&
+				(gap || value === '(' || previous === ')')
+			) {
+				parts.push(' ');
+			}
+		}
+		parts.push(value);
+		if (value === '(') depth++;
+		previous = value;
+		gap = '';
+	}
+	return hasComment ? parts.join('') + '\n' : undefined;
+}
+
 export function createWatWorkerService(): WorkerLanguageService {
 	let features: Record<string, boolean> | undefined;
 	let wabt: Awaited<ReturnType<typeof wabtFactory>>;
@@ -232,16 +292,18 @@ export function createWatWorkerService(): WorkerLanguageService {
 				}
 			};
 		},
-		formatting(document) {
+		formatting(document, options) {
 			let module: any = null;
 			try {
 				module = parse(document);
 				module.resolveNames();
 				module.validate();
-				const formatted = module.toText({
+				const canonical = module.toText({
 					foldExprs: false,
 					inlineExport: false
 				});
+				if (canonical === document.text) return [];
+				const formatted = formatCommentedWat(document.text, options) ?? canonical;
 				return formatted === document.text
 					? []
 					: [{ range: fullDocumentRange(document.text), newText: formatted }];
