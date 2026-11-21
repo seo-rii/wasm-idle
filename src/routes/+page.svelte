@@ -875,7 +875,7 @@
 	let debugInteractionError = $state('');
 	let breakpointEditOpen = $state(false);
 	let editingBreakpoint = $state<{
-		line: number;
+		line?: number;
 		sourcePath: string;
 		language: PlaygroundLanguage;
 		workspace: string;
@@ -887,14 +887,13 @@
 	let breakpointLogMessage = $state('');
 	function editDebugBreakpoint(line: number) {
 		const spec = debug.structuredBreakpoints.find((entry) => entry.line === line);
-		editingBreakpoint = spec
-			? {
-					line,
-					sourcePath: debug.sourcePath,
-					language,
-					workspace: currentWorkspaceStorageKey
-				}
-			: null;
+		debugInteractionError = '';
+		editingBreakpoint = {
+			line: spec?.line,
+			sourcePath: debug.sourcePath,
+			language,
+			workspace: currentWorkspaceStorageKey
+		};
 		breakpointLine = line;
 		breakpointEnabled = spec?.enabled !== false;
 		breakpointCondition = spec?.condition ?? '';
@@ -916,8 +915,12 @@
 				debugInteractionError = 'Select a breakpoint in the current file before saving.';
 				return;
 			}
-			if (original && !specs.some((entry) => entry.line === original.line)) {
-				debugInteractionError = 'This breakpoint was removed. Select a breakpoint before saving.';
+			if (
+				original?.line !== undefined &&
+				!specs.some((entry) => entry.line === original.line)
+			) {
+				debugInteractionError =
+					'This breakpoint was removed. Select a breakpoint before saving.';
 				return;
 			}
 			if (
@@ -940,7 +943,10 @@
 					: {}),
 				...(breakpointLogMessage.trim() ? { logMessage: breakpointLogMessage.trim() } : {})
 			});
-			if (await debug.setStructuredBreakpoints(next)) breakpointEditOpen = false;
+			if (await debug.setStructuredBreakpoints(next)) {
+				editingBreakpoint = null;
+				breakpointEditOpen = false;
+			}
 		} catch (error) {
 			debugInteractionError = error instanceof Error ? error.message : String(error);
 		}
@@ -3930,6 +3936,84 @@
 			{/each}
 		{/snippet}
 
+		{#snippet breakpointEditor()}
+			<details
+				class="debug-feature-panel"
+				bind:open={breakpointEditOpen}
+				ontoggle={(event) => {
+					if (!event.currentTarget.open) editingBreakpoint = null;
+					else if (!editingBreakpoint) editDebugBreakpoint(breakpointLine);
+				}}
+			>
+				<summary>Breakpoints</summary>
+				<ul>
+					{#each debug.structuredBreakpoints as spec (spec.line)}<li>
+							<button onclick={() => editDebugBreakpoint(spec.line)}
+								>Line {spec.line}{spec.enabled === false
+									? ' (disabled)'
+									: ''}{spec.hitCondition
+									? ` · hit ${spec.hitCondition}`
+									: ''}{spec.condition
+									? ` · ${spec.condition}`
+									: ''}{spec.logMessage ? ' · log' : ''}</button
+							>
+						</li>{/each}
+				</ul>
+				<form
+					class="debug-breakpoint-editor"
+					onsubmit={(event) => {
+						event.preventDefault();
+						void saveDebugBreakpoint();
+					}}
+				>
+					<label
+						>Line<input
+							aria-label="Breakpoint line"
+							type="number"
+							min="1"
+							required
+							value={breakpointLine}
+							oninput={(event) =>
+								(breakpointLine = Number(event.currentTarget.value))}
+						/></label
+					>
+					<label><input type="checkbox" bind:checked={breakpointEnabled} /> Enabled</label
+					>
+					{#if debug.capabilities.hitConditionalBreakpoints}<label
+							>Hit count<input
+								aria-label="Breakpoint hit count"
+								bind:value={breakpointHitCondition}
+								maxlength={4096}
+								placeholder="100"
+							/></label
+						>{/if}
+					{#if debug.capabilities.conditionalBreakpoints}<label
+							>Condition<input
+								aria-label="Breakpoint condition"
+								bind:value={breakpointCondition}
+								maxlength={4096}
+							/></label
+						>{/if}
+					{#if debug.capabilities.logPoints}<label
+							>Log message<input
+								aria-label="Breakpoint log message"
+								bind:value={breakpointLogMessage}
+								maxlength={4096}
+							/></label
+						>{/if}
+					<button
+						type="submit"
+						disabled={!Number.isSafeInteger(breakpointLine) ||
+							breakpointLine < 1 ||
+							dataBreakpointLoading}>Save breakpoint</button
+					>
+				</form>
+				{#if debug.breakpointError}<p role="alert">
+						{debug.breakpointError}
+					</p>{/if}
+			</details>
+		{/snippet}
+
 		{#if debugLanguage && (debug.active || debug.history.length > 0)}
 			<section
 				class={[
@@ -4392,81 +4476,7 @@
 						{/if}
 					</section>
 					<section class="debug-panel">
-						<details
-							class="debug-feature-panel"
-							bind:open={breakpointEditOpen}
-							ontoggle={(event) => {
-								if (!event.currentTarget.open) editingBreakpoint = null;
-							}}
-						>
-							<summary>Breakpoints</summary>
-							<ul>
-								{#each debug.structuredBreakpoints as spec (spec.line)}<li>
-										<button onclick={() => editDebugBreakpoint(spec.line)}
-											>Line {spec.line}{spec.enabled === false
-												? ' (disabled)'
-												: ''}{spec.hitCondition
-												? ` · hit ${spec.hitCondition}`
-												: ''}{spec.condition
-												? ` · ${spec.condition}`
-												: ''}{spec.logMessage ? ' · log' : ''}</button
-										>
-									</li>{/each}
-							</ul>
-							<form
-								class="debug-breakpoint-editor"
-								onsubmit={(event) => {
-									event.preventDefault();
-									void saveDebugBreakpoint();
-								}}
-							>
-								<label
-									>Line<input
-										aria-label="Breakpoint line"
-										type="number"
-										min="1"
-										required
-										value={breakpointLine}
-										oninput={(event) =>
-											(breakpointLine = Number(event.currentTarget.value))}
-									/></label
-								>
-								<label
-									><input type="checkbox" bind:checked={breakpointEnabled} /> Enabled</label
-								>
-								{#if debug.capabilities.hitConditionalBreakpoints}<label
-										>Hit count<input
-											aria-label="Breakpoint hit count"
-											bind:value={breakpointHitCondition}
-											maxlength={4096}
-											placeholder="100"
-										/></label
-									>{/if}
-								{#if debug.capabilities.conditionalBreakpoints}<label
-										>Condition<input
-											aria-label="Breakpoint condition"
-											bind:value={breakpointCondition}
-											maxlength={4096}
-										/></label
-									>{/if}
-								{#if debug.capabilities.logPoints}<label
-										>Log message<input
-											aria-label="Breakpoint log message"
-											bind:value={breakpointLogMessage}
-											maxlength={4096}
-										/></label
-									>{/if}
-								<button
-									type="submit"
-									disabled={!Number.isSafeInteger(breakpointLine) ||
-										breakpointLine < 1 ||
-										dataBreakpointLoading}>Save breakpoint</button
-								>
-							</form>
-							{#if debug.breakpointError}<p role="alert">
-									{debug.breakpointError}
-								</p>{/if}
-						</details>
+						{@render breakpointEditor()}
 						{#if debug.capabilities.skipLibraryCode}<label class="debug-feature-panel"
 								><input
 									type="checkbox"
@@ -4718,6 +4728,11 @@
 						</section>
 					{/if}
 				</div>
+			</section>
+		{:else if debugLanguage && breakpointEditOpen}
+			<section class="debug-panel">
+				{@render breakpointEditor()}
+				{#if debugInteractionError}<p role="alert">{debugInteractionError}</p>{/if}
 			</section>
 		{/if}
 		<DebuggerLog
@@ -5511,7 +5526,7 @@
 							onAddWatch={(expression) => {
 								debug.addWatchExpression(expression);
 							}}
-							onEditBreakpoint={editDebugBreakpoint}
+							onEditBreakpoint={debugLanguage ? editDebugBreakpoint : undefined}
 							{debugHoverOptions}
 							debugHoverEnabled={debug.paused &&
 								!debug.sourceRevisionStale &&

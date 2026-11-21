@@ -85,6 +85,19 @@ it('moves an edited breakpoint and keeps an occupied destination intact', async 
 	await ops.saveDebugBreakpoint();
 	expect(debug.structuredBreakpoints).toEqual([{ line: 8 }]);
 	expect(state.debugInteractionError).toContain('removed');
+
+	ops.editDebugBreakpoint(6);
+	debug.setSourcePath('/workspace/helper.py');
+	await ops.saveDebugBreakpoint();
+	expect(state.debugInteractionError).toContain('current file');
+	expect(debug.structuredBreakpoints).toEqual([]);
+	debug.setSourcePath('/workspace/main.py');
+	state.currentWorkspaceStorageKey = 'other-project';
+	await ops.saveDebugBreakpoint();
+	expect(state.debugInteractionError).toContain('current file');
+	state.currentWorkspaceStorageKey = 'demo';
+	await ops.saveDebugBreakpoint();
+	expect(debug.structuredBreakpoints.map((entry) => entry.line)).toEqual([8, 6]);
 });
 
 it('moves structured breakpoints on rename and clears them on deletion and filename reuse', async () => {
@@ -2369,6 +2382,12 @@ describe('example route debug actions', () => {
 	});
 
 	it('renders retained watch subtrees in history without requesting live children', () => {
+		expect(source).toMatch(
+			/\{:else if debugLanguage && breakpointEditOpen\}\s*<section class="debug-panel">\s*\{@render breakpointEditor\(\)\}/u
+		);
+		expect(source).toContain(
+			'onEditBreakpoint={debugLanguage ? editDebugBreakpoint : undefined}'
+		);
 		const historyStart = source.indexOf('<summary>Recent stops (');
 		const historyPanel = source.slice(historyStart, source.indexOf('</details>', historyStart));
 		const watchMarkup = historyPanel.match(
