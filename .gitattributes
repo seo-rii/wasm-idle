@@ -1,2 +1,3 @@
 static/wasm-php/runtime.mjs -whitespace
 static/wasm-tcl/tcl/*.bin -text -whitespace
+scripts/duckdb-backport/apache-arrow-44715.patch -text -whitespace
