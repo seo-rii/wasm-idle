@@ -739,14 +739,22 @@
 	const sqlLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'sql');
 	const sqlLspWorkspaceFiles = $derived(
 		sqlLspEnabled || (lspEnabled && language === 'DUCKDB')
-			? files.filter((file) =>
-					file.path !== activePath &&
-					(language === 'DUCKDB' || (!isBinaryWorkspaceFile(file) && /\.sql$/iu.test(file.path)))
-				).map((file) =>
-					isBinaryWorkspaceFile(file)
-						? { path: file.path, content: file.content.slice(file.content.indexOf(',') + 1), encoding: 'base64' as const }
-						: { path: file.path, content: file.content }
-				)
+			? files
+					.filter(
+						(file) =>
+							file.path !== activePath &&
+							(language === 'DUCKDB' ||
+								(!isBinaryWorkspaceFile(file) && /\.sql$/iu.test(file.path)))
+					)
+					.map((file) =>
+						isBinaryWorkspaceFile(file)
+							? {
+									path: file.path,
+									content: file.content.slice(file.content.indexOf(',') + 1),
+									encoding: 'base64' as const
+								}
+							: { path: file.path, content: file.content }
+					)
 			: []
 	);
 	const sqlLspModuleUrl = $derived(sqlLspEnabled ? runtimeAssets.sqlite?.moduleUrl : undefined);

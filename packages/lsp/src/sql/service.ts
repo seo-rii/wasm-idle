@@ -206,6 +206,30 @@ const diagnosticFor = (text: string, diagnostic: SqlEngineDiagnostic): LspDiagno
 	};
 };
 
+function duckDbDiagnostic(error: unknown, text: string): SqlEngineDiagnostic {
+	const message = error instanceof Error ? error.message : String(error);
+	// DuckDB-Wasm sometimes prefixes its structured error with "Parser Error: ".
+	const start = message.indexOf('{');
+	if (start < 0) return { message };
+	try {
+		const info = JSON.parse(message.slice(start));
+		if (typeof info?.exception_message !== 'string') return { message };
+		const detail = { message: info.exception_type + ' Error: ' + info.exception_message };
+		const offset = Number(info.position);
+		if (info.position == null || !Number.isSafeInteger(offset) || offset < 0) return detail;
+		// The native offset counts UTF-8 bytes. LSP counts UTF-16 code units.
+		const bytes = new TextEncoder().encode(text);
+		if (offset > bytes.length) return detail;
+		const prefix = new TextDecoder('utf-8', { ignoreBOM: true }).decode(
+			bytes.subarray(0, offset)
+		);
+		const { line, character } = positionAt(text, prefix.length);
+		return { ...detail, lineNumber: line + 1, columnNumber: character + 1 };
+	} catch {
+		return { message };
+	}
+}
+
 async function loadSqlJsEngine(options: SqlWorkerOptions): Promise<SqlEngine> {
 	if (options.dialect === 'duckdb') {
 		if (!options.moduleUrl) {
@@ -245,7 +269,9 @@ async function loadSqlJsEngine(options: SqlWorkerOptions): Promise<SqlEngine> {
 					for (const file of workspaceFiles) {
 						setupFile = file.path;
 						if (file.encoding === 'base64') {
-							const bytes = Uint8Array.from(atob(file.content), (c) => c.charCodeAt(0));
+							const bytes = Uint8Array.from(atob(file.content), (c) =>
+								c.charCodeAt(0)
+							);
 							await db.registerFileBuffer(file.path, bytes);
 						} else {
 							await db.registerFileText(file.path, file.content);
@@ -253,6 +279,8 @@ async function loadSqlJsEngine(options: SqlWorkerOptions): Promise<SqlEngine> {
 					}
 					setupFile = undefined;
 					connection = await db.connect();
+					// Older external bundles can still report ordinary text diagnostics.
+					await connection.query('SET errors_as_json = true').catch(() => {});
 					for (const file of setupFiles) {
 						setupFile = file.path;
 						await connection.query(file.content);
@@ -261,13 +289,7 @@ async function loadSqlJsEngine(options: SqlWorkerOptions): Promise<SqlEngine> {
 					await connection.query(code);
 					return [];
 				} catch (error) {
-					return [
-						{
-							message: error instanceof Error ? error.message : String(error),
-							setupFile,
-							severity: 'error'
-						}
-					];
+					return [{ ...duckDbDiagnostic(error, code), setupFile, severity: 'error' }];
 				} finally {
 					await connection?.close().catch(() => {});
 				}

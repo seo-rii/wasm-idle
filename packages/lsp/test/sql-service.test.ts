@@ -243,7 +243,13 @@ describe('createSqlWorkerService', () => {
 					async registerFileBuffer(name, text) { globalThis.${stateKey}.files.set(name, text); }
 					async connect() {
 						return {
-							async query(code) { globalThis.${stateKey}.queried = code; },
+							async query(code) {
+								globalThis.${stateKey}.queried = code;
+								if (code.includes('unknown_col')) throw new Error(JSON.stringify({
+									exception_type: 'Binder', exception_message: 'Unknown column',
+									position: String(new TextEncoder().encode(code.slice(0, code.indexOf('unknown_col'))).length)
+								}));
+							},
 							async close() { globalThis.${stateKey}.closed = true; }
 						};
 					}
@@ -276,7 +282,10 @@ describe('createSqlWorkerService', () => {
 			const workspace = { ...context, documents };
 			documents.set(csv.uri, csv);
 			const binary = { path: 'inputs/value.parquet', content: 'AAH/', encoding: 'base64' };
-			await service.initialize?.({ dialect: 'duckdb', moduleUrl, workspaceFiles: [binary] }, workspace);
+			await service.initialize?.(
+				{ dialect: 'duckdb', moduleUrl, workspaceFiles: [binary] },
+				workspace
+			);
 			expect(await service.diagnostics?.(document, workspace)).toEqual([]);
 			expect(state.files.get('input/data.csv')).toBe(csv.text);
 			expect(state.files.get(binary.path)).toEqual(Uint8Array.of(0, 1, 255));
@@ -284,6 +293,12 @@ describe('createSqlWorkerService', () => {
 			expect(await service.diagnostics?.(document, workspace)).toEqual([]);
 			expect(state.files.has('input/data.csv')).toBe(false);
 			expect(state.files.get('main.sql')).toBe(document.text);
+			const bad = { ...document, text: "SELECT 1,\n  '한🙂', unknown_col;" };
+			const [error] = (await service.diagnostics?.(bad, workspace)) ?? [];
+			expect(error).toMatchObject({
+				message: 'Binder Error: Unknown column',
+				range: { start: { line: 1, character: 9 }, end: { line: 1, character: 10 } }
+			});
 			await service.dispose?.();
 			expect(state.selectedBundles).toEqual({
 				mvp: {
@@ -292,7 +307,7 @@ describe('createSqlWorkerService', () => {
 				}
 			});
 			expect(state.instantiated).toEqual(['/bundled/duckdb-mvp.wasm', null]);
-			expect(state.queried).toBe("SELECT 'ok';");
+			expect(state.queried).toBe(bad.text);
 			expect(state.closed).toBe(true);
 			expect(state.terminated).toBe(true);
 			expect(WorkerMock).toHaveBeenCalledWith('blob:duckdb-worker');
