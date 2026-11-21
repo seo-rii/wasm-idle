@@ -5386,6 +5386,7 @@
 							lspLanguage={monacoLspLanguage}
 							filePath={activePath || defaultPathForLanguage()}
 							workspacePaths={editorFilePaths}
+							onOpenFile={selectFile}
 							projectHistory={currentProjectHistory()}
 							rustTargetTriple={languageExecutionOptions.rustTargetTriple}
 							goTarget={languageExecutionOptions.goTarget}

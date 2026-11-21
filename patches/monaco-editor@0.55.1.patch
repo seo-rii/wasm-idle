@@ -1,5 +1,5 @@
 diff --git a/esm/external/monaco-lsp-client/out/index.js b/esm/external/monaco-lsp-client/out/index.js
-index e3ace9c..4b16f81 100644
+index e3ace9c..ff67591 100644
 --- a/esm/external/monaco-lsp-client/out/index.js
 +++ b/esm/external/monaco-lsp-client/out/index.js
 @@ -1,3 +1,4 @@
@@ -78,7 +78,40 @@ index e3ace9c..4b16f81 100644
      });
    }
    sendNotification(notification, context) {
-@@ -1532,7 +1568,9 @@ var LspCompletionProvider = class {
+@@ -1436,22 +1472,20 @@ function toMonacoInlayHintKind(kind) {
+   if (!kind) return languages.InlayHintKind.Type;
+   return lspInlayHintKindToMonacoInlayHintKind.get(kind) ?? languages.InlayHintKind.Type;
+ }
+-function toMonacoLocation(location, client) {
++function locationRange(range) {
++  return new Range(range.start.line + 1, range.start.character + 1, range.end.line + 1, range.end.character + 1);
++}
++function toMonacoLocation(location) {
++  // A location may target a workspace file that the editor has never opened.
+   if ("targetUri" in location) {
+-    const translatedRange = client.bridge.translateBackRange({ uri: location.targetUri }, location.targetRange);
+-    return {
+-      uri: translatedRange.textModel.uri,
+-      range: translatedRange.range,
+-      originSelectionRange: location.originSelectionRange ? client.bridge.translateBackRange({ uri: location.targetUri }, location.originSelectionRange).range : void 0,
+-      targetSelectionRange: location.targetSelectionRange ? client.bridge.translateBackRange({ uri: location.targetUri }, location.targetSelectionRange).range : void 0
+-    };
+-  } else {
+-    const translatedRange = client.bridge.translateBackRange({ uri: location.uri }, location.range);
+     return {
+-      uri: translatedRange.textModel.uri,
+-      range: translatedRange.range
++      uri: Uri.parse(location.targetUri),
++      range: locationRange(location.targetRange),
++      originSelectionRange: location.originSelectionRange ? locationRange(location.originSelectionRange) : void 0,
++      targetSelectionRange: location.targetSelectionRange ? locationRange(location.targetSelectionRange) : void 0
+     };
+   }
++  return { uri: Uri.parse(location.uri), range: locationRange(location.range) };
+ }
+ function toMonacoLanguageSelector(s) {
+   if (!s || s.length === 0) return { language: "*" };
+@@ -1532,7 +1566,9 @@ var LspCompletionProvider = class {
      this._client = _client;
      this._capabilities = _capabilities;
      if (_capabilities.resolveProvider) this.resolveCompletionItem = async (item, token) => {
@@ -89,7 +122,7 @@ index e3ace9c..4b16f81 100644
        return item;
      };
    }
-@@ -1548,7 +1586,8 @@ var LspCompletionProvider = class {
+@@ -1548,7 +1584,8 @@ var LspCompletionProvider = class {
          triggerKind: toLspCompletionTriggerKind(context.triggerKind),
          triggerCharacter: context.triggerCharacter
        } : void 0
@@ -99,7 +132,7 @@ index e3ace9c..4b16f81 100644
      if (!result) return { suggestions: [] };
      return { suggestions: (Array.isArray(result) ? result : result.items).map((i) => {
        return {
-@@ -2951,7 +2990,7 @@ var TextDocumentSynchronizer = class extends Disposable {
+@@ -2951,7 +2988,7 @@ var TextDocumentSynchronizer = class extends Disposable {
    }
    _getOrCreateManagedModel(m) {
      if (!this._started) throw new Error("Not started");
@@ -108,7 +141,7 @@ index e3ace9c..4b16f81 100644
      let mm = this._managedModels.get(m);
      if (!mm) {
        mm = new ManagedModel(m, this._server);
-@@ -2966,7 +3005,7 @@ var TextDocumentSynchronizer = class extends Disposable {
+@@ -2966,7 +3003,7 @@ var TextDocumentSynchronizer = class extends Disposable {
      return mm;
    }
    translateBack(textDocument, position) {
@@ -117,7 +150,7 @@ index e3ace9c..4b16f81 100644
      const textModel = this._managedModelsReverse.get(uri);
      if (!textModel) throw new Error(`No text model for uri ${uri}`);
      return {
-@@ -2975,7 +3014,7 @@ var TextDocumentSynchronizer = class extends Disposable {
+@@ -2975,7 +3012,7 @@ var TextDocumentSynchronizer = class extends Disposable {
      };
    }
    translateBackRange(textDocument, range) {
@@ -126,7 +159,7 @@ index e3ace9c..4b16f81 100644
      const textModel = this._managedModelsReverse.get(uri);
      if (!textModel) throw new Error(`No text model for uri ${uri}`);
      return {
-@@ -3005,12 +3044,16 @@ var TextDocumentSynchronizer = class extends Disposable {
+@@ -3005,12 +3042,16 @@ var TextDocumentSynchronizer = class extends Disposable {
      };
    }
  };

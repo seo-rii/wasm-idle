@@ -18,15 +18,28 @@ describe('TypeScript worker service', () => {
 
 	it('checks imported JSON properties using the JSON script kind', async () => {
 		const doc: LspDocument = {
-			uri: 'file:///workspace/main.ts', languageId: 'typescript', version: 1,
+			uri: 'file:///workspace/main.ts',
+			languageId: 'typescript',
+			version: 1,
 			text: 'import settings from "./settings.json"; export const port: string = settings.port;'
 		};
-		const ctx = { documents: new Map([[doc.uri, doc]]), publishDiagnostics: vi.fn(), reportProgress: vi.fn() };
+		const ctx = {
+			documents: new Map([[doc.uri, doc]]),
+			publishDiagnostics: vi.fn(),
+			reportProgress: vi.fn()
+		};
 		const service = createTypeScriptWorkerService('typescript', async () => ({}));
-		await service.initialize?.({
-			compilerOptions: { noLib: true, resolveJsonModule: true, allowSyntheticDefaultImports: true },
-			extraLibs: { '/workspace/settings.json': '{"port":8080}' }
-		}, ctx);
+		await service.initialize?.(
+			{
+				compilerOptions: {
+					noLib: true,
+					resolveJsonModule: true,
+					allowSyntheticDefaultImports: true
+				},
+				extraLibs: { '/workspace/settings.json': '{"port":8080}' }
+			},
+			ctx
+		);
 		try {
 			const diagnostics = await service.diagnostics?.(doc, ctx);
 			expect(diagnostics?.map((d) => d.code)).toEqual([2322]);
