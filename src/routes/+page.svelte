@@ -916,7 +916,8 @@
 				return;
 			}
 			if (original && !specs.some((entry) => entry.line === original.line)) {
-				debugInteractionError = 'This breakpoint was removed. Select a breakpoint before saving.';
+				debugInteractionError =
+					'This breakpoint was removed. Select a breakpoint before saving.';
 				return;
 			}
 			if (
@@ -1540,6 +1541,20 @@
 	let shellDirectoryPending = $state(false);
 	let shellDirectoryGeneration = 0;
 	let sharedWorkspaceOpening = $state(false);
+	// Restore can precede the first container scan. Both sources describe explicit
+	// directories; editor-created empty parents remain available for replacement.
+	const reservedProjectDirectories = $derived.by(() => {
+		const prefix = language + '/';
+		const paths = [
+			...savedDirectories.filter((path): path is string => typeof path === 'string'),
+			...sharedWorkspaceFiles
+				.filter((entry) => entry.type === 'directory' && !entry.editorOwned)
+				.map((entry) => entry.path)
+		];
+		return new Set(
+			paths.filter((path) => path.startsWith(prefix)).map((path) => path.slice(prefix.length))
+		);
+	});
 	const needsPosixBackup = $derived(
 		files.some((file) => file.pathStyle === 'posix' && normalizePath(file.path) !== file.path)
 	);
@@ -1956,7 +1971,8 @@
 		const nextPath = workspaceFilePath(
 			normalizeWorkspaceFilePath(filePath, pathStyle) || 'untitled.txt',
 			files.map((file) => file.path),
-			true
+			true,
+			reservedProjectDirectories
 		);
 		files = [...files, { path: nextPath, content, encoding, pathStyle }];
 		if (select) selectFile(nextPath);
@@ -1986,7 +2002,9 @@
 			if (!nextPath || nextPath === file.path) return;
 			workspaceFilePath(
 				nextPath,
-				files.map((item) => item.path)
+				files.map((item) => item.path),
+				false,
+				reservedProjectDirectories
 			);
 		} catch (error) {
 			saveStatus = error instanceof Error ? error.message : String(error);
@@ -2576,7 +2594,12 @@
 			} else {
 				const paths = files.map((file) => file.path);
 				const additions = plan.files.map((file) => {
-					const path = workspaceFilePath(file.path, paths, true);
+					const path = workspaceFilePath(
+						file.path,
+						paths,
+						true,
+						reservedProjectDirectories
+					);
 					paths.push(path);
 					return { ...file, path };
 				});
@@ -5710,13 +5733,13 @@
 												? 'The Bash WASIX package accepts stdin when the process starts. Enter it before Run; extra reads receive EOF.'
 												: language === 'DUCKDB'
 													? 'DuckDB reads this input from /dev/stdin. Enter it before Run.'
-												: language === 'POSTGRESQL'
-													? "PostgreSQL reads this input as the server file '/dev/blob' (COPY ... FROM '/dev/blob' or pg_read_file('/dev/blob')). Enter it before Run."
-													: language === 'CSHARP' ||
-														  language === 'FSHARP' ||
-														  language === 'VBNET'
-														? 'C#, F#, and VB.NET read all stdin when the program starts. Enter it before Run; extra reads receive EOF. Output appears when the program finishes.'
-														: 'SharedArrayBuffer is unavailable here, so terminal input cannot be sent while the program is running. Enter stdin before Run; extra reads receive EOF.'}
+													: language === 'POSTGRESQL'
+														? "PostgreSQL reads this input as the server file '/dev/blob' (COPY ... FROM '/dev/blob' or pg_read_file('/dev/blob')). Enter it before Run."
+														: language === 'CSHARP' ||
+															  language === 'FSHARP' ||
+															  language === 'VBNET'
+															? 'C#, F#, and VB.NET read all stdin when the program starts. Enter it before Run; extra reads receive EOF. Output appears when the program finishes.'
+															: 'SharedArrayBuffer is unavailable here, so terminal input cannot be sent while the program is running. Enter stdin before Run; extra reads receive EOF.'}
 								</span>
 							</div>
 							<textarea

@@ -44,9 +44,17 @@ function unusedSibling(path: string, files: Set<string>, directories: Set<string
 }
 
 /** Check both directions of a file/directory collision before changing the editor. */
-export function workspaceFilePath(path: string, existing: Iterable<string>, copy = false) {
+export function workspaceFilePath(
+	path: string,
+	existing: Iterable<string>,
+	copy = false,
+	reservedDirectories: Iterable<string> = []
+) {
 	const files = new Set(existing);
 	const directories = workspaceDirectories(files);
+	const reserved = new Set(reservedDirectories);
+	for (const directory of reserved) directories.add(directory);
+	for (const parent of workspaceDirectories(reserved)) directories.add(parent);
 	for (let slash = path.indexOf('/'); slash !== -1; slash = path.indexOf('/', slash + 1)) {
 		const parent = path.slice(0, slash);
 		if (files.has(parent)) throw new Error(`Cannot create ${path}: ${parent} is a file`);

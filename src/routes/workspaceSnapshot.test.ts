@@ -62,6 +62,12 @@ describe('workspace JSON boundary', () => {
 		}
 	});
 
+	it('does not write a file over stale directory metadata before the owner reconciles', () => {
+		const active = { files: [{ path: 'data', content: 'file' }] };
+		const snapshot = { language: 'CPP', ...active, workspaces: { CPP: active } };
+		expect(() => serializeStoredWorkspace(snapshot, ['CPP/data/child'])).toThrow('directory');
+		expect(() => serializeStoredWorkspace(snapshot, [])).not.toThrow();
+	});
 	it('treats a project directory rename as a real cross-tab change', () => {
 		const snapshot = { language: 'CPP', files };
 		const previous = serializeStoredWorkspace(snapshot, ['CPP/before']);

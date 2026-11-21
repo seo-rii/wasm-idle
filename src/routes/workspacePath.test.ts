@@ -61,6 +61,15 @@ describe('editor file and directory names', () => {
 		expect(workspaceFilePath('other/include', ['include/number.h'])).toBe('other/include');
 	});
 
+	it('protects named directories and chooses a free sibling for copies', () => {
+		const reserved = ['build', 'include/deep', 'source-2.cpp'];
+		expect(() => workspaceFilePath('build', [], true, reserved)).toThrow('directory');
+		expect(() => workspaceFilePath('include', [], false, reserved)).toThrow('directory');
+		expect(workspaceFilePath('source.cpp', ['source.cpp'], true, reserved)).toBe(
+			'source-3.cpp'
+		);
+		expect(workspaceFilePath('build/file.cpp', [], true, reserved)).toBe('build/file.cpp');
+	});
 	it('keeps generated copies out of existing files and directories', () => {
 		expect(workspaceFilePath('test.h', ['test.h', 'test-2.h/other', 'test-3.h'], true)).toBe(
 			'test-4.h'
