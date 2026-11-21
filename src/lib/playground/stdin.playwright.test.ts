@@ -98,9 +98,25 @@ COPY input_numbers FROM '/dev/blob';
 SELECT 'main=' || (sum(n) + 5)::text AS result FROM input_numbers;
 SELECT 'engine=' || split_part(version(), ' ', 1) AS engine;`;
 
-const phpStdinSource = `<?php
-$input = trim(file_get_contents('php://input'));
+const phpStdinSource = `<?php namespace WasmIdleProbe;
+if (__LINE__ !== 2) throw new \\RuntimeException("Source line changed");
+function count($value) { throw new \\RuntimeException("Unexpected namespace count"); }
+$input = trim(require __DIR__ . '/reader.php');
 echo "main=", $input, "\\n";`;
+
+const phpWorkspaceInput = {
+	workspaceFiles: [
+		{ path: 'reader.php', content: '<?php return file_get_contents("php://input");' },
+		{ path: 'word.txt', content: 'file-only=42' }
+	],
+	followUpRuns: [
+		{
+			source: '<?php // STDIN is unused\necho file_get_contents(__DIR__ . "/word.txt");',
+			stdinText: '',
+			expectedOutput: 'file-only=42'
+		}
+	]
+};
 
 const csharpStdinSource = `using System;
 
@@ -578,6 +594,7 @@ describe('wasm-idle browser stdin connection', () => {
 							process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || defaultRunTimeoutMs
 						),
 						sendEof: batchStdinBrowserLanguages.has(language),
+						...(language === 'PHP' ? phpWorkspaceInput : {}),
 						source,
 						stdinText
 					});

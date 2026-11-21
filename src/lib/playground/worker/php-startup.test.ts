@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { PHP_PRELOAD, PHP_PRELOAD_PATH } from './phpPreload';
 
 const mocks = vi.hoisted(() => ({ importRuntime: vi.fn(), create: vi.fn() }));
 vi.mock('$lib/playground/runtimeModule', () => ({
@@ -152,7 +153,7 @@ describe('PHP startup retry and ownership', () => {
 			}
 		});
 		expect(php.run).not.toHaveBeenCalled();
-		expect(php.writeFile).not.toHaveBeenCalled();
+		expect(php.writeFile.mock.calls).toEqual([[PHP_PRELOAD_PATH, PHP_PRELOAD]]);
 		expect(postMessage).toHaveBeenCalledWith({ results: true });
 	});
 });
