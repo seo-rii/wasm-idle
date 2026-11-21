@@ -187,7 +187,7 @@ describe('package install budgets', () => {
 		).toEqual({
 			'wasm-idle root install': {
 				maxBytes: 7653149,
-				maxFiles: 865,
+				maxFiles: 869,
 				maxPackages: 6
 			},
 			'@wasm-idle/gcc install': {
@@ -216,8 +216,8 @@ describe('package install budgets', () => {
 				maxPackages: 10
 			},
 			'all public packages/adapters aggregate': {
-				maxBytes: 43402240,
-				maxFiles: 3494,
+				maxBytes: 43420672,
+				maxFiles: 3498,
 				maxPackages: 70
 			}
 		});
@@ -241,7 +241,7 @@ describe('package install budgets', () => {
 		}
 	});
 
-	it('accepts measured language installs and rejects every aggregate limit plus one', () => {
+	it('accepts measured language installs and rejects each root and aggregate limit plus one', () => {
 		const root = scenarios.find((entry) => entry.name === 'wasm-idle root install')!;
 		// Compressed Verilog retains external compiler assets and the measured four-file SDK growth.
 		expect(() =>
@@ -268,6 +268,9 @@ describe('package install budgets', () => {
 		expect(() =>
 			assertInstallBudget(root, { bytes: 7_652_352, files: 865, packages: 5 })
 		).not.toThrow();
+		expect(() =>
+			assertInstallBudget(root, { bytes: 7_651_041, files: 869, packages: 5 })
+		).not.toThrow();
 		const scenario = scenarios.find(
 			(entry) => entry.name === 'all public packages/adapters aggregate'
 		)!;
@@ -283,18 +286,22 @@ describe('package install budgets', () => {
 			{ bytes: 43_041_892, files: 3_434, packages: 66 },
 			{ bytes: 43_049_150, files: 3_434, packages: 66 },
 			{ bytes: 43_374_893, files: 3_494, packages: 66 },
-			{ bytes: 43_401_987, files: 3_494, packages: 66 }
+			{ bytes: 43_401_987, files: 3_494, packages: 66 },
+			{ bytes: 43_420_505, files: 3_498, packages: 66 }
 		])
 			expect(() => assertInstallBudget(scenario, measurement)).not.toThrow();
-		const atLimit = {
-			bytes: scenario.budget.maxBytes,
-			files: scenario.budget.maxFiles,
-			packages: scenario.budget.maxPackages
-		};
-		for (const key of ['bytes', 'files', 'packages'] as const)
-			expect(() =>
-				assertInstallBudget(scenario, { ...atLimit, [key]: atLimit[key] + 1 })
-			).toThrow('Install budget exceeded for all public packages/adapters aggregate');
+		for (const entry of [root, scenario]) {
+			const atLimit = {
+				bytes: entry.budget.maxBytes,
+				files: entry.budget.maxFiles,
+				packages: entry.budget.maxPackages
+			};
+			for (const key of ['bytes', 'files', 'packages'] as const) {
+				expect(() =>
+					assertInstallBudget(entry, { ...atLimit, [key]: atLimit[key] + 1 })
+				).toThrow(`Install budget exceeded for ${entry.name}`);
+			}
+		}
 	});
 
 	it('allows measurements exactly at every configured limit', () => {
