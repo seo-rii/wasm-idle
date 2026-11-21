@@ -40,7 +40,12 @@ export async function executeRubyTracepoint(
 		},
 		read: (blocking: boolean) => read(blocking) ?? '{"op":"stop"}'
 	};
-	const data = JSON.stringify({ ...options, source, files, hashes, key });
+	// Byte-backed Ruby sources already exist in the VM's workspace with their original encoding.
+	const sources = files.map(({ path, content }) => ({
+		path,
+		content: typeof content === 'string' ? content : null
+	}));
+	const data = JSON.stringify({ ...options, source, files: sources, hashes, key });
 	const literal = `'${data.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
 	try {
 		vm.eval(String.raw`
@@ -69,7 +74,12 @@ known.each do |path, content|
       lines.concat(iseq.trace_points.select { |_, event| event == :line }.map(&:first))
       iseq.each_child { |child| collect.call(child) }
     end
-    collect.call(RubyVM::InstructionSequence.compile(content, path, path, 1))
+    compiled = if content.nil?
+      RubyVM::InstructionSequence.compile_file('/' + path)
+    else
+      RubyVM::InstructionSequence.compile(content, path, path, 1)
+    end
+    collect.call(compiled)
     executable[display_path.call(path)] = lines.uniq.sort
   rescue NameError, NoMethodError, SyntaxError
     executable[display_path.call(path)] = []
