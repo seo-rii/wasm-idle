@@ -1,6 +1,8 @@
 import { playgroundLanguages } from './language-registry';
 import { readCompilerOptions } from './compilerOptions';
 import { isBinaryWorkspaceFile, workspaceFileBytes, type WorkspaceFile } from './workspaceCodec';
+import { readWorkspaceDirectories, workspaceParents } from '../lib/container/workspace';
+import type { SavedWorkspaceDirectory } from '../lib/container/protocol';
 import { normalizeWorkspaceFilePath } from './workspacePath';
 
 function invalid(field: string): never {
@@ -11,7 +13,12 @@ function assertRecord(value: unknown, field: string): asserts value is Record<st
 	if (!value || typeof value !== 'object' || Array.isArray(value)) invalid(field);
 }
 
-function validateWorkspace(value: Record<string, unknown>, field: string) {
+function validateWorkspace(
+	value: Record<string, unknown>,
+	field: string,
+	project: unknown,
+	directories: ReadonlySet<string>
+) {
 	if (value.activePath !== undefined && typeof value.activePath !== 'string')
 		invalid(`${field}.activePath`);
 	if (
@@ -33,7 +40,12 @@ function validateWorkspace(value: Record<string, unknown>, field: string) {
 			invalid(`${field}.files[]`);
 		}
 		const path = normalizeWorkspaceFilePath(file.path, file.pathStyle);
-		if (!path || paths.has(path)) invalid(`${field}.files[].path`);
+		if (
+			!path ||
+			paths.has(path) ||
+			(typeof project === 'string' && directories.has(`${project}/${path}`))
+		)
+			invalid(`${field}.files[].path`);
 		paths.add(path);
 		if (
 			file.encoding !== undefined &&
@@ -62,6 +74,12 @@ export function validateWorkspaceSnapshot(
 	value: unknown
 ): asserts value is Record<string, unknown> {
 	assertRecord(value, 'root');
+	const directories = new Set<string>();
+	for (const entry of readWorkspaceDirectories(value.emptyDirectories, playgroundLanguages)) {
+		const path = typeof entry === 'string' ? entry : entry.path;
+		directories.add(path);
+		for (const parent of workspaceParents(path)) directories.add(parent);
+	}
 	if (value.files === undefined && value.workspaces === undefined)
 		invalid('missing files or workspaces');
 	if (
@@ -95,7 +113,7 @@ export function validateWorkspaceSnapshot(
 			invalid(field);
 	}
 	readCompilerOptions(value.compilerOptions);
-	validateWorkspace(value, 'workspace');
+	validateWorkspace(value, 'workspace', value.language, directories);
 	if (value.workspaces === undefined) return;
 	assertRecord(value.workspaces, 'workspaces');
 	const knownLanguages = new Set<string>(playgroundLanguages);
@@ -104,7 +122,7 @@ export function validateWorkspaceSnapshot(
 		if (!knownLanguages.has(language)) invalid(`workspaces.${language}`);
 		assertRecord(workspace, `workspaces.${language}`);
 		if (workspace.files === undefined) invalid(`workspaces.${language}.files`);
-		validateWorkspace(workspace, `workspaces.${language}`);
+		validateWorkspace(workspace, `workspaces.${language}`, language, directories);
 	}
 }
 
@@ -122,7 +140,11 @@ export function normalizeWorkspaceTabs(
 }
 
 /** Keep the active project's files once in local storage. Portable v6 backups retain their shape. */
-export function serializeStoredWorkspace(snapshot: Record<string, unknown>): string {
+export function serializeStoredWorkspace(
+	snapshot: Record<string, unknown>,
+	emptyDirectories?: readonly SavedWorkspaceDirectory[]
+): string {
+	if (emptyDirectories?.length) snapshot = { ...snapshot, emptyDirectories };
 	const projects = snapshot.workspaces;
 	const language = snapshot.language;
 	if (

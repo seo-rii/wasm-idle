@@ -4,6 +4,7 @@ import { createProjectBreakpointSelection, workspaceDebugPath } from './workspac
 import layoutSource from './+layout.svelte?raw';
 import source from './+page.svelte?raw';
 import { createApplicationRuntimeAssets } from '$lib/playground/applicationAssets';
+import { emptyProjectDirectories } from '$lib/container/workspace';
 import { mergeContainerWorkspace, sameWorkspaceFiles } from '$lib/playground/container/workspace';
 import type { WorkspaceFile } from './workspaceCodec';
 import { runInNewContext } from 'node:vm';
@@ -302,6 +303,8 @@ describe('shared workspace refresh scheduling', () => {
 			containerRefreshForcePending: false,
 			containerEditorRefreshDeferred: false,
 			sharedWorkspaceFiles: [] as Array<{ path: string }>,
+			savedDirectories: [] as string[],
+			emptyProjectDirectories,
 			playground: binding,
 			language: 'C',
 			files: [...baseline],

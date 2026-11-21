@@ -1,4 +1,5 @@
 import { DEFAULT_WORKSPACE_LIMITS, normalizeWorkspacePath } from '@wasm-idle/core';
+import type { ContainerWorkspaceEntry, SavedWorkspaceDirectory } from './protocol.js';
 
 const pathEncoder = new TextEncoder();
 export const runtimeWorkspacePathHint = `Rename the active file to a portable relative path of at most ${DEFAULT_WORKSPACE_LIMITS.maxPathBytes} UTF-8 bytes to run it.`;
@@ -119,4 +120,62 @@ export function workspaceFileFromBytes(path: string, bytes: Uint8Array): Workspa
 	}
 	const mime = /\.wasm$/i.test(path) ? 'application/wasm' : 'application/octet-stream';
 	return { path, content: `data:${mime};base64,${btoa(binary)}`, encoding: 'data-url' };
+}
+
+export function* workspaceParents(path: string) {
+	for (let slash = path.indexOf('/'); slash !== -1; slash = path.indexOf('/', slash + 1))
+		yield path.slice(0, slash);
+}
+
+export function readWorkspaceDirectories(
+	value: unknown,
+	projects: readonly string[]
+): SavedWorkspaceDirectory[] {
+	if (value === undefined) return [];
+	if (!Array.isArray(value)) throw new TypeError('Invalid workspace directories');
+	const known = new Set(projects);
+	const directories = new Map<string, SavedWorkspaceDirectory>();
+	for (const entry of value) {
+		const path =
+			typeof entry === 'string' ? entry : entry?.implicit === true ? entry.path : undefined;
+		if (
+			typeof path !== 'string' ||
+			!path.includes('/') ||
+			!known.has(path.slice(0, path.indexOf('/')))
+		)
+			throw new TypeError('Invalid workspace directory path');
+		normalizeWorkspacePath(path, 'posix');
+		if (directories.has(path) && typeof directories.get(path) !== typeof entry)
+			throw new TypeError('Conflicting workspace directory ownership');
+		directories.set(path, typeof entry === 'string' ? path : { path, implicit: true });
+	}
+	return [...directories.keys()].sort().map((path) => directories.get(path)!);
+}
+
+export function emptyProjectDirectories(
+	entries: readonly ContainerWorkspaceEntry[],
+	projects: readonly string[]
+): SavedWorkspaceDirectory[] {
+	const parents = new Set(entries.map(({ path }) => path.substring(0, path.lastIndexOf('/'))));
+	const languages = new Set(projects);
+	const implicit = new Set(
+		entries.filter((entry) => entry.editorOwned).map((entry) => entry.path)
+	);
+	const saved = new Set<string>();
+	for (const { type, path } of entries) {
+		const slash = path.indexOf('/');
+		if (
+			type !== 'directory' ||
+			slash < 0 ||
+			!languages.has(path.slice(0, slash)) ||
+			parents.has(path)
+		)
+			continue;
+		saved.add(path);
+		// Recursive mkdir creates the ancestors too. Retain which of them the editor may replace.
+		for (const parent of workspaceParents(path)) {
+			if (implicit.has(parent)) saved.add(parent);
+		}
+	}
+	return [...saved].sort().map((path) => (implicit.has(path) ? { path, implicit: true } : path));
 }

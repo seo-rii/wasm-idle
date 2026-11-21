@@ -21,20 +21,21 @@ import type {
 	PlaygroundBinding,
 	SandboxRuntimeAssets
 } from '../playground/sandbox.js';
-import { isRuntimeWorkspacePath, runtimeWorkspacePathHint } from './workspace.js';
 import type { SandboxExecutionOptions } from '../playground/options.js';
-import { decodeWorkspaceText, workspaceFileFromBytes } from './workspace.js';
+import {
+	decodeWorkspaceText,
+	isRuntimeWorkspacePath,
+	runtimeWorkspacePathHint,
+	workspaceFileFromBytes,
+	workspaceParents
+} from './workspace.js';
 import type {
 	ContainerWorkerEvent,
 	ContainerWorkspaceDelta,
 	ContainerWorkspaceEntry,
-	ContainerWorkspaceFileMetadata
+	ContainerWorkspaceFileMetadata,
+	SavedWorkspaceDirectory
 } from './protocol.js';
-
-function* workspaceParents(path: string) {
-	for (let slash = path.indexOf('/'); slash !== -1; slash = path.indexOf('/', slash + 1))
-		yield path.slice(0, slash);
-}
 
 const COMMAND = 'website-playground-engine';
 const ADAPTER = 'website-playground-host-v1';
@@ -501,6 +502,19 @@ export class ContainerRuntimeAdapter {
 		visit('');
 		return files;
 	}
+	restoreWorkspaceDirectories(directories: readonly SavedWorkspaceDirectory[]) {
+		const options = { root: '/workspace', cwd: '/workspace', recursive: true };
+		for (const directory of directories) {
+			const path = typeof directory === 'string' ? directory : directory.path;
+			this.fs.mkdir(path, options);
+			if (typeof directory === 'string') continue;
+			const slash = path.indexOf('/');
+			const project = path.slice(0, slash);
+			const implicit = this.#implicitDirectories.get(project) ?? new Map<string, number>();
+			implicit.set(path.slice(slash + 1), this.fs.lstat(path, options).inode);
+			this.#implicitDirectories.set(project, implicit);
+		}
+	}
 	/** Enumerate the common namespace without copying file bodies or following links. */
 	listWorkspaceFiles(): ContainerWorkspaceEntry[] {
 		const entries: ContainerWorkspaceEntry[] = [];
@@ -511,7 +525,14 @@ export class ContainerRuntimeAdapter {
 				const stat = this.fs.lstat(path, options);
 				if (stat.type !== 'file' && stat.type !== 'directory' && stat.type !== 'symlink')
 					continue;
-				entries.push({ path, type: stat.type, size: stat.size });
+				const entry: ContainerWorkspaceEntry = { path, type: stat.type, size: stat.size };
+				if (stat.type === 'directory') {
+					const slash = path.indexOf('/');
+					const implicit = this.#implicitDirectories.get(path.slice(0, slash));
+					if (slash > 0 && implicit?.get(path.slice(slash + 1)) === stat.inode)
+						entry.editorOwned = true;
+				}
+				entries.push(entry);
 				if (stat.type === 'directory') visit(path);
 			}
 		};
@@ -521,8 +542,7 @@ export class ContainerRuntimeAdapter {
 	inputs(language: string, code: string, options: SandboxExecutionOptions) {
 		const root = this.directory(language);
 		const activePath = options.activePath ?? defaultSource(language);
-		if (!isRuntimeWorkspacePath(activePath))
-			throw new Error(runtimeWorkspacePathHint);
+		if (!isRuntimeWorkspacePath(activePath)) throw new Error(runtimeWorkspacePathHint);
 		try {
 			this.fs.stat(activePath, { root, cwd: root });
 		} catch (error) {

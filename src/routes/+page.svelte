@@ -12,16 +12,19 @@
 	import { compilePython, isSharedArrayBufferAvailable, type PythonCompileOptions } from '$lib';
 	import { createContainerPlaygroundBinding } from '$lib/playground/container/binding';
 	import {
+		emptyProjectDirectories,
 		isRuntimeWorkspacePath,
 		runtimeWorkspacePathHint,
 		mergeContainerWorkspace,
+		readWorkspaceDirectories,
 		sameWorkspaceFiles
 	} from '$lib/playground/container/workspace';
 	import ContainerExplorer from '$lib/playground/container/ContainerExplorer.svelte';
 	import { resolveInitialWorkspace } from './initialWorkspace';
 	import type {
 		ContainerWorkspaceEntry,
-		ContainerWorkspaceFile
+		ContainerWorkspaceFile,
+		SavedWorkspaceDirectory
 	} from '$lib/playground/container/protocol';
 	import {
 		createDebugSessionController,
@@ -296,12 +299,14 @@
 			publicEnvironment
 		)
 	);
+	let savedDirectories = $state.raw<SavedWorkspaceDirectory[]>([]);
 	const playground = $derived.by(() =>
 		createContainerPlaygroundBinding(runtimeAssets, {
 			applicationRootURL: browser
 				? new URL(`${applicationRootUrl.replace(/\/$/, '')}/`, location.href).href
 				: '/',
 			workspaceId: currentWorkspaceStorageKey,
+			getInitialDirectories: () => savedDirectories,
 			getLanguage: () => untrack(() => language)
 		})
 	);
@@ -821,7 +826,7 @@
 	const sortedFiles = $derived([...files].sort((a, b) => a.path.localeCompare(b.path)));
 	const activeLines = $derived(activeFile ? activeFile.content.split(/\r\n|\r|\n/).length : 0);
 	const activeBytes = $derived(activeFile ? new Blob([activeFile.content]).size : 0);
-	const workspaceSaveKey = $derived(serializeStoredWorkspace(snapshot()));
+	const workspaceSaveKey = $derived(serializeStoredWorkspace(snapshot(), savedDirectories));
 
 	const loadingProgress = createLoadingProgressController({
 		onChange(state) {
@@ -1589,6 +1594,7 @@
 							continue;
 						}
 						containerReady = true;
+						savedDirectories = emptyProjectDirectories(metadata, playgroundLanguages);
 						if (rescan) {
 							// Include removed projects as well as additions when the watcher overflows.
 							for (const { path } of [...sharedWorkspaceFiles, ...metadata]) {
@@ -2485,6 +2491,7 @@
 		const imported = { ...snapshot(project, workspaces), argsInput: '', compilerOptions: {} };
 		workspaceStorage.createCopy(serializeStoredWorkspace(imported), importedKey);
 		applySnapshot(imported);
+		savedDirectories = [];
 		currentWorkspaceStorageKey = importedKey;
 		destination.advance();
 		await replaceState(importedUrl, page.state);
@@ -3744,6 +3751,11 @@
 	untrack(() => {
 		if (initialSelection) {
 			if (initialSelection.snapshot) {
+				if (initialSelection.source === 'snapshot')
+					savedDirectories = readWorkspaceDirectories(
+						initialSelection.snapshot.emptyDirectories,
+						playgroundLanguages
+					);
 				applySnapshot(
 					initialSelection.snapshot,
 					initialSelection.source === 'share'

@@ -16,6 +16,7 @@ import {
 } from './protocol.js';
 import type { SandboxExecutionOptions } from '../playground/options.js';
 import type { SandboxRuntimeAssets } from '../playground/sandbox.js';
+import { readWorkspaceDirectories } from './workspace.js';
 import type { WasixSdk } from '@wasm-idle/container/adapters/wasix';
 
 export interface ContainerWorkerOptions {
@@ -175,6 +176,9 @@ export function serveContainerWorker(options: ContainerWorkerOptions): {
 				maxMemoryBytes: 2 ** 32
 			});
 		engines.attach(container);
+		engines.restoreWorkspaceDirectories(
+			readWorkspaceDirectories(settings.emptyDirectories, options.languages)
+		);
 		watcher = container.fs.watch({ maxQueuedEvents: 32, signal: lifetime.signal }).getReader();
 		void (async () => {
 			try {

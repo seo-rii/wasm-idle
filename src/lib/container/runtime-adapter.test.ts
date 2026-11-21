@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createContainer, type Container } from '@wasm-idle/container';
 import { ScriptExitError } from '../playground/executionObservation.js';
 import { WebsiteRuntimeAdapter } from './runtime-adapter.js';
+import { emptyProjectDirectories, readWorkspaceDirectories } from './workspace.js';
 import type { PlaygroundBinding } from '../playground/sandbox.js';
 
 const owned: Container[] = [];
@@ -355,6 +356,31 @@ describe('container shared editor input boundary', () => {
 		expect(read(container, '/workspace/C/parts/nested/source')).toBe('deep');
 		adapter.syncWorkspace('C', flat, nested);
 		expect(read(container, '/workspace/C/parts')).toBe('flat');
+	});
+
+	it('keeps editor parents replaceable and shell directories protected after saving and reopening', () => {
+		const original = fixture();
+		const initial = [f('parts/nested/one.txt', 'old'), f('manual/source', 'old')];
+		original.adapter.syncWorkspace('C', initial, []);
+		original.adapter.syncWorkspace('C', [], initial);
+		// Recreating a directory in Bash gives it a new inode, even at the same path.
+		original.container.fs.rmdir('/workspace/C/manual');
+		original.container.fs.mkdir('/workspace/C/manual');
+		const saved = emptyProjectDirectories(original.adapter.listWorkspaceFiles(), ['C']);
+		expect(saved).toEqual([
+			'C/manual',
+			{ path: 'C/parts', implicit: true },
+			{ path: 'C/parts/nested', implicit: true }
+		]);
+		const restored = fixture();
+		restored.adapter.restoreWorkspaceDirectories(
+			readWorkspaceDirectories(JSON.parse(JSON.stringify(saved)), ['C'])
+		);
+		expect(restored.container.fs.stat('/workspace/C/parts/nested').type).toBe('directory');
+		restored.adapter.syncWorkspace('C', [f('parts', 'new')], []);
+		expect(read(restored.container, '/workspace/C/parts')).toBe('new');
+		expect(() => restored.adapter.syncWorkspace('C', [f('manual', 'data')], [])).toThrow();
+		expect(restored.container.fs.stat('/workspace/C/manual').type).toBe('directory');
 	});
 
 	it('preserves shell-created directories, replacements and unrelated content on failure', () => {

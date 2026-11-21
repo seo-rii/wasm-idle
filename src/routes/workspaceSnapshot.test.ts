@@ -1,3 +1,4 @@
+import { emptyProjectDirectories, readWorkspaceDirectories } from '../lib/container/workspace';
 import { describe, expect, it } from 'vitest';
 import {
 	normalizeWorkspaceTabs,
@@ -12,6 +13,68 @@ const files = [
 ];
 
 describe('workspace JSON boundary', () => {
+	it('saves only empty project directory leaves, preserving their POSIX names', () => {
+		const rows = [
+			['CPP', 'directory'],
+			['CPP/empty', 'directory'],
+			['CPP/empty/literal\\name', 'directory'],
+			['CPP/full', 'directory'],
+			['CPP/full/data', 'file'],
+			['PYTHON/cache', 'directory'],
+			['outside/sub', 'directory']
+		] as const;
+		const dirs = emptyProjectDirectories(
+			rows.map(([path, type]) => ({ path, type, size: 0 })),
+			['CPP', 'PYTHON']
+		);
+		const stored = JSON.parse(serializeStoredWorkspace({ files: [] }, dirs));
+		expect(readWorkspaceDirectories(stored.emptyDirectories, ['CPP', 'PYTHON'])).toEqual([
+			'CPP/empty/literal\\name',
+			'PYTHON/cache'
+		]);
+		expect(() => validateWorkspaceSnapshot(stored)).not.toThrow();
+		for (const bad of [
+			'CPP/../root',
+			'/CPP/folder',
+			'CPP',
+			'CPP//folder',
+			'UNKNOWN/empty',
+			{ path: 'CPP/d', implicit: 'yes' }
+		])
+			expect(() =>
+				validateWorkspaceSnapshot({ files: [], emptyDirectories: [bad] })
+			).toThrow();
+	});
+
+	it('rejects a saved directory whose path or parent is a project file', () => {
+		const file = { path: 'data', content: 'keep' };
+		for (const layout of [
+			{ language: 'CPP', files: [file] },
+			{ language: 'PYTHON', files: [], workspaces: { CPP: { files: [file] } } }
+		]) {
+			for (const directory of ['CPP/data', 'CPP/data/nested'])
+				expect(() =>
+					validateWorkspaceSnapshot({ ...layout, emptyDirectories: [directory] })
+				).toThrow();
+			expect(() =>
+				validateWorkspaceSnapshot({ ...layout, emptyDirectories: ['CPP/data-old'] })
+			).not.toThrow();
+		}
+	});
+
+	it('treats a project directory rename as a real cross-tab change', () => {
+		const snapshot = { language: 'CPP', files };
+		const previous = serializeStoredWorkspace(snapshot, ['CPP/before']);
+		const renamed = serializeStoredWorkspace(snapshot, ['CPP/after']);
+		expect(sameWorkspaceContents(previous, renamed)).toBe(false);
+		expect(
+			sameWorkspaceContents(
+				renamed,
+				serializeStoredWorkspace({ ...snapshot, openTabs: ['helper.h'] }, ['CPP/after'])
+			)
+		).toBe(true);
+	});
+
 	it('accepts current and legacy snapshots without rewriting their input', () => {
 		for (const snapshot of [
 			{ files, activePath: 'main.cpp' },

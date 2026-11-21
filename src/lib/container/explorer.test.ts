@@ -17,7 +17,7 @@ describe('shared workspace folder explorer', () => {
 		const model = buildExplorerModel([
 			file('CPP/src/main.cpp'),
 			file('notes.txt'),
-			folder('empty'),
+			{ ...folder('empty'), editorOwned: true },
 			folder('CPP')
 		]);
 		expect(model.children.get('')?.map((entry) => entry.path)).toEqual([
@@ -31,6 +31,8 @@ describe('shared workspace folder explorer', () => {
 			parent: 'CPP'
 		});
 		expect(model.entries.get('CPP')?.implicit).toBeUndefined();
+		expect(model.entries.get('empty')?.editorOwned).toBe(true);
+		expect(model.entries.get('empty')?.implicit).toBeUndefined();
 		expect(visibleExplorerRows(model, 'empty', new Set()).rows).toEqual([]);
 	});
 

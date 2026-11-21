@@ -13,7 +13,8 @@ import {
 import type {
 	ContainerWorkerEvent,
 	ContainerWorkspaceDelta,
-	ContainerWorkspaceEntry
+	ContainerWorkspaceEntry,
+	SavedWorkspaceDirectory
 } from './protocol.js';
 
 // The Bash image has no termcap database. Readline needs erase-to-end-of-line
@@ -29,6 +30,7 @@ const shellEnvironment = {
 export type ContainerPlaygroundBindingOptions = {
 	applicationRootURL: string;
 	workspaceId: string;
+	getInitialDirectories?: () => readonly SavedWorkspaceDirectory[];
 	getLanguage?: () => string;
 	/** The app bundles this worker entry; no worker is created until first use. */
 	workerFactory?: () => ContainerOwnerWorker;
@@ -184,6 +186,7 @@ export function createContainerPlaygroundBinding(
 				runtimeAssets,
 				applicationRootURL: options.applicationRootURL,
 				workspaceId: options.workspaceId,
+				emptyDirectories: options.getInitialDirectories?.(),
 				workerFactory: options.workerFactory!
 			});
 		client.onEvent((event) => {
