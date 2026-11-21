@@ -1829,6 +1829,7 @@
 
 	function switchLanguage(nextLanguage: PlaygroundLanguage, message?: string) {
 		if (nextLanguage === language) return;
+		editorComponent?.rememberProjectView();
 		languageWorkspaces = {
 			...languageWorkspaces,
 			[language]: currentWorkspace()

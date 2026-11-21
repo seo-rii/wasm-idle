@@ -1285,6 +1285,47 @@ describe('workspace storage browser integration', () => {
 
 describe('workspace editor model lifetime', () => {
 	it(
+		'restores the cursor and viewport after a language switch without any undo history',
+		browserOptions,
+		async () => {
+			await withWorkspacePage(async (page, context, browserUrl) => {
+				await disableBrowserPrewarm(context);
+				const code = Array.from(
+					{ length: 140 },
+					(_, index) => '// source line ' + index
+				).join('\n');
+				const url = new URL(browserUrl);
+				url.searchParams.set('lsp-test', '1');
+				url.searchParams.set('lang', 'cpp');
+				url.searchParams.set('code', code);
+				await page.goto(url.href, { waitUntil: 'domcontentloaded' });
+				const view = () =>
+					page.evaluate(() => {
+						const editor = (window as any).__wasmIdleMonacoEditor;
+						return {
+							line: editor?.getPosition()?.lineNumber,
+							scroll: editor?.getScrollTop()
+						};
+					});
+				await page.waitForFunction(
+					() => (window as any).__wasmIdleMonacoEditor?.getModel()?.getLineCount() === 140
+				);
+				await page.evaluate(() => (window as any).__wasmIdleMonacoEditor.focus());
+				await page.keyboard.press('Control+End');
+				await expect.poll(async () => (await view()).scroll).toBeGreaterThan(0);
+				const before = await view();
+				expect(before.line).toBe(140);
+				await page.locator('#language-select').selectOption('PYTHON');
+				await page.waitForFunction(() =>
+					(window as any).__wasmIdleMonacoEditor?.getModel()?.uri.path.endsWith('.py')
+				);
+				await page.locator('#language-select').selectOption('CPP');
+				await expect.poll(view).toEqual(before);
+			});
+		}
+	);
+
+	it(
 		'keeps undo and redo separate when language projects share a filename',
 		browserOptions,
 		async () => {
