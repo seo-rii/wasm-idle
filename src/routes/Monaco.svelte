@@ -4112,8 +4112,13 @@
 		if (!api || !owner || !openFile) return;
 		const opener = api.editor.registerEditorOpener({
 			async openCodeEditor(source, resource, target) {
-				if (source !== owner || resource.scheme !== 'file' || resource.authority ||
-					!resource.path.startsWith('/workspace/')) return false;
+				if (
+					source !== owner ||
+					resource.scheme !== 'file' ||
+					resource.authority ||
+					!resource.path.startsWith('/workspace/')
+				)
+					return false;
 				const path = resource.path.slice('/workspace/'.length);
 				if (!workspacePaths?.includes(path)) return false;
 				openFile(path);

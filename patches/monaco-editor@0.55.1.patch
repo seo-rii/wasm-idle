@@ -177,3 +177,21 @@ index e3ace9c..ff67591 100644
      this._api.textDocumentDidOpen({ textDocument: {
        languageId: _textModel.getLanguageId(),
        uri,
+diff --git a/esm/vs/language/typescript/tsMode.js b/esm/vs/language/typescript/tsMode.js
+index 6ff0b8e..154c1c7 100644
+--- a/esm/vs/language/typescript/tsMode.js
++++ b/esm/vs/language/typescript/tsMode.js
+@@ -201,6 +201,13 @@ function setupMode(defaults, modeId) {
+     }
+   }
+   registerProviders();
++  let registeredMode = defaults.modeConfiguration;
++  defaults.onDidChange(() => {
++    if (registeredMode !== defaults.modeConfiguration) {
++      registeredMode = defaults.modeConfiguration;
++      registerProviders();
++    }
++  });
+   return worker;
+ }
+ function disposeAll(disposables) {
