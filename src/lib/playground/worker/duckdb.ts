@@ -1,16 +1,23 @@
+import type { AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
 import type { WorkspaceFile } from '@wasm-idle/core';
 import { importRuntimeModule } from '$lib/playground/runtimeModule';
-import { queryDuckDbResult } from './duckdbResult';
 
 declare var self: any;
 
 const encoder = new TextEncoder();
-let dbPromise: Promise<any> | null = null;
+let dbPromise: Promise<{
+	db: any;
+	queryDuckDbResult: DuckDbRuntimeModule['queryDuckDbResult'];
+}> | null = null;
 let runtimeModuleUrl = '';
 
 interface DuckDbRuntimeModule {
 	duckdb: any;
 	bundles: Record<string, { mainModule: string; mainWorker?: string; pthreadWorker?: string }>;
+	queryDuckDbResult?: (
+		readResult: () => Promise<Uint8Array>,
+		openDisplay: () => Promise<AsyncDuckDBConnection>
+	) => Promise<Parameters<typeof formatTable>[0]>;
 }
 
 async function loadDuckDB(moduleUrl: string, log: boolean) {
@@ -21,7 +28,8 @@ async function loadDuckDB(moduleUrl: string, log: boolean) {
 	}
 	if (dbPromise) return await dbPromise;
 	dbPromise = (async () => {
-		const { duckdb, bundles } = await importRuntimeModule<DuckDbRuntimeModule>(moduleUrl);
+		const { duckdb, bundles, queryDuckDbResult } =
+			await importRuntimeModule<DuckDbRuntimeModule>(moduleUrl);
 		const bundle = await duckdb.selectBundle(bundles);
 		if (!bundle.mainWorker) {
 			throw new Error('DuckDB selected bundle does not include a browser worker');
@@ -32,7 +40,7 @@ async function loadDuckDB(moduleUrl: string, log: boolean) {
 			worker
 		);
 		await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
-		return db;
+		return { db, queryDuckDbResult };
 	})();
 	return await dbPromise;
 }
@@ -204,13 +212,15 @@ self.onmessage = async (event: { data: any }) => {
 			return;
 		}
 
-		const db = await loadDuckDB(runtimeModuleUrl, Boolean(log));
+		const { db, queryDuckDbResult } = await loadDuckDB(runtimeModuleUrl, Boolean(log));
 		if (prepare) {
 			postMessage({ results: true });
 			return;
 		}
 
-		await db.reset();
+		// Opening a fresh in-memory DB configures the Wasm Arrow exporter itself.
+		if (queryDuckDbResult) await db.open({ arrowLosslessConversion: true });
+		else await db.reset();
 		await db.dropFiles();
 		const normalizedActivePath = normalizeWorkspacePath(activePath || 'main.duckdb');
 		const setupSql = await registerWorkspaceFiles(
@@ -220,7 +230,7 @@ self.onmessage = async (event: { data: any }) => {
 			workspaceFiles,
 			stdin
 		);
-		const connection = await db.connect();
+		const connection: AsyncDuckDBConnection = await db.connect();
 		try {
 			if (log) {
 				console.log(
@@ -238,7 +248,12 @@ self.onmessage = async (event: { data: any }) => {
 					label: 'DuckDB query started'
 				}
 			});
-			const table = await queryDuckDbResult(db, connection, code);
+			const table = queryDuckDbResult
+				? await queryDuckDbResult(
+						() => connection.useUnsafe((bindings, id) => bindings.runQuery(id, code)),
+						() => db.connect()
+					)
+				: await connection.query(code);
 			const output = formatTable(table);
 			if (output) postMessage({ output });
 			if (log) {

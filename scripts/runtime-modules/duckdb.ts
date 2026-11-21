@@ -16,3 +16,4 @@ export const bundles: duckdb.DuckDBBundles = {
 };
 
 export { duckdb };
+export { queryDuckDbResult } from './duckdb-result';

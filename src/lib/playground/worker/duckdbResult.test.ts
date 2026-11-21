@@ -1,13 +1,13 @@
 // @vitest-environment node
 import { createRequire } from 'node:module';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { queryDuckDbResult } from './duckdbResult';
+import { queryDuckDbResult } from '../../../../scripts/runtime-modules/duckdb-result';
 
 const require = createRequire(import.meta.url);
 const duckdb =
 	require('@duckdb/duckdb-wasm/blocking') as typeof import('@duckdb/duckdb-wasm/blocking');
 
-describe('DuckDB result types before Arrow conversion', () => {
+describe('DuckDB result formatting', () => {
 	let db: Awaited<ReturnType<typeof duckdb.createDuckDB>>;
 	let connection: ReturnType<typeof db.connect>;
 	beforeAll(async () => {
@@ -23,14 +23,14 @@ describe('DuckDB result types before Arrow conversion', () => {
 			duckdb.NODE_RUNTIME
 		);
 		await db.instantiate(() => {});
+		db.open({ arrowLosslessConversion: true });
 		connection = db.connect();
 	});
 	afterAll(() => connection?.close());
 	const query = (sql: string) =>
 		queryDuckDbResult(
-			{ tokenize: async (text) => db.tokenize(text) },
-			{ query: async (text) => connection.query(text) },
-			sql
+			() => connection.useUnsafe((bindings, id) => bindings.runQuery(id, sql)),
+			() => db.connect()
 		);
 
 	it('retains timezone offsets, interval components, unsigned integers and nested logical values', async () => {
@@ -132,18 +132,92 @@ describe('DuckDB result types before Arrow conversion', () => {
 		expect(empty.schema.fields.map((field) => field.name)).toEqual(['t', 't']);
 	});
 
+	it('binds volatile table arguments, views and dynamic pivots exactly as one native query', async () => {
+		const compare = async (suffix: string, body: string) => {
+			const run = async (formatted: boolean) => {
+				const name = 'probe_' + suffix + (formatted ? '_formatted' : '_control');
+				const sql = ('CREATE SEQUENCE seq_name START 41; ' + body)
+					.replaceAll('seq_name', name)
+					.replaceAll('view_name', 'v_' + name);
+				const table = formatted ? await query(sql) : connection.query(sql);
+				return {
+					headings: table.schema.fields.map((field) => field.name),
+					value: table.getChildAt(0)?.get(0)?.toString(),
+					sequence: connection
+						.query("SELECT currval('" + name + "')")
+						.getChildAt(0)
+						?.get(0)
+				};
+			};
+			expect(await run(true)).toEqual(await run(false));
+		};
+		await compare('range', "SELECT count(*) AS n FROM range(nextval('seq_name'))");
+		await compare(
+			'view',
+			"CREATE VIEW view_name AS SELECT * FROM range(nextval('seq_name')); SELECT count(*) AS n FROM view_name"
+		);
+		await compare('pivot', "PIVOT (SELECT nextval('seq_name') AS n, 1 AS v) ON n USING sum(v)");
+	});
+
+	it('preserves the original statement and prepared-statement catalog seen through a view', async () => {
+		connection.query(`CREATE TEMP VIEW inspect_run AS
+			SELECT current_query() AS sql_text, (SELECT count(*) FROM duckdb_prepared_statements()) AS statements`);
+		const sql =
+			"/* run from the editor */ SELECT sql_text, statements, INTERVAL '2 days' AS duration FROM inspect_run";
+		const result = await query(sql);
+		expect(result.getChildAt(0)?.get(0)).toBe(sql);
+		expect(result.getChildAt(1)?.get(0)).toBe(0n);
+		expect(result.getChildAt(2)?.get(0)).toBe('2 days');
+	});
+
+	it('keeps the user transaction open while formatting RETURNING and respects rollback and commit', async () => {
+		connection.query('CREATE TABLE user_transactions(n INTEGER, t TIMETZ)');
+		const observe = db.connect();
+		try {
+			const inserted =
+				await query(`BEGIN; INSERT INTO user_transactions VALUES (1, '10:30:00+03')
+				RETURNING t AS value, t AS value`);
+			expect(inserted.schema.fields.map((field) => field.name)).toEqual(['value', 'value']);
+			expect(inserted.getChildAt(1)?.get(0)).toBe('10:30:00+03');
+			expect(observe.query('SELECT n FROM user_transactions').numRows).toBe(0);
+			await query('ROLLBACK');
+			expect(connection.query('SELECT n FROM user_transactions').numRows).toBe(0);
+
+			await query("BEGIN; INSERT INTO user_transactions VALUES (2, '05:00:00-03'); COMMIT");
+			expect(observe.query('SELECT n FROM user_transactions').getChildAt(0)?.get(0)).toBe(2);
+		} finally {
+			observe.close();
+		}
+	});
+
+	it('preserves committed prefix effects when the final statement fails to bind', async () => {
+		connection.query('CREATE TABLE prefix_events(n INTEGER)');
+		await expect(
+			query('INSERT INTO prefix_events VALUES (9); SELECT * FROM missing_prefix_table')
+		).rejects.toThrow(/missing_prefix_table/);
+		expect(connection.query('SELECT n FROM prefix_events').getChildAt(0)?.toArray()).toEqual(
+			new Int32Array([9])
+		);
+	});
+
 	it('keeps MERGE-specific output and DuckDB parse failures from re-running prefix statements', async () => {
-		const merged = await query(`CREATE TABLE merge_log(n INT); INSERT INTO merge_log VALUES (1);
+		const merged =
+			await query(`CREATE TABLE merge_log(n INT, t TIMETZ); INSERT INTO merge_log VALUES (1,'04:00:00-03');
 			MERGE INTO merge_log t USING (VALUES (1)) s(n) ON t.n=s.n
-			WHEN MATCHED THEN UPDATE SET n=t.n+1 RETURNING merge_action, t.n`);
+			WHEN MATCHED THEN UPDATE SET n=t.n+1 RETURNING merge_action, t.n, t.t`);
 		expect(merged.getChildAt(0)?.get(0)).toBe('UPDATE');
 		expect(merged.getChildAt(1)?.get(0)).toBe(2);
-		await expect(query('INSERT INTO merge_log VALUES (5); SELECT 1 + )')).rejects.toThrow();
+		expect(merged.getChildAt(2)?.get(0)).toBe('04:00:00-03');
+		await expect(query('INSERT INTO merge_log(n) VALUES (5); SELECT 1 + )')).rejects.toThrow();
 		await expect(
-			query('INSERT INTO merge_log VALUES (6); UPDATE merge_log SET n = + RETURNING n')
+			query('INSERT INTO merge_log(n) VALUES (6); UPDATE merge_log SET n = + RETURNING n')
 		).rejects.toThrow();
 		expect(
-			connection.query('SELECT sum(n) FROM merge_log').getChildAt(0)?.get(0).toString()
+			connection
+				.query('SELECT sum(n)::INTEGER FROM merge_log')
+				.getChildAt(0)
+				?.get(0)
+				.toString()
 		).toBe('2');
 	});
 });

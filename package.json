@@ -304,6 +304,7 @@
 		"@wasm-idle/lsp": "workspace:*",
 		"@wasm-idle/terminal": "workspace:*",
 		"@wasmer/sdk": "0.10.0",
+		"apache-arrow": "17.0.0",
 		"assemblyscript": "0.28.20",
 		"esbuild": "0.28.2",
 		"eslint": "^10.13.0",

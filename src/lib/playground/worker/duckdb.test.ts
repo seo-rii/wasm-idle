@@ -1,12 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// These fixtures exercise worker lifecycle and the raw Arrow display columns.
-// The query planner is exercised against the real engine in duckdbResult.test.ts.
-vi.mock('./duckdbResult', () => ({
-	queryDuckDbResult: (_db: unknown, connection: { query(sql: string): unknown }, sql: string) =>
-		connection.query(sql)
-}));
-
 const { importRuntimeModuleMock } = vi.hoisted(() => ({
 	importRuntimeModuleMock: vi.fn()
 }));
@@ -14,13 +7,19 @@ const { importRuntimeModuleMock } = vi.hoisted(() => ({
 const duckdbMock = vi.hoisted(() => {
 	const query = vi.fn();
 	const close = vi.fn(async () => {});
-	const connection = { query, close };
+	const connection = {
+		query,
+		close,
+		useUnsafe: (read: (bindings: unknown, id: number) => unknown) =>
+			read({ runQuery: (_id: number, sql: string) => query(sql) }, 1)
+	};
 	const db = {
 		connect: vi.fn(async () => connection),
 		instantiate: vi.fn(async () => {}),
 		dropFiles: vi.fn(async () => {}),
 		registerFileBuffer: vi.fn(async () => {}),
 		registerFileText: vi.fn(async () => {}),
+		open: vi.fn(async () => {}),
 		reset: vi.fn(async () => {})
 	};
 	const selectBundle = vi.fn(async () => ({
@@ -42,6 +41,7 @@ const duckdbMock = vi.hoisted(() => {
 		db.dropFiles.mockClear();
 		db.registerFileBuffer.mockClear();
 		db.registerFileText.mockClear();
+		db.open.mockClear();
 		db.reset.mockClear();
 		selectBundle.mockClear();
 		AsyncDuckDB.mockClear();
@@ -84,6 +84,7 @@ describe('DuckDB worker', () => {
 		importRuntimeModuleMock.mockReset();
 		importRuntimeModuleMock.mockResolvedValue({
 			duckdb: duckdbMock,
+			queryDuckDbResult: (read: () => unknown) => read(),
 			bundles: {
 				eh: {
 					mainModule: '/duckdb-eh.wasm',
@@ -100,6 +101,18 @@ describe('DuckDB worker', () => {
 		(globalThis as any).Worker = vi.fn(function MockWorker(this: { url: string }, url: string) {
 			this.url = url;
 		});
+	});
+
+	it('runs a custom provider that exposes only the original DuckDB and bundles exports', async () => {
+		const provider = await importRuntimeModuleMock();
+		const { queryDuckDbResult: _result, ...legacy } = provider;
+		importRuntimeModuleMock.mockResolvedValue(legacy);
+		duckdbMock.query.mockResolvedValue({ numCols: 0 });
+		await loadWorker();
+		await (globalThis as any).self.onmessage({ data: { code: 'SELECT 1' } });
+		expect(duckdbMock.query).toHaveBeenCalledWith('SELECT 1');
+		expect(duckdbMock.db.reset).toHaveBeenCalledOnce();
+		expect(duckdbMock.db.open).not.toHaveBeenCalled();
 	});
 
 	it('loads DuckDB-Wasm and executes workspace setup plus the active query', async () => {
@@ -156,7 +169,7 @@ describe('DuckDB worker', () => {
 			'/duckdb-mvp.wasm',
 			'/duckdb-pthread.worker.js'
 		);
-		expect(duckdbMock.db.reset).toHaveBeenCalledTimes(1);
+		expect(duckdbMock.db.open).toHaveBeenCalledWith({ arrowLosslessConversion: true });
 		expect(duckdbMock.db.registerFileText).toHaveBeenCalledWith(
 			'setup.sql',
 			'CREATE TABLE numbers(n INTEGER);'
@@ -214,19 +227,29 @@ describe('DuckDB worker', () => {
 			{ path: 'stdin.txt', content: 'workspace file' }
 		];
 		const run = (files: typeof workspaceFiles) =>
-			(globalThis as any).self.onmessage({ data: { code: 'SELECT 1', workspaceFiles: files, stdin: 'stdin' } });
+			(globalThis as any).self.onmessage({
+				data: { code: 'SELECT 1', workspaceFiles: files, stdin: 'stdin' }
+			});
 		await run(workspaceFiles);
 		const firstRegistration = duckdbMock.db.registerFileBuffer.mock.invocationCallOrder[0];
 		expect(duckdbMock.db.dropFiles.mock.invocationCallOrder[0]).toBeLessThan(firstRegistration);
 		expect(duckdbMock.db.registerFileBuffer).toHaveBeenCalledWith('parts/table.parquet', bytes);
-		const mounted = vi.mocked(duckdbMock.db.registerFileBuffer).mock.calls[0] as unknown as [string, Uint8Array];
+		const mounted = vi.mocked(duckdbMock.db.registerFileBuffer).mock.calls[0] as unknown as [
+			string,
+			Uint8Array
+		];
 		expect(mounted[1].buffer).not.toBe(bytes.buffer);
 		expect(duckdbMock.db.registerFileText).toHaveBeenCalledWith('stdin.txt', 'workspace file');
 		expect(duckdbMock.db.registerFileText).not.toHaveBeenCalledWith('stdin.txt', 'stdin');
-		expect(duckdbMock.db.registerFileBuffer).toHaveBeenCalledWith('/dev/stdin', new TextEncoder().encode('stdin'));
+		expect(duckdbMock.db.registerFileBuffer).toHaveBeenCalledWith(
+			'/dev/stdin',
+			new TextEncoder().encode('stdin')
+		);
 		await run([]);
 		expect(duckdbMock.db.dropFiles).toHaveBeenCalledTimes(2);
-		expect(duckdbMock.db.dropFiles.mock.invocationCallOrder[1]).toBeGreaterThan(firstRegistration);
+		expect(duckdbMock.db.dropFiles.mock.invocationCallOrder[1]).toBeGreaterThan(
+			firstRegistration
+		);
 		expect(duckdbMock.db.registerFileText).toHaveBeenCalledWith('stdin.txt', 'stdin');
 	});
 
@@ -264,15 +287,23 @@ describe('DuckDB worker', () => {
 	it('renders timestamps from exact Arrow ticks across the epoch, preserving null and infinity', async () => {
 		const columns = [
 			[1_770_091_506_654_321_000n, 1_770_091_506_654_321_001n, -1n, 0n, 0n],
-			[0n, 12_345_678n, 9_223_372_036_854_775_807n, -9_223_372_036_854_775_807n, -62_161_757_633_000_000n]
+			[
+				0n,
+				12_345_678n,
+				9_223_372_036_854_775_807n,
+				-9_223_372_036_854_775_807n,
+				-62_161_757_633_000_000n
+			]
 		];
 		duckdbMock.query.mockResolvedValue({
 			numCols: 2,
 			numRows: 5,
-			schema: { fields: [
-				{ name: 'ns', type: { typeId: 10, unit: 3 } },
-				{ name: 'tz', type: { typeId: 10, unit: 2, timezone: 'UTC' } }
-			] },
+			schema: {
+				fields: [
+					{ name: 'ns', type: { typeId: 10, unit: 3 } },
+					{ name: 'tz', type: { typeId: 10, unit: 2, timezone: 'UTC' } }
+				]
+			},
 			getChildAt: (index: number) => ({
 				toArray: () => BigInt64Array.from(columns[index]),
 				isValid: (row: number) => index !== 0 || row !== 3
