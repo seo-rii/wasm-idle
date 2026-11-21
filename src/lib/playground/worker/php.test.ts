@@ -79,7 +79,7 @@ describe('PHP worker', () => {
 		);
 		expect(phpInstances[0].writeFile).toHaveBeenCalledWith(
 			'/workspace/main.php',
-			expect.stringContaining("$argv = array('main.php', '7');")
+			"<?php echo file_get_contents('php://input');"
 		);
 		expect(phpInstances[0].run).toHaveBeenCalledWith(
 			expect.objectContaining({
@@ -89,6 +89,7 @@ describe('PHP worker', () => {
 					USER: 'jungol'
 				},
 				$_SERVER: {
+					WASM_IDLE_ARGV: JSON.stringify(['main.php', '7']),
 					SCRIPT_FILENAME: '/workspace/main.php',
 					SCRIPT_NAME: '/main.php'
 				}
@@ -128,48 +129,27 @@ describe('PHP worker', () => {
 	});
 
 	it.each([
-		{
-			label: 'strict_types declaration',
-			code: '<?php\ndeclare(strict_types=1);\necho $argc;',
-			header: 'declare(strict_types=1);',
-			body: 'echo $argc;'
-		},
-		{
-			label: 'unbracketed namespace declaration',
-			code: '<?php\ndeclare(strict_types=1);\nnamespace Demo\\Cli;\necho $argc;',
-			header: 'namespace Demo\\Cli;',
-			body: 'echo $argc;'
-		},
-		{
-			label: 'bracketed namespace declaration',
-			code: '<?php\ndeclare(strict_types=1);\nnamespace Demo\\Cli { echo $argc; }',
-			header: 'namespace Demo\\Cli {',
-			body: 'echo $argc;'
-		}
-	])('injects argv after the required $label header', async ({ code, header, body }) => {
+		'<?php\ndeclare(strict_types=1);\necho $argc;',
+		'<?php\ndeclare(strict_types=1);\nnamespace Demo\\Cli;\necho $argc;',
+		'<?php\nnamespace Demo { function count($v) { return 99; } echo __LINE__; }'
+	])('passes PHP sources unchanged and supplies program arguments separately', async (code) => {
 		await loadWorker();
 		await (globalThis as any).self.onmessage({
 			data: {
 				code,
-				prepare: false,
 				buffer: new SharedArrayBuffer(4096),
-				args: ['value'],
-				activePath: 'main.php',
-				workspaceFiles: []
+				stdin: '',
+				args: ['two words', "quote's"],
+				activePath: 'app/main.php'
 			}
 		});
-
-		const source = phpInstances[0].writeFile.mock.calls.find(
-			([path]: [string]) => path === '/workspace/main.php'
-		)?.[1] as string;
-		expect(source.indexOf('declare(strict_types=1);')).toBeLessThan(
-			source.indexOf("$argv = array('main.php', 'value');")
-		);
-		expect(source.indexOf(header)).toBeLessThan(
-			source.indexOf("$argv = array('main.php', 'value');")
-		);
-		expect(source.indexOf("$argv = array('main.php', 'value');")).toBeLessThan(
-			source.indexOf(body)
+		expect(phpInstances[0].writeFile).toHaveBeenCalledWith('/workspace/app/main.php', code);
+		expect(phpInstances[0].run).toHaveBeenCalledWith(
+			expect.objectContaining({
+				$_SERVER: expect.objectContaining({
+					WASM_IDLE_ARGV: JSON.stringify(['app/main.php', 'two words', "quote's"])
+				})
+			})
 		);
 	});
 
