@@ -109,3 +109,24 @@ it('stores active file bodies once and accepts both the compact and older repres
 			.workspaces
 	).toBeUndefined();
 });
+
+it('accepts a layout-only save that upgrades legacy Python defaults while retaining concurrent edits', () => {
+	const legacy = { version: 7, language: 'PYTHON', files, sidebarOpen: true };
+	const upgraded = {
+		...legacy,
+		sidebarOpen: false,
+		pythonInvalidationMode: 'checked-hash',
+		pythonTimestampInput: '0'
+	};
+	const stored = JSON.stringify(legacy);
+	expect(sameWorkspaceContents(stored, JSON.stringify(upgraded))).toBe(true);
+	expect(
+		sameWorkspaceContents(
+			stored,
+			JSON.stringify({ ...upgraded, pythonInvalidationMode: 'timestamp' })
+		)
+	).toBe(false);
+	expect(
+		sameWorkspaceContents(stored, JSON.stringify({ ...upgraded, pythonTimestampInput: '17' }))
+	).toBe(false);
+});

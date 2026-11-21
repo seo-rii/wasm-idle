@@ -161,6 +161,9 @@ export function sameWorkspaceContents(left: string | null, right: string | null)
 		};
 		const result = withoutSelection(compact);
 		delete result.sidebarOpen;
+		// Older saves omit these same compiler defaults.
+		if (result.pythonInvalidationMode === 'checked-hash') delete result.pythonInvalidationMode;
+		if (result.pythonTimestampInput === '0') delete result.pythonTimestampInput;
 		if (result.workspaces && typeof result.workspaces === 'object')
 			result.workspaces = Object.fromEntries(
 				Object.entries(result.workspaces).map(([id, project]) => [
