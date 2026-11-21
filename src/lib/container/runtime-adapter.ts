@@ -24,6 +24,7 @@ import type { SandboxExecutionOptions } from '../playground/options.js';
 import {
 	decodeWorkspaceText,
 	isRuntimeWorkspacePath,
+	runtimeWorkspacePathHint,
 	workspaceFileFromBytes,
 	workspaceParents
 } from './workspace.js';
@@ -295,6 +296,8 @@ export class ContainerRuntimeAdapter {
 		const path = this.directoryPath(language);
 		const limits = {
 			maxFiles: 2048,
+			// The container accepts a 4096-byte absolute path, including its project directory.
+			maxPathBytes: 4096 - path.length - 1,
 			maxFileBytes: 16 * 1024 * 1024,
 			maxTotalBytes: 64 * 1024 * 1024,
 			caseSensitive: true
@@ -538,7 +541,7 @@ export class ContainerRuntimeAdapter {
 		const root = this.directory(language);
 		const activePath = options.activePath ?? defaultSource(language);
 		if (!isRuntimeWorkspacePath(activePath))
-			throw new Error('Rename the active file to a portable relative path to run it.');
+			throw new Error(runtimeWorkspacePathHint);
 		try {
 			this.fs.stat(activePath, { root, cwd: root });
 		} catch (error) {

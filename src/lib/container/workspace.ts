@@ -1,10 +1,16 @@
-import { normalizeWorkspacePath } from '@wasm-idle/core';
+import { DEFAULT_WORKSPACE_LIMITS, normalizeWorkspacePath } from '@wasm-idle/core';
 import type { ContainerWorkspaceEntry, SavedWorkspaceDirectory } from './protocol.js';
+
+const pathEncoder = new TextEncoder();
+export const runtimeWorkspacePathHint = `Rename the active file to a portable relative path of at most ${DEFAULT_WORKSPACE_LIMITS.maxPathBytes} UTF-8 bytes to run it.`;
 
 /** Private language workers accept portable relative paths; the shell filesystem uses POSIX names. */
 export function isRuntimeWorkspacePath(path: string) {
 	try {
-		return normalizeWorkspacePath(path) === path;
+		return (
+			normalizeWorkspacePath(path) === path &&
+			pathEncoder.encode(path).byteLength <= DEFAULT_WORKSPACE_LIMITS.maxPathBytes
+		);
 	} catch {
 		return false;
 	}

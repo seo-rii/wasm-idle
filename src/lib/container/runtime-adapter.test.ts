@@ -485,6 +485,32 @@ describe('container shared editor input boundary', () => {
 		expect(() => adapter.syncWorkspace('C', [f('../outside', 'x')])).toThrow();
 	});
 
+	it('retains a long UTF-8 sibling in the container while running a portable entrypoint', () => {
+		const { adapter, container } = fixture();
+		const prefix = ('a'.repeat(200) + '/').repeat(5);
+		const boundary = prefix + '한'.repeat(6) + 'x';
+		const long = boundary + 'y';
+		expect(new TextEncoder().encode(boundary)).toHaveLength(1024);
+		const files = [f('main.c', 'source'), f(boundary, 'worker file'), f(long, 'editor file')];
+		adapter.syncWorkspace('C', files, []);
+		adapter.syncWorkspace(
+			'C',
+			[f(long, 'changed')],
+			[f(long, 'editor file')],
+			files.map(({ path, content }) => ({ path, bytes: path === long ? 7 : content.length }))
+		);
+		expect(read(container, '/workspace/C/' + long)).toBe('changed');
+		const inputs = adapter.inputs('C', '', { activePath: 'main.c' });
+		expect(inputs.code).toBe('source');
+		expect(inputs.options.workspaceFiles?.map((file) => file.path).sort()).toEqual([
+			boundary,
+			'main.c'
+		]);
+		expect(() => adapter.inputs('C', '', { activePath: long })).toThrow(
+			/Rename the active file/
+		);
+	});
+
 	it('retains whole-project admission limits and checks delta metadata before writing', () => {
 		const { adapter, container } = fixture();
 		adapter.syncWorkspace('C', [f('main.c', 'base')]);
