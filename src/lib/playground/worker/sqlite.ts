@@ -84,7 +84,7 @@ function loadWorkspaceFiles(
 	const normalizedActivePath = normalizeWorkspacePath(activePath);
 	for (const file of workspaceFiles) {
 		const normalizedPath = normalizeWorkspacePath(file.path);
-		if (!normalizedPath || !normalizedPath.endsWith('.sql')) continue;
+		if (!normalizedPath || !normalizedPath.toLowerCase().endsWith('.sql')) continue;
 		if (normalizedPath === normalizedActivePath) continue;
 		db.exec(file.content);
 	}

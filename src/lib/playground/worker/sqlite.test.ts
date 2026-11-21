@@ -93,9 +93,13 @@ SELECT 'factorial_plus_bonus=' || 27 AS result;`,
 		});
 	});
 
-	it.each(['query.sql', 'reports/query.sql'])(
-		'loads auxiliary main.sql and excludes the active %s from setup',
-		async (activePath) => {
+	it.each([
+		['query.sql', 'main.sql'],
+		['reports/query.SQL', 'schema.SQL'],
+		['reports/query.sql', 'nested/Schema.SqL']
+	])(
+		'excludes the active %s and executes the auxiliary %s',
+		async (activePath, schemaPath) => {
 			await loadWorker();
 			await (globalThis as any).self.onmessage({
 				data: {
@@ -103,7 +107,7 @@ SELECT 'factorial_plus_bonus=' || 27 AS result;`,
 					activePath,
 					workspaceFiles: [
 						{
-							path: 'main.sql',
+							path: schemaPath,
 							content:
 								'CREATE TABLE numbers(n INTEGER); INSERT INTO numbers VALUES(7);'
 						},
