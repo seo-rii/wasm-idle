@@ -1,4 +1,4 @@
-import { PHP_PRELOAD, PHP_PRELOAD_PATH } from './phpPreload';
+import { PHP_PRELOAD, PHP_PRELOAD_PATH, PHP_STDIN_MESSAGE } from './phpPreload';
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 import type { SandboxWorkspaceFile } from '$lib/playground/options';
 import { importRuntimeModule } from '$lib/playground/runtimeModule';
@@ -11,9 +11,6 @@ let networkFetch: typeof fetch | undefined;
 
 declare var self: any;
 
-const encoder = new TextEncoder();
-
-let stdinBufferPhp: Int32Array | null = null;
 let runtimeModuleUrl = '';
 let phpPromise: Promise<PhpRuntime> | null = null;
 let workspaceDirty = false;
@@ -23,6 +20,7 @@ class SupersededPhpStartup extends Error {}
 
 interface PhpRuntime {
 	exit?(): void;
+	onMessage(handler: (message: string) => string): () => Promise<void> | void;
 	mkdir(path: string): void;
 	rmdir(path: string, options?: { recursive?: boolean }): void;
 	writeFile(path: string, content: string): void;
@@ -140,30 +138,6 @@ function writeWorkspaceFile(php: PhpRuntime, path: string, content: string) {
 	php.writeFile(fullPath, content);
 }
 
-function codeMightReadStdin(code: string) {
-	return /php:\/\/input|STDIN|stream_get_contents|file_get_contents|fgets\s*\(/.test(code);
-}
-
-function readInitialStdin(code: string, initialStdin: unknown, log = true) {
-	if (typeof initialStdin === 'string') return initialStdin;
-	if (!codeMightReadStdin(code)) return '';
-	// PHP receives stdin as one request body before the program starts, so collect
-	// terminal input until EOF instead of dropping chunks typed after the first.
-	let input = '';
-	while (true) {
-		const chunk = waitForBufferedStdin(stdinBufferPhp!, () => postMessage({ buffer: true }));
-		if (log) {
-			console.log(
-				chunk == null
-					? '[wasm-idle:php-stdin] read(bytes=0, eof=true)'
-					: `[wasm-idle:php-stdin] read(bytes=${encoder.encode(chunk).byteLength}, text=${JSON.stringify(chunk)})`
-			);
-		}
-		if (chunk == null) return input;
-		input += chunk;
-	}
-}
-
 self.onmessage = async (event: { data: any }) => {
 	const {
 		load,
@@ -194,7 +168,7 @@ self.onmessage = async (event: { data: any }) => {
 			return;
 		}
 
-		stdinBufferPhp = new Int32Array(buffer);
+		const inputBuffer = new Int32Array(buffer);
 		const php = await loadPhp(runtimeModuleUrl, log);
 
 		if (prepare) {
@@ -215,7 +189,6 @@ self.onmessage = async (event: { data: any }) => {
 				`[wasm-idle:php-worker] run start bytes=${code.length} activePath=${activePath}`
 			);
 		}
-		const body = readInitialStdin(code, stdin, log);
 		postMessage({
 			progress: {
 				kind: 'ready',
@@ -224,18 +197,32 @@ self.onmessage = async (event: { data: any }) => {
 				label: 'PHP program started'
 			}
 		});
-		const response = await php.run({
-			scriptPath,
-			body,
-			env: {
-				USER: 'jungol'
-			},
-			$_SERVER: {
-				WASM_IDLE_ARGV: JSON.stringify([normalizedActivePath, ...args]),
-				SCRIPT_FILENAME: scriptPath,
-				SCRIPT_NAME: `/${normalizedActivePath}`
-			}
-		});
+		const interactive = typeof stdin !== 'string';
+		const removeInputHandler = interactive
+			? php.onMessage((message) => {
+					if (message !== PHP_STDIN_MESSAGE) return '';
+					const chunk = waitForBufferedStdin(inputBuffer, () =>
+						postMessage({ buffer: true })
+					);
+					return JSON.stringify(chunk);
+				})
+			: undefined;
+		let response;
+		try {
+			response = await php.run({
+				scriptPath,
+				body: interactive ? '' : stdin,
+				env: { USER: 'jungol' },
+				$_SERVER: {
+					WASM_IDLE_ARGV: JSON.stringify([normalizedActivePath, ...args]),
+					WASM_IDLE_TERMINAL_STDIN: interactive ? '1' : '0',
+					SCRIPT_FILENAME: scriptPath,
+					SCRIPT_NAME: `/${normalizedActivePath}`
+				}
+			});
+		} finally {
+			await removeInputHandler?.();
+		}
 		if (response.text) postMessage({ output: response.text });
 		if (response.errors) postMessage({ output: response.errors });
 		if (response.exitCode !== 0) {

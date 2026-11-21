@@ -6,6 +6,7 @@ const { phpInstances, createPhp84Mock, runResponses, MockPhp } = vi.hoisted(() =
 
 	class MockPhp {
 		mkdir = vi.fn();
+		onMessage = vi.fn(() => () => {});
 		writeFile = vi.fn();
 		run = vi.fn(async () => runResponses.shift() ?? { text: '', errors: '', exitCode: 0 });
 		runtime: unknown;
@@ -90,6 +91,7 @@ describe('PHP worker', () => {
 				},
 				$_SERVER: {
 					WASM_IDLE_ARGV: JSON.stringify(['main.php', '7']),
+					WASM_IDLE_TERMINAL_STDIN: '0',
 					SCRIPT_FILENAME: '/workspace/main.php',
 					SCRIPT_NAME: '/main.php'
 				}
