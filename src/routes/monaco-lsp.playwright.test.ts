@@ -365,6 +365,10 @@ const lspBrowserCases: LspBrowserCase[] = [
 		label: 'TypeScript',
 		fileName: 'main.ts',
 		source: 'const n: number = "not a number";\nconsole.log(n);\n',
+		validSource:
+			'import type { Value } from "./types/value";\nconst n: Value = 42;\nconsole.log(n);\n',
+		workspaceFiles: [{ path: 'types/value.ts', content: 'export type Value = number;' }],
+		errorLine: 1,
 		aliases: ['ts'],
 		expectedResponses: ['/lsp/typescript-libs.json.gz'],
 		assertNoPreEnableRequests: ['/lsp/typescript-libs.json.gz']
@@ -1766,6 +1770,23 @@ async function runLspCase(
 				resource: hooks.__wasmIdleMonacoEditor!.getModel!()!.uri
 			});
 		});
+		if (testCase.language === 'TYPESCRIPT') {
+			const waitForOwner = (owner: string) =>
+				page.waitForFunction((owner) => {
+					const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
+					const markers = hooks
+						.__wasmIdleMonacoApi!.editor.getModelMarkers({
+							resource: hooks.__wasmIdleMonacoEditor!.getModel!()!.uri
+						})
+						.filter((marker) => marker.message?.includes('not assignable'));
+					return markers.length === 1 && markers[0].owner === owner;
+				}, owner);
+			await waitForOwner('lsp');
+			await page.locator('#lsp-toggle').uncheck();
+			await waitForOwner('typescript');
+			await enableLsp(page);
+			await waitForOwner('lsp');
+		}
 		expect(
 			markers.some(
 				(marker) =>

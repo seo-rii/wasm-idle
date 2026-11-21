@@ -356,8 +356,10 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(
 			/monacoApi\.languages\.setMonarchTokensProvider\('toml', tomlMonarchTokens\);/
 		);
-		expect(source).toMatch(/typescript: \{ libUrl: typescriptLspLibUrl \}/);
-		expect(source).toMatch(/javascript: \{ libUrl: typescriptLspLibUrl \}/);
+		expect(source).toContain('libUrl: typescriptLspLibUrl');
+		expect(source).toContain('extraLibs: $state.snapshot(typescriptLspExtraLibs)');
+		expect(source).toContain('typescript: config');
+		expect(source).toContain('javascript: config');
 		expect(source).toMatch(/moduleUrl: duckDbLspModuleUrl \|\| ''/);
 		expect(source).not.toMatch(/@duckdb\/duckdb-wasm\/dist/);
 		for (const statusKey of ['json', 'yaml', 'toml', 'html', 'css', 'markdown']) {
