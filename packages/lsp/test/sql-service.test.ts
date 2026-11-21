@@ -28,6 +28,7 @@ describe('createSqlWorkerService', () => {
 			};
 			const validate = vi.fn(() => []);
 			const service = createSqlWorkerService(async () => ({ validate }));
+			expect(service.workspaceDiagnostics).toBe(true);
 			await service.initialize?.(
 				{
 					dialect,

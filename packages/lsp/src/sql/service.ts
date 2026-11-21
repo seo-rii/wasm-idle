@@ -359,6 +359,7 @@ export function createSqlWorkerService(
 
 	return {
 		name: 'wasm-idle-sql-lsp',
+		workspaceDiagnostics: true,
 		diagnosticDelay: 250,
 		capabilities: {
 			completionProvider: { triggerCharacters: [' ', '.'] },
