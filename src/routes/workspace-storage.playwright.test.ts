@@ -1024,6 +1024,46 @@ describe('workspace storage browser integration', () => {
 		}
 	);
 
+	it(
+		'shares a large active project when its compact representation fits Chromium',
+		browserOptions,
+		async () => {
+			await withWorkspacePage(async (page, context, browserUrl) => {
+				await disableBrowserPrewarm(context);
+				const csv = 'q'.repeat(820_000);
+				await context.addInitScript((contents) => {
+					const files = [
+						{ path: 'main.cpp', content: 'int main() {}' },
+						{ path: 'data.csv', content: contents }
+					];
+					localStorage.setItem(
+						'wasm-idle:example-workspace:v3',
+						JSON.stringify({
+							version: 7,
+							language: 'CPP',
+							activePath: 'main.cpp',
+							files
+						})
+					);
+				}, csv);
+				await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+				await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
+				await page.locator('#language-select[data-workspace-ready="true"]').waitFor();
+				await page.getByRole('button', { name: 'Share', exact: true }).click();
+				await page.getByText('Share URL copied, but large', { exact: true }).waitFor();
+				const url = new URL(await page.evaluate(() => navigator.clipboard.readText()));
+				expect(url.href.length).toBeLessThanOrEqual(2 * 1024 * 1024);
+				const shared = JSON.parse(
+					Buffer.from(url.hash.slice('#workspace='.length), 'base64url').toString()
+				);
+				expect(shared.language).toBe('CPP');
+				expect(
+					shared.files.find((file: { path: string }) => file.path === 'data.csv').content
+				).toBe(csv);
+			});
+		}
+	);
+
 	it('keeps edited shared code after a reload and sharing again', browserOptions, async () => {
 		expect.hasAssertions();
 		await withWorkspacePage(async (page, context, browserUrl) => {
