@@ -493,7 +493,9 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// The input layout and Readline renderer each add a JavaScript file and a declaration.
 		// source-map-js 1.2.3 added 2,296 bytes to Vue's dependency tree. Allow 3 KiB.
 		// Multi-source Clang, foreground terminal editing, and reactive breakpoints measure 43,393,107 installed bytes.
-		budget: { maxBytes: 43394048, maxFiles: 3494, maxPackages: 70 },
+		// The reviewed workspace, runtime and LSP fixes add 16,689 bytes to the pinned install:
+		// 43,401,987 bytes in 3,494 files and 66 packages. Round the byte limit up to the next KiB.
+		budget: { maxBytes: 43402240, maxFiles: 3494, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
