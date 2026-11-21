@@ -1,5 +1,6 @@
 import type { WorkspaceFile } from '@wasm-idle/core';
 import { importRuntimeModule } from '$lib/playground/runtimeModule';
+import { queryDuckDbResult } from './duckdbResult';
 
 declare var self: any;
 
@@ -237,7 +238,7 @@ self.onmessage = async (event: { data: any }) => {
 					label: 'DuckDB query started'
 				}
 			});
-			const table = await connection.query(code);
+			const table = await queryDuckDbResult(db, connection, code);
 			const output = formatTable(table);
 			if (output) postMessage({ output });
 			if (log) {

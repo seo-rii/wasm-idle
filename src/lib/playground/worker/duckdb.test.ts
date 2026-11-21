@@ -1,5 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+// These fixtures exercise worker lifecycle and the raw Arrow display columns.
+// The query planner is exercised against the real engine in duckdbResult.test.ts.
+vi.mock('./duckdbResult', () => ({
+	queryDuckDbResult: (_db: unknown, connection: { query(sql: string): unknown }, sql: string) =>
+		connection.query(sql)
+}));
+
 const { importRuntimeModuleMock } = vi.hoisted(() => ({
 	importRuntimeModuleMock: vi.fn()
 }));
