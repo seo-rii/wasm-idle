@@ -710,12 +710,12 @@
 		});
 	}
 
-	function eraseInputCharacter(characters: string[], position: number) {
-		if (position < 0 || position >= characters.length) return;
+	function eraseInput(characters: string[], position: number, end = position + 1) {
+		if (position < 0 || end > characters.length || position >= end) return;
 		const previousCursor = inputCursor;
 		input = characters
 			.slice(0, position)
-			.concat(characters.slice(position + 1))
+			.concat(characters.slice(end))
 			.join('');
 		inputCursor = position;
 		redrawInput(characters, previousCursor, position);
@@ -724,16 +724,23 @@
 	function handleInputKey(key: string) {
 		const characters = getInputCharacters(input);
 		switch (key) {
+			case '\x17':
 			case 'Meta-b':
 			case 'Meta-f': {
-				const step = key === 'Meta-b' ? -1 : 1;
+				const step = key === 'Meta-f' ? 1 : -1;
 				let position = inputCursor;
 				const adjacent = () => characters[step < 0 ? position - 1 : position];
-				const word = /[\p{L}\p{N}_]/u;
+				// Canonical word erase groups non-ASCII input, including symbols, with word characters.
+				const word = key === '\x17' ? /[\w\u0080-\u{10ffff}]/u : /[\p{L}\p{N}_]/u;
 				while (adjacent() && !word.test(adjacent())) position += step;
 				while (adjacent() && word.test(adjacent())) position += step;
+				if (key === '\x17') return eraseInput(characters, position, inputCursor);
 				return moveInputCursor(characters, position);
 			}
+			case '\x15':
+				return eraseInput(characters, 0, inputCursor);
+			case '\u007f':
+				return eraseInput(characters, inputCursor - 1);
 			case 'D':
 				return moveInputCursor(characters, Math.max(0, inputCursor - 1));
 			case 'C':
@@ -747,7 +754,7 @@
 			case '8~':
 				return moveInputCursor(characters, characters.length);
 			case '3~':
-				return eraseInputCharacter(characters, inputCursor);
+				return eraseInput(characters, inputCursor);
 		}
 	}
 
@@ -1279,12 +1286,12 @@
 							submitCurrentInput();
 							continue;
 						}
-						if (chunk === '\u007f') {
+						if (chunk === '\u007f' || chunk === '\x17' || chunk === '\x15') {
 							if (pendingText) {
 								appendInputText(pendingText);
 								pendingText = '';
 							}
-							eraseInputCharacter(getInputCharacters(input), inputCursor - 1);
+							handleInputKey(chunk);
 							continue;
 						}
 						if (chunk === '\t' || codePoint >= 0x20) {

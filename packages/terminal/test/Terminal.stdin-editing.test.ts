@@ -163,6 +163,17 @@ it('moves by word on Meta+B/F without inserting unsupported Meta keys', async ()
 	expect(write.mock.calls.flat()).toEqual(['one Xtwo\n', '_가나X,do!\n', 'left\n']);
 });
 
+it('erases a word or the line back to the cursor in foreground input', async () => {
+	const { term, write } = await runningTerminal();
+	term.input('one two\x17okay\r');
+	term.input('one two !!!\x17\r');
+	term.input('앞 🐈\x17\r');
+	term.input('some text\x15okay\r');
+	term.input('abc한글X\x1b[D\x15새\r');
+	term.input('\x17\x15\r');
+	expect(write.mock.calls.flat()).toEqual(['one okay\n', 'one \n', '앞 \n', 'okay\n', '새X\n', '\n']);
+});
+
 it('moves by word with Ctrl+Arrow while plain arrows keep moving by a grapheme', async () => {
 	const { term, write } = await runningTerminal();
 	term.input('one two\x1b[1;5DX\r');
