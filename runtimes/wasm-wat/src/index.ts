@@ -53,6 +53,8 @@ export interface BrowserWatExecutionResult {
 }
 
 let wabtPromise: ReturnType<typeof wabtFactory> | null = null;
+const utf8 = new TextEncoder();
+const decodeUtf8 = new TextDecoder('utf-8', { ignoreBOM: true });
 
 export async function compileWat(
 	request: BrowserWatCompileRequest
@@ -61,7 +63,11 @@ export async function compileWat(
 	let parsedModule: any = null;
 	try {
 		const wabt = await (wabtPromise ??= wabtFactory());
-		parsedModule = wabt.parseWat(fileName, request.code, request.features as never);
+		parsedModule = wabt.parseWat(
+			fileName,
+			utf8.encode(request.code),
+			request.features as never
+		);
 		parsedModule.resolveNames();
 		parsedModule.validate();
 		const binary = parsedModule.toBinary({
@@ -90,7 +96,12 @@ export async function compileWat(
 			severity: match?.[4] === 'warning' ? 'warning' : 'error',
 			message: (match?.[5] || cleanMessage || rawMessage).trim()
 		};
-		if (match?.[3]) diagnostic.columnNumber = Number(match[3]);
+		if (match?.[3]) {
+			const line = request.code.split(/\r\n|[\r\n]/u)[diagnostic.lineNumber - 1] ?? '';
+			const byteColumn = Number(match[3]) - 1;
+			diagnostic.columnNumber =
+				decodeUtf8.decode(utf8.encode(line).subarray(0, byteColumn)).length + 1;
+		}
 		return {
 			success: false,
 			diagnostics: [diagnostic],
