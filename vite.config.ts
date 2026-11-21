@@ -42,10 +42,14 @@ export default defineConfig({
 		alias: createCoreSourceAliases(root)
 	},
 	optimizeDeps: {
+		// Discover worker-only imports before the first editor session opens.
+		entries: ['packages/lsp/dist/{document,graphql,typescript}/worker.js'],
 		exclude: ['@seorii/monaco', '@seorii/monaco/workers', 'monaco-editor']
 	},
 	worker: { format: 'es' },
 	server: {
+		// Worker entry points are requested directly and fall outside SvelteKit's source directories.
+		fs: { allow: [fileURLToPath(new URL('./packages/lsp/dist/', import.meta.url))] },
 		allowedHosts: true,
 		headers: {
 			'Cross-Origin-Opener-Policy': 'same-origin',

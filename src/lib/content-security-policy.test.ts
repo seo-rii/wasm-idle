@@ -1,6 +1,7 @@
 // @vitest-environment node
 
 import { describe, expect, it } from 'vitest';
+import path from 'node:path';
 
 import svelteConfig from '../../sveltekit.config.mjs';
 import {
@@ -11,6 +12,11 @@ import {
 	svelteContentSecurityPolicy
 } from '../../scripts/content-security-policy.mjs';
 import viteConfig, { releasePreviewSecurityHeaders } from '../../vite.config';
+
+it('permits Vite to serve language worker entry points from the built SDK', () => {
+	const allowed = viteConfig.server?.fs?.allow?.map((root) => path.resolve(root)) ?? [];
+	expect(allowed).toContain(path.resolve('packages/lsp/dist'));
+});
 
 describe('release content security policy', () => {
 	it('uses SvelteKit hashes for document scripts and permits only verified Blob/Wasm execution', () => {
