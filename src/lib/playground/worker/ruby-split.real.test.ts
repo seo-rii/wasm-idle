@@ -148,5 +148,17 @@ puts 'ruby-split-ok'
 				.join('')
 		).toBe('[1,2]\n');
 		expect(stats.instances).toBe(2);
+		messages.length = 0;
+		await send({
+			...options,
+			activePath: 'app/main.rb',
+			workspaceFiles: [{ path: 'app/helper.rb', content: 'HELPER = 42' }],
+			code: `require_relative 'helper'
+raise 'script identity' unless __FILE__ == 'app/main.rb' && $0 == __FILE__
+raise 'unmounted source' unless File.read(__FILE__).include?('require_relative')
+puts HELPER`
+		});
+		expect(messages.filter((x) => x.error)).toEqual([]);
+		expect(messages.filter((x) => x.output).map((x) => x.output).join('')).toBe('42\n');
 	}, 30000);
 });

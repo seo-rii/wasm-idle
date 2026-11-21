@@ -1,3 +1,4 @@
+import { rubyStringLiteral } from './rubyScriptProcess';
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 import type { WorkspaceFile } from '@wasm-idle/core';
 import { importRuntimeModule } from '$lib/playground/runtimeModule';
@@ -273,7 +274,7 @@ interface PreparedRubyExecution {
 	stdin: ReturnType<typeof createRubyStdin>;
 	activate(initial: string | null, provider: () => string | null): void;
 	hasOutput(): { stdout: boolean; stderr: boolean };
-	mountActiveSource?(source: string): void;
+	mountActiveSource(source: string): void;
 	flushOutput?(): void;
 }
 const defaultContext = (golfscript = false): RubyExecutionContext => ({
@@ -486,33 +487,33 @@ async function initializeRubyExecution(
 			pendingBytes = 0;
 		},
 		hasOutput: () => ({ stdout: hasStdout, stderr: hasStderr }),
-		...(loaded.golfscriptBytes
-			? {
-					flushOutput() {
-						emit(golfscriptDecoders!.stdout.decode(), false);
-						emit(golfscriptDecoders!.stderr.decode(), true);
-					},
-					mountActiveSource(source: string) {
-						const parts = normalizeWorkspacePath(snapshot.activePath).split('/');
-						const name = parts.pop()!;
-						let contents = root;
-						for (const part of parts) {
-							let directory = contents.get(part);
-							if (!directory) {
-								directory = golfscriptMount!.createDirectory(new Map());
-								contents.set(part, directory);
-							}
-							if (!(directory.contents instanceof Map)) {
-								throw new Error(
-									'GolfScript source path conflicts with a workspace file.'
-								);
-							}
-							contents = directory.contents;
-						}
-						contents.set(name, new File(encoder.encode(source), { readonly: true }));
-					}
+		flushOutput() {
+			if (golfscriptDecoders) {
+				emit(golfscriptDecoders.stdout.decode(), false);
+				emit(golfscriptDecoders.stderr.decode(), true);
+			}
+		},
+		mountActiveSource(source: string) {
+			const parts = normalizeWorkspacePath(snapshot.activePath).split('/');
+			// The split bundle owns these directories. Keep its verified files read-only.
+			if (loaded.stdlib && (parts[0] === 'usr' || parts[0] === 'bundle')) return;
+			const name = parts.pop()!;
+			let contents = root;
+			for (const part of parts) {
+				let directory = contents.get(part);
+				if (!directory) {
+					directory = golfscriptMount
+						? golfscriptMount.createDirectory(new Map())
+						: new runtime.wasiShim.Directory(new Map());
+					contents.set(part, directory);
 				}
-			: {})
+				if (!(directory.contents instanceof Map)) {
+					throw new Error('Ruby source path conflicts with a workspace file.');
+				}
+				contents = directory.contents;
+			}
+			contents.set(name, new File(encoder.encode(source), { readonly: true }));
+		}
 	};
 }
 
@@ -642,8 +643,8 @@ self.onmessage = async (event: { data: any }) => {
 				label: 'Ruby program started'
 			}
 		});
+		execution.mountActiveSource(code);
 		if (loadedRuntime.golfscriptBytes) {
-			execution.mountActiveSource!(code);
 			// Single-quoted Ruby literals keep interpolation markers in filenames/args as data.
 			const argv = [`/${normalizeWorkspacePath(activePath)}`, ...args]
 				.map((value: string) => `'${value.replace(/\\/gu, '\\\\').replace(/'/gu, "\\'")}'`)
@@ -684,7 +685,11 @@ end`);
 					)
 			);
 		} else {
-			vm.eval(code);
+			const path = rubyStringLiteral(normalizeWorkspacePath(activePath));
+			const source = rubyStringLiteral(JSON.stringify(code));
+			vm.eval(`require 'json'
+$0 = ${path}
+eval(JSON.parse(${source}), TOPLEVEL_BINDING, ${path}, 1)`);
 		}
 		if (log) {
 			console.log(
