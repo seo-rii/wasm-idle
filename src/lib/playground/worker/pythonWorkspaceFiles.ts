@@ -1,3 +1,4 @@
+import type { WorkspaceFile } from '@wasm-idle/core';
 import type { PyodideInterface } from 'pyodide';
 
 // Pyodide exposes these helpers; older Emscripten FS declarations omit them.
@@ -10,7 +11,7 @@ export function createPythonWorkspaceFiles(fs: PyodideInterface['FS']) {
 	const workspaceFs = fs as WorkspaceFilesystem;
 	const writtenPaths = new Set<string>();
 	const createdDirectories = new Map<string, number>();
-	return (files: { path: string; content: string }[]) => {
+	return (files: WorkspaceFile[]) => {
 		const root = fs.cwd().replace(/\/$/, '');
 		const currentPaths = new Set(files.map((file) => `${root}/${file.path}`));
 		for (const path of writtenPaths) {

@@ -1,3 +1,4 @@
+import type { WorkspaceFile } from '@wasm-idle/core';
 import {
 	resolveRubyRuntimeAssetConfig,
 	resolveGolfscriptRuntimeAssetConfig,
@@ -124,7 +125,7 @@ class Ruby implements Sandbox {
 
 	private validateRuntimeNamespace(
 		activePath: string | undefined,
-		files: NonNullable<SandboxExecutionOptions['workspaceFiles']>
+		files: WorkspaceFile[]
 	) {
 		if (this.workerLanguage !== 'golfscript') return;
 		if (
@@ -340,7 +341,7 @@ class Ruby implements Sandbox {
 		_code = '',
 		_log = true,
 		_args: string[] = [],
-		options: SandboxExecutionOptions = {},
+		options: SandboxExecutionOptions<WorkspaceFile> = {},
 		progress?: SandboxProgress
 	) {
 		let activeOperation: RubyOperation;
@@ -355,7 +356,7 @@ class Ruby implements Sandbox {
 		let startupContext: {
 			args: string[];
 			activePath: string;
-			workspaceFiles: NonNullable<SandboxExecutionOptions['workspaceFiles']>;
+			workspaceFiles: WorkspaceFile[];
 		};
 		let nextAssetKey: string;
 		let signal: AbortSignal | undefined;
@@ -657,7 +658,7 @@ class Ruby implements Sandbox {
 		_log = true,
 		_prog?: SandboxProgress,
 		args: string[] = [],
-		options: SandboxExecutionOptions = {}
+		options: SandboxExecutionOptions<WorkspaceFile> = {}
 	): Promise<boolean | string> {
 		let activeOperation: RubyOperation;
 		try {
@@ -672,7 +673,7 @@ class Ruby implements Sandbox {
 			programArgs: string[];
 			stdin: string | undefined;
 			activePath: string;
-			workspaceFiles: NonNullable<SandboxExecutionOptions['workspaceFiles']>;
+			workspaceFiles: WorkspaceFile[];
 		};
 		try {
 			signal = options.signal;

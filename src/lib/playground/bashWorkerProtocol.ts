@@ -3,6 +3,7 @@ import {
 	type BashRuntimePreflightPayload,
 	type ExecutionLimits,
 	type RuntimeResourceKind,
+	type WorkspaceFile,
 	type WorkspaceLimits
 } from '@wasm-idle/core';
 
@@ -42,12 +43,7 @@ export interface BashWorkerRunMessage extends BashWorkerEnvelope {
 	readonly type: 'run';
 	readonly code: string;
 	readonly activePath: string;
-	readonly workspaceFiles: ReadonlyArray<
-		Readonly<{
-			path: string;
-			content: string;
-		}>
-	>;
+	readonly workspaceFiles: ReadonlyArray<Readonly<WorkspaceFile>>;
 	readonly programArgs: readonly string[];
 	readonly stdin?: string;
 	readonly limits: ExecutionLimits;
@@ -191,7 +187,8 @@ function hasWorkspaceFiles(value: unknown): value is BashWorkerRunMessage['works
 		Array.isArray(value) &&
 		value.every(
 			(file) =>
-				isRecord(file) && typeof file.path === 'string' && typeof file.content === 'string'
+				isRecord(file) && typeof file.path === 'string' &&
+				(typeof file.content === 'string' || isUint8Array(file.content))
 		)
 	);
 }

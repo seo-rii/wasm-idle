@@ -200,6 +200,18 @@ describe('Ruby untouched VM preparation', () => {
 		expect(rubyInstantiateMock).toHaveBeenCalledTimes(2);
 		expect(rubyEvalMock).toHaveBeenCalledOnce();
 	});
+	it('mounts binary file bytes and reuses a prepared VM across cloned workspace snapshots', async () => {
+		const handle = await ready();
+		const bytes = Uint8Array.of(0, 255, 128, 1);
+		const workspaceFiles = [{ path: 'picture.png', content: bytes }];
+		await handle({ data: request({ workspaceFiles, prepare: true }) });
+		const options = rubyInstantiateMock.mock.calls[1][0];
+		expect(options.wasip1.fds[3].contents.get('picture.png').data).toEqual(bytes);
+		await handle({ data: request({ workspaceFiles: structuredClone(workspaceFiles) }) });
+		expect(rubyInstantiateMock).toHaveBeenCalledTimes(2);
+		expect(rubyEvalMock).toHaveBeenCalledOnce();
+	});
+
 	it('does not treat program arguments as Ruby interpreter flags during preparation', async () => {
 		const handle = await ready();
 		const args = ['-rnetwork', '-e', 'puts "not a bootstrap program"'];

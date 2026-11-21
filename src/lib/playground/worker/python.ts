@@ -17,6 +17,7 @@ import {
 import {
 	createRuntimeGeneratedAssetCacheBackend,
 	type RuntimeAssetCacheOptions,
+	type WorkspaceFile,
 	type RuntimeGeneratedAssetCacheBackend
 } from '@wasm-idle/core';
 import { createPythonExecutionHelpers } from './pythonExecution';
@@ -482,12 +483,12 @@ function getExecutionHelpers() {
 	return (executionHelpers ??= createPythonExecutionHelpers(pyodide, imageHook));
 }
 
-async function loadPackages(code: string, files: { path: string; content: string }[] = []) {
+async function loadPackages(code: string, files: WorkspaceFile[] = []) {
 	const helpers = getExecutionHelpers();
 	// Cache analysis only. Package availability is still checked for each unprepared run.
 	// Parse files separately so one file's syntax or a data file cannot corrupt its neighbors.
 	const imports = new Set(
-		[code, ...files.map((file) => file.content)].map((source) => helpers.importSource(source))
+		[code, ...files.flatMap(({ content }) => typeof content === 'string' ? [content] : [])].map((source) => helpers.importSource(source))
 	);
 	const stub = [...imports].filter(Boolean).join('\n');
 	if (stub) await pyodide.loadPackagesFromImports(stub);
@@ -496,13 +497,13 @@ async function loadPackages(code: string, files: { path: string; content: string
 function packagePreparationKey(
 	code: string,
 	activePath: string | undefined,
-	files: { path: string; content: string }[] = []
+	files: WorkspaceFile[] = []
 ) {
 	// Keep source boundaries and paths: joining contents alone can alias different workspaces.
 	return JSON.stringify([
 		code,
 		activePath ?? null,
-		files.map(({ path, content }) => [path, content])
+		files.filter(({ content }) => typeof content === 'string').map(({ path, content }) => [path, content])
 	]);
 }
 
@@ -515,7 +516,7 @@ function normalizeWorkspacePath(path: string) {
 }
 
 function writeWorkspaceFiles(
-	files: { path: string; content: string }[] = [],
+	files: WorkspaceFile[] = [],
 	syncPythonWorkspace = false
 ) {
 	const fs = (pyodide as any).FS;

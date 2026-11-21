@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { expect, it } from 'vitest';
 import { executeRubyTracepoint } from './worker/rubyTracepoint';
@@ -27,11 +28,14 @@ it('probes real Ruby rdbg prerequisites and TracePoint bindings in the pinned WA
 		/* @vite-ignore */ 'data:text/javascript;base64,' +
 			Buffer.from(rewriteRubySplitRuntimeModule(payload)).toString('base64')
 	);
-	const { WASI, File, OpenFile } = runtime.wasiShim;
+	const { WASI, File, OpenFile, Directory } = runtime.wasiShim;
+	const helperBytes = new TextEncoder().encode(
+		'def triple(value)\n  adjusted = value * 3\n  adjusted + 1\nend'
+	);
 	const preopens = createRubyStdlibPreopens(
 		parseRubyStdlibPack(payload.stdlibBytes),
 		runtime.wasiShim,
-		new Map()
+		new Map([['lib', new Directory(new Map([['helper.rb', new File(helperBytes)]]))]])
 	);
 	let output = '';
 	const printer = runtime.consolePrinter({
@@ -158,16 +162,15 @@ puts JSON.generate(result)
 	output = '';
 	const nestedPauses: any[] = [];
 	const breakpointEvents: any[] = [];
-	const helper = 'def triple(value)\n  adjusted = value * 3\n  adjusted + 1\nend';
 	await executeRubyTracepoint(
 		vm,
-		`eval(${JSON.stringify(helper)}, TOPLEVEL_BINDING, 'lib/helper.rb', 1)\nvalue = 7\nanswer = triple(value)\nputs answer`,
+		`eval(File.binread('lib/helper.rb'), TOPLEVEL_BINDING, 'lib/helper.rb', 1)\nvalue = 7\nanswer = triple(value)\nputs answer`,
 		{
 			path: 'src/main.rb',
 			debugPath: '/workspace/src/main.rb',
 			breakpoints: [3],
 			pauseOnEntry: false,
-			files: [{ path: 'lib/helper.rb', content: helper }]
+			files: [{ path: 'lib/helper.rb', content: helperBytes }]
 		},
 		(message) => {
 			if (message.event?.type === 'breakpoints') breakpointEvents.push(message.event);
@@ -193,6 +196,9 @@ puts JSON.generate(result)
 		'/workspace/lib/helper.rb',
 		'/workspace/src/main.rb'
 	]);
+	expect(nestedPauses[1].sourceContentSha256).toBe(
+		createHash('sha256').update(helperBytes).digest('hex')
+	);
 	expect(nestedPauses[1].locals).toEqual(
 		expect.arrayContaining([expect.objectContaining({ name: 'adjusted', value: '21' })])
 	);

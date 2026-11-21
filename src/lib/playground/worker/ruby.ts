@@ -1,5 +1,5 @@
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
-import type { SandboxWorkspaceFile } from '$lib/playground/options';
+import type { WorkspaceFile } from '@wasm-idle/core';
 import { importRuntimeModule } from '$lib/playground/runtimeModule';
 import { readDebugCommand } from '../debugMailbox';
 import { executeRubyTracepoint } from './rubyTracepoint';
@@ -220,9 +220,9 @@ function createRubyStdin(
 	})();
 }
 
-type WorkspaceTree = Map<string, string | WorkspaceTree>;
+type WorkspaceTree = Map<string, WorkspaceFile['content'] | WorkspaceTree>;
 
-function insertWorkspaceFile(tree: WorkspaceTree, path: string, content: string) {
+function insertWorkspaceFile(tree: WorkspaceTree, path: string, content: WorkspaceFile['content']) {
 	const [head, ...rest] = path.split('/').filter(Boolean);
 	if (!head) return;
 	if (!rest.length) {
@@ -230,7 +230,7 @@ function insertWorkspaceFile(tree: WorkspaceTree, path: string, content: string)
 		return;
 	}
 	const existing = tree.get(head);
-	const child = existing instanceof Map ? existing : new Map<string, string | WorkspaceTree>();
+	const child: WorkspaceTree = existing instanceof Map ? existing : new Map();
 	tree.set(head, child);
 	insertWorkspaceFile(child, rest.join('/'), content);
 }
@@ -246,13 +246,13 @@ function materializeWorkspaceTree(
 			name,
 			entry instanceof Map
 				? new Directory(materializeWorkspaceTree(runtime, entry))
-				: new File(encoder.encode(entry), { readonly: true })
+				: new File(typeof entry === 'string' ? encoder.encode(entry) : entry, { readonly: true })
 		);
 	}
 	return contents;
 }
 
-function workspaceContents(runtime: RubyRuntimeModule, workspaceFiles: SandboxWorkspaceFile[]) {
+function workspaceContents(runtime: RubyRuntimeModule, workspaceFiles: WorkspaceFile[]) {
 	const tree: WorkspaceTree = new Map();
 	for (const file of workspaceFiles) {
 		const normalizedPath = file.path.replace(/^\/+/, '');
@@ -264,7 +264,7 @@ function workspaceContents(runtime: RubyRuntimeModule, workspaceFiles: SandboxWo
 
 interface RubyExecutionContext {
 	args: string[];
-	workspaceFiles: SandboxWorkspaceFile[];
+	workspaceFiles: WorkspaceFile[];
 	activePath: string;
 }
 interface PreparedRubyExecution {
@@ -302,7 +302,7 @@ function decodeStartupContext(value: unknown, golfscript = false): RubyExecution
 			typeof file !== 'object' ||
 			Object.keys(file).sort().join(',') !== 'content,path' ||
 			typeof file.path !== 'string' ||
-			typeof file.content !== 'string'
+			(typeof file.content !== 'string' && !(file.content instanceof Uint8Array))
 		)
 			throw new TypeError('Invalid Ruby startup workspace.');
 		return { path: normalizeWorkspacePath(file.path), content: file.content };
@@ -314,6 +314,11 @@ function decodeStartupContext(value: unknown, golfscript = false): RubyExecution
 	};
 }
 
+function sameContent(left: WorkspaceFile['content'], right: WorkspaceFile['content']) {
+	if (typeof left === 'string' || typeof right === 'string') return left === right;
+	return left.length === right.length && left.every((byte, index) => byte === right[index]);
+}
+
 const sameContext = (a: RubyExecutionContext, b: RubyExecutionContext) =>
 	a.activePath === b.activePath &&
 	a.args.length === b.args.length &&
@@ -322,7 +327,7 @@ const sameContext = (a: RubyExecutionContext, b: RubyExecutionContext) =>
 	a.workspaceFiles.every(
 		(file, index) =>
 			file.path === b.workspaceFiles[index].path &&
-			file.content === b.workspaceFiles[index].content
+			sameContent(file.content, b.workspaceFiles[index].content)
 	);
 
 async function initializeRubyExecution(
@@ -339,7 +344,7 @@ async function initializeRubyExecution(
 		activePath: context.activePath,
 		workspaceFiles: context.workspaceFiles.map((file) => ({
 			path: file.path,
-			content: file.content
+			content: typeof file.content === 'string' ? file.content : file.content.slice()
 		}))
 	};
 	let active = !deferred;

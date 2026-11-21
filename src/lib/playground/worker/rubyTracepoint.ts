@@ -1,3 +1,4 @@
+import type { WorkspaceFile } from '@wasm-idle/core';
 import type { DebugSourceBreakpoints } from '../options';
 import { RUBY_DEBUG_PREVIEW } from './rubyDebugPreview';
 
@@ -7,7 +8,7 @@ export interface RubyTracepointOptions {
 	breakpoints: number[];
 	sourceBreakpoints?: DebugSourceBreakpoints[];
 	pauseOnEntry: boolean;
-	files: Array<{ path: string; content: string }>;
+	files: WorkspaceFile[];
 }
 
 /** Real CRuby TracePoint and Binding APIs; user source is passed unchanged as eval data. */
@@ -23,7 +24,7 @@ export async function executeRubyTracepoint(
 	for (const file of files) {
 		const digest = await crypto.subtle.digest(
 			'SHA-256',
-			new TextEncoder().encode(file.content)
+			typeof file.content === 'string' ? new TextEncoder().encode(file.content) : file.content.slice()
 		);
 		hashes[file.path] = [...new Uint8Array(digest)]
 			.map((byte) => byte.toString(16).padStart(2, '0'))
@@ -39,7 +40,12 @@ export async function executeRubyTracepoint(
 		},
 		read: (blocking: boolean) => read(blocking) ?? '{"op":"stop"}'
 	};
-	const data = JSON.stringify({ ...options, source, files, hashes, key });
+	// Byte-backed Ruby sources already exist in the VM's workspace with their original encoding.
+	const sources = files.map(({ path, content }) => ({
+		path,
+		content: typeof content === 'string' ? content : null
+	}));
+	const data = JSON.stringify({ ...options, source, files: sources, hashes, key });
 	const literal = `'${data.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
 	try {
 		vm.eval(String.raw`
@@ -68,7 +74,12 @@ known.each do |path, content|
       lines.concat(iseq.trace_points.select { |_, event| event == :line }.map(&:first))
       iseq.each_child { |child| collect.call(child) }
     end
-    collect.call(RubyVM::InstructionSequence.compile(content, path, path, 1))
+    compiled = if content.nil?
+      RubyVM::InstructionSequence.compile_file('/' + path)
+    else
+      RubyVM::InstructionSequence.compile(content, path, path, 1)
+    end
+    collect.call(compiled)
     executable[display_path.call(path)] = lines.uniq.sort
   rescue NameError, NoMethodError, SyntaxError
     executable[display_path.call(path)] = []

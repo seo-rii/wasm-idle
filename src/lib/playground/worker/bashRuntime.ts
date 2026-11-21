@@ -1,3 +1,4 @@
+import type { WorkspaceFile } from '@wasm-idle/core';
 import { type CompilerDiagnostic, type SandboxExecutionOptions } from '$lib/playground/options';
 import type { Sandbox, SandboxProgress, SandboxRuntimeAssets } from '$lib/playground/sandbox';
 import { createBashNestedBootstrapSource } from '$lib/playground/worker/bashNestedBootstrap';
@@ -284,7 +285,7 @@ class BashWorkerRuntime implements Sandbox {
 		_code = '',
 		_log = true,
 		_args: string[] = [],
-		_options: SandboxExecutionOptions = {},
+		_options: SandboxExecutionOptions<WorkspaceFile> = {},
 		_progress?: SandboxProgress
 	): Promise<void> {
 		return Promise.reject(
@@ -298,7 +299,7 @@ class BashWorkerRuntime implements Sandbox {
 	loadVerified(
 		runtimePreflight: BashRuntimePreflightPayload,
 		_log = true,
-		options: SandboxExecutionOptions = {},
+		options: SandboxExecutionOptions<WorkspaceFile> = {},
 		progress?: SandboxProgress
 	) {
 		let activeOperation: BashOperation;
@@ -646,7 +647,7 @@ class BashWorkerRuntime implements Sandbox {
 		_log = true,
 		progress?: SandboxProgress,
 		args: string[] = [],
-		options: SandboxExecutionOptions = {}
+		options: SandboxExecutionOptions<WorkspaceFile> = {}
 	): Promise<boolean | string> {
 		const activeOperation = this.beginOperation('execute');
 		if (prepare) {
@@ -694,7 +695,7 @@ class BashWorkerRuntime implements Sandbox {
 			}
 			const workspaceFileCount = workspaceFilesSource.length;
 			this.requireOperationActive(activeOperation);
-			const workspaceFiles: Array<{ path: string; content: string }> = [];
+			const workspaceFiles: WorkspaceFile[] = [];
 			for (let index = 0; index < workspaceFileCount; index += 1) {
 				const file = workspaceFilesSource[index];
 				this.requireOperationActive(activeOperation);

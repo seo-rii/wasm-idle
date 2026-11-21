@@ -1,3 +1,4 @@
+import type { WorkspaceFile } from '@wasm-idle/core';
 import type {
 	DebugCommand,
 	DebugSessionEvent,
@@ -254,7 +255,7 @@ class Python implements Sandbox {
 		code = '',
 		log = true,
 		_args: string[] = [],
-		options: SandboxExecutionOptions = {},
+		options: SandboxExecutionOptions<WorkspaceFile> = {},
 		progress?: SandboxProgress
 	) {
 		let operation: PythonOperation;
@@ -562,7 +563,7 @@ class Python implements Sandbox {
 		_log = true,
 		_prog?: SandboxProgress,
 		_args: string[] = [],
-		options: SandboxExecutionOptions = {}
+		options: SandboxExecutionOptions<WorkspaceFile> = {}
 	): Promise<boolean | string> {
 		let activeOperation: PythonOperation;
 		try {
@@ -578,7 +579,7 @@ class Python implements Sandbox {
 		let pauseOnEntry: boolean;
 		let activePath: string | undefined;
 		let debugPath: string | undefined;
-		let workspaceFiles: SandboxExecutionOptions['workspaceFiles'];
+		let workspaceFiles: WorkspaceFile[] | undefined;
 		let limits: ReturnType<typeof resolveExecutionLimits> | undefined;
 		try {
 			signal = options.signal;

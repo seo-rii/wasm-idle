@@ -308,6 +308,16 @@ test('worker preparation and execution preserve generated directories replacing 
 	assert.equal(f.messages.at(-1).results, true);
 	assert.ok(f.filesystemNodes.has('/home/pyodide/input'));
 });
+test('Python mounts binary siblings without sending their bytes to the import scanner', async () => {
+	const f = workerFixture();
+	const content = Uint8Array.of(0, 255, 128, 1);
+	const data = { code: 'pass', workspaceFiles: [{ path: 'image.png', content }] };
+	await f.send({ ...data, prepare: true });
+	await f.send(data);
+	assert.deepEqual(f.scanned, ['pass']);
+	assert.deepEqual(f.writes.at(-1).slice(0, 2), ['image.png', content]);
+	assert.equal(f.messages.at(-1).results, true);
+});
 test('files are analyzed separately and package state is checked again after an execution', async () => {
 	const f = workerFixture();
 	const data = {
