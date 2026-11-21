@@ -90,6 +90,7 @@ describe('workspace import browser integration', () => {
 		async () => {
 			await withImportPage(async (page) => {
 				await page.locator('#cpp-version').selectOption('CPP98');
+				await page.locator('#lsp-toggle').uncheck();
 				const backup = {
 					language: 'CPP',
 					version: 4,
@@ -103,6 +104,7 @@ describe('workspace import browser integration', () => {
 				});
 				await page.locator('.file-tab.active[title="build.cpp"]').waitFor();
 				expect(await page.locator('#cpp-version').inputValue()).toBe('CPP20');
+				expect(await page.locator('#lsp-toggle').isChecked()).toBe(true);
 			});
 		}
 	);
@@ -115,6 +117,7 @@ describe('workspace import browser integration', () => {
 				const backup = {
 					language: 'CPP',
 					version: 4,
+					lspEnabled: false,
 					activePath: 'src\\main.cpp',
 					files: [
 						{ path: 'src\\main.cpp', content: 'int main() {}' },
@@ -129,6 +132,7 @@ describe('workspace import browser integration', () => {
 					buffer: Buffer.from(serializeWorkspaceBackup(backup))
 				});
 				await page.locator('.file-tab.active[title="src/main.cpp"]').waitFor();
+				expect(await page.locator('#lsp-toggle').isChecked()).toBe(false);
 				expect(
 					await page
 						.locator('.file-tab')
