@@ -9,6 +9,18 @@ function hostTest(run, fs = new MemoryFileSystem(), stdio) {
   try { host.run({ exports: { memory, _start: () => run(host.imports, memory, fs) } }); }
   finally { host.dispose(); }
 }
+test('relative WASI paths retain a leading U+FEFF in the filename', () => hostTest((w, memory, fs) => {
+  const encoder = new TextEncoder(), bytes = new Uint8Array(memory.buffer), view = new DataView(memory.buffer);
+  for (const name of ['note', '\uFEFFnote']) fs.writeFile('/workspace/' + name, new Uint8Array());
+  for (const name of ['note', '\uFEFFnote', './\uFEFFnote']) {
+    const size = encoder.encodeInto(name, bytes).written;
+    assert.equal(w.path_filestat_get(3, 0, 0, size, 64), 0);
+    assert.equal(view.getBigUint64(72, true), BigInt(fs.stat('/workspace/' + name).inode));
+  }
+  const size = encoder.encodeInto('\uFEFFnote', bytes).written;
+  assert.equal(w.path_unlink_file(3, 0, size), 0);
+  assert.deepEqual(fs.readdir('/workspace'), ['note']);
+}));
 test('directory-only open rights and metadata-only file handles are accepted', () => hostTest((w, memory) => {
   new TextEncoder().encodeInto('.', new Uint8Array(memory.buffer, 0, 8));
   assert.equal(w.path_open(3, 1, 0, 1, 2, 1n << 14n, 0n, 0, 100), 0);
