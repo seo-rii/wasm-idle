@@ -685,6 +685,7 @@ const playgroundLanguageAliases: Record<string, PlaygroundLanguage> = {
 	'objective-c++': 'OBJECTIVECXX',
 	objective_cxx: 'OBJECTIVECXX',
 	java: 'JAVA',
+	scala: 'SCALA',
 	rust: 'RUST',
 	go: 'GO',
 	d: 'D',
