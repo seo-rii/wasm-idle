@@ -598,9 +598,7 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(/bind:lspStatus=\{editorLspStatus\}/);
 		// Binary-preserving workspace snapshots use v6 and still persist the LSP opt-in.
 		expect(pageSource).toMatch(/version: 6,/);
-		expect(pageSource).toMatch(
-			/if \(typeof value\?\.lspEnabled === 'boolean'\) lspEnabled = value\.lspEnabled;/
-		);
+		expect(pageSource).toContain('lspEnabled = value.lspEnabled ?? true;');
 		expect(pageSource).toMatch(/clangdEnabled=\{clangdLspEnabled\}/);
 		expect(pageSource).toMatch(/const dotnetLspEnabled = \$derived/);
 		expect(pageSource).toMatch(/dotnetLspLanguages\.has\(language\)/);
