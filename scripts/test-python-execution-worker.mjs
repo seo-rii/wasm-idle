@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import { test } from 'node:test';
+import { resolve } from 'node:path';
 import vm from 'node:vm';
 const ts = createRequire(import.meta.url)('typescript');
 const importsExports = {};
@@ -171,10 +172,10 @@ function workerFixture() {
 		invalidated = [];
 	const filesystemNodes = new Map();
 	const absolutePath = (path) => (path.startsWith('/') ? path : `/home/pyodide/${path}`);
+	const mkdir = (path) => filesystemNodes.set(absolutePath(path), { mode: 0o040755 });
 	const fs = {
-		mkdirTree(path) {
-			filesystemNodes.set(absolutePath(path), { mode: 0o040755 });
-		},
+		mkdir,
+		mkdirTree: mkdir,
 		writeFile(...args) {
 			writes.push(args);
 			filesystemNodes.set(absolutePath(args[0]), { mode: 0o100644 });
@@ -316,7 +317,10 @@ test('Python mounts binary siblings without sending their bytes to the import sc
 	await f.send({ ...data, prepare: true });
 	await f.send(data);
 	assert.deepEqual(f.scanned, ['pass']);
-	assert.deepEqual(f.writes.at(-1).slice(0, 2), ['image.png', content]);
+	assert.deepEqual(f.writes.map(([path, bytes]) => [path, bytes]), [
+		['image.png', content], ['__wasm_idle_user__.py', 'pass'],
+		['image.png', content], ['__wasm_idle_user__.py', 'pass']
+	]);
 	assert.equal(f.messages.at(-1).results, true);
 });
 test('files are analyzed separately and package state is checked again after an execution', async () => {
@@ -344,12 +348,9 @@ test('files are analyzed separately and package state is checked again after an 
 	assert.equal(f.initialized(), 1);
 	assert.equal(f.cachedRuns.length, 2);
 	assert.equal(f.legacyRuns.length, 0);
-	assert.equal(f.writes.length, 6); // no unsafe cross-run file-state caching
-	assert.deepEqual(f.invalidated, [
-		['bad.py', 'data.csv'],
-		['bad.py', 'data.csv'],
-		['bad.py', 'data.csv']
-	]);
+	const paths = ['bad.py', 'data.csv', 'main.py'];
+	assert.deepEqual(f.writes.map(([path]) => path), [...paths, ...paths, ...paths]);
+	assert.deepEqual(f.invalidated, [paths, paths, paths]);
 	assert.equal(f.self.prompt, undefined);
 	assert.ok(!Object.keys(f.self).some((name) => name.startsWith('__pyodide__')));
 });
@@ -364,7 +365,7 @@ test('debug execution retains the legacy trace wrapper', async () => {
 test('the actual debug wrapper gives user code its active filename and restores its process state at exit', async () => {
 	const f = workerFixture();
 	await f.send({
-		code: 'import os, sys\nassert sys.argv == [__file__]\nprint(__file__)\nos.chdir("/")\nsys.argv = []\nsys.exit(7)',
+		code: 'import os, sys\nassert sys.argv == ["subdir/main.py"] and __file__ == os.path.abspath(sys.argv[0])\nprint(__file__)\nos.chdir("/")\nsys.argv = []\nsys.exit(7)',
 		activePath: 'subdir/main.py',
 		debug: true
 	});
@@ -384,7 +385,7 @@ assert __wasm_idle_status == [7] and os.getcwd() == cwd and sys.argv is argv
 		],
 		{ input: f.legacyRuns[0], encoding: 'utf8' }
 	);
-	assert.equal(output, 'subdir/main.py\n');
+	assert.equal(output, resolve('subdir/main.py') + '\n');
 });
 test('the actual debug wrapper connects user classes and globals to __main__ and restores it', async () => {
 	const f = workerFixture();

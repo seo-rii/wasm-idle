@@ -517,13 +517,14 @@ function normalizeWorkspacePath(path: string) {
 
 function writeWorkspaceFiles(
 	files: WorkspaceFile[] = [],
-	syncPythonWorkspace = false
+	activeScript?: { path: string; content: string }
 ) {
 	const fs = (pyodide as any).FS;
-	if (syncPythonWorkspace) {
+	if (activeScript) {
 		const normalized = files
 			.map((file) => ({ ...file, path: normalizeWorkspacePath(file.path) }))
-			.filter((file) => file.path);
+			.filter((file) => file.path && file.path !== activeScript.path);
+		normalized.push(activeScript);
 		invalidateWorkspaceImports ??= createPythonWorkspaceImports(pyodide);
 		invalidateWorkspaceImports(normalized.map((file) => file.path));
 		syncWorkspaceFiles ??= createPythonWorkspaceFiles(fs);
@@ -678,6 +679,10 @@ self.onmessage = async (event: any) => {
 	const usesInterpreterFileDescriptors = isAheui || isApecode;
 	const isPython = !isHy && !usesInterpreterFileDescriptors;
 	const interpreterLabel = isApecode ? 'APECode' : 'Aheui';
+	const executionFilename =
+		normalizeWorkspacePath(activePath || '') ||
+		(isHy ? '__wasm_idle_user__.hy' : '__wasm_idle_user__.py');
+	const activeScript = isPython && typeof code === 'string' ? { path: executionFilename, content: code } : undefined;
 	if (load) {
 		preparedPackagesKey = undefined;
 		try {
@@ -780,7 +785,7 @@ self.onmessage = async (event: any) => {
 			);
 			const preparationKey = packagePreparationKey(code, activePath, workspaceFiles);
 			await loadPyodide(baseUrl);
-			if (!usesInterpreterFileDescriptors) writeWorkspaceFiles(workspaceFiles, isPython);
+			if (!usesInterpreterFileDescriptors) writeWorkspaceFiles(workspaceFiles, activeScript);
 			// The genuine language implementations own their source, never Python's import scanner.
 			if (isPython) {
 				postProgress(15, 'Resolving Python imports');
@@ -802,7 +807,7 @@ self.onmessage = async (event: any) => {
 		preparedPackagesKey = undefined;
 		try {
 			await loadPyodide(baseUrl);
-			if (!usesInterpreterFileDescriptors) writeWorkspaceFiles(workspaceFiles, isPython);
+			if (!usesInterpreterFileDescriptors) writeWorkspaceFiles(workspaceFiles, activeScript);
 			if (isHy && installedHyVersion === undefined) {
 				throw new Error('Hy runtime is not installed');
 			}
@@ -969,9 +974,6 @@ self.onmessage = async (event: any) => {
 				return Atomics.load(debugBufferPyodide, 2);
 			}
 		};
-		const executionFilename =
-			normalizeWorkspacePath(activePath || '') ||
-			(isHy ? '__wasm_idle_user__.hy' : '__wasm_idle_user__.py');
 		const debugFilename = normalizeWorkspacePath(debugPath || '') || executionFilename;
 		const executionFilenameLiteral = JSON.stringify(executionFilename);
 		const normalizedBreakpoints = JSON.stringify(
@@ -1053,7 +1055,7 @@ __wasm_idle_previous_main = sys.modules.get("__main__", __wasm_idle_missing_main
 __wasm_idle_previous_path = sys.path
 try:
     __wasm_idle_module = types.ModuleType("__main__")
-    __wasm_idle_module.__file__ = ${executionFilenameLiteral}
+    __wasm_idle_module.__file__ = os.path.abspath(${executionFilenameLiteral})
     __wasm_idle_globals = __wasm_idle_module.__dict__
     __wasm_idle_globals.update({
         ${JSON.stringify(executionReadyName)}: __wasm_idle_execution_ready,

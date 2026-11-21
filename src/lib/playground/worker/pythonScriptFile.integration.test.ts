@@ -7,11 +7,12 @@ it('exposes the active filename and resolves sibling resources on cache misses a
 	const runtime = await loadPyodide();
 	const helpers = createPythonExecutionHelpers(runtime, '');
 	const values: string[] = [];
+	const cwd = runtime.FS.cwd();
 	runtime.FS.mkdir('한글');
 	runtime.FS.writeFile('한글/payload.txt', 'script resource');
 	try {
 		const source =
-			'from pathlib import Path\nprint(__file__)\nprint(Path(__file__).with_name("payload.txt").read_text())';
+			'import os\nfrom pathlib import Path\nos.chdir("/")\nprint(__file__)\nprint(Path(__file__).with_name("payload.txt").read_text())';
 		for (let i = 0; i < 2; i++) {
 			await helpers.run(
 				source,
@@ -29,11 +30,11 @@ it('exposes the active filename and resolves sibling resources on cache misses a
 			(value) => values.push(String(value))
 		);
 		expect(values).toEqual([
-			'한글/main.py',
+			cwd + '/한글/main.py',
 			'script resource',
-			'한글/main.py',
+			cwd + '/한글/main.py',
 			'script resource',
-			'another.py'
+			cwd + '/another.py'
 		]);
 	} finally {
 		helpers.dispose();

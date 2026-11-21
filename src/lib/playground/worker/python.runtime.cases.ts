@@ -479,7 +479,10 @@ describe('Python prepare-to-run reuse', () => {
 		expect(pyodide.loadPackagesFromImports).toHaveBeenCalledOnce();
 		expect(pyodide.runPythonAsync).toHaveBeenCalledOnce();
 		// Rewriting files is intentional: preparation does not change workspace semantics.
-		expect(pyodide.FS.writeFile).toHaveBeenCalledTimes(2);
+		expect(pyodide.FS.writeFile.mock.calls).toEqual([
+			['helper.py', 'import demo'], ['main.py', 'import demo'],
+			['helper.py', 'import demo'], ['main.py', 'import demo']
+		]);
 		expect(postMessage).toHaveBeenCalledWith({ results: true });
 		await onmessage({ data });
 		expect(pyodide.loadPackagesFromImports).toHaveBeenCalledTimes(2);
