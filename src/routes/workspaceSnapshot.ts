@@ -1,7 +1,7 @@
 import { playgroundLanguages } from './language-registry';
 import { readCompilerOptions } from './compilerOptions';
 import { isBinaryWorkspaceFile, workspaceFileBytes, type WorkspaceFile } from './workspaceCodec';
-import { readWorkspaceDirectories } from '../lib/container/workspace-directories';
+import { readWorkspaceDirectories } from '../lib/container/workspace';
 import { normalizeWorkspaceFilePath } from './workspacePath';
 
 function invalid(field: string): never {

@@ -1,7 +1,7 @@
 import {
 	emptyProjectDirectories,
 	readWorkspaceDirectories
-} from '../lib/container/workspace-directories';
+} from '../lib/container/workspace';
 import { describe, expect, it } from 'vitest';
 import {
 	normalizeWorkspaceTabs,

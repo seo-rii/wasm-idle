@@ -16,7 +16,7 @@ import {
 } from './protocol.js';
 import type { SandboxExecutionOptions } from '../playground/options.js';
 import type { SandboxRuntimeAssets } from '../playground/sandbox.js';
-import { readWorkspaceDirectories } from './workspace-directories.js';
+import { readWorkspaceDirectories } from './workspace.js';
 import type { WasixSdk } from '@wasm-idle/container/adapters/wasix';
 
 export interface ContainerWorkerOptions {

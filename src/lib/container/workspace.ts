@@ -1,4 +1,5 @@
 import { normalizeWorkspacePath } from '@wasm-idle/core';
+import type { ContainerWorkspaceEntry } from './protocol.js';
 
 /** Private language workers accept portable relative paths; the shell filesystem uses POSIX names. */
 export function isRuntimeWorkspacePath(path: string) {
@@ -113,4 +114,35 @@ export function workspaceFileFromBytes(path: string, bytes: Uint8Array): Workspa
 	}
 	const mime = /\.wasm$/i.test(path) ? 'application/wasm' : 'application/octet-stream';
 	return { path, content: `data:${mime};base64,${btoa(binary)}`, encoding: 'data-url' };
+}
+
+export function readWorkspaceDirectories(value: unknown): string[] {
+	if (value === undefined) return [];
+	if (!Array.isArray(value)) throw new TypeError('Invalid workspace directories');
+	for (const path of value) {
+		if (typeof path !== 'string' || !/^[A-Z][A-Z0-9_]*\//u.test(path))
+			throw new TypeError('Invalid workspace directory path');
+		normalizeWorkspacePath(path, 'posix');
+	}
+	return [...new Set<string>(value)].sort();
+}
+
+export function emptyProjectDirectories(
+	entries: readonly ContainerWorkspaceEntry[],
+	projects: readonly string[]
+) {
+	const parents = new Set(entries.map(({ path }) => path.substring(0, path.lastIndexOf('/'))));
+	const languages = new Set(projects);
+	return entries
+		.filter(({ type, path }) => {
+			const slash = path.indexOf('/');
+			return (
+				type === 'directory' &&
+				slash > 0 &&
+				languages.has(path.slice(0, slash)) &&
+				!parents.has(path)
+			);
+		})
+		.map(({ path }) => path)
+		.sort();
 }

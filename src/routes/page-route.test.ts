@@ -4,7 +4,7 @@ import { createProjectBreakpointSelection } from './workspaceBreakpoints';
 import layoutSource from './+layout.svelte?raw';
 import source from './+page.svelte?raw';
 import { createApplicationRuntimeAssets } from '$lib/playground/applicationAssets';
-import { emptyProjectDirectories } from '$lib/container/workspace-directories';
+import { emptyProjectDirectories } from '$lib/container/workspace';
 import { mergeContainerWorkspace, sameWorkspaceFiles } from '$lib/playground/container/workspace';
 import type { WorkspaceFile } from './workspaceCodec';
 import { runInNewContext } from 'node:vm';

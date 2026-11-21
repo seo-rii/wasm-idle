@@ -18,7 +18,7 @@
 	import {
 		emptyProjectDirectories,
 		readWorkspaceDirectories
-	} from '$lib/container/workspace-directories';
+	} from '$lib/container/workspace';
 	import ContainerExplorer from '$lib/playground/container/ContainerExplorer.svelte';
 	import { resolveInitialWorkspace } from './initialWorkspace';
 	import type {
