@@ -117,7 +117,7 @@ export function createWasiHost(options: HostOptions) {
   const env = Object.entries(options.env).map(([key, value]) => `${key}=${value}`);
   const stat = (ptr: number, info: ReturnType<MemoryFileSystem['stat']>) => {
     const dest = span(ptr, 64); dest.fill(0); const v = view(ptr, 64);
-    v.setBigUint64(8, BigInt(info.inode), true); v.setUint8(16, filetype(info.type)); v.setBigUint64(24, 1n, true);
+    v.setBigUint64(8, BigInt(info.inode), true); v.setUint8(16, filetype(info.type)); v.setBigUint64(24, BigInt(info.nlink), true);
     v.setBigUint64(32, BigInt(info.size), true);
     v.setBigUint64(40, BigInt(Math.trunc(info.atimeMs)) * 1000000n, true);
     v.setBigUint64(48, BigInt(Math.trunc(info.mtimeMs)) * 1000000n, true);

@@ -21,6 +21,32 @@ test('relative WASI paths retain a leading U+FEFF in the filename', () => hostTe
   assert.equal(w.path_unlink_file(3, 0, size), 0);
   assert.deepEqual(fs.readdir('/workspace'), ['note']);
 }));
+test('filestat follows the open inode after its final name is removed or replaced', () => hostTest((w, memory, fs) => {
+  const bytes = new Uint8Array(memory.buffer), view = new DataView(memory.buffer);
+  for (const operation of ['unlink', 'replace']) {
+    fs.writeFile('/workspace/x', new Uint8Array([42]));
+    bytes[0] = 120;
+    assert.equal(w.path_open(3, 0, 0, 1, 0, 1n << 21n, 0n, 0, 64), 0);
+    const fd = view.getUint32(64, true);
+    assert.equal(w.fd_filestat_get(fd, 128), 0);
+    const inode = view.getBigUint64(136, true);
+    assert.equal(view.getBigUint64(152, true), 1n);
+    if (operation === 'unlink') {
+      assert.equal(w.path_unlink_file(3, 0, 1), 0);
+      assert.equal(w.path_filestat_get(3, 0, 0, 1, 128), 44);
+    } else {
+      fs.writeFile('/workspace/y', new Uint8Array([43]));
+      fs.rename('/workspace/y', '/workspace/x');
+      assert.equal(w.path_filestat_get(3, 0, 0, 1, 128), 0);
+      assert.notEqual(view.getBigUint64(136, true), inode);
+      assert.equal(view.getBigUint64(152, true), 1n);
+    }
+    assert.equal(w.fd_filestat_get(fd, 128), 0);
+    assert.equal(view.getBigUint64(136, true), inode);
+    assert.equal(view.getBigUint64(152, true), 0n);
+    assert.equal(w.fd_close(fd), 0);
+  }
+}));
 test('directory-only open rights and metadata-only file handles are accepted', () => hostTest((w, memory) => {
   new TextEncoder().encodeInto('.', new Uint8Array(memory.buffer, 0, 8));
   assert.equal(w.path_open(3, 1, 0, 1, 2, 1n << 14n, 0n, 0, 100), 0);
