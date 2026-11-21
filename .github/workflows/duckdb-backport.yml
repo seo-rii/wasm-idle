@@ -1,0 +1,87 @@
+name: Build pinned DuckDB-Wasm Arrow backport
+
+on:
+    workflow_dispatch:
+    push:
+        branches:
+            - 'ci/duckdb-arrow-backport-*'
+        paths:
+            - '.github/workflows/duckdb-backport.yml'
+            - 'scripts/duckdb-backport/**'
+
+permissions:
+    contents: read
+
+concurrency:
+    group: duckdb-arrow-backport-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    build:
+        name: DuckDB-Wasm ${{ matrix.variant }}
+        runs-on: ubuntu-24.04
+        timeout-minutes: 240
+        strategy:
+            fail-fast: false
+            matrix:
+                variant: [mvp, eh]
+        steps:
+            - name: Check out build recipe
+              uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+              with:
+                  persist-credentials: false
+                  sparse-checkout: scripts/duckdb-backport
+
+            - name: Make space on the hosted runner
+              run: |
+                  sudo rm -rf /usr/local/lib/android/sdk /usr/share/dotnet
+                  df -h .
+
+            - name: Check out DuckDB-Wasm and its pinned submodules
+              uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+              with:
+                  repository: duckdb/duckdb-wasm
+                  ref: ef8a4f8912b6e7f62bc0cc490145ebd391b79e1f
+                  path: upstream
+                  submodules: recursive
+                  persist-credentials: false
+
+            - name: Check out Emscripten SDK 3.1.71
+              uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+              with:
+                  repository: emscripten-core/emsdk
+                  ref: 59108b0e222d4c38530a5f2bebcecc7db965f52d
+                  path: emsdk
+                  persist-credentials: false
+
+            - name: Set up Node for the upstream worker bundle
+              uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+              with:
+                  node-version: 18.20.8
+
+            - name: Install build tools
+              run: |
+                  sudo apt-get update -qq
+                  sudo apt-get install --no-install-recommends -y ccache wabt ninja-build cmake
+                  npm install --prefix "$RUNNER_TEMP/duckdb-tools" --no-audit --no-fund yarn@1.22.22 js-beautify@1.15.4
+                  ln -s /usr/bin/cmake "$RUNNER_TEMP/duckdb-tools/node_modules/.bin/cmake"
+                  emsdk/emsdk install 3.1.71
+                  emsdk/emsdk activate 3.1.71
+
+            - name: Build native module and its browser worker
+              env:
+                  VARIANT: ${{ matrix.variant }}
+                  CCACHE_DISABLE: '1'
+              run: |
+                  node_bin=$(dirname "$(command -v node)")
+                  source emsdk/emsdk_env.sh
+                  export PATH="$RUNNER_TEMP/duckdb-tools/node_modules/.bin:$node_bin:$PATH"
+                  bash scripts/duckdb-backport/build.sh "$VARIANT" upstream "artifacts/$VARIANT"
+
+            - name: Upload native module, worker and provenance
+              uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+              with:
+                  name: duckdb-arrow-backport-${{ matrix.variant }}
+                  path: artifacts/${{ matrix.variant }}/
+                  if-no-files-found: error
+                  retention-days: 30
