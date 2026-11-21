@@ -114,6 +114,30 @@ function nativeFixture(mailbox: string) {
 }
 
 describe('real Bash directory control protocol', () => {
+	it('preserves the user’s regex captures while polling both mailboxes', () => {
+		const session = 'ab'.repeat(16);
+		const native = nativeFixture(`1 ${session} 1 C\n`);
+		writeFileSync(native.resizeRequest, `4 ${session} 1 resize\n`);
+		const result = native.run(
+			[
+				'[[ red42 =~ ^([a-z]+)([0-9]+)$ ]]',
+				'__wasm_idle_poll',
+				'printf "<%s>" "${BASH_REMATCH[@]}"',
+				'__wasm_idle_poll',
+				'printf "<%s>" "${BASH_REMATCH[@]}"',
+				'unset BASH_REMATCH',
+				'__wasm_idle_poll',
+				'[[ ! -v BASH_REMATCH[0] ]]'
+			].join('\n')
+		);
+		expect(result).toMatchObject({
+			status: 0,
+			stdout: '<red42><red><42><red42><red><42>',
+			stderr: ''
+		});
+		expect(readFileSync(native.ack, 'utf8')).toContain(`|1|${session}|1|C|ok\n`);
+	});
+
 	it('keeps pending directory control intact while a separate resize is acknowledged', async () => {
 		const { control, fs } = fixture();
 		const changing = control.requestDirectory('CPP');

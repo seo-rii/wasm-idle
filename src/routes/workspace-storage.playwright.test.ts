@@ -1024,6 +1024,46 @@ describe('workspace storage browser integration', () => {
 		}
 	);
 
+	it(
+		'shares a large active project when its compact representation fits Chromium',
+		browserOptions,
+		async () => {
+			await withWorkspacePage(async (page, context, browserUrl) => {
+				await disableBrowserPrewarm(context);
+				const csv = 'q'.repeat(820_000);
+				await context.addInitScript((contents) => {
+					const files = [
+						{ path: 'main.cpp', content: 'int main() {}' },
+						{ path: 'data.csv', content: contents }
+					];
+					localStorage.setItem(
+						'wasm-idle:example-workspace:v3',
+						JSON.stringify({
+							version: 7,
+							language: 'CPP',
+							activePath: 'main.cpp',
+							files
+						})
+					);
+				}, csv);
+				await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+				await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
+				await page.locator('#language-select[data-workspace-ready="true"]').waitFor();
+				await page.getByRole('button', { name: 'Share', exact: true }).click();
+				await page.getByText('Share URL copied, but large', { exact: true }).waitFor();
+				const url = new URL(await page.evaluate(() => navigator.clipboard.readText()));
+				expect(url.href.length).toBeLessThanOrEqual(2 * 1024 * 1024);
+				const shared = JSON.parse(
+					Buffer.from(url.hash.slice('#workspace='.length), 'base64url').toString()
+				);
+				expect(shared.language).toBe('CPP');
+				expect(
+					shared.files.find((file: { path: string }) => file.path === 'data.csv').content
+				).toBe(csv);
+			});
+		}
+	);
+
 	it('keeps edited shared code after a reload and sharing again', browserOptions, async () => {
 		expect.hasAssertions();
 		await withWorkspacePage(async (page, context, browserUrl) => {
@@ -1125,8 +1165,11 @@ describe('workspace storage browser integration', () => {
 				await context.grantPermissions(['clipboard-write', 'clipboard-read']);
 				await page.getByRole('button', { name: 'Share', exact: true }).click();
 				await page.getByText('Share URL copied', { exact: true }).waitFor();
-				const shareUrl = await page.evaluate(() => navigator.clipboard.readText());
-				expect(new URL(shareUrl).hash).toMatch(/^#workspace=/);
+				const shareUrl = new URL(await page.evaluate(() => navigator.clipboard.readText()));
+				expect(shareUrl.hash).toMatch(/^#workspace=/);
+				const shared = JSON.parse(
+					Buffer.from(shareUrl.hash.slice('#workspace='.length), 'base64url').toString()
+				);
 				expect(new URL(page.url()).hash).toBe('');
 				await page.getByRole('alert').filter({ hasText: 'Not saved locally' }).waitFor();
 				const backupDownload = page.waitForEvent('download');
@@ -1136,14 +1179,18 @@ describe('workspace storage browser integration', () => {
 				const backupBytes = await readFile(backupPath);
 				const backup = JSON.parse(backupBytes.toString());
 				expect(backup.format).toBe(WORKSPACE_BACKUP_FORMAT);
-				expect(backup.snapshot.version).toBe(6);
-				const { CPP: active, ...inactive } = backup.snapshot.workspaces;
+				// A portable backup records an empty directory set explicitly. Compact v7 omits it.
+				const { emptyDirectories, ...snapshot } = backup.snapshot;
+				expect(emptyDirectories).toEqual([]);
+				expect(snapshot.version).toBe(6);
+				expect(shared.files).toEqual(snapshot.files);
+				const { CPP: active, ...inactive } = snapshot.workspaces;
 				expect(active).toEqual({
-					activePath: backup.snapshot.activePath,
-					files: backup.snapshot.files,
-					openTabs: backup.snapshot.openTabs
+					activePath: snapshot.activePath,
+					files: snapshot.files,
+					openTabs: snapshot.openTabs
 				});
-				expect(backup.snapshot.files).toContainEqual({
+				expect(snapshot.files).toContainEqual({
 					path: 'unsaved.txt',
 					content: 'latest unsaved content',
 					encoding: 'utf-8'
@@ -1157,7 +1204,7 @@ describe('workspace storage browser integration', () => {
 					await page.evaluate(() =>
 						JSON.parse(localStorage.getItem('wasm-idle:example-workspace:v3')!)
 					)
-				).toEqual({ ...backup.snapshot, version: 7, workspaces: inactive });
+				).toEqual({ ...snapshot, version: 7, workspaces: inactive });
 				await page.evaluate(() => history.replaceState(null, '', location.pathname));
 				await page.reload({ waitUntil: 'domcontentloaded' });
 				await page.locator('button[title="unsaved.txt"]').waitFor();
@@ -1244,6 +1291,47 @@ describe('workspace storage browser integration', () => {
 });
 
 describe('workspace editor model lifetime', () => {
+	it(
+		'restores the cursor and viewport after a language switch without any undo history',
+		browserOptions,
+		async () => {
+			await withWorkspacePage(async (page, context, browserUrl) => {
+				await disableBrowserPrewarm(context);
+				const code = Array.from(
+					{ length: 140 },
+					(_, index) => '// source line ' + index
+				).join('\n');
+				const url = new URL(browserUrl);
+				url.searchParams.set('lsp-test', '1');
+				url.searchParams.set('lang', 'cpp');
+				url.searchParams.set('code', code);
+				await page.goto(url.href, { waitUntil: 'domcontentloaded' });
+				const view = () =>
+					page.evaluate(() => {
+						const editor = (window as any).__wasmIdleMonacoEditor;
+						return {
+							line: editor?.getPosition()?.lineNumber,
+							scroll: editor?.getScrollTop()
+						};
+					});
+				await page.waitForFunction(
+					() => (window as any).__wasmIdleMonacoEditor?.getModel()?.getLineCount() === 140
+				);
+				await page.evaluate(() => (window as any).__wasmIdleMonacoEditor.focus());
+				await page.keyboard.press('Control+End');
+				await expect.poll(async () => (await view()).scroll).toBeGreaterThan(0);
+				const before = await view();
+				expect(before.line).toBe(140);
+				await page.locator('#language-select').selectOption('PYTHON');
+				await page.waitForFunction(() =>
+					(window as any).__wasmIdleMonacoEditor?.getModel()?.uri.path.endsWith('.py')
+				);
+				await page.locator('#language-select').selectOption('CPP');
+				await expect.poll(view).toEqual(before);
+			});
+		}
+	);
+
 	it(
 		'keeps undo and redo separate when language projects share a filename',
 		browserOptions,

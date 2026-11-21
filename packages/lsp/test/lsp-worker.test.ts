@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+	createGraphqlWorkerService,
 	createTypeScriptWorkerService,
 	startWorkerLanguageServer,
 	type WorkerLanguageService
@@ -26,6 +27,54 @@ class FakeWorkerScope {
 }
 
 describe('startWorkerLanguageServer', () => {
+	it.each(['rootUri', 'workspaceFolders', 'configured'] as const)(
+		'resolves GraphQL sibling schemas against the %s project root',
+		async (rootSource) => {
+			const scope = new FakeWorkerScope();
+			const project = 'file:///User/Graph%20QL';
+			const uri = project + '/src/query.graphql';
+			startWorkerLanguageServer(createGraphqlWorkerService(), scope);
+			scope.dispatch({
+				type: 'init',
+				options: {
+					workspaceRootUri: rootSource === 'configured' ? project : undefined,
+					workspaceFiles: [
+						{ path: 'schema.graphql', content: 'type Query { root: String }' },
+						{ path: 'src/schema.graphql', content: 'type Query { nested: String }' }
+					]
+				}
+			});
+			await vi.waitFor(() => expect(scope.messages).toContainEqual({ type: 'ready' }));
+			scope.dispatch({
+				jsonrpc: '2.0',
+				id: 1,
+				method: 'initialize',
+				params:
+					rootSource === 'workspaceFolders'
+						? {
+								rootUri: null,
+								workspaceFolders: [{ uri: project + '/', name: 'Graph QL' }]
+							}
+						: { rootUri: rootSource === 'configured' ? project + '/src' : project }
+			});
+			scope.dispatch({
+				jsonrpc: '2.0',
+				method: 'textDocument/didOpen',
+				params: {
+					textDocument: { uri, version: 1, languageId: 'graphql', text: '{ nested }' }
+				}
+			});
+			await vi.waitFor(() =>
+				expect(scope.messages).toContainEqual({
+					jsonrpc: '2.0',
+					method: 'textDocument/publishDiagnostics',
+					params: { uri, diagnostics: [] }
+				})
+			);
+			scope.dispatch({ jsonrpc: '2.0', method: 'exit' });
+		}
+	);
+
 	it('publishes compiler results at the owning URI and clears removed dependency errors', async () => {
 		const scope = new FakeWorkerScope();
 		const entry = 'file:///workspace/main.ts';

@@ -386,7 +386,7 @@ export class MemoryFileSystem {
 
   private info(node: Inode): FileStat {
     return {
-      inode: node.inode, type: node.type, mode: node.mode,
+      inode: node.inode, nlink: node.linked ? 1 : 0, type: node.type, mode: node.mode,
       size: node.type === 'file' ? node.data.length : node.type === 'symlink' ? encoder.encode(node.target).length : 0,
       atimeMs: node.atimeMs, mtimeMs: node.mtimeMs, ctimeMs: node.ctimeMs,
       ...(node.command ? { command: true as const } : {}),
@@ -507,6 +507,8 @@ export class MemoryFileSystem {
   applyFileChanges(changes: {
     readonly write: readonly { readonly path: string; readonly bytes: Uint8Array }[];
     readonly remove: readonly string[];
+    /** Materialize named directories as part of the same atomic workspace replacement. */
+    readonly createDirectories?: readonly string[];
     /** Remove these unchanged, empty directory inodes before publishing a replacement file. */
     readonly replaceEmptyDirectories?: readonly { readonly path: string; readonly inode: number }[];
   }, options: PathOptions & { createRoot?: boolean } = {}): void {
@@ -516,6 +518,7 @@ export class MemoryFileSystem {
       checkPath(entry.path);
     }
     for (const path of changes.remove) checkPath(path);
+    for (const path of changes.createDirectories ?? []) checkPath(path);
     for (const directory of changes.replaceEmptyDirectories ?? []) {
       checkPath(directory.path);
       integer(directory.inode, 'directory inode');
@@ -525,7 +528,7 @@ export class MemoryFileSystem {
       if (typeof options.root !== 'string' || !options.root.startsWith('/')) throw new FsError('EINVAL', 'Root creation requires an explicit absolute capability root');
       checkPath(options.root);
     }
-    if (!changes.write.length && !changes.remove.length && !options.createRoot) return;
+    if (!changes.write.length && !changes.remove.length && !changes.createDirectories?.length && !changes.replaceEmptyDirectories?.length && !options.createRoot) return;
 
     // Stage namespace/metadata only. These operations replace file buffers rather than
     // writing into them, so unchanged bodies (including large toolchains) remain shared.
@@ -561,6 +564,7 @@ export class MemoryFileSystem {
       if (target.type === 'directory' && target.inode === directory.inode && target.children.size === 0)
         staged.rmdir(directory.path, options);
     }
+    for (const path of changes.createDirectories ?? []) staged.mkdir(path, { ...options, recursive: true });
     for (const { path, bytes } of changes.write) {
       const parent = path.split('/').slice(0, -1).join('/');
       if (parent) staged.mkdir(parent, { ...options, recursive: true });

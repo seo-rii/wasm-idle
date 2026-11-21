@@ -14,6 +14,8 @@ import {
 	languageLabels,
 	lspLanguageOverrides,
 	monacoLanguageContributionLoaders,
+	normalizeRequestedLanguage,
+	searchPlaygroundLanguages,
 	playgroundLanguageDescriptors,
 	playgroundLanguages,
 	runtimeLspCapabilities,
@@ -21,6 +23,22 @@ import {
 } from './language-registry';
 
 describe('language registry', () => {
+	it('restores every canonical project identity independently of the active filename', () => {
+		for (const language of playgroundLanguages) {
+			expect(normalizeRequestedLanguage(language)).toBe(language);
+			expect(normalizeRequestedLanguage(language.toLowerCase())).toBe(language);
+		}
+	});
+
+	it('finds native language labels and exact aliases before keyboard selection', () => {
+		expect(searchPlaygroundLanguages('엄준식')).toEqual(['UHMLANG']);
+		expect(searchPlaygroundLanguages('엄준')).toEqual(['UHMLANG']);
+		expect(searchPlaygroundLanguages('아희')).toEqual(['AHEUI']);
+		expect(searchPlaygroundLanguages('ZZZ')).toEqual([]);
+		expect(searchPlaygroundLanguages('')).toEqual(playgroundLanguages);
+		expect(searchPlaygroundLanguages('c#')[0]).toBe('CSHARP');
+	});
+
 	it('exposes the experimental Scala.js contract without promising an LSP', () => {
 		expect(supportedLanguageIds).toContain('SCALA');
 		expect(playgroundLanguages).toContain('SCALA');

@@ -110,6 +110,7 @@
 	import { consumeWorkspaceQueryInput } from './workspaceQuery';
 	import { migrateLegacyWorkspaceFile } from './workspaceMigration';
 	import {
+		compatibleWorkspaceDirectories,
 		normalizeWorkspaceTabs,
 		sameWorkspaceContents,
 		serializeStoredWorkspace,
@@ -139,6 +140,7 @@
 		languageLabels,
 		lspLanguageOverrides,
 		normalizeRequestedLanguage,
+		searchPlaygroundLanguages,
 		playgroundLanguages,
 		runtimeLspCapabilities,
 		typescriptLspLanguages,
@@ -698,6 +700,14 @@
 		fortranLspEnabled ? runtimeAssets.fortran?.analyzerUrl : undefined
 	);
 	const assemblyScriptLspModuleUrl = $derived(runtimeAssets.assemblyscript?.moduleUrl);
+	const graphqlLspWorkspaceFiles = $derived(
+		lspEnabled && language === 'GRAPHQL'
+			? files.filter((file) =>
+					file.path !== activePath && basename(file.path) === 'schema.graphql' &&
+					!isBinaryWorkspaceFile(file)
+				).map(({ path, content }) => ({ path, content }))
+			: undefined
+	);
 	const duckDbLspModuleUrl = $derived(runtimeAssets.duckdb?.moduleUrl);
 	const bashLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'bash');
 	const bashLspModuleUrl = $derived(
@@ -743,10 +753,18 @@
 					.filter(
 						(file) =>
 							file.path !== activePath &&
-							!isBinaryWorkspaceFile(file) &&
-							(language === 'DUCKDB' || file.path.endsWith('.sql'))
+							(language === 'DUCKDB' ||
+								(!isBinaryWorkspaceFile(file) && /\.sql$/iu.test(file.path)))
 					)
-					.map(({ path, content }) => ({ path, content }))
+					.map((file) =>
+						isBinaryWorkspaceFile(file)
+							? {
+									path: file.path,
+									content: file.content.slice(file.content.indexOf(',') + 1),
+									encoding: 'base64' as const
+								}
+							: { path: file.path, content: file.content }
+					)
 			: []
 	);
 	const sqlLspModuleUrl = $derived(sqlLspEnabled ? runtimeAssets.sqlite?.moduleUrl : undefined);
@@ -826,7 +844,14 @@
 	const sortedFiles = $derived([...files].sort((a, b) => a.path.localeCompare(b.path)));
 	const activeLines = $derived(activeFile ? activeFile.content.split(/\r\n|\r|\n/).length : 0);
 	const activeBytes = $derived(activeFile ? new Blob([activeFile.content]).size : 0);
-	const workspaceSaveKey = $derived(serializeStoredWorkspace(snapshot(), savedDirectories));
+	const workspaceSaveKey = $derived.by(() => {
+		try {
+			return serializeStoredWorkspace(snapshot(), savedDirectories);
+		} catch {
+			// A refresh can briefly pair incoming files with the outgoing folder list.
+			return undefined;
+		}
+	});
 
 	const loadingProgress = createLoadingProgressController({
 		onChange(state) {
@@ -874,7 +899,7 @@
 	let debugInteractionError = $state('');
 	let breakpointEditOpen = $state(false);
 	let editingBreakpoint = $state<{
-		line: number;
+		line?: number;
 		sourcePath: string;
 		language: PlaygroundLanguage;
 		workspace: string;
@@ -886,14 +911,13 @@
 	let breakpointLogMessage = $state('');
 	function editDebugBreakpoint(line: number) {
 		const spec = debug.structuredBreakpoints.find((entry) => entry.line === line);
-		editingBreakpoint = spec
-			? {
-					line,
-					sourcePath: debug.sourcePath,
-					language,
-					workspace: currentWorkspaceStorageKey
-				}
-			: null;
+		debugInteractionError = '';
+		editingBreakpoint = {
+			line: spec?.line,
+			sourcePath: debug.sourcePath,
+			language,
+			workspace: currentWorkspaceStorageKey
+		};
 		breakpointLine = line;
 		breakpointEnabled = spec?.enabled !== false;
 		breakpointCondition = spec?.condition ?? '';
@@ -915,8 +939,12 @@
 				debugInteractionError = 'Select a breakpoint in the current file before saving.';
 				return;
 			}
-			if (original && !specs.some((entry) => entry.line === original.line)) {
-				debugInteractionError = 'This breakpoint was removed. Select a breakpoint before saving.';
+			if (
+				original?.line !== undefined &&
+				!specs.some((entry) => entry.line === original.line)
+			) {
+				debugInteractionError =
+					'This breakpoint was removed. Select a breakpoint before saving.';
 				return;
 			}
 			if (
@@ -939,7 +967,10 @@
 					: {}),
 				...(breakpointLogMessage.trim() ? { logMessage: breakpointLogMessage.trim() } : {})
 			});
-			if (await debug.setStructuredBreakpoints(next)) breakpointEditOpen = false;
+			if (await debug.setStructuredBreakpoints(next)) {
+				editingBreakpoint = null;
+				breakpointEditOpen = false;
+			}
 		} catch (error) {
 			debugInteractionError = error instanceof Error ? error.message : String(error);
 		}
@@ -1486,20 +1517,19 @@
 					defaultSource: defaultSourceForLanguage(nextLanguage)
 				})
 		);
-		const requestedActivePath =
-			typeof value?.activePath !== 'string'
-				? ''
-				: files.some((file) => file.path === value.activePath)
-					? value.activePath
-					: normalizePath(value.activePath);
-		const restoredPath = renamed?.get(requestedActivePath) ?? requestedActivePath;
+		const filePaths = new Set(files.map((file) => file.path));
+		function restoredFilePath(path: string) {
+			// A literal POSIX name takes precedence over its legacy separator spelling.
+			const requested =
+				filePaths.has(path) || renamed?.has(path) ? path : normalizePath(path);
+			return renamed?.get(requested) ?? requested;
+		}
+		const restoredPath = restoredFilePath(value?.activePath ?? '');
 		const activePath = files.some((file) => file.path === restoredPath)
 			? restoredPath
 			: (files[0]?.path ?? '');
 		const openTabs = normalizeWorkspaceTabs(
-			Array.isArray(value?.openTabs)
-				? value.openTabs.map((tab) => renamed?.get(tab) ?? tab)
-				: value?.openTabs,
+			value?.openTabs?.map(restoredFilePath),
 			files,
 			activePath
 		);
@@ -1540,6 +1570,20 @@
 	let shellDirectoryPending = $state(false);
 	let shellDirectoryGeneration = 0;
 	let sharedWorkspaceOpening = $state(false);
+	// Restore can precede the first container scan. Both sources describe explicit
+	// directories; editor-created empty parents remain available for replacement.
+	const reservedProjectDirectories = $derived.by(() => {
+		const prefix = language + '/';
+		const paths = [
+			...savedDirectories.filter((path): path is string => typeof path === 'string'),
+			...sharedWorkspaceFiles
+				.filter((entry) => entry.type === 'directory' && !entry.editorOwned)
+				.map((entry) => entry.path)
+		];
+		return new Set(
+			paths.filter((path) => path.startsWith(prefix)).map((path) => path.slice(prefix.length))
+		);
+	});
 	const needsPosixBackup = $derived(
 		files.some((file) => file.pathStyle === 'posix' && normalizePath(file.path) !== file.path)
 	);
@@ -1558,13 +1602,18 @@
 		});
 	async function publishContainerWorkspace(
 		selectedLanguage: string,
-		values: readonly WorkspaceFile[]
+		values: readonly WorkspaceFile[],
+		restoreDirectories?: readonly SavedWorkspaceDirectory[] | null
 	) {
 		if (containerWorkspaceConflicts.has(selectedLanguage))
 			throw new Error(
 				'An editor buffer conflicts with terminal edits. Refresh files to resolve it.'
 			);
-		await playground.syncWorkspace(selectedLanguage, containerFiles(values));
+		await playground.syncWorkspace(
+			selectedLanguage,
+			containerFiles(values),
+			restoreDirectories
+		);
 	}
 	async function refreshContainerWorkspace(force = false, scanAll = false) {
 		if (!browser || !workspaceInitialized) return;
@@ -1822,6 +1871,7 @@
 
 	function switchLanguage(nextLanguage: PlaygroundLanguage, message?: string) {
 		if (nextLanguage === language) return;
+		editorComponent?.rememberProjectView();
 		languageWorkspaces = {
 			...languageWorkspaces,
 			[language]: currentWorkspace()
@@ -1842,20 +1892,7 @@
 		if (nextLanguage) switchLanguage(nextLanguage);
 	}
 
-	const compactSearchText = (text: string) => text.toLowerCase().replace(/[^a-z0-9#+]/g, '');
-	const filteredLanguages = $derived.by(() => {
-		const query = compactSearchText(languageQuery);
-		if (!query) return playgroundLanguages;
-		const matches = playgroundLanguages
-			.map((option) => {
-				const label = compactSearchText(languageLabels[option]);
-				const id = compactSearchText(option);
-				const rank = label.startsWith(query) || id.startsWith(query) ? 0 : 1;
-				return label.includes(query) || id.includes(query) ? { option, rank } : null;
-			})
-			.filter((match) => match !== null);
-		return matches.sort((left, right) => left.rank - right.rank).map((match) => match.option);
-	});
+	const filteredLanguages = $derived(searchPlaygroundLanguages(languageQuery));
 
 	function openLanguageMenu() {
 		if (!workspaceInitialized || runningMode) return;
@@ -1956,7 +1993,8 @@
 		const nextPath = workspaceFilePath(
 			normalizeWorkspaceFilePath(filePath, pathStyle) || 'untitled.txt',
 			files.map((file) => file.path),
-			true
+			true,
+			reservedProjectDirectories
 		);
 		files = [...files, { path: nextPath, content, encoding, pathStyle }];
 		if (select) selectFile(nextPath);
@@ -1986,7 +2024,9 @@
 			if (!nextPath || nextPath === file.path) return;
 			workspaceFilePath(
 				nextPath,
-				files.map((item) => item.path)
+				files.map((item) => item.path),
+				false,
+				reservedProjectDirectories
 			);
 		} catch (error) {
 			saveStatus = error instanceof Error ? error.message : String(error);
@@ -2101,6 +2141,7 @@
 			) ??
 			languageForPath(typeof value?.activePath === 'string' ? value.activePath : '') ??
 			'CPP';
+		rustTargetTriple = value.rustTargetTriple ?? 'wasm32-wasip1';
 		const nextWorkspaces = createDefaultLanguageWorkspaces();
 		const recovered: string[] = [];
 		for (const nextLanguageKey of playgroundLanguages) {
@@ -2140,33 +2181,13 @@
 		pythonTimestampInput = value.pythonTimestampInput ?? '0';
 		compilerOptions = restoredCompilerOptions.compilerOptions;
 		argsInput = restoredCompilerOptions.argsInput;
-		if (knownCppVersions.includes(value?.cppVersion as CppVersion))
-			cppVersion = value?.cppVersion as CppVersion;
-		if (typeof value?.log === 'boolean') log = value.log;
-		if (typeof value?.lspEnabled === 'boolean') lspEnabled = value.lspEnabled;
-		if (
-			value?.rustTargetTriple === 'wasm32-wasip1' ||
-			value?.rustTargetTriple === 'wasm32-wasip2' ||
-			value?.rustTargetTriple === 'wasm32-wasip3'
-		)
-			rustTargetTriple = value.rustTargetTriple;
-		if (
-			value?.rustOptimizationProfile === 'interactive' ||
-			value?.rustOptimizationProfile === 'speed' ||
-			value?.rustOptimizationProfile === 'size'
-		)
-			rustOptimizationProfile = value.rustOptimizationProfile;
-		if (
-			value?.goTarget === 'wasip1/wasm' ||
-			value?.goTarget === 'wasip2/wasm' ||
-			value?.goTarget === 'wasip3/wasm' ||
-			value?.goTarget === 'js/wasm'
-		)
-			goTarget = value.goTarget;
-		if (value?.ocamlBackend === 'js' || value?.ocamlBackend === 'wasm')
-			ocamlBackend = value.ocamlBackend;
-		if (value?.ocamlWasmBinaryenMode === 'fast' || value?.ocamlWasmBinaryenMode === 'full')
-			ocamlWasmBinaryenMode = value.ocamlWasmBinaryenMode;
+		cppVersion = value.cppVersion ?? 'CPP20';
+		log = value.log ?? true;
+		lspEnabled = value.lspEnabled ?? true;
+		rustOptimizationProfile = value.rustOptimizationProfile ?? 'interactive';
+		goTarget = value.goTarget ?? 'wasip1/wasm';
+		ocamlBackend = value.ocamlBackend ?? 'wasm';
+		ocamlWasmBinaryenMode = value.ocamlWasmBinaryenMode ?? 'fast';
 		sidebarOpen = value?.sidebarOpen ?? desktopExampleLayout;
 		saveStatus = recovered.length
 			? `${message}. Renamed conflicting files: ${recovered.join(', ')}`
@@ -2203,13 +2224,15 @@
 				return 'failed';
 			}
 		}
+		// A failed or in-flight backup publication is not a durable workspace yet.
+		if (pendingBackupProjects.size) return 'failed';
 		if (containerWorkspaceConflicts.size) {
 			workspaceStorage.fail(
 				`Editor and terminal changes conflict in ${[...containerWorkspaceConflicts].join(', ')}. Open the project and refresh files to resolve them.`
 			);
 			return 'failed';
 		}
-		const result = await workspaceStorage.saveRevision(readWorkspaceSaveKey(), identity);
+		const result = await workspaceStorage.saveRevision(workspaceSaveKey, identity);
 		if (result === 'saved' && identity === currentWorkspaceStorageKey && pendingWorkspaceUrl) {
 			if (location.href === pendingWorkspaceUrl.source)
 				replaceState(pendingWorkspaceUrl.target, page.state);
@@ -2217,14 +2240,6 @@
 		}
 		if (result === 'saved' && showStatus) saveStatus = 'Saved locally';
 		return result;
-	}
-
-	function readWorkspaceSaveKey() {
-		try {
-			return workspaceSaveKey;
-		} catch {
-			return undefined;
-		}
 	}
 
 	async function saveWorkspaceCopy() {
@@ -2241,8 +2256,14 @@
 	}
 
 	function downloadWorkspaceBackup() {
+		const project = snapshot();
+		// Export remains available during a save conflict. Keep unsaved editor files
+		// and every directory whose metadata still agrees with them.
+		const emptyDirectories = compatibleWorkspaceDirectories(project, savedDirectories);
 		downloadBlob(
-			new Blob([serializeWorkspaceBackup(snapshot())], { type: 'application/json' }),
+			new Blob([serializeWorkspaceBackup({ ...project, emptyDirectories })], {
+				type: 'application/json'
+			}),
 			'wasm-idle-workspace.json'
 		);
 		saveStatus = 'Workspace backup downloaded';
@@ -2271,7 +2292,7 @@
 	}
 
 	function isCurrentWorkspaceSaved() {
-		workspaceStorage.observe(readWorkspaceSaveKey(), currentWorkspaceStorageKey);
+		workspaceStorage.observe(workspaceSaveKey, currentWorkspaceStorageKey);
 		workspaceStorage.checkExternalChanges(currentWorkspaceStorageKey);
 		const state = workspaceStorage.getState();
 		return (
@@ -2336,8 +2357,13 @@
 		shareNotice = null;
 		void saveWorkspace();
 		const url = consumeWorkspaceQueryInput(new URL(location.href));
-		url.hash = SHARE_PREFIX + encodeBase64Url(JSON.stringify(snapshot()));
 		url.searchParams.delete('workspace');
+		const project = snapshot();
+		url.hash = SHARE_PREFIX + encodeBase64Url(JSON.stringify(project));
+		// Keep the portable v6 shape for older receivers when it fits. v7 avoids
+		// including active files twice and restores the same selected language.
+		if (!isNavigableWorkspaceShare(url.href))
+			url.hash = SHARE_PREFIX + encodeBase64Url(serializeStoredWorkspace(project));
 		const link = url.toString();
 		if (!isNavigableWorkspaceShare(link)) {
 			shareNotice = { workspace };
@@ -2523,6 +2549,17 @@
 			}
 			let imported: string[] = [];
 			if (plan.kind === 'backup') {
+				const directories = readWorkspaceDirectories(
+					plan.backup.emptyDirectories,
+					playgroundLanguages
+				);
+				const previousDirectories =
+					unrestoredWorkspace === null
+						? emptyProjectDirectories(
+								await playground.listWorkspaceFiles(),
+								playgroundLanguages
+							)
+						: [];
 				destination.assertBackupUnedited();
 				// A recovery copy gets a fresh container. A healthy restore keeps the live Bash session.
 				const previous =
@@ -2537,20 +2574,27 @@
 					replaceState(copyUrl, page.state);
 					unrestoredWorkspace = null;
 				}
+				savedDirectories =
+					plan.backup.emptyDirectories === undefined ? previousDirectories : directories;
 				applySnapshot(plan.backup, 'Workspace backup restored');
 				if (previous) {
 					const binding = playground;
 					const revision = editorWorkspaceRevision;
-					// The active editor publishes its own changes. Restore inactive diffs as well,
-					// including files removed by a backup that resets a project to its default.
+					const directoryPath = (entry: SavedWorkspaceDirectory) =>
+						typeof entry === 'string' ? entry : entry.path;
+					const directoryProjects = new Set(
+						[...previousDirectories, ...directories].map(
+							(entry) => directoryPath(entry).split('/')[0]
+						)
+					);
 					const changed = playgroundLanguages.filter(
 						(project) =>
-							project !== language &&
-							(pendingBackupProjects.has(project) ||
-								!sameWorkspaceFiles(
-									previous[project].files,
-									languageWorkspaces[project].files
-								))
+							directoryProjects.has(project) ||
+							pendingBackupProjects.has(project) ||
+							!sameWorkspaceFiles(
+								previous[project].files,
+								languageWorkspaces[project].files
+							)
 					);
 					try {
 						await Promise.all(
@@ -2559,15 +2603,24 @@
 								pendingBackupProjects.set(project, revision);
 								await publishContainerWorkspace(
 									project,
-									languageWorkspaces[project].files
+									languageWorkspaces[project].files,
+									plan.backup.emptyDirectories === undefined
+										? null
+										: directories.filter((entry) =>
+												directoryPath(entry).startsWith(project + '/')
+											)
 								);
 								if (pendingBackupProjects.get(project) === revision)
 									pendingBackupProjects.delete(project);
 							})
 						);
-					} catch (error) {
 						if (binding === playground && revision === editorWorkspaceRevision)
+							scheduleWorkspaceSave();
+					} catch (error) {
+						if (binding === playground && revision === editorWorkspaceRevision) {
 							saveStatus = `Workspace backup restored. Workspace sync failed: ${String(error)}`;
+							workspaceStorage.fail(saveStatus);
+						}
 					}
 				}
 				return;
@@ -2576,7 +2629,12 @@
 			} else {
 				const paths = files.map((file) => file.path);
 				const additions = plan.files.map((file) => {
-					const path = workspaceFilePath(file.path, paths, true);
+					const path = workspaceFilePath(
+						file.path,
+						paths,
+						true,
+						reservedProjectDirectories
+					);
 					paths.push(path);
 					return { ...file, path };
 				});
@@ -3357,7 +3415,7 @@
 
 	$effect(() => {
 		if (!browser || !workspaceEditorInitialized || unrestoredWorkspace !== null) return;
-		const key = readWorkspaceSaveKey();
+		const key = workspaceSaveKey;
 		workspaceStorage.observe(key, currentWorkspaceStorageKey);
 		if (!key) return;
 		scheduleWorkspaceSave();
@@ -3942,6 +4000,84 @@
 			{/each}
 		{/snippet}
 
+		{#snippet breakpointEditor()}
+			<details
+				class="debug-feature-panel"
+				bind:open={breakpointEditOpen}
+				ontoggle={(event) => {
+					if (!event.currentTarget.open) editingBreakpoint = null;
+					else if (!editingBreakpoint) editDebugBreakpoint(breakpointLine);
+				}}
+			>
+				<summary>Breakpoints</summary>
+				<ul>
+					{#each debug.structuredBreakpoints as spec (spec.line)}<li>
+							<button onclick={() => editDebugBreakpoint(spec.line)}
+								>Line {spec.line}{spec.enabled === false
+									? ' (disabled)'
+									: ''}{spec.hitCondition
+									? ` · hit ${spec.hitCondition}`
+									: ''}{spec.condition
+									? ` · ${spec.condition}`
+									: ''}{spec.logMessage ? ' · log' : ''}</button
+							>
+						</li>{/each}
+				</ul>
+				<form
+					class="debug-breakpoint-editor"
+					onsubmit={(event) => {
+						event.preventDefault();
+						void saveDebugBreakpoint();
+					}}
+				>
+					<label
+						>Line<input
+							aria-label="Breakpoint line"
+							type="number"
+							min="1"
+							required
+							value={breakpointLine}
+							oninput={(event) =>
+								(breakpointLine = Number(event.currentTarget.value))}
+						/></label
+					>
+					<label><input type="checkbox" bind:checked={breakpointEnabled} /> Enabled</label
+					>
+					{#if debug.capabilities.hitConditionalBreakpoints}<label
+							>Hit count<input
+								aria-label="Breakpoint hit count"
+								bind:value={breakpointHitCondition}
+								maxlength={4096}
+								placeholder="100"
+							/></label
+						>{/if}
+					{#if debug.capabilities.conditionalBreakpoints}<label
+							>Condition<input
+								aria-label="Breakpoint condition"
+								bind:value={breakpointCondition}
+								maxlength={4096}
+							/></label
+						>{/if}
+					{#if debug.capabilities.logPoints}<label
+							>Log message<input
+								aria-label="Breakpoint log message"
+								bind:value={breakpointLogMessage}
+								maxlength={4096}
+							/></label
+						>{/if}
+					<button
+						type="submit"
+						disabled={!Number.isSafeInteger(breakpointLine) ||
+							breakpointLine < 1 ||
+							dataBreakpointLoading}>Save breakpoint</button
+					>
+				</form>
+				{#if debug.breakpointError}<p role="alert">
+						{debug.breakpointError}
+					</p>{/if}
+			</details>
+		{/snippet}
+
 		{#if debugLanguage && (debug.active || debug.history.length > 0)}
 			<section
 				class={[
@@ -4404,81 +4540,7 @@
 						{/if}
 					</section>
 					<section class="debug-panel">
-						<details
-							class="debug-feature-panel"
-							bind:open={breakpointEditOpen}
-							ontoggle={(event) => {
-								if (!event.currentTarget.open) editingBreakpoint = null;
-							}}
-						>
-							<summary>Breakpoints</summary>
-							<ul>
-								{#each debug.structuredBreakpoints as spec (spec.line)}<li>
-										<button onclick={() => editDebugBreakpoint(spec.line)}
-											>Line {spec.line}{spec.enabled === false
-												? ' (disabled)'
-												: ''}{spec.hitCondition
-												? ` · hit ${spec.hitCondition}`
-												: ''}{spec.condition
-												? ` · ${spec.condition}`
-												: ''}{spec.logMessage ? ' · log' : ''}</button
-										>
-									</li>{/each}
-							</ul>
-							<form
-								class="debug-breakpoint-editor"
-								onsubmit={(event) => {
-									event.preventDefault();
-									void saveDebugBreakpoint();
-								}}
-							>
-								<label
-									>Line<input
-										aria-label="Breakpoint line"
-										type="number"
-										min="1"
-										required
-										value={breakpointLine}
-										oninput={(event) =>
-											(breakpointLine = Number(event.currentTarget.value))}
-									/></label
-								>
-								<label
-									><input type="checkbox" bind:checked={breakpointEnabled} /> Enabled</label
-								>
-								{#if debug.capabilities.hitConditionalBreakpoints}<label
-										>Hit count<input
-											aria-label="Breakpoint hit count"
-											bind:value={breakpointHitCondition}
-											maxlength={4096}
-											placeholder="100"
-										/></label
-									>{/if}
-								{#if debug.capabilities.conditionalBreakpoints}<label
-										>Condition<input
-											aria-label="Breakpoint condition"
-											bind:value={breakpointCondition}
-											maxlength={4096}
-										/></label
-									>{/if}
-								{#if debug.capabilities.logPoints}<label
-										>Log message<input
-											aria-label="Breakpoint log message"
-											bind:value={breakpointLogMessage}
-											maxlength={4096}
-										/></label
-									>{/if}
-								<button
-									type="submit"
-									disabled={!Number.isSafeInteger(breakpointLine) ||
-										breakpointLine < 1 ||
-										dataBreakpointLoading}>Save breakpoint</button
-								>
-							</form>
-							{#if debug.breakpointError}<p role="alert">
-									{debug.breakpointError}
-								</p>{/if}
-						</details>
+						{@render breakpointEditor()}
 						{#if debug.capabilities.skipLibraryCode}<label class="debug-feature-panel"
 								><input
 									type="checkbox"
@@ -4730,6 +4792,11 @@
 						</section>
 					{/if}
 				</div>
+			</section>
+		{:else if debugLanguage && breakpointEditOpen}
+			<section class="debug-panel">
+				{@render breakpointEditor()}
+				{#if debugInteractionError}<p role="alert">{debugInteractionError}</p>{/if}
 			</section>
 		{/if}
 		<DebuggerLog
@@ -5386,6 +5453,7 @@
 							lspLanguage={monacoLspLanguage}
 							filePath={activePath || defaultPathForLanguage()}
 							workspacePaths={editorFilePaths}
+							onOpenFile={selectFile}
 							projectHistory={currentProjectHistory()}
 							rustTargetTriple={languageExecutionOptions.rustTargetTriple}
 							goTarget={languageExecutionOptions.goTarget}
@@ -5478,6 +5546,7 @@
 							{fortranLspAnalyzerUrl}
 							{assemblyScriptLspModuleUrl}
 							{duckDbLspModuleUrl}
+							{graphqlLspWorkspaceFiles}
 							{cobolLspEnabled}
 							{cobolLspBaseUrl}
 							{cobolLspWorkspaceFiles}
@@ -5523,7 +5592,7 @@
 							onAddWatch={(expression) => {
 								debug.addWatchExpression(expression);
 							}}
-							onEditBreakpoint={editDebugBreakpoint}
+							onEditBreakpoint={debugLanguage ? editDebugBreakpoint : undefined}
 							{debugHoverOptions}
 							debugHoverEnabled={debug.paused &&
 								!debug.sourceRevisionStale &&

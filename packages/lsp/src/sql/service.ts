@@ -10,7 +10,7 @@ import {
 import type { DuckDBBundles } from '../types.js';
 
 export type SqlLanguageServerDialect = 'sql' | 'sqlite' | 'duckdb';
-type SqlWorkspaceFile = { path: string; content: string };
+type SqlWorkspaceFile = { path: string; content: string; encoding?: 'base64' };
 
 export interface SqlWorkerOptions {
 	dialect?: SqlLanguageServerDialect;
@@ -51,6 +51,7 @@ interface DuckDBDatabase {
 	reset(): Promise<void>;
 	dropFiles(): Promise<unknown>;
 	registerFileText(name: string, text: string): Promise<void>;
+	registerFileBuffer(name: string, bytes: Uint8Array): Promise<void>;
 	connect(): Promise<DuckDBConnection>;
 	terminate(): Promise<void>;
 }
@@ -156,11 +157,12 @@ const SQL_HOVER: Record<string, string> = {
 
 const wordAt = (text: string, position: LspPosition) => {
 	const line = text.split('\n')[position.line] || '';
-	const character = Math.max(0, Math.min(position.character, line.length));
-	const left =
-		line.slice(0, character).match(/[A-Za-z_][A-Za-z0-9_]*(?:\s+[A-Za-z_]+)?$/u)?.[0] || '';
-	const right = line.slice(character).match(/^[A-Za-z0-9_]*/u)?.[0] || '';
-	return `${left}${right}`.trim().toLowerCase();
+	const words = /\b(?:group\s+by\b|order\s+by\b|[a-z_][a-z0-9_]*)/giu;
+	for (const match of line.matchAll(words)) {
+		if (match.index <= position.character && position.character < match.index + match[0].length)
+			return match[0].toLowerCase().replace(/\s+/gu, ' ');
+	}
+	return '';
 };
 
 const severityFor = (severity: SqlEngineDiagnostic['severity']): 1 | 2 | 3 =>
@@ -204,6 +206,30 @@ const diagnosticFor = (text: string, diagnostic: SqlEngineDiagnostic): LspDiagno
 	};
 };
 
+function duckDbDiagnostic(error: unknown, text: string): SqlEngineDiagnostic {
+	const message = error instanceof Error ? error.message : String(error);
+	// DuckDB-Wasm sometimes prefixes its structured error with "Parser Error: ".
+	const start = message.indexOf('{');
+	if (start < 0) return { message };
+	try {
+		const info = JSON.parse(message.slice(start));
+		if (typeof info?.exception_message !== 'string') return { message };
+		const detail = { message: info.exception_type + ' Error: ' + info.exception_message };
+		const offset = Number(info.position);
+		if (info.position == null || !Number.isSafeInteger(offset) || offset < 0) return detail;
+		// The native offset counts UTF-8 bytes. LSP counts UTF-16 code units.
+		const bytes = new TextEncoder().encode(text);
+		if (offset > bytes.length) return detail;
+		const prefix = new TextDecoder('utf-8', { ignoreBOM: true }).decode(
+			bytes.subarray(0, offset)
+		);
+		const { line, character } = positionAt(text, prefix.length);
+		return { ...detail, lineNumber: line + 1, columnNumber: character + 1 };
+	} catch {
+		return { message };
+	}
+}
+
 async function loadSqlJsEngine(options: SqlWorkerOptions): Promise<SqlEngine> {
 	if (options.dialect === 'duckdb') {
 		if (!options.moduleUrl) {
@@ -242,10 +268,19 @@ async function loadSqlJsEngine(options: SqlWorkerOptions): Promise<SqlEngine> {
 					await db.dropFiles();
 					for (const file of workspaceFiles) {
 						setupFile = file.path;
-						await db.registerFileText(file.path, file.content);
+						if (file.encoding === 'base64') {
+							const bytes = Uint8Array.from(atob(file.content), (c) =>
+								c.charCodeAt(0)
+							);
+							await db.registerFileBuffer(file.path, bytes);
+						} else {
+							await db.registerFileText(file.path, file.content);
+						}
 					}
 					setupFile = undefined;
 					connection = await db.connect();
+					// Older external bundles can still report ordinary text diagnostics.
+					await connection.query('SET errors_as_json = true').catch(() => {});
 					for (const file of setupFiles) {
 						setupFile = file.path;
 						await connection.query(file.content);
@@ -254,13 +289,7 @@ async function loadSqlJsEngine(options: SqlWorkerOptions): Promise<SqlEngine> {
 					await connection.query(code);
 					return [];
 				} catch (error) {
-					return [
-						{
-							message: error instanceof Error ? error.message : String(error),
-							setupFile,
-							severity: 'error'
-						}
-					];
+					return [{ ...duckDbDiagnostic(error, code), setupFile, severity: 'error' }];
 				} finally {
 					await connection?.close().catch(() => {});
 				}
@@ -353,6 +382,7 @@ export function createSqlWorkerService(
 
 	return {
 		name: 'wasm-idle-sql-lsp',
+		workspaceDiagnostics: true,
 		diagnosticDelay: 250,
 		capabilities: {
 			completionProvider: { triggerCharacters: [' ', '.'] },
@@ -378,22 +408,21 @@ export function createSqlWorkerService(
 				: uri.slice(0, uri.lastIndexOf('/') + 1);
 			const rootPath = uriToPath(root);
 			const active = uriToPath(uri).slice(rootPath.length);
-			const files = new Map(workspace.map(({ path, content }) => [path, content]));
+			const files = new Map(workspace.map((file) => [file.path, file]));
 			for (const open of context.documents.values()) {
-				if (open.uri.startsWith(root))
-					files.set(uriToPath(open.uri).slice(rootPath.length), open.text);
+				if (open.uri.startsWith(root)) {
+					const path = uriToPath(open.uri).slice(rootPath.length);
+					files.set(path, { path, content: open.text });
+				}
 			}
-			files.set(active, text);
-			const workspaceFiles =
-				dialect === 'duckdb'
-					? Array.from(files, ([path, content]) => ({ path, content }))
-					: undefined;
+			files.set(active, { path: active, content: text });
+			const workspaceFiles = dialect === 'duckdb' ? [...files.values()] : undefined;
 			files.delete(active);
-			const setupFiles = Array.from(files)
-				.filter(([path]) =>
-					dialect === 'duckdb' ? /\.(sql|duckdb)$/iu.test(path) : path.endsWith('.sql')
-				)
-				.map(([path, content]) => ({ path, content }));
+			const setupFiles = [...files.values()].filter(
+				(file) =>
+					!file.encoding &&
+					(dialect === 'duckdb' ? /\.(sql|duckdb)$/iu : /\.sql$/iu).test(file.path)
+			);
 			if (dialect === 'duckdb') setupFiles.sort((a, b) => a.path.localeCompare(b.path));
 			const key = JSON.stringify([dialect, uri, workspaceFiles ?? [text, setupFiles]]);
 			if (cached?.key === key) return cached.result;

@@ -2,7 +2,8 @@ import { type MemoryFileSystem, type OpenOptions, type FileStat, type FileTimes,
 import { createBatchStdio, type WasiStdio } from './stdio.js';
 
 const encoder = new TextEncoder();
-const decoder = new TextDecoder('utf-8', { fatal: true });
+// In a guest path the initial UTF-8 bytes for U+FEFF are part of the filename.
+const decoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
 const errno: Record<string, number> = { EACCES: 2, EAGAIN: 6, EBADF: 8, EBUSY: 10, EEXIST: 20, EFAULT: 21, EFBIG: 22, EINVAL: 28, EIO: 29, EISDIR: 31, ELOOP: 32, EMFILE: 33, ENOENT: 44, ENOMEM: 48, ENOSPC: 51, ENOSYS: 52, ENOTDIR: 54, ENOTEMPTY: 55, ENOTSUP: 58, EPERM: 63, EPIPE: 64, EROFS: 69, EXDEV: 75, ENOTCAPABLE: 76 };
 class WasiFault extends Error { constructor(readonly errno: number) { super(`WASI errno ${errno}`); } }
 class WasiExit { constructor(readonly code: number) {} }
@@ -116,7 +117,7 @@ export function createWasiHost(options: HostOptions) {
   const env = Object.entries(options.env).map(([key, value]) => `${key}=${value}`);
   const stat = (ptr: number, info: ReturnType<MemoryFileSystem['stat']>) => {
     const dest = span(ptr, 64); dest.fill(0); const v = view(ptr, 64);
-    v.setBigUint64(8, BigInt(info.inode), true); v.setUint8(16, filetype(info.type)); v.setBigUint64(24, 1n, true);
+    v.setBigUint64(8, BigInt(info.inode), true); v.setUint8(16, filetype(info.type)); v.setBigUint64(24, BigInt(info.nlink), true);
     v.setBigUint64(32, BigInt(info.size), true);
     v.setBigUint64(40, BigInt(Math.trunc(info.atimeMs)) * 1000000n, true);
     v.setBigUint64(48, BigInt(Math.trunc(info.mtimeMs)) * 1000000n, true);

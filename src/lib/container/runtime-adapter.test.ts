@@ -383,6 +383,39 @@ describe('container shared editor input boundary', () => {
 		expect(restored.container.fs.stat('/workspace/C/manual').type).toBe('directory');
 	});
 
+	it('restores named directories and files together while protecting unrelated shell data', () => {
+		const { adapter, container } = fixture();
+		adapter.directory('C');
+		container.fs.mkdir('/workspace/C/old-dir');
+		container.fs.mkdir('/workspace/C/manual');
+		container.fs.mkdir('/workspace/C/occupied');
+		container.fs.writeFile('/workspace/C/occupied/keep', Uint8Array.of(42));
+		const original = [f('source-dir', 'old file'), f('control.c', 'unchanged')];
+		adapter.syncWorkspace('C', original);
+		const next = [f('manual', 'incoming file'), f('control.c', 'unchanged')];
+		adapter.syncWorkspace('C', next, original, undefined, ['C/source-dir/nested']);
+		expect(read(container, '/workspace/C/manual')).toBe('incoming file');
+		expect(container.fs.stat('/workspace/C/source-dir/nested').type).toBe('directory');
+		expect(() => container.fs.stat('/workspace/C/old-dir')).toThrow();
+		expect(container.fs.readFile('/workspace/C/occupied/keep')).toEqual(Uint8Array.of(42));
+		const before = container.fs.exportSnapshot();
+		expect(() =>
+			adapter.syncWorkspace('C', [f('occupied', 'file')], next, undefined, [])
+		).toThrow();
+		expect(container.fs.exportSnapshot()).toEqual(before);
+	});
+	it('retains unlisted shell directories when a legacy backup only describes files', () => {
+		const { adapter, container } = fixture();
+		adapter.directory('C');
+		container.fs.mkdir('/workspace/C/build/old', { recursive: true });
+		container.fs.mkdir('/workspace/C/keep/nested', { recursive: true });
+		const files = [f('build', 'file')];
+		adapter.syncWorkspace('C', files, [], undefined, null);
+		expect(read(container, '/workspace/C/build')).toBe('file');
+		expect(container.fs.stat('/workspace/C/keep/nested').type).toBe('directory');
+		adapter.syncWorkspace('C', files, files, undefined, []);
+		expect(() => container.fs.stat('/workspace/C/keep')).toThrow();
+	});
 	it('preserves shell-created directories, replacements and unrelated content on failure', () => {
 		for (const situation of ['preexisting', 'recreated', 'occupied']) {
 			const { adapter, container } = fixture();

@@ -60,7 +60,9 @@ class ExecutionTests(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as directory:
             for value, expected in [('None', 0), ('0', 0), ('7', 7), ('-1', 255),
                                     ('1 << 100', 255), ("'stopping'", 1)]:
-                source = (f'import asyncio, os, sys\nassert sys.argv == [__file__]\n'
+                source = ('import asyncio, os, sys\n'
+                          'assert sys.argv == ["tools/script.py"]\n'
+                          'assert __file__ == os.path.abspath(sys.argv[0])\n'
                           f'sys.argv = ["mutated"]\nos.chdir({directory!r})\n'
                           f'await asyncio.sleep(0)\nsys.exit({value})')
                 stderr = StringIO()
@@ -90,7 +92,7 @@ class ExecutionTests(unittest.IsolatedAsyncioTestCase):
         await self.execute(code, '한글/main.py')
         await self.execute(code, 'other/tool.py')
         self.assertEqual([item[0] for item in self.output],
-                         [('main.py', '한글'), ('main.py', '한글'), ('tool.py', 'other')])
+                         [('main.py', str(Path.cwd() / '한글'))] * 2 + [('tool.py', str(Path.cwd() / 'other'))])
 
     async def test_top_level_await_runs_each_time(self):
         code = 'import asyncio\nawait asyncio.sleep(0)\nprint("awaited")'

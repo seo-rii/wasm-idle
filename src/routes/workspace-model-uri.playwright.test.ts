@@ -31,7 +31,8 @@ describe.runIf(enabled)('workspace URI through the Monaco LSP adapter', () => {
 					import { startMonacoLspSession } from ${JSON.stringify(sessionModule)};
 					import { createWorkspaceModelUri } from ${JSON.stringify(helperModule)};
 					monaco.languages.register({ id: 'uri-regression' });
-					window.runUriCase = async (path) => {
+					window.runUriCase = async (path, { siblingPath, fallback = false } = {}) => {
+						const sibling = siblingPath && monaco.editor.createModel('sibling', 'uri-regression', createWorkspaceModelUri(monaco.Uri, siblingPath));
 						const uri = createWorkspaceModelUri(monaco.Uri, path);
 						const model = monaco.editor.createModel('const target = 1;\\ntarget;', 'uri-regression', uri);
 						const editor = monaco.editor.create(document.getElementById('editor'), { model });
@@ -52,10 +53,11 @@ describe.runIf(enabled)('workspace URI through the Monaco LSP adapter', () => {
 										writer: { async write(message) {
 											messages.push(message);
 											if (message.method === 'initialize') send({ jsonrpc: '2.0', id: message.id, result: {
-												capabilities: { textDocumentSync: { openClose: true, change: 2 }, definitionProvider: true }
+												capabilities: fallback ? {} : { textDocumentSync: { openClose: true, change: 2 }, definitionProvider: true }
 											} });
 											if (message.method === 'textDocument/didOpen') {
 												opened.add(message.params.textDocument.uri);
+												if (fallback) return;
 												send({ jsonrpc: '2.0', method: 'textDocument/publishDiagnostics', params: {
 													uri: message.params.textDocument.uri,
 													diagnostics: [{ range, severity: 1, message: 'URI regression diagnostic' }]
@@ -80,6 +82,14 @@ describe.runIf(enabled)('workspace URI through the Monaco LSP adapter', () => {
 							}
 						};
 						try {
+							if (fallback) {
+								await waitFor(() => opened.size > 0);
+								model.setValue('changed');
+								const change = () => messages.find((message) => message.method === 'textDocument/didChange');
+								await waitFor(change);
+								return { openedUris: [...opened], changedUri: change().params.textDocument.uri,
+									rootUri: messages.find((message) => message.method === 'initialize').params.rootUri };
+							}
 							await waitFor(() => monaco.editor.getModelMarkers({ resource: uri }).length > 0);
 							const providers = StandaloneServices.get(ILanguageFeaturesService).definitionProvider;
 							await waitFor(() => providers.ordered(model).length > 0);
@@ -88,12 +98,12 @@ describe.runIf(enabled)('workspace URI through the Monaco LSP adapter', () => {
 							const result = { providerUri, errors, modelPath: uri.path,
 								definitionPath: definitions?.[0]?.uri.path,
 								definitionRange: definitions?.[0]?.range,
-								openedUri: messages.find((message) => message.method === 'textDocument/didOpen').params.textDocument.uri,
+								openedUris: [...opened],
 								requestedUri: messages.find((message) => message.method === 'textDocument/definition').params.textDocument.uri,
 								marker: monaco.editor.getModelMarkers({ resource: uri })[0]?.message,
 								cloneFindsModel: clonedModel === model };
 							return result;
-						} finally { model.dispose(); stop(); editor.dispose(); }
+						} finally { model.dispose(); stop(); sibling?.dispose(); editor.dispose(); }
 					};
 				`
 			},
@@ -136,9 +146,9 @@ describe.runIf(enabled)('workspace URI through the Monaco LSP adapter', () => {
 				expect(result.errors).toEqual([]);
 				expect(result.modelPath).toBe(`/workspace/${path}`);
 				expect(result.cloneFindsModel).toBe(true);
-				expect(result.providerUri).toBe(result.openedUri);
-				expect(result.requestedUri).toBe(result.openedUri);
-				expect(decodeURIComponent(new URL(result.openedUri).pathname)).toBe(
+				expect(result.openedUris).toEqual([result.providerUri]);
+				expect(result.requestedUri).toBe(result.providerUri);
+				expect(decodeURIComponent(new URL(result.providerUri).pathname)).toBe(
 					`/workspace/${path}`
 				);
 				expect(result.marker).toBe('URI regression diagnostic');
@@ -150,6 +160,23 @@ describe.runIf(enabled)('workspace URI through the Monaco LSP adapter', () => {
 					endColumn: 13
 				});
 			}
+			const paired = await page.evaluate(() =>
+				(window as any).runUriCase('Lib/Main.ts', { siblingPath: 'Lib/main.ts' })
+			);
+			expect(paired.openedUris).toEqual([
+				'file:///workspace/Lib/main.ts',
+				'file:///workspace/Lib/Main.ts'
+			]);
+			expect(paired.requestedUri).toBe('file:///workspace/Lib/Main.ts');
+			expect(paired.definitionPath).toBe('/workspace/Lib/Main.ts');
+			const fallback = await page.evaluate(() =>
+				(window as any).runUriCase('Lib/Other.ts', { fallback: true })
+			);
+			expect(fallback).toEqual({
+				openedUris: ['file:///workspace/Lib/Other.ts'],
+				changedUri: 'file:///workspace/Lib/Other.ts',
+				rootUri: 'file:///workspace/Lib'
+			});
 		} finally {
 			await browser.close();
 		}

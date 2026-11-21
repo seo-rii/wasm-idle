@@ -8,6 +8,28 @@ const answerWat = `(module
 )`;
 
 describe('wasm-wat compiler runtime', () => {
+	it('compiles UTF-8 data and export names and maps diagnostics to editor columns', async () => {
+		const code =
+			'(module (memory (export "mem") 1) (data (i32.const 0) "안녕🙂") (func (export "café🙂") (result i32) i32.const 42))';
+		const result = await compileWat({ code });
+		expect(result.diagnostics).toEqual([]);
+		const execution = await executeBrowserWatArtifact(result.artifact!);
+		expect(execution.stdout).toBe('café🙂=42\n');
+		const module = await WebAssembly.compile(Uint8Array.from(result.artifact!.wasm));
+		const instance = await WebAssembly.instantiate(module);
+		const bytes = new TextEncoder().encode('안녕🙂');
+		expect(
+			new Uint8Array((instance.exports.mem as WebAssembly.Memory).buffer, 0, bytes.length)
+		).toEqual(bytes);
+
+		const invalid = '(module (func (export "안녕🙂") bogus))';
+		const diagnostics = (await compileWat({ code: invalid })).diagnostics;
+		expect(diagnostics[0]).toMatchObject({
+			lineNumber: 1,
+			columnNumber: invalid.indexOf('bogus') + 1
+		});
+	});
+
 	it('compiles WAT to a runnable wasm artifact', async () => {
 		const compiler = await createWatCompiler();
 		const result = await compiler.compile({

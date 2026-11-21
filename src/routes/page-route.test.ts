@@ -85,6 +85,19 @@ it('moves an edited breakpoint and keeps an occupied destination intact', async 
 	await ops.saveDebugBreakpoint();
 	expect(debug.structuredBreakpoints).toEqual([{ line: 8 }]);
 	expect(state.debugInteractionError).toContain('removed');
+
+	ops.editDebugBreakpoint(6);
+	debug.setSourcePath('/workspace/helper.py');
+	await ops.saveDebugBreakpoint();
+	expect(state.debugInteractionError).toContain('current file');
+	expect(debug.structuredBreakpoints).toEqual([]);
+	debug.setSourcePath('/workspace/main.py');
+	state.currentWorkspaceStorageKey = 'other-project';
+	await ops.saveDebugBreakpoint();
+	expect(state.debugInteractionError).toContain('current file');
+	state.currentWorkspaceStorageKey = 'demo';
+	await ops.saveDebugBreakpoint();
+	expect(debug.structuredBreakpoints.map((entry) => entry.line)).toEqual([8, 6]);
 });
 
 it('moves structured breakpoints on rename and clears them on deletion and filename reuse', async () => {
@@ -111,6 +124,7 @@ it('moves structured breakpoints on rename and clears them on deletion and filen
 		selectFile: vi.fn(),
 		normalizeWorkspaceFilePath,
 		workspaceFilePath,
+		reservedProjectDirectories: new Set<string>(),
 		saveStatus: ''
 	};
 	const action = (name: string, following: string) => {
@@ -624,6 +638,7 @@ describe('shared workspace refresh scheduling', () => {
 			unrestoredWorkspace: null,
 			currentWorkspaceStorageKey: 'source',
 			pendingWorkspaceUrl: null,
+			pendingBackupProjects: new Map(),
 			workspaceStorage,
 			refreshContainerWorkspace: refresh,
 			captureWorkspaceImportDestination,
@@ -1759,7 +1774,7 @@ describe('example route debug actions', () => {
 		);
 		expect(source).toMatch(/CPP: \(\) => \(\{ cppVersion \}\)/);
 		expect(source).toMatch(/cppVersion,/);
-		expect(source).toMatch(/knownCppVersions\.includes\(value\?\.cppVersion as CppVersion\)/);
+		expect(source).toContain("cppVersion = value.cppVersion ?? 'CPP20';");
 		expect(source).toMatch(/<select id="cpp-version" bind:value=\{cppVersion\}>/);
 		expect(source).toMatch(
 			/\{#each knownCppVersions as version \(version\)\}\s+<option value=\{version\}>\{cppVersionLabels\[version\]\}<\/option>\s+\{\/each\}/s
@@ -1837,9 +1852,7 @@ describe('example route debug actions', () => {
 		const snapshotStart = source.indexOf('function snapshot(');
 		const snapshotBody = source.slice(snapshotStart, source.indexOf('\n\t}\n', snapshotStart));
 		expect(snapshotBody).toMatch(/log,\s+lspEnabled,[\s\S]*version: 6,/);
-		expect(source).toMatch(
-			/if \(typeof value\?\.lspEnabled === 'boolean'\) lspEnabled = value\.lspEnabled;/
-		);
+		expect(source).toContain('lspEnabled = value.lspEnabled ?? true;');
 		expect(source).toMatch(
 			/<input id="lsp-toggle" type="checkbox" bind:checked=\{lspEnabled\} \/>/
 		);
@@ -2369,6 +2382,12 @@ describe('example route debug actions', () => {
 	});
 
 	it('renders retained watch subtrees in history without requesting live children', () => {
+		expect(source).toMatch(
+			/\{:else if debugLanguage && breakpointEditOpen\}\s*<section class="debug-panel">\s*\{@render breakpointEditor\(\)\}/u
+		);
+		expect(source).toContain(
+			'onEditBreakpoint={debugLanguage ? editDebugBreakpoint : undefined}'
+		);
 		const historyStart = source.indexOf('<summary>Recent stops (');
 		const historyPanel = source.slice(historyStart, source.indexOf('</details>', historyStart));
 		const watchMarkup = historyPanel.match(

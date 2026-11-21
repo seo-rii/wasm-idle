@@ -215,6 +215,22 @@ describe('document language worker service', () => {
 		]);
 	});
 
+	it('matches the decoded fragment literally against the generated heading id', async () => {
+		const service = createDocumentWorkerService();
+		const ctx = context();
+		await service.initialize?.({ language: 'markdown' }, ctx);
+		const source = document(
+			'markdown',
+			'# Report\n# 한글\n\n[ok](#report) [encoded](#%ED%95%9C%EA%B8%80) [case](#REPORT) [bang](#report!) [escaped](#report%21) [hash](##report)'
+		);
+		expect((await service.diagnostics?.(source, ctx))?.map((d) => d.message)).toEqual([
+			'No heading matches #REPORT.',
+			'No heading matches #report!.',
+			'No heading matches #report!.',
+			'No heading matches ##report.'
+		]);
+	});
+
 	it('reports the source spelling of Unicode anchors and reference destinations', async () => {
 		const service = createDocumentWorkerService(),
 			ctx = context();

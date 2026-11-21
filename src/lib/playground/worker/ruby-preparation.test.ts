@@ -111,7 +111,7 @@ describe('Ruby untouched VM preparation', () => {
 		mocks.verifyRubyRuntimePreflightPayload.mockReset();
 		mocks.rewriteVerifiedRubyRuntimeModule.mockReset();
 		mocks.importRuntimeModule.mockReset();
-		rubyEvalMock.mockReset();
+		rubyEvalMock.mockReset().mockReturnValue(0);
 		rubyInstantiateMock.mockReset();
 		rubyInstantiateMock.mockImplementation(async () => ({
 			vm: { eval: rubyEvalMock }
@@ -170,7 +170,7 @@ describe('Ruby untouched VM preparation', () => {
 		expect(rubyEvalMock).not.toHaveBeenCalled();
 		await handle({ data: request() });
 		expect(rubyInstantiateMock).toHaveBeenCalledOnce();
-		expect(rubyEvalMock).toHaveBeenCalledWith('puts 42');
+		expect(rubyEvalMock).toHaveBeenCalledWith(expect.stringContaining('puts 42'));
 		await handle({ data: request() });
 		expect(rubyInstantiateMock).toHaveBeenCalledTimes(2);
 	});
@@ -243,7 +243,7 @@ describe('Ruby untouched VM preparation', () => {
 		);
 		await handle({ data: request(startupContext) });
 		expect(rubyInstantiateMock).toHaveBeenCalledOnce();
-		expect(rubyEvalMock).toHaveBeenCalledWith('puts 42');
+		expect(rubyEvalMock).toHaveBeenCalledWith(expect.stringContaining('puts 42'));
 	});
 	it('uses private snapshots so changed workspace content cannot claim an old VM', async () => {
 		const handle = await ready();

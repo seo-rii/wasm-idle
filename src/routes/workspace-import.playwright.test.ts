@@ -85,6 +85,64 @@ describe('workspace import browser integration', () => {
 	});
 
 	it(
+		'restores the default dialect for a legacy C++ backup that omits its standard',
+		browserOptions,
+		async () => {
+			await withImportPage(async (page) => {
+				await page.locator('#cpp-version').selectOption('CPP98');
+				await page.locator('#lsp-toggle').uncheck();
+				const backup = {
+					language: 'CPP',
+					version: 4,
+					activePath: 'build.cpp',
+					files: [{ path: 'build.cpp', content: 'int main() {}' }]
+				};
+				await page.locator('input[type="file"]').setInputFiles({
+					name: 'legacy.json',
+					mimeType: 'application/json',
+					buffer: Buffer.from(serializeWorkspaceBackup(backup))
+				});
+				await page.locator('.file-tab.active[title="build.cpp"]').waitFor();
+				expect(await page.locator('#cpp-version').inputValue()).toBe('CPP20');
+				expect(await page.locator('#lsp-toggle').isChecked()).toBe(true);
+			});
+		}
+	);
+
+	it(
+		'normalizes legacy tab paths while preserving explicit POSIX names',
+		browserOptions,
+		async () => {
+			await withImportPage(async (page) => {
+				const backup = {
+					language: 'CPP',
+					version: 4,
+					lspEnabled: false,
+					activePath: 'src\\main.cpp',
+					files: [
+						{ path: 'src\\main.cpp', content: 'int main() {}' },
+						{ path: 'src\\lib.h', content: 'int f();' },
+						{ path: 'literal\\name.txt', pathStyle: 'posix', content: 'literal' }
+					],
+					openTabs: ['src\\lib.h', 'literal\\name.txt', 'src\\main.cpp']
+				};
+				await page.locator('input[type="file"]').setInputFiles({
+					name: 'legacy.json',
+					mimeType: 'application/json',
+					buffer: Buffer.from(serializeWorkspaceBackup(backup))
+				});
+				await page.locator('.file-tab.active[title="src/main.cpp"]').waitFor();
+				expect(await page.locator('#lsp-toggle').isChecked()).toBe(false);
+				expect(
+					await page
+						.locator('.file-tab')
+						.evaluateAll((tabs) => tabs.map((tab) => tab.getAttribute('title')))
+				).toEqual(['src/lib.h', 'literal\\name.txt', 'src/main.cpp']);
+			});
+		}
+	);
+
+	it(
 		'preserves the UTF-8 BOM and line endings across edits, undo, save and download',
 		browserOptions,
 		async () => {
@@ -620,6 +678,110 @@ describe('workspace import browser integration', () => {
 	);
 
 	it(
+		'replaces an outgoing named directory with a portable backup file without corrupting Save',
+		browserOptions,
+		async () => {
+			await withImportPage(async (page) => {
+				const key = 'wasm-idle:example-workspace:v3';
+				const before = page.url();
+				const saveSnapshot = async () => {
+					await page.getByRole('button', { name: 'Save', exact: true }).click();
+					await page.locator('[data-workspace-save-state="saved"]').waitFor();
+					return page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), key);
+				};
+				const downloadBackup = async () => {
+					const [download] = await Promise.all([
+						page.waitForEvent('download'),
+						page.getByRole('button', { name: 'Backup (JSON)', exact: true }).click()
+					]);
+					const backupPath = await download.path();
+					if (!backupPath) throw new Error('Missing workspace backup');
+					return readFile(backupPath);
+				};
+				await page.goto(new URL('favicon.png', before).href);
+				await page.evaluate(
+					(key) =>
+						localStorage.setItem(
+							key,
+							JSON.stringify({
+								version: 7,
+								language: 'CPP',
+								activePath: 'main.cpp',
+								files: [
+									{ path: 'main.cpp', content: '// old' },
+									{
+										path: 'literal\\name.txt',
+										pathStyle: 'posix',
+										content: 'original'
+									}
+								],
+								emptyDirectories: [
+									'CPP/build',
+									'CPP/keep',
+									{ path: 'PYTHON/pkg', implicit: true }
+								]
+							})
+						),
+					key
+				);
+				await page.goto(before, { waitUntil: 'domcontentloaded' });
+				await page.locator('#language-select[data-workspace-ready="true"]').waitFor();
+				await page.locator('[data-container-directory="CPP/build"]').waitFor();
+				const portable = await downloadBackup();
+				const original = JSON.parse(portable.toString()).snapshot;
+				expect(original.emptyDirectories).toEqual([
+					'CPP/build',
+					'CPP/keep',
+					{ path: 'PYTHON/pkg', implicit: true }
+				]);
+				await page.locator('input[type="file"]').setInputFiles({
+					name: 'backup.json',
+					mimeType: 'application/json',
+					buffer: Buffer.from(
+						serializeWorkspaceBackup({
+							version: 6,
+							language: 'CPP',
+							activePath: 'build',
+							files: [{ path: 'build', content: 'restored' }]
+						})
+					)
+				});
+				await page.locator('.file-tab.active[title="build"]').waitFor();
+				expect(await saveSnapshot()).toMatchObject({
+					activePath: 'build',
+					files: [{ path: 'build', content: 'restored' }],
+					emptyDirectories: ['CPP/keep', { path: 'PYTHON/pkg', implicit: true }]
+				});
+				await page.reload({ waitUntil: 'domcontentloaded' });
+				await page.locator('.file-tab.active[title="build"]').waitFor();
+				expect(await page.locator('[data-workspace-recovery]').count()).toBe(0);
+				await page.locator('[data-container-directory="CPP/keep"]').waitFor();
+				await page.locator('input[type="file"]').setInputFiles({
+					name: 'downloaded.json',
+					mimeType: 'application/json',
+					buffer: portable
+				});
+				await page.locator('.file-tab.active[title="main.cpp"]').waitFor();
+				await page.locator('[data-container-directory="CPP/build"]').waitFor();
+				expect(await saveSnapshot()).toMatchObject({
+					version: 7,
+					activePath: 'main.cpp',
+					openTabs: original.openTabs,
+					files: original.files,
+					emptyDirectories: original.emptyDirectories
+				});
+				await page.reload({ waitUntil: 'domcontentloaded' });
+				await page.locator('.file-tab.active[title="main.cpp"]').waitFor();
+				await page.locator('[data-container-directory="CPP/build"]').waitFor();
+				await page.locator('[data-container-directory="CPP/keep"]').waitFor();
+				const reloaded = JSON.parse((await downloadBackup()).toString()).snapshot;
+				expect(reloaded.emptyDirectories).toEqual(original.emptyDirectories);
+				expect(page.url()).toBe(before);
+			});
+		}
+	);
+
+	it(
 		'publishes an imported backup to inactive language directories before Bash edits them',
 		browserOptions,
 		async () => {
@@ -719,12 +881,20 @@ describe('workspace import browser integration', () => {
 						PYTHON: project([{ ...restored, content: appended }, extra, blocked])
 					}
 				};
-				await shellCommand('CPP', 'mkdir /workspace/PYTHON/retry.py && echo retry-blocked');
+				// Empty directories are replaceable during restore. A shell-only link
+				// keeps this directory occupied and must survive a rejected publication.
+				await shellCommand(
+					'CPP',
+					'mkdir /workspace/PYTHON/retry.py && ln -s ../notes.py /workspace/PYTHON/retry.py/link && echo retry-blocked'
+				);
 				await waitForShellLine('retry-blocked');
 				await upload(retryBackup);
 				await page.getByText(/Workspace backup restored\. Workspace sync failed/).waitFor();
 				expect(await pythonFiles()).not.toHaveProperty('retry.py');
-				await shellCommand('CPP', 'rmdir /workspace/PYTHON/retry.py && echo retry-ready');
+				await shellCommand(
+					'CPP',
+					'rm /workspace/PYTHON/retry.py/link && rmdir /workspace/PYTHON/retry.py && echo retry-ready'
+				);
 				await waitForShellLine('retry-ready');
 				await upload(retryBackup);
 				await expect.poll(pythonFiles, { timeout: 12_000 }).toEqual({

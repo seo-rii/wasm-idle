@@ -60,6 +60,9 @@ const canonicalDirectory = (path: string) =>
 			.every((part) => part && part !== '.' && part !== '..'));
 
 function rcfile(session: string, languages: readonly string[]) {
+	// Bash stores every =~ match in the user's BASH_REMATCH, even inside a function.
+	const validGeneration =
+		'"$__wic_generation" == [123456789]* && "$__wic_generation" != *[!0123456789]* && ${#__wic_generation} -le 10';
 	return [
 		'# Trusted application rcfile. The mailbox is data and is never evaluated.',
 		'__wasm_idle_poll() {',
@@ -69,7 +72,7 @@ function rcfile(session: string, languages: readonly string[]) {
 		`  if [[ -f '${SHELL_RESIZE_REQUEST}' && -r '${SHELL_RESIZE_REQUEST}' ]] && builtin exec {__wic_fd}< '${SHELL_RESIZE_REQUEST}'; then`,
 		'    IFS=\' \' builtin read -r -n 160 -u "$__wic_fd" __wic_version __wic_session __wic_generation __wic_language __wic_extra || :',
 		'    builtin exec {__wic_fd}<&-',
-		'    if [[ "$__wic_version" == 4 && "$__wic_session" == "$__wic_expected_session" && "$__wic_language" == resize && -z "$__wic_extra" && "$__wic_generation" =~ ^[1-9][0-9]{0,9}$ ]] &&',
+		`    if [[ "$__wic_version" == 4 && "$__wic_session" == "$__wic_expected_session" && "$__wic_language" == resize && -z "$__wic_extra" && ${validGeneration} ]] &&`,
 		`       (( __wic_generation <= ${MAX_GENERATION} && __wic_generation > \${__wasm_idle_resize_generation:-0} )); then`,
 		'      __wasm_idle_resize_generation=$__wic_generation',
 		// Native resize preserves TERM, including an unset or readonly user value.
@@ -90,7 +93,7 @@ function rcfile(session: string, languages: readonly string[]) {
 		'    return 0',
 		'  fi',
 		'  [[ "$__wic_session" == "$__wic_expected_session" && -z "$__wic_extra" ]] || return 0',
-		'  [[ "$__wic_generation" =~ ^[1-9][0-9]{0,9}$ ]] || return 0',
+		`  [[ ${validGeneration} ]] || return 0`,
 		`  (( __wic_generation <= ${MAX_GENERATION} && __wic_generation > \${__wasm_idle_control_generation:-0} )) || return 0`,
 		// stdin has real EOF; the native hook reaches this only at a primary prompt.
 		// Exit directly instead of accepting or changing the unfinished editing buffer.

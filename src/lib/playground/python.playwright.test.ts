@@ -401,6 +401,8 @@ except RuntimeError as error:
 					stdinText: '68\n',
 					source: `import sys, sqlite3, lzma
 from compression import zstd
+from pathlib import Path
+assert Path(__file__).is_absolute() and "from compression import zstd" in Path(__file__).read_text()
 print("python=" + ".".join(map(str, sys.version_info[:3])))
 template = t"{int(input()) + 5}"
 db = sqlite3.connect(":memory:")

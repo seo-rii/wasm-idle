@@ -217,10 +217,18 @@ describe('Monaco route debug sync', () => {
 			])
 		);
 		expect(source).toMatch(/debugActionBindings\?\.dispose\(\);/);
-		expect(source).toMatch(
-			/import type \{\s+EditorLanguageServerHandle,\s+EditorLanguageServerRuntimeOptions,\s+LanguageServerStatus\s+\} from '@wasm-idle\/lsp';/s
+		const lspImports = parse(source, { modern: true })
+			.instance!.content.body.filter((node) => node.type === 'ImportDeclaration')
+			.filter((node) => node.source.value === '@wasm-idle/lsp');
+		expect(lspImports).toMatchObject([{ importKind: 'type' }]);
+		expect(lspImports[0].specifiers.map((item) => item.local.name)).toEqual(
+			expect.arrayContaining([
+				'EditorLanguageServerHandle',
+				'EditorLanguageServerRuntimeOptions',
+				'LanguageServerStatus',
+				'SqlWorkerOptions'
+			])
 		);
-		expect(source).not.toMatch(/^\s*import \{[^\n]*\} from '@wasm-idle\/lsp';/m);
 		expect(source).toMatch(/type MonacoLspStatusView = \{/);
 		expect(source).toMatch(/progressPercent: number \| null;/);
 		expect(source).toMatch(/lspStatus\?: MonacoLspStatusView \| null;/);
@@ -598,9 +606,7 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(/bind:lspStatus=\{editorLspStatus\}/);
 		// Binary-preserving workspace snapshots use v6 and still persist the LSP opt-in.
 		expect(pageSource).toMatch(/version: 6,/);
-		expect(pageSource).toMatch(
-			/if \(typeof value\?\.lspEnabled === 'boolean'\) lspEnabled = value\.lspEnabled;/
-		);
+		expect(pageSource).toContain('lspEnabled = value.lspEnabled ?? true;');
 		expect(pageSource).toMatch(/clangdEnabled=\{clangdLspEnabled\}/);
 		expect(pageSource).toMatch(/const dotnetLspEnabled = \$derived/);
 		expect(pageSource).toMatch(/dotnetLspLanguages\.has\(language\)/);

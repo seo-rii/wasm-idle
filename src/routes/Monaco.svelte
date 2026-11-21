@@ -23,7 +23,8 @@
 	import type {
 		EditorLanguageServerHandle,
 		EditorLanguageServerRuntimeOptions,
-		LanguageServerStatus
+		LanguageServerStatus,
+		SqlWorkerOptions
 	} from '@wasm-idle/lsp';
 	import type { HaskellRuntimeAssetReceipts } from '@wasm-idle/core';
 	import type { DOuterAssetReceipts } from '$lib/playground/dOuterAssets';
@@ -40,7 +41,7 @@
 		type PlaygroundRuntimeAssets
 	} from '$lib/playground/assets';
 	import type monaco from 'monaco-editor';
-	import { onMount, untrack } from 'svelte';
+	import { onMount, tick, untrack } from 'svelte';
 	import { SvelteURL } from 'svelte/reactivity';
 	import { createWorkspaceModelUri } from './workspace-model-uri';
 	import { createOriginalLineEndings } from './workspace-model-eol';
@@ -2386,6 +2387,7 @@
 		lspLanguage?: string;
 		filePath?: string;
 		workspacePaths?: readonly string[];
+		onOpenFile?: (path: string) => void;
 		projectHistory?: ProjectModelHistories;
 		value?: string;
 		onChange?: (value: string) => void;
@@ -2466,6 +2468,7 @@
 		haskellLspIntegrity?: HaskellRuntimeAssetReceipts;
 		fortranLspAnalyzerUrl?: string;
 		assemblyScriptLspModuleUrl?: string;
+		graphqlLspWorkspaceFiles?: ReadonlyArray<{ path: string; content: string }>;
 		duckDbLspModuleUrl?: string;
 		cobolLspEnabled?: boolean;
 		cobolLspBaseUrl?: string;
@@ -2475,7 +2478,7 @@
 		nimLspWorkspaceFiles?: Array<{ path: string; content: string }>;
 		sqlLspEnabled?: boolean;
 		sqlLspModuleUrl?: string;
-		sqlLspWorkspaceFiles?: { path: string; content: string }[];
+		sqlLspWorkspaceFiles?: SqlWorkerOptions['workspaceFiles'];
 		postgresqlLspEnabled?: boolean;
 		postgresqlLspModuleUrl?: string;
 		bashLspEnabled?: boolean;
@@ -2528,6 +2531,7 @@
 		lspLanguage,
 		filePath,
 		workspacePaths,
+		onOpenFile,
 		projectHistory,
 		value,
 		onChange,
@@ -2607,6 +2611,7 @@
 		haskellLspIntegrity,
 		fortranLspAnalyzerUrl,
 		assemblyScriptLspModuleUrl,
+		graphqlLspWorkspaceFiles,
 		duckDbLspModuleUrl,
 		cobolLspEnabled = false,
 		cobolLspBaseUrl,
@@ -2811,6 +2816,7 @@
 			haskellLspEnabled ? JSON.stringify(haskellLspIntegrity) : '',
 			fortranLspAnalyzerUrl || '',
 			assemblyScriptLspModuleUrl || '',
+			activeLspLanguage === 'graphql' ? JSON.stringify(graphqlLspWorkspaceFiles) : '',
 			duckDbLspModuleUrl || '',
 			cobolLspEnabled ? cobolLspBaseUrl || '' : '',
 			cobolLspEnabled ? JSON.stringify(cobolLspWorkspaceFiles) : '',
@@ -3703,6 +3709,10 @@
 				const { getGraphqlLanguageServer } = await import('@wasm-idle/lsp/graphql');
 				return await getGraphqlLanguageServer({
 					currentUrl,
+					graphql: {
+						workspaceRootUri: 'file:///workspace',
+						workspaceFiles: $state.snapshot(graphqlLspWorkspaceFiles)
+					},
 					onStatus: (status) => (graphqlLspStatus = status)
 				});
 			}
@@ -3946,6 +3956,8 @@
 					? monacoApi.typescript.javascriptDefaults
 					: undefined;
 		if (!defaults) return;
+		const previousMode = defaults.modeConfiguration;
+		const mode = { ...previousMode, definitions: false };
 		const previous = defaults.getDiagnosticsOptions();
 		const options = {
 			...previous,
@@ -3953,8 +3965,12 @@
 			noSemanticValidation: true,
 			noSuggestionDiagnostics: true
 		};
+		// The project language server owns definitions while ready; the built-in provider
+		// sees only visited models and can return the import statement as a second target.
+		defaults.setModeConfiguration(mode);
 		defaults.setDiagnosticsOptions(options);
 		return () => {
+			if (defaults.modeConfiguration === mode) defaults.setModeConfiguration(previousMode);
 			if (!activeModel.isDisposed()) monacoApi.editor.setModelMarkers(activeModel, 'lsp', []);
 			if (defaults.getDiagnosticsOptions() === options)
 				defaults.setDiagnosticsOptions(previous);
@@ -3992,7 +4008,7 @@
 				adaptMonacoFullDocumentSync(connection, (uri) => {
 					if (
 						sessionModel.isDisposed() ||
-						sessionModel.uri.toString(true).toLowerCase() !== uri.toLowerCase()
+						sessionModel.uri.toString(true) !== uri
 					)
 						return undefined;
 					return { uri: sessionModel.uri.toString(true), text: sessionModel.getValue() };
@@ -4029,6 +4045,13 @@
 		);
 		if (endings) originalEndings.set(model, endings);
 		else originalEndings.delete(model);
+	}
+
+	// Read the live view before switching the keyed editor can dispose its child.
+	export function rememberProjectView() {
+		const active = editor?.getModel();
+		const view = editor?.saveViewState();
+		if (active && view) modelViewStates.set(active, view);
 	}
 
 	// A Monaco URI is immutable. Give the renamed file its real URI while its source still
@@ -4079,8 +4102,10 @@
 				const saved = savedHistories?.get(path);
 				savedHistories?.delete(path);
 				if (saved?.text === initialValue) {
-					restoreModelHistory(nextModel, saved.history);
+					if (saved.history) restoreModelHistory(nextModel, saved.history);
+					if (saved.view) modelViewStates.set(nextModel, saved.view);
 					if (saved.endings) originalEndings.set(nextModel, saved.endings);
+					else rememberText(nextModel, initialValue);
 				} else {
 					rememberText(nextModel, initialValue);
 				}
@@ -4095,6 +4120,39 @@
 				if (view) activeEditor.restoreViewState(view);
 			}
 		});
+	});
+
+	$effect(() => {
+		const api = Monaco;
+		const owner = editor;
+		const openFile = onOpenFile;
+		if (!api || !owner || !openFile) return;
+		const opener = api.editor.registerEditorOpener({
+			async openCodeEditor(source, resource, target) {
+				if (
+					source !== owner ||
+					resource.scheme !== 'file' ||
+					resource.authority ||
+					!resource.path.startsWith('/workspace/')
+				)
+					return false;
+				const path = resource.path.slice('/workspace/'.length);
+				if (!workspacePaths?.includes(path)) return false;
+				openFile(path);
+				await tick();
+				if (owner.getModel()?.uri.path !== resource.path) return false;
+				if (target && 'startLineNumber' in target) {
+					owner.setSelection(target);
+					owner.revealRangeInCenterIfOutsideViewport(target);
+				} else if (target) {
+					owner.setPosition(target);
+					owner.revealPositionInCenterIfOutsideViewport(target);
+				}
+				owner.focus();
+				return true;
+			}
+		});
+		return () => opener.dispose();
 	});
 
 	$effect(() => {
@@ -4137,6 +4195,16 @@
 
 	const handleEditorLoad = (nextEditor: monaco.editor.IStandaloneCodeEditor) => {
 		editor = nextEditor;
+		// The wrapper applies the model and font metrics after onload. Restoring
+		// against its placeholder's line height shifts the saved viewport.
+		// onload runs inside the wrapper's editor-creation effect. Tab changes must not recreate it.
+		const loadedModel = untrack(() => model);
+		const view = loadedModel && modelViewStates.get(loadedModel);
+		if (view)
+			void tick().then(() => {
+				if (editor === nextEditor && nextEditor.getModel() === loadedModel)
+					nextEditor.restoreViewState(view);
+			});
 		if (monacoTestHooksEnabled()) {
 			(globalThis as MonacoTestGlobal).__wasmIdleMonacoEditor = nextEditor;
 		}
@@ -4616,10 +4684,12 @@
 			for (const [path, cachedModel] of workspaceModels) {
 				if (cachedModel.isDisposed()) continue;
 				const history = savedHistories && captureModelHistory(cachedModel);
-				if (history) {
+				const view = modelViewStates.get(cachedModel);
+				if (savedHistories && (history || view)) {
 					const endings = originalEndings.get(cachedModel);
 					savedHistories.set(path, {
 						history,
+						view,
 						endings,
 						text: endings?.text ?? cachedModel.getValue(undefined, true)
 					});

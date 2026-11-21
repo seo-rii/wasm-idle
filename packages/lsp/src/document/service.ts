@@ -234,11 +234,10 @@ const nextInlineToken = (tokens: MarkdownToken[], index: number) => {
 };
 
 const decodeMarkdownAnchor = (value: string) => {
-	const raw = value.replace(/^#+/u, '');
 	try {
-		return markdownSlug(decodeURIComponent(raw));
+		return decodeURIComponent(value);
 	} catch {
-		return markdownSlug(raw);
+		return value;
 	}
 };
 

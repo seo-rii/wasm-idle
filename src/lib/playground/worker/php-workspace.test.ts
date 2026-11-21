@@ -7,6 +7,7 @@ const { phpInstances, createPhp84Mock, materializedFiles, operationLog, MockPhp 
 		const operationLog: string[] = [];
 
 		class MockPhp {
+			onMessage = vi.fn(() => () => {});
 			mkdir = vi.fn((path: string) => operationLog.push(`mkdir:${path}`));
 			rmdir = vi.fn((path: string) => {
 				operationLog.push(`rmdir:${path}`);

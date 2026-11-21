@@ -685,6 +685,7 @@ const playgroundLanguageAliases: Record<string, PlaygroundLanguage> = {
 	'objective-c++': 'OBJECTIVECXX',
 	objective_cxx: 'OBJECTIVECXX',
 	java: 'JAVA',
+	scala: 'SCALA',
 	rust: 'RUST',
 	go: 'GO',
 	d: 'D',
@@ -816,4 +817,22 @@ export function normalizeRequestedLanguage(value: string | null): PlaygroundLang
 	return Object.hasOwn(playgroundLanguageAliases, alias)
 		? playgroundLanguageAliases[alias]
 		: null;
+}
+
+const compactSearchText = (text: string) =>
+	text.normalize('NFC').toLowerCase().replace(/[^\p{L}\p{N}#+]/gu, '');
+
+/** Search the same names and aliases accepted by workspace URLs, including native labels. */
+export function searchPlaygroundLanguages(value: string) {
+	const query = compactSearchText(value);
+	if (!query) return value.trim() ? [] : playgroundLanguages;
+	const alias = normalizeRequestedLanguage(value);
+	const matches = playgroundLanguages.flatMap((option) => {
+		const label = compactSearchText(languageLabels[option]);
+		const id = compactSearchText(option);
+		if (option === alias) return [{ option, rank: -1 }];
+		if (!label.includes(query) && !id.includes(query)) return [];
+		return [{ option, rank: label.startsWith(query) || id.startsWith(query) ? 0 : 1 }];
+	});
+	return matches.sort((left, right) => left.rank - right.rank).map(({ option }) => option);
 }

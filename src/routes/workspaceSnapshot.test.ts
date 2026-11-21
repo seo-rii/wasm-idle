@@ -1,6 +1,7 @@
 import { emptyProjectDirectories, readWorkspaceDirectories } from '../lib/container/workspace';
 import { describe, expect, it } from 'vitest';
 import {
+	compatibleWorkspaceDirectories,
 	normalizeWorkspaceTabs,
 	sameWorkspaceContents,
 	serializeStoredWorkspace,
@@ -62,6 +63,21 @@ describe('workspace JSON boundary', () => {
 		}
 	});
 
+	it('does not write a file over stale directory metadata before the owner reconciles', () => {
+		const active = { files: [{ path: 'data', content: 'file' }] };
+		const snapshot = { language: 'CPP', ...active, workspaces: { CPP: active } };
+		expect(() => serializeStoredWorkspace(snapshot, ['CPP/data/child'])).toThrow('directory');
+		expect(() => serializeStoredWorkspace(snapshot, [])).not.toThrow();
+		const keep = { path: 'CPP/still-empty', implicit: true } as const;
+		expect(
+			compatibleWorkspaceDirectories(snapshot, [
+				'CPP/data',
+				'CPP/data/child',
+				keep,
+				'PYTHON/data'
+			])
+		).toEqual([keep, 'PYTHON/data']);
+	});
 	it('treats a project directory rename as a real cross-tab change', () => {
 		const snapshot = { language: 'CPP', files };
 		const previous = serializeStoredWorkspace(snapshot, ['CPP/before']);
@@ -192,4 +208,25 @@ it('accepts a layout-only save that upgrades legacy Python defaults while retain
 	expect(
 		sameWorkspaceContents(stored, JSON.stringify({ ...upgraded, pythonTimestampInput: '17' }))
 	).toBe(false);
+});
+
+it('compares each language project independently of the selected language', () => {
+	const projects = {
+		CPP: { files, activePath: 'main.cpp', openTabs: ['main.cpp'] },
+		PYTHON: { files: [{ path: 'main.py', content: 'print(8)' }], activePath: 'main.py' }
+	};
+	const cpp = serializeStoredWorkspace({
+		language: 'CPP',
+		...projects.CPP,
+		workspaces: projects
+	});
+	const python = { language: 'PYTHON', ...projects.PYTHON, workspaces: projects };
+	expect(sameWorkspaceContents(cpp, serializeStoredWorkspace(python))).toBe(true);
+	const edited = { ...projects, CPP: { ...projects.CPP, files: [] } };
+	expect(
+		sameWorkspaceContents(cpp, serializeStoredWorkspace({ ...python, workspaces: edited }))
+	).toBe(false);
+	expect(sameWorkspaceContents(cpp, serializeStoredWorkspace({ ...python, log: false }))).toBe(
+		false
+	);
 });
