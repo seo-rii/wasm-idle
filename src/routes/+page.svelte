@@ -139,6 +139,7 @@
 		languageLabels,
 		lspLanguageOverrides,
 		normalizeRequestedLanguage,
+		searchPlaygroundLanguages,
 		playgroundLanguages,
 		runtimeLspCapabilities,
 		typescriptLspLanguages,
@@ -1842,20 +1843,7 @@
 		if (nextLanguage) switchLanguage(nextLanguage);
 	}
 
-	const compactSearchText = (text: string) => text.toLowerCase().replace(/[^a-z0-9#+]/g, '');
-	const filteredLanguages = $derived.by(() => {
-		const query = compactSearchText(languageQuery);
-		if (!query) return playgroundLanguages;
-		const matches = playgroundLanguages
-			.map((option) => {
-				const label = compactSearchText(languageLabels[option]);
-				const id = compactSearchText(option);
-				const rank = label.startsWith(query) || id.startsWith(query) ? 0 : 1;
-				return label.includes(query) || id.includes(query) ? { option, rank } : null;
-			})
-			.filter((match) => match !== null);
-		return matches.sort((left, right) => left.rank - right.rank).map((match) => match.option);
-	});
+	const filteredLanguages = $derived(searchPlaygroundLanguages(languageQuery));
 
 	function openLanguageMenu() {
 		if (!workspaceInitialized || runningMode) return;
