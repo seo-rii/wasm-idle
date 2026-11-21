@@ -101,6 +101,7 @@ const symbolKind = (kind: ts.ScriptElementKind) => {
 };
 
 const scriptKind = (fileName: string) => {
+	if (fileName.endsWith('.json')) return ts.ScriptKind.JSON;
 	if (fileName.endsWith('.tsx')) return ts.ScriptKind.TSX;
 	if (fileName.endsWith('.jsx')) return ts.ScriptKind.JSX;
 	if (fileName.endsWith('.js') || fileName.endsWith('.mjs') || fileName.endsWith('.cjs')) {
