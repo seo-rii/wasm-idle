@@ -1487,20 +1487,19 @@
 					defaultSource: defaultSourceForLanguage(nextLanguage)
 				})
 		);
-		const requestedActivePath =
-			typeof value?.activePath !== 'string'
-				? ''
-				: files.some((file) => file.path === value.activePath)
-					? value.activePath
-					: normalizePath(value.activePath);
-		const restoredPath = renamed?.get(requestedActivePath) ?? requestedActivePath;
+		const filePaths = new Set(files.map((file) => file.path));
+		function restoredFilePath(path: string) {
+			// A literal POSIX name takes precedence over its legacy separator spelling.
+			const requested =
+				filePaths.has(path) || renamed?.has(path) ? path : normalizePath(path);
+			return renamed?.get(requested) ?? requested;
+		}
+		const restoredPath = restoredFilePath(value?.activePath ?? '');
 		const activePath = files.some((file) => file.path === restoredPath)
 			? restoredPath
 			: (files[0]?.path ?? '');
 		const openTabs = normalizeWorkspaceTabs(
-			Array.isArray(value?.openTabs)
-				? value.openTabs.map((tab) => renamed?.get(tab) ?? tab)
-				: value?.openTabs,
+			value?.openTabs?.map(restoredFilePath),
 			files,
 			activePath
 		);

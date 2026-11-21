@@ -643,6 +643,37 @@ describe('workspace import browser integration', () => {
 	);
 
 	it(
+		'normalizes legacy tab paths while preserving explicit POSIX names',
+		browserOptions,
+		async () => {
+			await withImportPage(async (page) => {
+				const backup = {
+					language: 'CPP',
+					version: 4,
+					activePath: 'src\\main.cpp',
+					files: [
+						{ path: 'src\\main.cpp', content: 'int main() {}' },
+						{ path: 'src\\lib.h', content: 'int f();' },
+						{ path: 'literal\\name.txt', pathStyle: 'posix', content: 'literal' }
+					],
+					openTabs: ['src\\lib.h', 'literal\\name.txt', 'src\\main.cpp']
+				};
+				await page.locator('input[type="file"]').setInputFiles({
+					name: 'legacy.json',
+					mimeType: 'application/json',
+					buffer: Buffer.from(serializeWorkspaceBackup(backup))
+				});
+				await page.locator('.file-tab.active[title="src/main.cpp"]').waitFor();
+				expect(
+					await page
+						.locator('.file-tab')
+						.evaluateAll((tabs) => tabs.map((tab) => tab.getAttribute('title')))
+				).toEqual(['src/lib.h', 'literal\\name.txt', 'src/main.cpp']);
+			});
+		}
+	);
+
+	it(
 		'publishes an imported backup to inactive language directories before Bash edits them',
 		browserOptions,
 		async () => {
