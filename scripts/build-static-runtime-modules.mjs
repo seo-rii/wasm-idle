@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
 
+import { buildDuckDbBackport } from './duckdb-native-assets.mjs';
 import { syncWasmBashAssets } from './sync-wasm-bash.mjs';
 import { validatePhpRuntimeAssets } from './sync-wasm-php.mjs';
 
@@ -26,8 +27,12 @@ const modules = [
 	{
 		name: 'duckdb',
 		entry: 'scripts/runtime-modules/duckdb.ts',
-		packages: ['@duckdb/duckdb-wasm'],
-		licenses: [['node_modules/@duckdb/duckdb-wasm/LICENSE', 'LICENSE.txt']]
+		packages: ['@duckdb/duckdb-wasm', 'apache-arrow'],
+		licenses: [
+			['scripts/runtime-modules/duckdb-wasm-LICENSE.txt', 'LICENSE.txt'],
+			['node_modules/apache-arrow/LICENSE.txt', 'LICENSE.apache-arrow.txt'],
+			['node_modules/apache-arrow/NOTICE.txt', 'NOTICE.apache-arrow.txt']
+		]
 	},
 	{
 		name: 'postgresql',
@@ -98,16 +103,15 @@ async function writeVersionModule(targetDirs) {
 	);
 }
 
-async function copyLicenses(targetDir, licenses) {
+async function copyLicenses(targetDir, licenses, required) {
 	for (const [source, target] of licenses) {
 		const sourcePath = path.join(REPO_ROOT, source);
-		if (!(await stat(sourcePath).catch(() => null))?.isFile()) continue;
+		if (!required && !(await stat(sourcePath).catch(() => null))?.isFile()) continue;
 		await cp(sourcePath, path.join(targetDir, target));
 	}
 }
 
-async function buildRuntimeModule(config) {
-	const targetDir = path.join(STATIC_DIR, `wasm-${config.name}`);
+async function buildRuntimeModule(config, targetDir, alias = []) {
 	await rm(targetDir, { recursive: true, force: true });
 	await build({
 		root: REPO_ROOT,
@@ -115,6 +119,7 @@ async function buildRuntimeModule(config) {
 		publicDir: false,
 		logLevel: 'warn',
 		base: './',
+		resolve: { alias },
 		assetsInclude: ['**/*.wasm', '**/*.so', '**/*.dat'],
 		build: {
 			target: 'es2022',
@@ -135,27 +140,47 @@ async function buildRuntimeModule(config) {
 			}
 		}
 	});
-	await copyLicenses(targetDir, config.licenses);
+	await copyLicenses(targetDir, config.licenses, config.name === 'duckdb');
 	await writeManifest(targetDir, config.packages);
+}
+
+const [selectedModule, ...extra] = process.argv.slice(2);
+if (extra.length || (selectedModule && selectedModule !== 'duckdb'))
+	throw new Error('Usage: node scripts/build-static-runtime-modules.mjs [duckdb]');
+const phpTargetDir = path.join(STATIC_DIR, 'wasm-php');
+if (!selectedModule) {
+	try {
+		await validatePhpRuntimeAssets(phpTargetDir, { allowCompressed: true });
+	} catch (error) {
+		throw new Error(
+			'The checked-in wasm-php assets are missing or invalid. Build producers/wasm-php and run "pnpm run sync:wasm-php" before rebuilding the page.',
+			{ cause: error }
+		);
+	}
+	console.log(`Validated prebuilt wasm-php assets in ${path.relative(REPO_ROOT, phpTargetDir)}`);
+}
+
+const targetDirs = [phpTargetDir];
+for (const config of modules) {
+	const targetDir = path.join(STATIC_DIR, `wasm-${config.name}`);
+	targetDirs.push(targetDir);
+	if (selectedModule && selectedModule !== config.name) continue;
+	if (config.name === 'duckdb') {
+		await buildDuckDbBackport(
+			{
+				targetDir,
+				packageVersion: packageVersion('@duckdb/duckdb-wasm'),
+				artifactDir: process.env.WASM_IDLE_DUCKDB_BACKPORT_DIR
+			},
+			(outDir, alias) => buildRuntimeModule(config, outDir, alias)
+		);
+	} else {
+		await buildRuntimeModule(config, targetDir);
+	}
 	console.log(
 		`Built static ${config.name} runtime module in ${path.relative(REPO_ROOT, targetDir)}`
 	);
-	return targetDir;
 }
-
-const phpTargetDir = path.join(STATIC_DIR, 'wasm-php');
-try {
-	await validatePhpRuntimeAssets(phpTargetDir, { allowCompressed: true });
-} catch (error) {
-	throw new Error(
-		'The checked-in wasm-php assets are missing or invalid. Build producers/wasm-php and run "pnpm run sync:wasm-php" before rebuilding the page.',
-		{ cause: error }
-	);
-}
-console.log(`Validated prebuilt wasm-php assets in ${path.relative(REPO_ROOT, phpTargetDir)}`);
-
-const targetDirs = [phpTargetDir];
-for (const config of modules) targetDirs.push(await buildRuntimeModule(config));
-const bashResult = await syncWasmBashAssets();
-targetDirs.push(path.join(bashResult.targetDir, 'sdk'));
+if (!selectedModule) await syncWasmBashAssets();
+targetDirs.push(path.join(STATIC_DIR, 'wasm-bash/sdk'));
 await writeVersionModule(targetDirs);
