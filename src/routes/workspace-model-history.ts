@@ -1,11 +1,12 @@
 import type { editor, Uri } from 'monaco-editor';
+import type { createOriginalLineEndings } from './workspace-model-eol';
 
 /** These are the native text stack operations used by the pinned Monaco ModelService when it
  * reattaches a disposed document. The public model API has no history transfer between URIs. */
 interface TextEdit {
 	readonly resource: Uri;
 	matchesResource(resource: Uri): boolean;
-	setModel(model: editor.ITextModel): void;
+	setModel(model: editor.ITextModel | Uri): void;
 	close(): void;
 	redo(): void;
 }
@@ -31,7 +32,9 @@ function documentEdit(entry: unknown, uri: Uri): TextEdit | undefined {
 	if (edit.resource && edit.matchesResource?.(uri) && edit.setModel && edit.close && edit.redo) {
 		edit.close();
 		// Closing freezes the native change bytes. Each URI owns its own element and model pointer.
-		return Object.assign(Object.create(Object.getPrototypeOf(edit)) as TextEdit, edit);
+		const copy = Object.assign(Object.create(Object.getPrototypeOf(edit)) as TextEdit, edit);
+		copy.setModel(uri);
+		return copy;
 	}
 	if (edit.split) {
 		for (const part of edit.split()) {
@@ -41,11 +44,10 @@ function documentEdit(entry: unknown, uri: Uri): TextEdit | undefined {
 	}
 }
 
-/** Move contiguous text undo/redo groups to the new real file URI. Other documents stay live. */
-export function moveModelHistory(source: editor.ITextModel, target: editor.ITextModel) {
+/** Save only contiguous native text edits. Inactive projects keep no live models or URI registrations. */
+export function captureModelHistory(source: editor.ITextModel) {
 	if (!source.canUndo() && !source.canRedo()) return;
 	const from = source as NativeModel;
-	const to = target as NativeModel;
 	const service = from._undoRedoService;
 	const history = service.getElements(source.uri);
 	function nearestFirst(entries: unknown[]) {
@@ -60,6 +62,32 @@ export function moveModelHistory(source: editor.ITextModel, target: editor.IText
 	}
 	const past = nearestFirst(history.past).reverse();
 	const future = nearestFirst(history.future);
+	return {
+		past,
+		future,
+		eol: source.getEndOfLineSequence(),
+		version: source.getVersionId(),
+		alternativeVersion: source.getAlternativeVersionId()
+	};
+}
+
+export type ProjectModelHistories = Map<
+	string,
+	{
+		text: string;
+		endings?: ReturnType<typeof createOriginalLineEndings>;
+		history: NonNullable<ReturnType<typeof captureModelHistory>>;
+	}
+>;
+
+export function restoreModelHistory(
+	target: editor.ITextModel,
+	history: NonNullable<ReturnType<typeof captureModelHistory>>
+) {
+	const to = target as NativeModel;
+	const service = to._undoRedoService;
+	const { past, future } = history;
+	target.setEOL(history.eol);
 	const initial = service.createSnapshot(target.uri);
 	for (const edit of past) {
 		edit.setModel(target);
@@ -73,8 +101,15 @@ export function moveModelHistory(source: editor.ITextModel, target: editor.IText
 		service.pushElement(edit);
 	}
 	for (let i = 0; i < future.length; i++) target.undo();
-	to._overwriteVersionId(Math.max(source.getVersionId(), target.getVersionId()));
-	to._overwriteAlternativeVersionId(source.getAlternativeVersionId());
+	to._overwriteVersionId(Math.max(history.version, target.getVersionId()));
+	to._overwriteAlternativeVersionId(history.alternativeVersion);
 	to._overwriteInitialUndoRedoSnapshot(initial);
-	service.removeElements(source.uri);
+}
+
+/** Move text history to a renamed file's real URI while other documents stay live. */
+export function moveModelHistory(source: editor.ITextModel, target: editor.ITextModel) {
+	const history = captureModelHistory(source);
+	if (!history) return;
+	restoreModelHistory(target, history);
+	(source as NativeModel)._undoRedoService.removeElements(source.uri);
 }

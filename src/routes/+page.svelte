@@ -5,6 +5,7 @@
 	import { parseDebugInteger } from './debugInteger';
 	import { createProjectBreakpointSelection, workspaceDebugPath } from './workspaceBreakpoints';
 	import Monaco from './Monaco.svelte';
+	import type { ProjectModelHistories } from './workspace-model-history';
 	import DebuggerLog from './DebuggerLog.svelte';
 	import Terminal, { type TerminalControl } from '@wasm-idle/terminal';
 	import type { ProgressLike } from '@wasm-idle/core';
@@ -444,9 +445,22 @@
 		? { source: location.href, target: initialSelection.replacementUrl }
 		: null;
 	let editorWorkspaceRevision = $state(0);
+	const editorHistoryScope = $derived({
+		key: currentWorkspaceStorageKey,
+		projects: new Map<PlaygroundLanguage, ProjectModelHistories>()
+	});
 	const editorWorkspaceKey = $derived(
-		`${currentWorkspaceStorageKey}:${language}:${editorWorkspaceRevision}`
+		`${editorHistoryScope.key}:${language}:${editorWorkspaceRevision}`
 	);
+	function currentProjectHistory() {
+		const projects = editorHistoryScope.projects;
+		let history = projects.get(language);
+		if (!history) {
+			history = new Map();
+			projects.set(language, history);
+		}
+		return history;
+	}
 	let zipExportRequest = 0;
 	const workspaceStorage = createWorkspaceStorage(
 		(value, key) => localStorage.setItem(key, value),
@@ -2104,6 +2118,7 @@
 				recovered
 			);
 		}
+		editorHistoryScope.projects.clear();
 		editorWorkspaceRevision += 1;
 		// Buffered stdin is session input for the current project, never part of a backup.
 		stdinInput = '';
@@ -2608,6 +2623,7 @@
 		for (const { sourcePath } of debug.sourceBreakpoints)
 			void debug.setStructuredBreakpoints([], sourcePath);
 		stdinInput = '';
+		editorHistoryScope.projects.delete(language);
 		editorWorkspaceRevision += 1;
 		languageWorkspaces = {
 			...languageWorkspaces,
@@ -5358,6 +5374,7 @@
 							lspLanguage={monacoLspLanguage}
 							filePath={activePath || defaultPathForLanguage()}
 							workspacePaths={editorFilePaths}
+							projectHistory={currentProjectHistory()}
 							rustTargetTriple={languageExecutionOptions.rustTargetTriple}
 							goTarget={languageExecutionOptions.goTarget}
 							bind:editor

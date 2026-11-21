@@ -44,7 +44,12 @@
 	import { SvelteURL } from 'svelte/reactivity';
 	import { createWorkspaceModelUri } from './workspace-model-uri';
 	import { createOriginalLineEndings } from './workspace-model-eol';
-	import { moveModelHistory } from './workspace-model-history';
+	import {
+		captureModelHistory,
+		moveModelHistory,
+		restoreModelHistory,
+		type ProjectModelHistories
+	} from './workspace-model-history';
 	import { adaptMonacoFullDocumentSync } from './lsp-full-sync';
 	import {
 		isEditorDefaultSource,
@@ -2381,6 +2386,7 @@
 		lspLanguage?: string;
 		filePath?: string;
 		workspacePaths?: readonly string[];
+		projectHistory?: ProjectModelHistories;
 		value?: string;
 		onChange?: (value: string) => void;
 		rustTargetTriple?: RustTargetTriple;
@@ -2522,6 +2528,7 @@
 		lspLanguage,
 		filePath,
 		workspacePaths,
+		projectHistory,
 		value,
 		onChange,
 		rustTargetTriple = 'wasm32-wasip1',
@@ -4002,6 +4009,8 @@
 		})(lspConnectionKey)
 	);
 
+	// A keyed editor owns this project's cache even if the page selects another language during teardown.
+	const savedHistories = untrack(() => projectHistory);
 	// Models own undo history; retain them while their files remain in this workspace.
 	// Keep resource caches outside effect dependencies; the active model is reactive.
 	// eslint-disable-next-line svelte/prefer-svelte-reactivity
@@ -4067,7 +4076,14 @@
 				// Monaco can restore a disposed model's history by URI, even for equal text.
 				// A newly owned model must start with fresh history; cached tabs keep theirs.
 				nextModel.setValue(initialValue);
-				rememberText(nextModel, initialValue);
+				const saved = savedHistories?.get(path);
+				savedHistories?.delete(path);
+				if (saved?.text === initialValue) {
+					restoreModelHistory(nextModel, saved.history);
+					if (saved.endings) originalEndings.set(nextModel, saved.endings);
+				} else {
+					rememberText(nextModel, initialValue);
+				}
 				workspaceModels.set(path, nextModel);
 			} else if (nextModel.getLanguageId() !== modelLanguage) {
 				monacoApi.editor.setModelLanguage(nextModel, modelLanguage);
@@ -4088,6 +4104,9 @@
 		const paths = new Set(workspacePaths);
 		// The empty workspace still displays an editable placeholder model.
 		paths.add(normalizedFilePath);
+		if (savedHistories)
+			for (const path of savedHistories.keys())
+				if (!paths.has(path)) savedHistories.delete(path);
 		for (const [path, cachedModel] of workspaceModels) {
 			if (paths.has(path)) continue;
 			modelViewStates.delete(cachedModel);
@@ -4594,8 +4613,18 @@
 			testGlobal.__wasmIdleMonacoApi = null;
 			testGlobal.__wasmIdleMonacoLspStatus = null;
 			lspStatus = null;
-			for (const cachedModel of workspaceModels.values()) {
-				if (!cachedModel.isDisposed()) cachedModel.dispose();
+			for (const [path, cachedModel] of workspaceModels) {
+				if (cachedModel.isDisposed()) continue;
+				const history = savedHistories && captureModelHistory(cachedModel);
+				if (history) {
+					const endings = originalEndings.get(cachedModel);
+					savedHistories.set(path, {
+						history,
+						endings,
+						text: endings?.text ?? cachedModel.getValue(undefined, true)
+					});
+				}
+				cachedModel.dispose();
 			}
 			workspaceModels.clear();
 			modelViewStates.clear();
