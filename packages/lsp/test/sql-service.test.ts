@@ -378,6 +378,19 @@ describe('createSqlWorkerService', () => {
 		expect(context.reportProgress).toHaveBeenCalledWith('load-sqlite-language-service');
 	});
 
+	it.each([
+		['SELECT count(*)', 10, 'COUNT'],
+		['SELECT coalesce(NULL, 3)', 11, 'COALESCE'],
+		['SELECT x GROUP BY x', 10, 'GROUP BY'],
+		['SELECT x ORDER\tBY x', 15, 'ORDER BY']
+	] as const)('finds the hover token in %s', async (text, character, word) => {
+		const service = createSqlWorkerService();
+		const doc = { uri: 'file:///workspace/main.sql', languageId: 'sql', version: 1, text };
+		const ctx = { documents: new Map(), publishDiagnostics: vi.fn(), reportProgress: vi.fn() };
+		const result = await service.hover?.(doc, { line: 0, character }, ctx);
+		expect(result?.contents.value).toContain(word);
+	});
+
 	it('passes DuckDB bundles to the configured SQL engine', async () => {
 		const duckdbBundles = {
 			mvp: {

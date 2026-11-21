@@ -157,11 +157,12 @@ const SQL_HOVER: Record<string, string> = {
 
 const wordAt = (text: string, position: LspPosition) => {
 	const line = text.split('\n')[position.line] || '';
-	const character = Math.max(0, Math.min(position.character, line.length));
-	const left =
-		line.slice(0, character).match(/[A-Za-z_][A-Za-z0-9_]*(?:\s+[A-Za-z_]+)?$/u)?.[0] || '';
-	const right = line.slice(character).match(/^[A-Za-z0-9_]*/u)?.[0] || '';
-	return `${left}${right}`.trim().toLowerCase();
+	const words = /\b(?:group\s+by\b|order\s+by\b|[a-z_][a-z0-9_]*)/giu;
+	for (const match of line.matchAll(words)) {
+		if (match.index <= position.character && position.character < match.index + match[0].length)
+			return match[0].toLowerCase().replace(/\s+/gu, ' ');
+	}
+	return '';
 };
 
 const severityFor = (severity: SqlEngineDiagnostic['severity']): 1 | 2 | 3 =>
