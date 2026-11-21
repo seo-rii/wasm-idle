@@ -229,12 +229,12 @@ describe('DuckDB worker', () => {
 
 	it('renders timestamps from exact Arrow ticks across the epoch, preserving null and infinity', async () => {
 		const columns = [
-			[1_770_091_506_654_321_000n, 1_770_091_506_654_321_001n, -1n, 0n],
-			[0n, 12_345_678n, 9_223_372_036_854_775_807n, -9_223_372_036_854_775_807n]
+			[1_770_091_506_654_321_000n, 1_770_091_506_654_321_001n, -1n, 0n, 0n],
+			[0n, 12_345_678n, 9_223_372_036_854_775_807n, -9_223_372_036_854_775_807n, -62_161_757_633_000_000n]
 		];
 		duckdbMock.query.mockResolvedValue({
 			numCols: 2,
-			numRows: 4,
+			numRows: 5,
 			schema: { fields: [
 				{ name: 'ns', type: { typeId: 10, unit: 3 } },
 				{ name: 'tz', type: { typeId: 10, unit: 2, timezone: 'UTC' } }
@@ -253,6 +253,7 @@ describe('DuckDB worker', () => {
 				'2026-02-03 04:05:06.654321001\t1970-01-01 00:00:12.345678+00',
 				'1969-12-31 23:59:59.999999999\tinfinity',
 				'NULL\t-infinity',
+				'1970-01-01 00:00:00\t0001-03-04 (BC) 05:06:07+00',
 				''
 			].join('\n')
 		});

@@ -88,7 +88,7 @@ function formatTimestamp(ticks: bigint, unit: number, timezone?: string) {
 		.map((part) => String(part).padStart(2, '0'))
 		.join(':');
 	const fraction = String(time % 1_000_000_000n).padStart(9, '0').replace(/0+$/, '');
-	return date + ' ' + clock + (fraction ? '.' + fraction : '') + (timezone ? '+00' : '') + era;
+	return date + era + ' ' + clock + (fraction ? '.' + fraction : '') + (timezone ? '+00' : '');
 }
 
 function stringifyCell(value: unknown, type: ArrowFieldType) {
