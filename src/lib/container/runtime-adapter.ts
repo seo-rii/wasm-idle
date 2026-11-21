@@ -1,3 +1,4 @@
+import { ScriptExitError } from '../playground/executionObservation.js';
 import {
 	assertDebugBreakpointSupport,
 	normalizeDebugSourceBreakpoints,
@@ -209,6 +210,7 @@ export class ContainerRuntimeAdapter {
 							return { code: job.result === false ? 1 : 0 };
 						} catch (error) {
 							job.error = error;
+							if (error instanceof ScriptExitError) return { code: error.exitCode };
 							throw error;
 						}
 					},

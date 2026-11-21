@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createContainer, type Container } from '@wasm-idle/container';
+import { ScriptExitError } from '../playground/executionObservation.js';
 import { WebsiteRuntimeAdapter } from './runtime-adapter.js';
 import type { PlaygroundBinding } from '../playground/sandbox.js';
 
@@ -117,6 +118,20 @@ describe('container execution file representations', () => {
 		adapter.syncWorkspace('WASM', [f(path, base64)]);
 		expect(adapter.inputs('WASM', '', { activePath: path }).code).toBe(base64);
 	});
+});
+
+it('records an explicit nonzero status on the container process and returns it to the terminal', async () => {
+	const f = executionFixture();
+	const spawn = f.container.spawn.bind(f.container);
+	let admitted: Awaited<ReturnType<typeof spawn>> | undefined;
+	vi.spyOn(f.container, 'spawn').mockImplementationOnce(async (...args) => {
+		admitted = await spawn(...args);
+		return admitted;
+	});
+	const exit = new ScriptExitError(7);
+	f.sandbox.run.mockRejectedValueOnce(exit);
+	await expect(f.run()).rejects.toBe(exit);
+	await expect(admitted!.exited).resolves.toMatchObject({ reason: 'exited', code: 7 });
 });
 
 describe('container runtime admission cancellation', () => {

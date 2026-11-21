@@ -20,7 +20,7 @@ import {
 	type WorkspaceFile,
 	type RuntimeGeneratedAssetCacheBackend
 } from '@wasm-idle/core';
-import { createPythonExecutionHelpers } from './pythonExecution';
+import { createPythonExecutionHelpers, PYTHON_SCRIPT_PROCESS } from './pythonExecution';
 import { compilePythonBytecode } from './pythonCompile';
 import { createPythonWorkspaceImports } from './pythonWorkspaceImports';
 import { createPythonWorkspaceFiles } from './pythonWorkspaceFiles';
@@ -988,8 +988,9 @@ self.onmessage = async (event: any) => {
 				// Unusual non-mutable streams remain correct, without batching their writes.
 				stdio.disableBatching();
 			}
+			let exitCode: number | undefined;
 			if (isPython && !debug) {
-				await getExecutionHelpers().run(code, executionFilename, self[executionReadyName]);
+				exitCode = await getExecutionHelpers().run(code, executionFilename, self[executionReadyName]);
 			} else {
 				if (debug) {
 					debugHelpers ??= createPythonDebugHelpers(pyodide, imageHook);
@@ -1008,7 +1009,7 @@ self.onmessage = async (event: any) => {
 					);
 					self[debugTraceName] = debugTrace;
 				}
-				await pyodide.runPythonAsync(`import ast
+				const result = await pyodide.runPythonAsync(`import ast
 import builtins
 import inspect
 import json
@@ -1046,6 +1047,7 @@ finally:
     del __wasm_idle_execution_ready
 `
 		: `
+${PYTHON_SCRIPT_PROCESS}
 __wasm_idle_missing_main = object()
 __wasm_idle_previous_main = sys.modules.get("__main__", __wasm_idle_missing_main)
 __wasm_idle_previous_path = sys.path
@@ -1067,14 +1069,15 @@ try:
         os.path.dirname(os.path.abspath(${executionFilenameLiteral})), os.getcwd()
     )))
     sys.path = __wasm_idle_run_paths + [path for path in __wasm_idle_previous_path if path not in __wasm_idle_run_paths]
-    __wasm_idle_globals.pop(${JSON.stringify(executionReadyName)})()
-    __wasm_idle_result = eval(
-        __wasm_idle_compiled,
-        __wasm_idle_globals,
-        __wasm_idle_globals,
-    )
-    if inspect.isawaitable(__wasm_idle_result):
-        await __wasm_idle_result
+    with __wasm_idle_script_process(${executionFilenameLiteral}) as __wasm_idle_status:
+        __wasm_idle_globals.pop(${JSON.stringify(executionReadyName)})()
+        __wasm_idle_result = eval(
+            __wasm_idle_compiled,
+            __wasm_idle_globals,
+            __wasm_idle_globals,
+        )
+        if inspect.isawaitable(__wasm_idle_result):
+            await __wasm_idle_result
 finally:
     sys.path = __wasm_idle_previous_path
     if __wasm_idle_previous_main is __wasm_idle_missing_main:
@@ -1085,12 +1088,14 @@ finally:
     del __wasm_idle_execution_ready
     sys.settrace(None)
     ${debug ? 'del __wasm_idle_debug_trace' : ''}
+__wasm_idle_status[0]
 `
 }
 `);
+				if (isPython && typeof result === 'number') exitCode = result;
 			}
 			finishStdio();
-			self.postMessage({ results: true });
+			self.postMessage(exitCode ? { results: false, exitCode } : { results: true });
 		} catch (e: any) {
 			try {
 				finishStdio();

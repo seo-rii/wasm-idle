@@ -8,6 +8,7 @@ import type {
 import { WorkerAssetBridge } from '$lib/playground/assetBridge';
 import { RuntimeAssetCache } from './runtimeAssetCache';
 import { buildPythonSnapshot } from './pythonSnapshotBuilder';
+import { ScriptExitError } from './executionObservation';
 import { resolveRuntimeAssetConfig, type PlaygroundRuntimeAssets } from '$lib/playground/assets';
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
 import {
@@ -717,6 +718,7 @@ class Python implements Sandbox {
 					const {
 						output,
 						results,
+						exitCode,
 						log,
 						error,
 						buffer,
@@ -776,7 +778,11 @@ class Python implements Sandbox {
 					if (results !== undefined) {
 						this.ondebug?.({ type: 'stop' });
 						if (!claimRun()) return;
-						resolve(results as boolean | string);
+						if (Number.isInteger(exitCode) && exitCode > 0) {
+							reject(new ScriptExitError(exitCode));
+						} else {
+							resolve(results as boolean | string);
+						}
 						return;
 					}
 					if (error !== undefined) {

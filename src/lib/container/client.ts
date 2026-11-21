@@ -1,3 +1,4 @@
+import { ScriptExitError } from '../playground/executionObservation.js';
 import {
 	CONTAINER_WORKER_PROTOCOL,
 	OWNER_CLEANUP_DEADLINE_MS,
@@ -103,10 +104,12 @@ export function createContainerWorkerClient(
 		entry.cleanup();
 		pending.delete(data.id);
 		if (data.type === 'error') {
-			const error = Object.assign(new Error(data.error.message), {
-				name: data.error.name,
-				code: data.error.code
-			});
+			const error = data.error.exitCode !== undefined
+				? new ScriptExitError(data.error.exitCode)
+				: Object.assign(new Error(data.error.message), {
+					name: data.error.name,
+					code: data.error.code
+				});
 			entry.reject(error);
 		} else entry.resolve(data.value);
 	};

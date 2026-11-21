@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { createExecutionObserver } from './executionObservation';
+import { ScriptExitError, createExecutionObserver } from './executionObservation';
 
 describe('execution observation', () => {
+	it('retains an explicit failed process exit status and leaves cancelled runs without one', () => {
+		const observer = createExecutionObserver();
+		observer.start(1, 'PYTHON', {});
+		observer.finish(1, 'failed', new ScriptExitError(7));
+		expect(observer.snapshot()).toMatchObject({ status: 'failed', exitCode: 7 });
+		observer.start(2, 'PYTHON', {});
+		observer.finish(2, 'cancelled', new ScriptExitError(7));
+		expect(observer.snapshot().exitCode).toBeNull();
+	});
 	it('preserves the failed phase and rejects late events from an earlier run', () => {
 		const observer = createExecutionObserver();
 		const first = observer.start(1, 'NIM', {});
