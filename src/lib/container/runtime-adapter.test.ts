@@ -404,6 +404,18 @@ describe('container shared editor input boundary', () => {
 		).toThrow();
 		expect(container.fs.exportSnapshot()).toEqual(before);
 	});
+	it('retains unlisted shell directories when a legacy backup only describes files', () => {
+		const { adapter, container } = fixture();
+		adapter.directory('C');
+		container.fs.mkdir('/workspace/C/build/old', { recursive: true });
+		container.fs.mkdir('/workspace/C/keep/nested', { recursive: true });
+		const files = [f('build', 'file')];
+		adapter.syncWorkspace('C', files, [], undefined, null);
+		expect(read(container, '/workspace/C/build')).toBe('file');
+		expect(container.fs.stat('/workspace/C/keep/nested').type).toBe('directory');
+		adapter.syncWorkspace('C', files, files, undefined, []);
+		expect(() => container.fs.stat('/workspace/C/keep')).toThrow();
+	});
 	it('preserves shell-created directories, replacements and unrelated content on failure', () => {
 		for (const situation of ['preexisting', 'recreated', 'occupied']) {
 			const { adapter, container } = fixture();

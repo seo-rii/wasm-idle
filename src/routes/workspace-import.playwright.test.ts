@@ -635,8 +635,19 @@ describe('workspace import browser integration', () => {
 								version: 7,
 								language: 'CPP',
 								activePath: 'main.cpp',
-								files: [{ path: 'main.cpp', content: '// old' }],
-								emptyDirectories: ['CPP/build']
+								files: [
+									{ path: 'main.cpp', content: '// old' },
+									{
+										path: 'literal\\name.txt',
+										pathStyle: 'posix',
+										content: 'original'
+									}
+								],
+								emptyDirectories: [
+									'CPP/build',
+									'CPP/keep',
+									{ path: 'PYTHON/pkg', implicit: true }
+								]
 							})
 						),
 					key
@@ -644,6 +655,18 @@ describe('workspace import browser integration', () => {
 				await page.goto(before, { waitUntil: 'domcontentloaded' });
 				await page.locator('#language-select[data-workspace-ready="true"]').waitFor();
 				await page.locator('[data-container-directory="CPP/build"]').waitFor();
+				const [download] = await Promise.all([
+					page.waitForEvent('download'),
+					page.getByRole('button', { name: 'Backup (JSON)', exact: true }).click()
+				]);
+				const backupPath = await download.path();
+				if (!backupPath) throw new Error('Missing workspace backup');
+				const portable = await readFile(backupPath);
+				expect(JSON.parse(portable.toString()).snapshot.emptyDirectories).toEqual([
+					'CPP/build',
+					'CPP/keep',
+					{ path: 'PYTHON/pkg', implicit: true }
+				]);
 				await page.locator('input[type="file"]').setInputFiles({
 					name: 'backup.json',
 					mimeType: 'application/json',
@@ -668,6 +691,23 @@ describe('workspace import browser integration', () => {
 				await page.reload({ waitUntil: 'domcontentloaded' });
 				await page.locator('.file-tab.active[title="build"]').waitFor();
 				expect(await page.locator('[data-workspace-recovery]').count()).toBe(0);
+				await page.locator('[data-container-directory="CPP/keep"]').waitFor();
+				await page.locator('input[type="file"]').setInputFiles({
+					name: 'downloaded.json',
+					mimeType: 'application/json',
+					buffer: portable
+				});
+				await page.locator('.file-tab.active[title="main.cpp"]').waitFor();
+				await page.locator('[data-container-directory="CPP/build"]').waitFor();
+				await page.getByRole('button', { name: 'Save', exact: true }).click();
+				await expect
+					.poll(() =>
+						page.evaluate(
+							(key) => JSON.parse(localStorage.getItem(key)!).emptyDirectories,
+							key
+						)
+					)
+					.toEqual(['CPP/build', 'CPP/keep', { path: 'PYTHON/pkg', implicit: true }]);
 				expect(page.url()).toBe(before);
 			});
 		}

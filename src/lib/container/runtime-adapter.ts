@@ -294,7 +294,7 @@ export class ContainerRuntimeAdapter {
 		files: readonly WorkspaceFile[],
 		expectedBaseFiles?: readonly WorkspaceFile[],
 		project?: readonly ContainerWorkspaceFileMetadata[],
-		restoreDirectories?: readonly SavedWorkspaceDirectory[]
+		restoreDirectories?: readonly SavedWorkspaceDirectory[] | null
 	) {
 		const path = this.directoryPath(language);
 		const limits = {
@@ -384,7 +384,7 @@ export class ContainerRuntimeAdapter {
 		const restored = new Map<string, boolean>();
 		if (restoreDirectories !== undefined) {
 			const keep = new Set([...publishedNext].flatMap((file) => [...workspaceParents(file)]));
-			for (const entry of restoreDirectories) {
+			for (const entry of restoreDirectories ?? []) {
 				const fullPath = typeof entry === 'string' ? entry : entry.path;
 				const name = fullPath.slice(language.length + 1);
 				for (const parent of workspaceParents(name)) {
@@ -397,6 +397,14 @@ export class ContainerRuntimeAdapter {
 			for (const entry of this.listWorkspaceFiles()) {
 				if (entry.type !== 'directory' || !entry.path.startsWith(language + '/')) continue;
 				const name = entry.path.slice(language.length + 1);
+				// Older backups only describe files. They can replace an empty tree
+				// with an incoming file but have no authority over unrelated directories.
+				if (
+					restoreDirectories === null &&
+					!publishedNext.has(name) &&
+					![...workspaceParents(name)].some((parent) => publishedNext.has(parent))
+				)
+					continue;
 				if (!keep.has(name) && !replaceableInodes.has(name))
 					replaceableInodes.set(name, this.fs.lstat(name, context).inode);
 			}

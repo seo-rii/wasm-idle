@@ -1581,7 +1581,7 @@
 	async function publishContainerWorkspace(
 		selectedLanguage: string,
 		values: readonly WorkspaceFile[],
-		restoreDirectories?: readonly SavedWorkspaceDirectory[]
+		restoreDirectories?: readonly SavedWorkspaceDirectory[] | null
 	) {
 		if (containerWorkspaceConflicts.has(selectedLanguage))
 			throw new Error(
@@ -2578,7 +2578,8 @@
 					replaceState(copyUrl, page.state);
 					unrestoredWorkspace = null;
 				}
-				savedDirectories = directories;
+				savedDirectories =
+					plan.backup.emptyDirectories === undefined ? previousDirectories : directories;
 				applySnapshot(plan.backup, 'Workspace backup restored');
 				if (previous) {
 					const binding = playground;
@@ -2607,9 +2608,11 @@
 								await publishContainerWorkspace(
 									project,
 									languageWorkspaces[project].files,
-									directories.filter((entry) =>
-										directoryPath(entry).startsWith(project + '/')
-									)
+									plan.backup.emptyDirectories === undefined
+										? null
+										: directories.filter((entry) =>
+												directoryPath(entry).startsWith(project + '/')
+											)
 								);
 								if (pendingBackupProjects.get(project) === revision)
 									pendingBackupProjects.delete(project);

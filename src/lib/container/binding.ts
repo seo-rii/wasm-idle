@@ -100,10 +100,11 @@ export interface ContainerPlaygroundBinding extends PlaygroundBinding {
 	beginTerminalExecution(signal?: AbortSignal): Promise<void>;
 	/** Redraw the actual Bash prompt after the Terminal has written its execution footer. */
 	endTerminalExecution(): Promise<void>;
+	/** Legacy backups pass null to replace conflicting directories while retaining unrelated ones. */
 	syncWorkspace(
 		language: string,
 		files: readonly ContainerWorkspaceFile[],
-		restoreDirectories?: readonly SavedWorkspaceDirectory[]
+		restoreDirectories?: readonly SavedWorkspaceDirectory[] | null
 	): Promise<void>;
 	readWorkspace(language: string): Promise<ContainerWorkspaceFile[]>;
 	/**
@@ -241,9 +242,10 @@ export function createContainerPlaygroundBinding(
 	const syncWorkspace = (
 		language: string,
 		files: readonly ContainerWorkspaceFile[],
-		restoreDirectories?: readonly SavedWorkspaceDirectory[]
+		restoreDirectories?: readonly SavedWorkspaceDirectory[] | null
 	) => {
-		const directoryArgument = restoreDirectories === undefined ? [] : [[...restoreDirectories]];
+		const directoryArgument =
+			restoreDirectories === undefined ? [] : [restoreDirectories && [...restoreDirectories]];
 		const snapshot = copyFiles(files);
 		publishRequests.set(language, (publishRequests.get(language) ?? 0) + 1);
 		return enqueueWorkspace(language, async () => {
