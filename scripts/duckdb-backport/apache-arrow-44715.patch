@@ -1,0 +1,67 @@
+From 152e878a2e79877ec461f96cefc97663f0bc581f Mon Sep 17 00:00:00 2001
+From: Dewey Dunnington <dewey@voltrondata.com>
+Date: Mon, 18 Nov 2024 14:03:48 +0000
+Subject: [PATCH] GH-44714: [C++] Keep field metadata for keys and values when
+ importing a map type via the C data interface (#44715)
+
+### Rationale for this change
+
+Import of a map type from the C data interface drops field metadata (including extension type information) which does not happen when importing a map type from IPC or a list of structs. This affects the ability to roundtrip data through pyarrow/Arrow C++ if extension types are not registered.
+
+### What changes are included in this PR?
+
+The mechanism to import the map type was changed to align with the method used for IPC import.
+
+### Are these changes tested?
+
+Yes.
+
+### Are there any user-facing changes?
+
+The current behaviour was surprising/inconsistent, so I think this PR brings it in more line with the current expectation/documentation.
+* GitHub Issue: #44714
+
+Authored-by: Dewey Dunnington <dewey@voltrondata.com>
+Signed-off-by: Antoine Pitrou <antoine@python.org>
+---
+ cpp/src/arrow/c/bridge.cc      | 8 ++++----
+ cpp/src/arrow/c/bridge_test.cc | 4 ++++
+ 2 files changed, 8 insertions(+), 4 deletions(-)
+
+diff --git a/cpp/src/arrow/c/bridge.cc b/cpp/src/arrow/c/bridge.cc
+index f848b341154b..6b30802c78ec 100644
+--- a/cpp/src/arrow/c/bridge.cc
++++ b/cpp/src/arrow/c/bridge.cc
+@@ -1310,13 +1310,13 @@ struct SchemaImporter {
+     }
+ 
+     bool keys_sorted = (c_struct_->flags & ARROW_FLAG_MAP_KEYS_SORTED);
+-    bool values_nullable = value_type->field(1)->nullable();
++
+     // Some implementations of Arrow (such as Rust) use a non-standard field name
+     // for key ("keys") and value ("values") fields. For simplicity, we override
+     // them on import.
+-    auto values_field =
+-        ::arrow::field("value", value_type->field(1)->type(), values_nullable);
+-    type_ = map(value_type->field(0)->type(), values_field, keys_sorted);
++    type_ =
++        std::make_shared<MapType>(value_type->field(0)->WithName("key"),
++                                  value_type->field(1)->WithName("value"), keys_sorted);
+     return Status::OK();
+   }
+ 
+diff --git a/cpp/src/arrow/c/bridge_test.cc b/cpp/src/arrow/c/bridge_test.cc
+index bc60b587cf6f..75fadc7c0247 100644
+--- a/cpp/src/arrow/c/bridge_test.cc
++++ b/cpp/src/arrow/c/bridge_test.cc
+@@ -3769,6 +3769,10 @@ TEST_F(TestSchemaRoundtrip, RegisteredExtension) {
+ TEST_F(TestSchemaRoundtrip, Map) {
+   TestWithTypeFactory([&]() { return map(utf8(), int32()); });
+   TestWithTypeFactory([&]() { return map(utf8(), field("value", int32(), false)); });
++  TestWithTypeFactory([&]() {
++    return map(utf8(), field("value", int32(), false,
++                             KeyValueMetadata::Make({"meta key"}, {"meta value"})));
++  });
+   // Field names are brought in line with the spec on import.
+   TestWithTypeFactory(
+       [&]() {
