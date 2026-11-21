@@ -1,8 +1,69 @@
 import { describe, expect, it, vi } from 'vitest';
+import wabtFactory from 'wabt';
 
 import { createWatWorkerService, type LspDocument, type LspDocumentContext } from '../src/index.js';
 
+async function fixture(text: string) {
+	const service = createWatWorkerService();
+	const context: LspDocumentContext = {
+		documents: new Map(),
+		publishDiagnostics: vi.fn(),
+		reportProgress: vi.fn()
+	};
+	const document: LspDocument = {
+		uri: 'file:///workspace/main.wat',
+		languageId: 'wat',
+		version: 1,
+		text
+	};
+	await service.initialize?.({}, context);
+	return {
+		diagnostics: (source = text) =>
+			service.diagnostics!({ ...document, text: source }, context),
+		format: async (source = text, insertSpaces = true) => {
+			const edits = await service.formatting!(
+				{ ...document, text: source },
+				{ tabSize: 2, insertSpaces },
+				context
+			);
+			return edits[0]?.newText ?? source;
+		}
+	};
+}
+
+async function instantiate(text: string) {
+	const wabt = await wabtFactory();
+	const module = wabt.parseWat('test.wat', new TextEncoder().encode(text));
+	try {
+		module.resolveNames();
+		module.validate();
+		const { instance } = await WebAssembly.instantiate(module.toBinary({}).buffer);
+		return instance.exports;
+	} finally {
+		module.destroy();
+	}
+}
+
 describe('createWatWorkerService', () => {
+	it('preserves UTF-8 names and data when diagnosing and formatting WAT', async () => {
+		const text =
+			'(module (memory (export "mem") 1) (data (i32.const 0) "안녕🙂") (func (export "café🙂") (result i32) i32.const 42))';
+		const service = await fixture(text);
+		expect(await service.diagnostics()).toEqual([]);
+		const formatted = await service.format();
+		expect(formatted).not.toBe(text);
+		const exports = await instantiate(formatted);
+		expect((exports['café🙂'] as () => number)()).toBe(42);
+		const bytes = new TextEncoder().encode('안녕🙂');
+		expect(new Uint8Array((exports.mem as WebAssembly.Memory).buffer, 0, bytes.length)).toEqual(
+			bytes
+		);
+
+		const invalid = '(module (func (export "안녕🙂") bogus))';
+		const [diagnostic] = await service.diagnostics(invalid);
+		expect(diagnostic.range.start).toEqual({ line: 0, character: invalid.indexOf('bogus') });
+	});
+
 	it('uses wabt for diagnostics, formatting, completion, and hover', async () => {
 		const context: LspDocumentContext = {
 			documents: new Map(),

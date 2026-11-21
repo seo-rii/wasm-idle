@@ -11,6 +11,9 @@ export interface WatWorkerOptions {
 	features?: Record<string, boolean>;
 }
 
+const utf8 = new TextEncoder();
+const decodeUtf8 = new TextDecoder('utf-8', { ignoreBOM: true });
+
 const WAT_KEYWORDS = [
 	'module',
 	'type',
@@ -131,12 +134,17 @@ const wordAt = (text: string, position: LspPosition) => {
 	return left + right;
 };
 
-function parseWatDiagnostics(message: string, fileName: string): LspDiagnostic[] {
+function parseWatDiagnostics(message: string, document: LspDocument): LspDiagnostic[] {
+	const lines = document.text.split(/\r\n|[\r\n]/u);
 	const diagnostics: LspDiagnostic[] = [];
 	const pattern = /([^:\n]+):(\d+):(\d+):\s*(error|warning):\s*([^\n]+)/gu;
 	for (const match of message.matchAll(pattern)) {
 		const line = Math.max(0, Number(match[2]) - 1);
-		const character = Math.max(0, Number(match[3]) - 1);
+		// WABT reports byte columns. Monaco positions count UTF-16 code units.
+		const byteColumn = Math.max(0, Number(match[3]) - 1);
+		const character = decodeUtf8.decode(
+			utf8.encode(lines[line] ?? '').subarray(0, byteColumn)
+		).length;
 		diagnostics.push({
 			range: {
 				start: { line, character },
@@ -158,7 +166,7 @@ function parseWatDiagnostics(message: string, fileName: string): LspDiagnostic[]
 					},
 					severity: 1,
 					source: 'wabt',
-					message: clean || `Failed to parse ${fileName}`
+					message: clean || `Failed to parse ${document.uri}`
 				}
 			]
 		: [];
@@ -171,7 +179,7 @@ export function createWatWorkerService(): WorkerLanguageService {
 	const parse = (document: LspDocument) =>
 		wabt.parseWat(
 			document.uri.split('/').pop() || 'main.wat',
-			document.text,
+			utf8.encode(document.text),
 			features as never
 		);
 
@@ -197,7 +205,7 @@ export function createWatWorkerService(): WorkerLanguageService {
 			} catch (error) {
 				return parseWatDiagnostics(
 					error instanceof Error ? error.message : String(error),
-					document.uri
+					document
 				);
 			} finally {
 				module?.destroy();
