@@ -2,9 +2,52 @@ import type { PyodideInterface } from 'pyodide';
 
 export const PYTHON_SCRIPT_PROCESS = String.raw`
 def __wasm_idle_make_script_process():
+    import atexit
     import os
     import sys
+    import traceback
     from contextlib import contextmanager
+
+    @contextmanager
+    def script_exit_callbacks():
+        # Pyodide keeps the interpreter alive. Its own native atexit callbacks
+        # must survive completion of the individual script.
+        callbacks = []
+        previous_register, previous_unregister = atexit.register, atexit.unregister
+
+        def register(callback, /, *args, **kwargs):
+            if atexit.register is not register:
+                # An imported module may retain this function across runs.
+                return atexit.register(callback, *args, **kwargs)
+            if not callable(callback):
+                raise TypeError("the first argument must be callable")
+            callbacks.append((callback, args, kwargs))
+            return callback
+
+        def unregister(callback, /):
+            if atexit.unregister is not unregister:
+                return atexit.unregister(callback)
+            callbacks[:] = [entry for entry in callbacks if entry[0] != callback]
+
+        atexit.register, atexit.unregister = register, unregister
+        try:
+            yield
+        finally:
+            try:
+                while callbacks:
+                    callback, args, kwargs = callbacks.pop()
+                    try:
+                        callback(*args, **kwargs)
+                    except BaseException as error:
+                        # Callback failures do not cancel the remaining handlers
+                        # or replace the process's exit status.
+                        try:
+                            sys.stderr.write(f"Exception ignored in atexit callback {callback!r}:\n")
+                            traceback.print_exception(error)
+                        except BaseException:
+                            pass
+            finally:
+                atexit.register, atexit.unregister = previous_register, previous_unregister
 
     @contextmanager
     def script_process(filename):
@@ -14,15 +57,17 @@ def __wasm_idle_make_script_process():
         status = [0]
         sys.argv = [filename]
         try:
-            yield status
-        except SystemExit as stop:
-            code = stop.code
-            if isinstance(code, int):
-                value = int.__index__(code)
-                status[0] = value & 255 if -(1 << 63) <= value < (1 << 63) else 255
-            elif code is not None:
-                sys.stderr.write(str(code) + "\n")
-                status[0] = 1
+            with script_exit_callbacks():
+                try:
+                    yield status
+                except SystemExit as stop:
+                    code = stop.code
+                    if isinstance(code, int):
+                        value = int.__index__(code)
+                        status[0] = value & 255 if -(1 << 63) <= value < (1 << 63) else 255
+                    elif code is not None:
+                        sys.stderr.write(str(code) + "\n")
+                        status[0] = 1
         finally:
             sys.argv = previous_argv
             os.environ = environment
