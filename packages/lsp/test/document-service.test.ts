@@ -19,6 +19,26 @@ const document = (languageId: string, text: string): LspDocument => ({
 });
 
 describe('document language worker service', () => {
+	it('validates every document in a YAML stream and keeps global line offsets', async () => {
+		const service = createDocumentWorkerService();
+		const ctx = context();
+		await service.initialize?.({ language: 'yaml' }, ctx);
+		const first = '---\nname: one\n---\n';
+		expect(await service.diagnostics?.(document('yaml', first + 'name: two\n'), ctx)).toEqual(
+			[]
+		);
+		const errors = await service.diagnostics?.(
+			document('yaml', first + 'name: two\nname: duplicate\n'),
+			ctx
+		);
+		expect(errors).toEqual([
+			expect.objectContaining({
+				code: 'DUPLICATE_KEY',
+				range: expect.objectContaining({ start: { line: 4, character: 0 } })
+			})
+		]);
+	});
+
 	it('uses the VS Code JSON language service for diagnostics and completions', async () => {
 		const service = createDocumentWorkerService();
 		const testContext = context();

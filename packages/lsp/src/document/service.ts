@@ -5,7 +5,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { DiagnosticSeverity, type Diagnostic, type TextEdit } from 'vscode-languageserver-types';
 import MarkdownIt from 'markdown-it';
 import { parse as parseToml } from 'smol-toml';
-import { LineCounter, parseDocument as parseYamlDocument } from 'yaml';
+import { LineCounter, parseAllDocuments } from 'yaml';
 import {
 	positionAt,
 	type LspDiagnostic,
@@ -105,8 +105,12 @@ const oneCharacterRange = (text: string, offset: number): LspRange => {
 
 const yamlDiagnostics = (document: LspDocument): LspDiagnostic[] => {
 	const lineCounter = new LineCounter();
-	const parsed = parseYamlDocument(document.text, { lineCounter });
-	return [...parsed.errors, ...parsed.warnings].map((error) => {
+	const documents = parseAllDocuments(document.text, { lineCounter });
+	const diagnostics =
+		'empty' in documents
+			? [...documents.errors, ...documents.warnings]
+			: documents.flatMap((parsed) => [...parsed.errors, ...parsed.warnings]);
+	return diagnostics.map((error) => {
 		const startLinePos = error.linePos?.[0];
 		const endLinePos = error.linePos?.[1];
 		const range =

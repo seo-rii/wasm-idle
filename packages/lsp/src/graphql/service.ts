@@ -1,5 +1,6 @@
 import { buildSchema, GraphQLError, parse, Source, validate, type GraphQLSchema } from 'graphql';
 import {
+	positionAt,
 	type LspDiagnostic,
 	type LspDocument,
 	type LspPosition,
@@ -125,31 +126,35 @@ export function createGraphqlWorkerService(): WorkerLanguageService {
 			};
 		},
 		documentSymbols(document) {
-			const symbols = [];
-			const pattern =
-				/^\s*(query|mutation|subscription|fragment|type|interface|enum|input|scalar|union)\s+([_A-Za-z][_0-9A-Za-z]*)/gmu;
-			for (const match of document.text.matchAll(pattern)) {
-				const offset = match.index || 0;
-				const before = document.text.slice(0, offset);
-				const line = before.split('\n').length - 1;
-				const character = offset - before.lastIndexOf('\n') - 1;
-				symbols.push({
-					name: match[2],
-					kind: match[1] === 'query' || match[1] === 'mutation' ? 12 : 5,
-					range: {
-						start: { line, character },
-						end: { line, character: character + match[0].length }
-					},
-					selectionRange: {
-						start: { line, character: character + match[0].indexOf(match[2]) },
-						end: {
-							line,
-							character: character + match[0].indexOf(match[2]) + match[2].length
+			let ast;
+			try {
+				ast = parse(document.text);
+			} catch (error) {
+				if (error instanceof GraphQLError) return [];
+				throw error;
+			}
+			return ast.definitions.flatMap((definition) => {
+				if (!('name' in definition) || !definition.name?.loc || !definition.loc) return [];
+				const name = definition.name;
+				const start =
+					'description' in definition && definition.description?.loc
+						? (definition.description.loc.endToken.next?.start ?? definition.loc.start)
+						: definition.loc.start;
+				return [
+					{
+						name: name.value,
+						kind: definition.kind === 'OperationDefinition' ? 12 : 5,
+						range: {
+							start: positionAt(document.text, start),
+							end: positionAt(document.text, definition.loc.end)
+						},
+						selectionRange: {
+							start: positionAt(document.text, definition.name.loc.start),
+							end: positionAt(document.text, definition.name.loc.end)
 						}
 					}
-				});
-			}
-			return symbols;
+				];
+			});
 		}
 	};
 }
