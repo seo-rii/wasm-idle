@@ -158,7 +158,9 @@ export function emptyProjectDirectories(
 ): SavedWorkspaceDirectory[] {
 	const parents = new Set(entries.map(({ path }) => path.substring(0, path.lastIndexOf('/'))));
 	const languages = new Set(projects);
-	const implicit = new Set(entries.filter((entry) => entry.implicit).map((entry) => entry.path));
+	const implicit = new Set(
+		entries.filter((entry) => entry.editorOwned).map((entry) => entry.path)
+	);
 	const saved = new Set<string>();
 	for (const { type, path } of entries) {
 		const slash = path.indexOf('/');

@@ -528,7 +528,7 @@ export class ContainerRuntimeAdapter {
 					const slash = path.indexOf('/');
 					const implicit = this.#implicitDirectories.get(path.slice(0, slash));
 					if (slash > 0 && implicit?.get(path.slice(slash + 1)) === stat.inode)
-						entry.implicit = true;
+						entry.editorOwned = true;
 				}
 				entries.push(entry);
 				if (stat.type === 'directory') visit(path);
@@ -540,8 +540,7 @@ export class ContainerRuntimeAdapter {
 	inputs(language: string, code: string, options: SandboxExecutionOptions) {
 		const root = this.directory(language);
 		const activePath = options.activePath ?? defaultSource(language);
-		if (!isRuntimeWorkspacePath(activePath))
-			throw new Error(runtimeWorkspacePathHint);
+		if (!isRuntimeWorkspacePath(activePath)) throw new Error(runtimeWorkspacePathHint);
 		try {
 			this.fs.stat(activePath, { root, cwd: root });
 		} catch (error) {

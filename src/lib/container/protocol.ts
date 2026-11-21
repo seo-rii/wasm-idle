@@ -30,7 +30,8 @@ export interface ContainerWorkspaceEntry {
 	path: string;
 	type: 'file' | 'directory' | 'symlink';
 	size: number;
-	implicit?: true;
+	/** The editor created this directory as a parent and may replace it with a file. */
+	editorOwned?: true;
 }
 export interface ContainerWorkerEvent {
 	language?: string;
