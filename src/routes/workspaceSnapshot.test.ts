@@ -52,6 +52,8 @@ describe('workspace JSON boundary', () => {
 		{ files, version: 8 },
 		{ files, version: 4.5 },
 		{ files, cppVersion: 'CPP99' },
+		{ files, pythonInvalidationMode: 'unknown' },
+		{ files, pythonTimestampInput: 1700000001 },
 		{ files, rustOptimizationProfile: 'unknown' },
 		{ files: [{ path: 'main.cpp', content: 42 }] },
 		{ files: [{ path: 'main.cpp', content: '', encoding: 'other' }] },
@@ -89,7 +91,12 @@ it('stores active file bodies once and accepts both the compact and older repres
 	expect(JSON.parse(stored)).toEqual({ ...original, version: 7, workspaces: { PYTHON: other } });
 	expect(() => validateWorkspaceSnapshot(JSON.parse(stored))).not.toThrow();
 	expect(sameWorkspaceContents(JSON.stringify(original), stored)).toBe(true);
-	const differentTab = { ...JSON.parse(stored), activePath: 'helper.h', openTabs: ['helper.h'] };
+	const differentTab = {
+		...JSON.parse(stored),
+		activePath: 'helper.h',
+		openTabs: ['helper.h'],
+		sidebarOpen: false
+	};
 	expect(sameWorkspaceContents(JSON.stringify(differentTab), stored)).toBe(true);
 	expect(sameWorkspaceContents(JSON.stringify({ ...differentTab, files: [] }), stored)).toBe(
 		false
@@ -101,4 +108,25 @@ it('stores active file bodies once and accepts both the compact and older repres
 		JSON.parse(serializeStoredWorkspace({ ...original, workspaces: { CPP: active } }))
 			.workspaces
 	).toBeUndefined();
+});
+
+it('accepts a layout-only save that upgrades legacy Python defaults while retaining concurrent edits', () => {
+	const legacy = { version: 7, language: 'PYTHON', files, sidebarOpen: true };
+	const upgraded = {
+		...legacy,
+		sidebarOpen: false,
+		pythonInvalidationMode: 'checked-hash',
+		pythonTimestampInput: '0'
+	};
+	const stored = JSON.stringify(legacy);
+	expect(sameWorkspaceContents(stored, JSON.stringify(upgraded))).toBe(true);
+	expect(
+		sameWorkspaceContents(
+			stored,
+			JSON.stringify({ ...upgraded, pythonInvalidationMode: 'timestamp' })
+		)
+	).toBe(false);
+	expect(
+		sameWorkspaceContents(stored, JSON.stringify({ ...upgraded, pythonTimestampInput: '17' }))
+	).toBe(false);
 });

@@ -64,6 +64,26 @@ async function withImportPage(run: (page: Page) => Promise<void>) {
 }
 
 describe('workspace import browser integration', () => {
+	it('displays the downloaded byte count for text and binary files', browserOptions, async () => {
+		await withImportPage(async (page) => {
+			for (const [name, bytes] of [
+				['note.txt', Buffer.from('한글')],
+				['sample.bin', Buffer.from([0, 255, 16, 32, 64])]
+			] as const) {
+				await page
+					.locator('input[type=file]')
+					.setInputFiles({ name, mimeType: 'application/octet-stream', buffer: bytes });
+				await page.locator(`.file-tab.active[title="${name}"]`).waitFor();
+				const download = page.waitForEvent('download');
+				await page.getByRole('button', { name: 'Download', exact: true }).click();
+				expect(await readFile((await (await download).path())!)).toEqual(bytes);
+				expect(await page.locator('.statusbar__meta').allTextContents()).toContain(
+					`${bytes.length} bytes`
+				);
+			}
+		});
+	});
+
 	it(
 		'preserves the UTF-8 BOM and line endings across edits, undo, save and download',
 		browserOptions,

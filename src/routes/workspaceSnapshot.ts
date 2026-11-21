@@ -72,7 +72,7 @@ export function validateWorkspaceSnapshot(
 			value.version > 7)
 	)
 		invalid('version');
-	for (const field of ['argsInput', 'language']) {
+	for (const field of ['argsInput', 'language', 'pythonTimestampInput']) {
 		if (value[field] !== undefined && typeof value[field] !== 'string') invalid(field);
 	}
 	for (const field of ['log', 'lspEnabled', 'sidebarOpen']) {
@@ -80,6 +80,7 @@ export function validateWorkspaceSnapshot(
 	}
 	const selections: Record<string, readonly string[]> = {
 		cppVersion: ['CPP98', 'CPP03', 'CPP11', 'CPP14', 'CPP17', 'CPP20', 'CPP23', 'CPP26'],
+		pythonInvalidationMode: ['checked-hash', 'unchecked-hash', 'timestamp', 'normalized'],
 		goTarget: ['wasip1/wasm', 'wasip2/wasm', 'wasip3/wasm', 'js/wasm'],
 		rustTargetTriple: ['wasm32-wasip1', 'wasm32-wasip2', 'wasm32-wasip3'],
 		rustOptimizationProfile: ['interactive', 'speed', 'size'],
@@ -159,6 +160,10 @@ export function sameWorkspaceContents(left: string | null, right: string | null)
 			return result;
 		};
 		const result = withoutSelection(compact);
+		delete result.sidebarOpen;
+		// Older saves omit these same compiler defaults.
+		if (result.pythonInvalidationMode === 'checked-hash') delete result.pythonInvalidationMode;
+		if (result.pythonTimestampInput === '0') delete result.pythonTimestampInput;
 		if (result.workspaces && typeof result.workspaces === 'object')
 			result.workspaces = Object.fromEntries(
 				Object.entries(result.workspaces).map(([id, project]) => [
