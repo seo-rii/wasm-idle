@@ -176,12 +176,9 @@ export function serveContainerWorker(options: ContainerWorkerOptions): {
 				maxMemoryBytes: 2 ** 32
 			});
 		engines.attach(container);
-		for (const directory of readWorkspaceDirectories(settings.emptyDirectories))
-			container.fs.mkdir(directory, {
-				root: '/workspace',
-				cwd: '/workspace',
-				recursive: true
-			});
+		engines.restoreWorkspaceDirectories(
+			readWorkspaceDirectories(settings.emptyDirectories, options.languages)
+		);
 		watcher = container.fs.watch({ maxQueuedEvents: 32, signal: lifetime.signal }).getReader();
 		void (async () => {
 			try {

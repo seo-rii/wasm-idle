@@ -11,19 +11,18 @@
 	import { compilePython, isSharedArrayBufferAvailable, type PythonCompileOptions } from '$lib';
 	import { createContainerPlaygroundBinding } from '$lib/playground/container/binding';
 	import {
+		emptyProjectDirectories,
 		isRuntimeWorkspacePath,
 		mergeContainerWorkspace,
+		readWorkspaceDirectories,
 		sameWorkspaceFiles
 	} from '$lib/playground/container/workspace';
-	import {
-		emptyProjectDirectories,
-		readWorkspaceDirectories
-	} from '$lib/container/workspace';
 	import ContainerExplorer from '$lib/playground/container/ContainerExplorer.svelte';
 	import { resolveInitialWorkspace } from './initialWorkspace';
 	import type {
 		ContainerWorkspaceEntry,
-		ContainerWorkspaceFile
+		ContainerWorkspaceFile,
+		SavedWorkspaceDirectory
 	} from '$lib/playground/container/protocol';
 	import {
 		createDebugSessionController,
@@ -294,7 +293,7 @@
 			publicEnvironment
 		)
 	);
-	let savedDirectories = $state.raw<string[]>([]);
+	let savedDirectories = $state.raw<SavedWorkspaceDirectory[]>([]);
 	const playground = $derived.by(() =>
 		createContainerPlaygroundBinding(runtimeAssets, {
 			applicationRootURL: browser
@@ -3851,7 +3850,8 @@
 			if (initialSelection.snapshot) {
 				if (initialSelection.source === 'snapshot')
 					savedDirectories = readWorkspaceDirectories(
-						initialSelection.snapshot.emptyDirectories
+						initialSelection.snapshot.emptyDirectories,
+						playgroundLanguages
 					);
 				applySnapshot(
 					initialSelection.snapshot,

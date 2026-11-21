@@ -4,11 +4,14 @@ import type { SandboxRuntimeAssets } from '../playground/sandbox.js';
 export const CONTAINER_WORKER_PROTOCOL = 1;
 export const OWNER_CLEANUP_DEADLINE_MS = 2_000;
 
+/** Plain paths are shell-owned. Only editor-created parents may be replaced by a file. */
+export type SavedWorkspaceDirectory = string | { path: string; implicit: true };
+
 export interface ContainerWorkerInitialization {
 	runtimeAssets: SandboxRuntimeAssets;
 	applicationRootURL: string;
 	workspaceId: string;
-	emptyDirectories?: readonly string[];
+	emptyDirectories?: readonly SavedWorkspaceDirectory[];
 }
 export type ContainerWorkspaceFile = WorkspaceFile;
 export interface ContainerWorkspaceFileMetadata {
@@ -27,6 +30,7 @@ export interface ContainerWorkspaceEntry {
 	path: string;
 	type: 'file' | 'directory' | 'symlink';
 	size: number;
+	implicit?: true;
 }
 export interface ContainerWorkerEvent {
 	language?: string;
