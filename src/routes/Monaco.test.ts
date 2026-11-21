@@ -217,10 +217,18 @@ describe('Monaco route debug sync', () => {
 			])
 		);
 		expect(source).toMatch(/debugActionBindings\?\.dispose\(\);/);
-		expect(source).toMatch(
-			/import type \{\s+EditorLanguageServerHandle,\s+EditorLanguageServerRuntimeOptions,\s+LanguageServerStatus\s+\} from '@wasm-idle\/lsp';/s
+		const lspImports = parse(source, { modern: true })
+			.instance!.content.body.filter((node) => node.type === 'ImportDeclaration')
+			.filter((node) => node.source.value === '@wasm-idle/lsp');
+		expect(lspImports).toMatchObject([{ importKind: 'type' }]);
+		expect(lspImports[0].specifiers.map((item) => item.local.name)).toEqual(
+			expect.arrayContaining([
+				'EditorLanguageServerHandle',
+				'EditorLanguageServerRuntimeOptions',
+				'LanguageServerStatus',
+				'SqlWorkerOptions'
+			])
 		);
-		expect(source).not.toMatch(/^\s*import \{[^\n]*\} from '@wasm-idle\/lsp';/m);
 		expect(source).toMatch(/type MonacoLspStatusView = \{/);
 		expect(source).toMatch(/progressPercent: number \| null;/);
 		expect(source).toMatch(/lspStatus\?: MonacoLspStatusView \| null;/);

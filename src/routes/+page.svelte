@@ -752,10 +752,18 @@
 					.filter(
 						(file) =>
 							file.path !== activePath &&
-							!isBinaryWorkspaceFile(file) &&
-							(language === 'DUCKDB' || file.path.endsWith('.sql'))
+							(language === 'DUCKDB' ||
+								(!isBinaryWorkspaceFile(file) && /\.sql$/iu.test(file.path)))
 					)
-					.map(({ path, content }) => ({ path, content }))
+					.map((file) =>
+						isBinaryWorkspaceFile(file)
+							? {
+									path: file.path,
+									content: file.content.slice(file.content.indexOf(',') + 1),
+									encoding: 'base64' as const
+								}
+							: { path: file.path, content: file.content }
+					)
 			: []
 	);
 	const sqlLspModuleUrl = $derived(sqlLspEnabled ? runtimeAssets.sqlite?.moduleUrl : undefined);
