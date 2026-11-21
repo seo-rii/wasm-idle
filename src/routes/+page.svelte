@@ -698,6 +698,14 @@
 		fortranLspEnabled ? runtimeAssets.fortran?.analyzerUrl : undefined
 	);
 	const assemblyScriptLspModuleUrl = $derived(runtimeAssets.assemblyscript?.moduleUrl);
+	const graphqlLspWorkspaceFiles = $derived(
+		lspEnabled && language === 'GRAPHQL'
+			? files.filter((file) =>
+					file.path !== activePath && basename(file.path) === 'schema.graphql' &&
+					!isBinaryWorkspaceFile(file)
+				).map(({ path, content }) => ({ path, content }))
+			: undefined
+	);
 	const duckDbLspModuleUrl = $derived(runtimeAssets.duckdb?.moduleUrl);
 	const bashLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'bash');
 	const bashLspModuleUrl = $derived(
@@ -5478,6 +5486,7 @@
 							{fortranLspAnalyzerUrl}
 							{assemblyScriptLspModuleUrl}
 							{duckDbLspModuleUrl}
+							{graphqlLspWorkspaceFiles}
 							{cobolLspEnabled}
 							{cobolLspBaseUrl}
 							{cobolLspWorkspaceFiles}

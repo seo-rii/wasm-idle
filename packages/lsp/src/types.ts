@@ -7,6 +7,7 @@ import type { DOuterAssetReceipts } from './d/assets.js';
 import type { DocumentLanguageId } from './document/service.js';
 import type { ElixirRuntimeAssetReceipts } from './elixir/assets.js';
 import type { JavaLanguageServerConfig } from './java/language-server.js';
+import type { GraphqlWorkerOptions } from './graphql/service.js';
 import type { SqlWorkerOptions } from './sql/service.js';
 import type {
 	AwkRuntimePreflightProfile,
@@ -216,9 +217,7 @@ export interface EditorLanguageServerRuntimeOptions {
 		baseUrl?: string;
 		workspaceFiles?: Array<{ path: string; content: string }>;
 	};
-	graphql?: {
-		schema?: string;
-	};
+	graphql?: GraphqlWorkerOptions;
 	postgresql?: {
 		/** Unmodified @postgres-language-server/wasm/lsp deployed outside the SDK. */
 		moduleUrl?: string;
