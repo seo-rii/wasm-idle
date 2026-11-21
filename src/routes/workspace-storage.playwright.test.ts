@@ -1165,8 +1165,11 @@ describe('workspace storage browser integration', () => {
 				await context.grantPermissions(['clipboard-write', 'clipboard-read']);
 				await page.getByRole('button', { name: 'Share', exact: true }).click();
 				await page.getByText('Share URL copied', { exact: true }).waitFor();
-				const shareUrl = await page.evaluate(() => navigator.clipboard.readText());
-				expect(new URL(shareUrl).hash).toMatch(/^#workspace=/);
+				const shareUrl = new URL(await page.evaluate(() => navigator.clipboard.readText()));
+				expect(shareUrl.hash).toMatch(/^#workspace=/);
+				const shared = JSON.parse(
+					Buffer.from(shareUrl.hash.slice('#workspace='.length), 'base64url').toString()
+				);
 				expect(new URL(page.url()).hash).toBe('');
 				await page.getByRole('alert').filter({ hasText: 'Not saved locally' }).waitFor();
 				const backupDownload = page.waitForEvent('download');
@@ -1176,14 +1179,18 @@ describe('workspace storage browser integration', () => {
 				const backupBytes = await readFile(backupPath);
 				const backup = JSON.parse(backupBytes.toString());
 				expect(backup.format).toBe(WORKSPACE_BACKUP_FORMAT);
-				expect(backup.snapshot.version).toBe(6);
-				const { CPP: active, ...inactive } = backup.snapshot.workspaces;
+				// A portable backup records an empty directory set explicitly. Compact v7 omits it.
+				const { emptyDirectories, ...snapshot } = backup.snapshot;
+				expect(emptyDirectories).toEqual([]);
+				expect(snapshot.version).toBe(6);
+				expect(shared.files).toEqual(snapshot.files);
+				const { CPP: active, ...inactive } = snapshot.workspaces;
 				expect(active).toEqual({
-					activePath: backup.snapshot.activePath,
-					files: backup.snapshot.files,
-					openTabs: backup.snapshot.openTabs
+					activePath: snapshot.activePath,
+					files: snapshot.files,
+					openTabs: snapshot.openTabs
 				});
-				expect(backup.snapshot.files).toContainEqual({
+				expect(snapshot.files).toContainEqual({
 					path: 'unsaved.txt',
 					content: 'latest unsaved content',
 					encoding: 'utf-8'
@@ -1197,7 +1204,7 @@ describe('workspace storage browser integration', () => {
 					await page.evaluate(() =>
 						JSON.parse(localStorage.getItem('wasm-idle:example-workspace:v3')!)
 					)
-				).toEqual({ ...backup.snapshot, version: 7, workspaces: inactive });
+				).toEqual({ ...snapshot, version: 7, workspaces: inactive });
 				await page.evaluate(() => history.replaceState(null, '', location.pathname));
 				await page.reload({ waitUntil: 'domcontentloaded' });
 				await page.locator('button[title="unsaved.txt"]').waitFor();

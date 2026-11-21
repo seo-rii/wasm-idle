@@ -139,12 +139,50 @@ export function normalizeWorkspaceTabs(
 	return [...new Set(tabs)];
 }
 
+/** Keep folder metadata that can coexist with the editor files in a portable backup. */
+export function compatibleWorkspaceDirectories(
+	snapshot: Record<string, unknown>,
+	directories: readonly SavedWorkspaceDirectory[]
+) {
+	const filesByProject = new Map<string, Set<string>>();
+	const workspaces = snapshot.workspaces as
+		Record<string, { files?: WorkspaceFile[] }> | undefined;
+	return directories.filter((entry) => {
+		const fullPath = typeof entry === 'string' ? entry : entry.path;
+		const slash = fullPath.indexOf('/');
+		const project = fullPath.slice(0, slash);
+		let files = filesByProject.get(project);
+		if (!files) {
+			const projectFiles =
+				workspaces?.[project]?.files ??
+				(project === snapshot.language
+					? (snapshot.files as WorkspaceFile[] | undefined)
+					: undefined);
+			files = new Set(projectFiles?.map((file) => file.path));
+			filesByProject.set(project, files);
+		}
+		const path = fullPath.slice(slash + 1);
+		if (files.has(path)) return false;
+		for (const parent of workspaceParents(path)) if (files.has(parent)) return false;
+		return true;
+	});
+}
+
 /** Keep the active project's files once in local storage. Portable v6 backups retain their shape. */
 export function serializeStoredWorkspace(
 	snapshot: Record<string, unknown>,
 	emptyDirectories?: readonly SavedWorkspaceDirectory[]
 ): string {
-	if (emptyDirectories?.length) snapshot = { ...snapshot, emptyDirectories };
+	if (emptyDirectories?.length) {
+		// Live metadata can race an editor publication. Preserve the previous good
+		// snapshot until the owner has reconciled any file/directory collision.
+		if (
+			compatibleWorkspaceDirectories(snapshot, emptyDirectories).length !==
+			emptyDirectories.length
+		)
+			invalid('file collides with a directory');
+		snapshot = { ...snapshot, emptyDirectories };
+	}
 	const projects = snapshot.workspaces;
 	const language = snapshot.language;
 	if (

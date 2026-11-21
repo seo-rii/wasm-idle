@@ -469,7 +469,9 @@ export function serveContainerWorker(options: ContainerWorkerOptions): {
 			return engines.syncWorkspace(
 				language,
 				args[1] as WorkspaceFile[],
-				args[2] as WorkspaceFile[] | undefined
+				args[2] as WorkspaceFile[] | undefined,
+				undefined,
+				args[3] == null ? args[3] : readWorkspaceDirectories(args[3], [language])
 			);
 		if (method === 'syncWorkspaceDelta') {
 			if (!Array.isArray(args[2]) || !Array.isArray(args[3]))
@@ -478,7 +480,8 @@ export function serveContainerWorker(options: ContainerWorkerOptions): {
 				language,
 				args[1] as WorkspaceFile[],
 				args[2] as WorkspaceFile[],
-				args[3] as ContainerWorkspaceFileMetadata[]
+				args[3] as ContainerWorkspaceFileMetadata[],
+				args[4] == null ? args[4] : readWorkspaceDirectories(args[4], [language])
 			);
 		}
 		if (method === 'readWorkspace') return engines.readWorkspace(language);
