@@ -110,6 +110,7 @@
 	import { consumeWorkspaceQueryInput } from './workspaceQuery';
 	import { migrateLegacyWorkspaceFile } from './workspaceMigration';
 	import {
+		compatibleWorkspaceDirectories,
 		normalizeWorkspaceTabs,
 		sameWorkspaceContents,
 		serializeStoredWorkspace,
@@ -2264,8 +2265,14 @@
 	}
 
 	function downloadWorkspaceBackup() {
+		const project = snapshot();
+		// Export remains available during a save conflict. Keep unsaved editor files
+		// and every directory whose metadata still agrees with them.
+		const emptyDirectories = compatibleWorkspaceDirectories(project, savedDirectories);
 		downloadBlob(
-			new Blob([serializeWorkspaceBackup(snapshot())], { type: 'application/json' }),
+			new Blob([serializeWorkspaceBackup({ ...project, emptyDirectories })], {
+				type: 'application/json'
+			}),
 			'wasm-idle-workspace.json'
 		);
 		saveStatus = 'Workspace backup downloaded';

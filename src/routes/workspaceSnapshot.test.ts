@@ -1,6 +1,7 @@
 import { emptyProjectDirectories, readWorkspaceDirectories } from '../lib/container/workspace';
 import { describe, expect, it } from 'vitest';
 import {
+	compatibleWorkspaceDirectories,
 	normalizeWorkspaceTabs,
 	sameWorkspaceContents,
 	serializeStoredWorkspace,
@@ -67,6 +68,15 @@ describe('workspace JSON boundary', () => {
 		const snapshot = { language: 'CPP', ...active, workspaces: { CPP: active } };
 		expect(() => serializeStoredWorkspace(snapshot, ['CPP/data/child'])).toThrow('directory');
 		expect(() => serializeStoredWorkspace(snapshot, [])).not.toThrow();
+		const keep = { path: 'CPP/still-empty', implicit: true } as const;
+		expect(
+			compatibleWorkspaceDirectories(snapshot, [
+				'CPP/data',
+				'CPP/data/child',
+				keep,
+				'PYTHON/data'
+			])
+		).toEqual([keep, 'PYTHON/data']);
 	});
 	it('treats a project directory rename as a real cross-tab change', () => {
 		const snapshot = { language: 'CPP', files };
