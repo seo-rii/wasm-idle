@@ -91,7 +91,13 @@ cat(sprintf("main=%s\\n", trimws(line[[1]])))`;
 
 const sqliteOutputSource = `SELECT 'main=73' AS result;`;
 
-const duckdbOutputSource = `SELECT 'main=73' AS result;`;
+// These MAP entries have identical physical Arrow bytes. The browser runtime
+// must preserve their distinct DuckDB types, including under duplicate names.
+const duckdbOutputSource = `CREATE SEQUENCE steps START 41;
+SELECT MAP(['k'], [UUID '01000000-0000-0000-0000-000000000000']) AS repeated,
+       MAP(['k'], [1::UHUGEINT]) AS repeated,
+       count(*) AS rows
+FROM range(nextval('steps'));`;
 
 const postgresqlStdinSource = `CREATE TABLE input_numbers (n integer);
 COPY input_numbers FROM '/dev/blob';
@@ -415,7 +421,7 @@ const sharedStdinBrowserCases = [
 		language: 'DUCKDB',
 		source: duckdbOutputSource,
 		stdinText: '',
-		expectedOutput: 'main=73',
+		expectedOutput: '{k=01000000-0000-0000-0000-000000000000}\t{k=1}\t41',
 		defaultRunTimeoutMs: 180_000
 	},
 	{

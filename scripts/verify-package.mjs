@@ -498,7 +498,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// 43,401,987 bytes in 3,494 files and 66 packages. Round the byte limit up to the next KiB.
 		// With the PHP and Ruby helpers and updated language services, the pinned install measures
 		// 43,420,505 bytes in 3,498 files and 66 packages.
-		budget: { maxBytes: 43420672, maxFiles: 3498, maxPackages: 70 },
+		// The DuckDB result formatter and refreshed Arrow runtime receipts measure 43,422,093 bytes.
+		budget: { maxBytes: 43422720, maxFiles: 3498, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

@@ -35,6 +35,7 @@ const runtimePackages = [
 	'@ruby/3.4-wasm-wasi',
 	'@ruby/wasm-wasi',
 	'@wasmer/sdk',
+	'apache-arrow',
 	'assemblyscript',
 	'pyodide',
 	'sql.js',
@@ -62,7 +63,7 @@ const staticRuntimeModules = [
 	},
 	{
 		directory: 'wasm-duckdb',
-		packages: { '@duckdb/duckdb-wasm': '1.33.1-dev57.0' }
+		packages: { '@duckdb/duckdb-wasm': '1.33.1-dev57.0', 'apache-arrow': '17.0.0' }
 	},
 	{
 		directory: 'wasm-php',

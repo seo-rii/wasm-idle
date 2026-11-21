@@ -2271,8 +2271,8 @@ const runtimeDetailsByLanguage = new Map([
 		'DuckDB',
 		{
 			packageBase:
-				`static ESM ${code('static/wasm-duckdb/runtime.mjs')} produced from ` +
-				`${npmPackage('@duckdb/duckdb-wasm')}`,
+				`${npmPackage('@duckdb/duckdb-wasm')} JavaScript SDK with MVP/EH builds of DuckDB-Wasm ` +
+				`using the Apache Arrow #44715 backport`,
 			execution:
 				`selects the best DuckDB-Wasm MVP/EH bundle on demand and creates a fresh in-memory ` +
 				`database per run; ${code('stdin')} is registered as ${code('stdin.txt')} and ` +

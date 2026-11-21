@@ -1,0 +1,30 @@
+{
+	"provenance": {
+		"schemaVersion": 1,
+		"packageVersion": "1.33.1-dev57.0",
+		"duckdbWasmCommit": "ef8a4f8912b6e7f62bc0cc490145ebd391b79e1f",
+		"duckdbCommit": "08e34c447bae34eaee3723cac61f2878b6bdf787",
+		"arrowCommit": "6a2e19a852b367c72d7b12da4d104456491ed8b7",
+		"arrowPatchCommit": "152e878a2e79877ec461f96cefc97663f0bc581f",
+		"arrowPatchSha256": "a10f7fbfaf1d354a4195ed29e80c303f6cc1146500408007ef92fc5dfefaf39b",
+		"emscriptenVersion": "3.1.71"
+	},
+	"assets": {
+		"duckdb-browser-eh.worker.js": {
+			"bytes": 773223,
+			"sha256": "003f244ffd2ee99db7a3d0687e697bcea9d232958eced95833cc70d39322d0d2"
+		},
+		"duckdb-browser-mvp.worker.js": {
+			"bytes": 839642,
+			"sha256": "74d45366b3ca0a02d61772ca5bd25a988717ebcb780f982de873d102b733df69"
+		},
+		"duckdb-eh.wasm": {
+			"bytes": 35914005,
+			"sha256": "1eecf99b05ac162e851341b50eaa1007d07d75c408e539cc8bce145763a324f0"
+		},
+		"duckdb-mvp.wasm": {
+			"bytes": 41325202,
+			"sha256": "01f04c365da063579353f36447d5233e12bae61515809cde251497d46e584b8a"
+		}
+	}
+}

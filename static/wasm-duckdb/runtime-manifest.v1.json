@@ -2,33 +2,49 @@
   "formatVersion": 1,
   "runtimeModule": "runtime.mjs",
   "packages": {
-    "@duckdb/duckdb-wasm": "1.33.1-dev57.0"
+    "@duckdb/duckdb-wasm": "1.33.1-dev57.0",
+    "apache-arrow": "17.0.0"
   },
   "files": [
     {
-      "path": "assets/duckdb-browser-eh.worker-CwdVMcbT.js",
+      "path": "assets/duckdb-browser-eh.worker-i5WYxhCX.js",
       "bytes": 773223,
-      "sha256": "fa889e6068c40426dea67c08cf16ce0cad7404eae94f6a2522adcabb5898eb93"
+      "sha256": "003f244ffd2ee99db7a3d0687e697bcea9d232958eced95833cc70d39322d0d2"
     },
     {
-      "path": "assets/duckdb-browser-mvp.worker-BEKIasyR.js",
+      "path": "assets/duckdb-browser-mvp.worker-CHmU4xWB.js",
       "bytes": 839642,
-      "sha256": "964f678d3bfa5a23deb154e0a7950634a4d1415e571040ab2d47815dc3f13582"
+      "sha256": "74d45366b3ca0a02d61772ca5bd25a988717ebcb780f982de873d102b733df69"
     },
     {
-      "path": "assets/duckdb-eh-CfdE9-rk.wasm",
-      "bytes": 35913747,
-      "sha256": "3abdec74989dcc54d2f2ea5621f611f3c45db1e7dff2f408476014d82beb2029"
+      "path": "assets/duckdb-eh-CGY8JZIq.wasm",
+      "bytes": 35914005,
+      "sha256": "1eecf99b05ac162e851341b50eaa1007d07d75c408e539cc8bce145763a324f0"
     },
     {
-      "path": "assets/duckdb-mvp-DQDXaYzB.wasm",
-      "bytes": 41325187,
-      "sha256": "ee5560145a3d3e0ffa6dce697be802c08842f139a594698eecc7c754f7ad5f05"
+      "path": "assets/duckdb-mvp-DT47q6v0.wasm",
+      "bytes": 41325202,
+      "sha256": "01f04c365da063579353f36447d5233e12bae61515809cde251497d46e584b8a"
+    },
+    {
+      "path": "LICENSE.apache-arrow.txt",
+      "bytes": 110423,
+      "sha256": "229dbe29e4e1344e95172f6f3a4277ec0da5c7850cb03897c47f3a24b7afce08"
+    },
+    {
+      "path": "LICENSE.txt",
+      "bytes": 1072,
+      "sha256": "7e17fd31249fa875cb3b1c5e05c6c3e99b75509f6a2804ca176c217834de1dcb"
+    },
+    {
+      "path": "NOTICE.apache-arrow.txt",
+      "bytes": 3032,
+      "sha256": "b62ea242642d3a18f1e29b0c1fe082415a6943fe158ee22b48cff3762f354009"
     },
     {
       "path": "runtime.mjs",
-      "bytes": 205704,
-      "sha256": "3e0a04fbc5f29ee62882881cbae124b24a555863584613c79ca4165d80df13b7"
+      "bytes": 206667,
+      "sha256": "e85548dcc3caa5db8fd5aa66a131847a78fac57b6165bbd125343d71a6bb73cb"
     }
   ]
 }
