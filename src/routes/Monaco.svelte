@@ -4148,7 +4148,8 @@
 		editor = nextEditor;
 		// The wrapper applies the model and font metrics after onload. Restoring
 		// against its placeholder's line height shifts the saved viewport.
-		const loadedModel = model;
+		// onload runs inside the wrapper's editor-creation effect. Tab changes must not recreate it.
+		const loadedModel = untrack(() => model);
 		const view = loadedModel && modelViewStates.get(loadedModel);
 		if (view)
 			void tick().then(() => {
