@@ -186,13 +186,29 @@ export function sameWorkspaceContents(left: string | null, right: string | null)
 		// Older saves omit these same compiler defaults.
 		if (result.pythonInvalidationMode === 'checked-hash') delete result.pythonInvalidationMode;
 		if (result.pythonTimestampInput === '0') delete result.pythonTimestampInput;
-		if (result.workspaces && typeof result.workspaces === 'object')
+		// In v7 the selected language's project occupies the top level. Compare files
+		// in their language projects regardless of which view each tab displays.
+		if (typeof result.language === 'string' && Array.isArray(result.files)) {
+			const projects = {
+				...(result.workspaces as Record<string, Record<string, unknown>> | undefined),
+				[result.language]: { files: result.files }
+			};
+			delete result.language;
+			delete result.files;
+			delete result.workspaces;
+			result.workspaces = Object.fromEntries(
+				Object.keys(projects)
+					.sort()
+					.map((id) => [id, withoutSelection(projects[id])])
+			);
+		} else if (result.workspaces && typeof result.workspaces === 'object') {
 			result.workspaces = Object.fromEntries(
 				Object.entries(result.workspaces).map(([id, project]) => [
 					id,
 					withoutSelection(project)
 				])
 			);
+		}
 		return JSON.stringify(result);
 	}
 	try {

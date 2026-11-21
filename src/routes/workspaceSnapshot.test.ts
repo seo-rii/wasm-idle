@@ -193,3 +193,24 @@ it('accepts a layout-only save that upgrades legacy Python defaults while retain
 		sameWorkspaceContents(stored, JSON.stringify({ ...upgraded, pythonTimestampInput: '17' }))
 	).toBe(false);
 });
+
+it('compares each language project independently of the selected language', () => {
+	const projects = {
+		CPP: { files, activePath: 'main.cpp', openTabs: ['main.cpp'] },
+		PYTHON: { files: [{ path: 'main.py', content: 'print(8)' }], activePath: 'main.py' }
+	};
+	const cpp = serializeStoredWorkspace({
+		language: 'CPP',
+		...projects.CPP,
+		workspaces: projects
+	});
+	const python = { language: 'PYTHON', ...projects.PYTHON, workspaces: projects };
+	expect(sameWorkspaceContents(cpp, serializeStoredWorkspace(python))).toBe(true);
+	const edited = { ...projects, CPP: { ...projects.CPP, files: [] } };
+	expect(
+		sameWorkspaceContents(cpp, serializeStoredWorkspace({ ...python, workspaces: edited }))
+	).toBe(false);
+	expect(sameWorkspaceContents(cpp, serializeStoredWorkspace({ ...python, log: false }))).toBe(
+		false
+	);
+});
