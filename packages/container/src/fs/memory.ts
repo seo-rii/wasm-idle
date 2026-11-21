@@ -386,7 +386,7 @@ export class MemoryFileSystem {
 
   private info(node: Inode): FileStat {
     return {
-      inode: node.inode, type: node.type, mode: node.mode,
+      inode: node.inode, nlink: node.linked ? 1 : 0, type: node.type, mode: node.mode,
       size: node.type === 'file' ? node.data.length : node.type === 'symlink' ? encoder.encode(node.target).length : 0,
       atimeMs: node.atimeMs, mtimeMs: node.mtimeMs, ctimeMs: node.ctimeMs,
       ...(node.command ? { command: true as const } : {}),

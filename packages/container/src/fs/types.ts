@@ -3,6 +3,8 @@ export type FileType = 'file' | 'directory' | 'symlink' | 'character-device';
 export interface FileStat {
   /** The immutable built-in /dev/null reserves inode 0; other identities are positive. */
   readonly inode: number;
+  /** Number of names retaining the inode. An unlinked open descriptor has zero. */
+  readonly nlink: number;
   readonly type: FileType;
   readonly size: number;
   /** Type bits are not included. Only the lower nine POSIX mode bits are stored. */
