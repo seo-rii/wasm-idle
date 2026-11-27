@@ -168,7 +168,7 @@ function addFile(root: Directory, path: string, bytes: Uint8Array, readonly: boo
 	parent.contents.set(name, new File(bytes, { readonly }));
 }
 
-function compilePlan(request: CrossClangCompileRequest, manifest: CrossClangManifest, hasLibatomic: boolean) {
+function compilePlan(request: CrossClangCompileRequest, manifest: CrossClangManifest, linkLibraries: Record<'c' | 'cpp', readonly string[]>) {
 	if (!request || typeof request.code !== 'string') throw new Error('Cross Clang requires source text');
 	for (const key of Object.keys(request)) {
 		if (!requestKeys.has(key)) throw new Error(`Unsupported cross Clang compile option: ${key}`);
@@ -204,7 +204,7 @@ function compilePlan(request: CrossClangCompileRequest, manifest: CrossClangMani
 	argv.push(main, '-o', fileName);
 	// Unlike the C++ driver, Clang's C driver does not link the math library.
 	if (emit === 'executable' && language === 'c') argv.push('-lm');
-	if (emit === 'executable' && hasLibatomic) argv.push('-latomic');
+	if (emit === 'executable') argv.push(...linkLibraries[language]);
 	return { cpu, emit, fileName, files, argv: Object.freeze(argv) };
 }
 
@@ -306,7 +306,14 @@ export async function createCrossClangCompiler(options: CreateCrossClangCompiler
 		}
 	});
 	if (!seen.size) throw new Error('Cross Clang sysroot is empty');
-	const hasLibatomic = seen.has(`usr/lib/gcc/x86_64-linux-gnu/${manifest.gnu.gccVersion}/libatomic.a`);
+	const gcc = `usr/lib/gcc/x86_64-linux-gnu/${manifest.gnu.gccVersion}`;
+	const commonLibraries: string[] = [];
+	if (seen.has(`${gcc}/libatomic.a`)) commonLibraries.push('-latomic');
+	if (seen.has('usr/lib/x86_64-linux-gnu/libresolv.a') || seen.has('lib/x86_64-linux-gnu/libresolv.a')) commonLibraries.push('-lresolv');
+	const cppLibraries = ['stdc++exp', 'stdc++fs']
+		.filter(name => seen.has(`${gcc}/lib${name}.a`))
+		.map(name => `-l${name}`);
+	const linkLibraries = { c: commonLibraries, cpp: [...cppLibraries, ...commonLibraries] };
 	let active: { root: Directory; stdout: string; stderr: string; diagnosticBytes: number } | undefined;
 	let host: LlvmToolHost | undefined;
 	let toolsDirectory = new Directory(new Map([
@@ -370,7 +377,7 @@ export async function createCrossClangCompiler(options: CreateCrossClangCompiler
 		compile(request) {
 			if (!host) throw new Error('Cross Clang compiler is disposed');
 			if (active) throw new Error('Cross Clang compiler is busy');
-			const plan = compilePlan(request, manifest, hasLibatomic), workspace = new Directory(new Map());
+			const plan = compilePlan(request, manifest, linkLibraries), workspace = new Directory(new Map());
 			for (const file of plan.files) addFile(workspace, file.path, file.contents, false);
 			active = { root: new Directory(new Map([['sysroot', sysroot], ['bin', toolsDirectory], ['tmp', new Directory(new Map())], ['workspace', workspace]])), stdout: '', stderr: '', diagnosticBytes: 0 };
 			try {

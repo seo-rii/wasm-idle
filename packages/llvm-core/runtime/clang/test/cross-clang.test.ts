@@ -207,6 +207,22 @@ describe('compile-only x86-64 Clang host', () => {
 		}
 	});
 
+	it.each([
+		['usr/lib/gcc/x86_64-linux-gnu/14/libstdc++fs.a', '-lstdc++fs', false],
+		['usr/lib/gcc/x86_64-linux-gnu/14/libstdc++exp.a', '-lstdc++exp', false],
+		['usr/lib/x86_64-linux-gnu/libresolv.a', '-lresolv', true]
+	] as const)('uses %s only for supported executable requests', async (archivePath, flag, linkWithC) => {
+		const compiler = await createCrossClangCompiler(bundle({ archivePath }).options);
+		try {
+			expect(compiler.compile({ code: '', language: 'cpp' }).argv).toContain(flag);
+			expect(compiler.compile({ code: '', language: 'c' }).argv.includes(flag)).toBe(linkWithC);
+		} finally { compiler.dispose(); }
+		const objectCompiler = await createCrossClangCompiler(bundle({ archivePath, output: elf(1), fileName: 'program.o' }).options);
+		try {
+			expect(objectCompiler.compile({ code: '', emit: 'object' }).argv).not.toContain(flag);
+		} finally { objectCompiler.dispose(); }
+	});
+
 	it.each(['c', 'cpp'] as const)('links the GNU atomic runtime for %s executables when the pinned sysroot contains it', async language => {
 		const compiler = await createCrossClangCompiler(bundle({ archivePath: 'usr/lib/gcc/x86_64-linux-gnu/14/libatomic.a' }).options);
 		try {
