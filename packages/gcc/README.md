@@ -709,10 +709,13 @@ GCC receives unchanged source. Its `target`/`optimize` pragmas, push/pop options
 PBDS, intrinsics and exceptions use real GNU implementation and qualification.
 
 Front ends use `-nostdinc` and pinned GNU C/C++/GCC/glibc include directories;
-C++ also gets `_GNU_SOURCE` and exceptions. GCC emits assembly, GNU `as --64`
+C++ also gets exceptions and supplies `_GNU_SOURCE` by default, preserving an explicit value
+from `defines`. GCC emits assembly, GNU `as --64`
 assembles ELF, and `ld -static` links CRT, libstdc++ (C++), libm (both languages),
 libgcc, libgcc_eh and glibc in the required order. When the sysroot includes GNU
-libatomic, the linker also resolves operations such as 16-byte atomic loads and stores.
+libatomic, the linker also resolves operations such as 16-byte atomic loads and stores. The x86
+linker includes the bundled resolver archive and, for C++, any libstdc++exp and libstdc++fs
+archives present in the selected sysroot.
 Fresh modules/MEMFS reset state. Emscripten stages mount the verified sysroot read-only
 and share its extracted bytes.
 The WASI-hosted linker retains its existing verified file map. The Worker

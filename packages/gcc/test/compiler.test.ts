@@ -1631,9 +1631,7 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 				expect(linker.argv.indexOf('/workspace/program.o')).toBeLessThan(
 					linker.argv.indexOf('-lm')
 				);
-				expect(linker.argv.indexOf('-lm')).toBeLessThan(
-					linker.argv.indexOf('--start-group')
-				);
+				expect(linker.argv.indexOf('-lm')).toBeLessThan(linker.argv.indexOf('-lgcc'));
 			} finally {
 				compiler.dispose();
 			}
@@ -1654,7 +1652,43 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 						linker.argv.indexOf('--start-group'),
 						linker.argv.indexOf('--end-group') + 1
 					)
-				).toEqual(['--start-group', '-latomic', '-lgcc', '-lgcc_eh', '-lc', '--end-group']);
+				).toEqual([
+					'--start-group',
+					...(language === 'cpp' ? ['-lstdc++'] : []),
+					'-lm',
+					'-latomic',
+					'-lgcc',
+					'-lgcc_eh',
+					'-lc',
+					'--end-group'
+				]);
+			} finally {
+				compiler.dispose();
+			}
+		}
+	);
+
+	it.each([
+		['usr/lib/gcc/x86_64-linux-gnu/16/libstdc++exp.a', '-lstdc++exp'],
+		['usr/lib/gcc/x86_64-linux-gnu/16/libstdc++fs.a', '-lstdc++fs'],
+		['usr/lib/x86_64-linux-gnu/libresolv.a', '-lresolv']
+	])(
+		'links %s when the bundle provides it and honors explicit GNU macros',
+		async (path, flag) => {
+			const compiler = await createCrossGccCompiler(bundle(path).options);
+			try {
+				for (const language of ['c', 'cpp'] as const) {
+					const result = await compiler.compile({
+						code: 'int main() {}',
+						language,
+						defines: ['_GNU_SOURCE=42']
+					});
+					const linker = result.stages.at(-1)!.argv;
+					expect(linker.includes(flag)).toBe(language === 'cpp' || flag === '-lresolv');
+					expect(
+						result.stages[0].argv.filter((arg) => arg.startsWith('-D_GNU_SOURCE'))
+					).toEqual(['-D_GNU_SOURCE=42']);
+				}
 			} finally {
 				compiler.dispose();
 			}

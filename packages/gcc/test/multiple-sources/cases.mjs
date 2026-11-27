@@ -85,6 +85,14 @@ export const cases = [
 		stageCount: 3
 	})),
 	{
+		id: 'gnu-libraries-and-explicit-feature-macro',
+		fixture: 'gnu-libraries.cpp',
+		request: { language: 'cpp', standard: 'c++17', defines: ['_GNU_SOURCE=42'] },
+		stdin: '',
+		stdout: '42 0\n',
+		stageCount: 3
+	},
+	{
 		id: 'cpp-separate-units',
 		fixture: 'main.c',
 		request: cpp,
