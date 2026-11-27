@@ -68,9 +68,8 @@ vi.mock('../src/module-loader.js', () => ({
 				throw host.failure;
 			}
 			const files = new Map<string, Uint8Array>();
-			let instance: WebAssembly.Instance;
-			(options.instantiateWasm as Function)({}, (value: WebAssembly.Instance) => {
-				instance = value;
+			const instance = await new Promise<WebAssembly.Instance>((resolve) => {
+				(options.instantiateWasm as Function)({}, resolve);
 			});
 			return {
 				HEAPU8: new Uint8Array((instance!.exports.memory as WebAssembly.Memory).buffer),
@@ -192,7 +191,7 @@ const wasm = Uint8Array.from([
 ]);
 
 function elf(type: number, machine = 62, dynamic = false) {
-	const bytes = new Uint8Array(type === 1 ? 64 : 120),
+	const bytes = new Uint8Array(type === 1 ? 64 : 121),
 		view = new DataView(bytes.buffer);
 	bytes.set([0x7f, 69, 76, 70, 2, 1, 1]);
 	view.setUint16(16, type, true);
@@ -204,6 +203,14 @@ function elf(type: number, machine = 62, dynamic = false) {
 		view.setUint16(54, 56, true);
 		view.setUint16(56, 1, true);
 		view.setUint32(64, dynamic ? 3 : 1, true);
+		view.setUint32(68, 5, true);
+		view.setBigUint64(24, 0x400078n, true);
+		view.setBigUint64(80, 0x400000n, true);
+		view.setBigUint64(96, BigInt(bytes.length), true);
+		view.setBigUint64(104, BigInt(bytes.length), true);
+		if (host.mode === 'entry-in-bss') view.setBigUint64(96, 120n, true);
+		if (host.mode === 'non-executable-load') view.setUint32(68, 4, true);
+		if (host.mode === 'truncated-load') view.setBigUint64(72, 512n, true);
 	}
 	return bytes;
 }
@@ -1631,9 +1638,7 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 				expect(linker.argv.indexOf('/workspace/program.o')).toBeLessThan(
 					linker.argv.indexOf('-lm')
 				);
-				expect(linker.argv.indexOf('-lm')).toBeLessThan(
-					linker.argv.indexOf('--start-group')
-				);
+				expect(linker.argv.indexOf('-lm')).toBeLessThan(linker.argv.indexOf('-lgcc'));
 			} finally {
 				compiler.dispose();
 			}
@@ -1654,12 +1659,59 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 						linker.argv.indexOf('--start-group'),
 						linker.argv.indexOf('--end-group') + 1
 					)
-				).toEqual(['--start-group', '-latomic', '-lgcc', '-lgcc_eh', '-lc', '--end-group']);
+				).toEqual([
+					'--start-group',
+					...(language === 'cpp' ? ['-lstdc++'] : []),
+					'-lm',
+					'-latomic',
+					'-lgcc',
+					'-lgcc_eh',
+					'-lc',
+					'--end-group'
+				]);
 			} finally {
 				compiler.dispose();
 			}
 		}
 	);
+
+	it.each([
+		['usr/lib/gcc/x86_64-linux-gnu/16/libstdc++exp.a', '-lstdc++exp'],
+		['usr/lib/gcc/x86_64-linux-gnu/16/libstdc++fs.a', '-lstdc++fs'],
+		['usr/lib/x86_64-linux-gnu/libresolv.a', '-lresolv']
+	])(
+		'links %s when the bundle provides it and honors explicit GNU macros',
+		async (path, flag) => {
+			const compiler = await createCrossGccCompiler(bundle(path).options);
+			try {
+				for (const language of ['c', 'cpp'] as const) {
+					const result = await compiler.compile({
+						code: 'int main() {}',
+						language,
+						defines: ['_GNU_SOURCE=42']
+					});
+					const linker = result.stages.at(-1)!.argv;
+					expect(linker.includes(flag)).toBe(language === 'cpp' || flag === '-lresolv');
+					expect(
+						result.stages[0].argv.filter((arg) => arg.startsWith('-D_GNU_SOURCE'))
+					).toEqual(['-D_GNU_SOURCE=42']);
+				}
+			} finally {
+				compiler.dispose();
+			}
+		}
+	);
+
+	it('rejects an asynchronous Wasm instantiation failure and releases the compiler for retry', async () => {
+		const compiler = await createCrossGccCompiler(bundle().options);
+		try {
+			vi.spyOn(WebAssembly, 'instantiate').mockRejectedValueOnce(new Error('bad imports'));
+			await expect(compiler.compile({ code: '' })).rejects.toThrow('bad imports');
+			expect((await compiler.compile({ code: '' })).exitCode).toBe(0);
+		} finally {
+			compiler.dispose();
+		}
+	});
 
 	it('supports C, preprocessed .ii, AVX2/FMA and each requested output without adding later stages', async () => {
 		const compiler = await createCrossGccCompiler(bundle().options);
@@ -1831,7 +1883,15 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 	it('rejects missing output, another ELF architecture, dynamic linkage, and oversized diagnostics', async () => {
 		const compiler = await createCrossGccCompiler(bundle().options);
 		try {
-			for (const mode of ['no-output', 'wrong-machine', 'dynamic', 'diagnostics']) {
+			for (const mode of [
+				'no-output',
+				'wrong-machine',
+				'dynamic',
+				'entry-in-bss',
+				'non-executable-load',
+				'truncated-load',
+				'diagnostics'
+			]) {
 				host.mode = mode;
 				await expect(compiler.compile({ code: '' })).rejects.toThrow();
 			}

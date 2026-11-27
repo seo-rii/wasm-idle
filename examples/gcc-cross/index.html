@@ -92,15 +92,16 @@
 			<label
 				>Compiler
 				<select id="compiler">
-					<option value="gcc">GNU GCC 16.2.0 (WebAssembly host)</option>
+					<option value="gcc">GNU GCC (WebAssembly host)</option>
 				</select></label
 			>
 			<label
 				>Bundle manifest URL
 				<input
 					id="manifest"
-					type="url"
-					placeholder="https://your-host/gcc/gcc-toolchain.v1.json"
+					type="text"
+					inputmode="url"
+					placeholder="/.cache/gcc-bundle/gcc-toolchain.v1.json"
 					required
 			/></label>
 			<label
@@ -182,8 +183,8 @@ int main() {
 		<pre id="diagnostics" aria-label="Compiler diagnostics" hidden></pre>
 		<p class="muted">
 			GCC pragmas and intrinsic headers are passed unchanged to GCC. The API supports multiple
-			translation units for executable output. PCH, plugins, LTO, dynamic linking, arbitrary
-			driver flags, and
+			translation units for executable output and precompiled headers on supported bundles.
+			Plugins, LTO, dynamic linking, arbitrary driver flags, and
 			<code>-march=native</code> are outside this API. See the
 			<a href="../../packages/gcc/README.md">@wasm-idle/gcc API documentation</a>.
 		</p>
