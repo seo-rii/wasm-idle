@@ -9,7 +9,7 @@ import {
 	parseCrossGccManifest,
 	parseWasiGccManifest
 } from './manifest.js';
-import { loadGccModuleFactory, type GccModuleFactory } from './module-loader.js';
+import { loadGccModuleFactory, type GccModule, type GccModuleFactory } from './module-loader.js';
 import { gccCompilePlan, gccRelativePath } from './plan.js';
 import { gccSysrootTree, mountGccSysroot, type GccSysrootDirectory } from './sysroot-fs.js';
 import { wasiGccCompilePlan } from './wasi-plan.js';
@@ -149,13 +149,16 @@ export async function createGccCompiler(
 	const maxAssetBytes = options.maxAssetBytes ?? 512 * 1024 * 1024;
 	if (!Number.isSafeInteger(maxAssetBytes) || maxAssetBytes < 1024)
 		throw new Error('Invalid GCC asset byte limit');
-	// readBuffer caches by fetch identity before callers verify SHA-256. Scope that
-	// cache to this initialization, including when a caller reuses a custom fetch,
-	// so a retry or repinned bundle cannot inherit rejected or obsolete bytes.
-	const fetchImpl = options.fetchImpl?.bind(undefined) ?? globalThis.fetch?.bind(globalThis),
-		signal = options.signal;
-	const manifestBytes = new Uint8Array(
-		await readBuffer(manifestUrl.href, undefined, 1024 * 1024, signal, fetchImpl)
+	// Pinned asset bytes belong to this compiler. A cancellable read bypasses the
+	// shared raw-byte cache, which would otherwise outlive dispose() with this handle.
+	const fetchImpl = options.fetchImpl ?? globalThis.fetch?.bind(globalThis);
+	const signal = options.signal ?? new AbortController().signal;
+	const manifestBytes = await readBuffer(
+		manifestUrl.href,
+		undefined,
+		1024 * 1024,
+		signal,
+		fetchImpl
 	);
 	await verifyRuntimeAssetIntegrity({
 		asset: manifestUrl.href,
@@ -174,9 +177,7 @@ export async function createGccCompiler(
 		(Object.keys(manifest.assets) as CrossGccAssetName[]).map(async (name) => {
 			const receipt = manifestAssets[name]!,
 				url = new URL(receipt.path, manifestUrl).href;
-			const bytes = new Uint8Array(
-				await readBuffer(url, undefined, receipt.bytes, signal, fetchImpl)
-			);
+			const bytes = await readBuffer(url, undefined, receipt.bytes, signal, fetchImpl);
 			await verifyRuntimeAssetIntegrity({ asset: url, bytes, expected: receipt });
 			assets.set(name, bytes);
 		})
@@ -277,15 +278,10 @@ export async function createGccCompiler(
 		for (const receipt of receipts)
 			if (receipt.bytes > maxAssetBytes)
 				throw new Error('GCC std modules asset exceeds the configured byte limit');
-		// A failed integrity check must not poison readBuffer's raw-byte cache on retry.
-		// Only this function's fully verified result is retained between compilations.
-		const attemptFetch = fetchImpl?.bind(undefined);
 		const files = new Map<string, Uint8Array>();
 		for (const receipt of receipts) {
 			const url = new URL(receipt.path, manifestUrl).href;
-			const bytes = new Uint8Array(
-				await readBuffer(url, undefined, receipt.bytes, signal, attemptFetch)
-			);
+			const bytes = await readBuffer(url, undefined, receipt.bytes, signal, fetchImpl);
 			await verifyRuntimeAssetIntegrity({ asset: url, bytes, expected: receipt });
 			if (disposed) throw new Error('GCC compiler is disposed');
 			files.set(`${gccStdModulesDirectory}/${receipt.path.split('/').at(-1)!}`, bytes);
@@ -351,7 +347,8 @@ export async function createGccCompiler(
 				factories.set(tool, { ...loader, wasm });
 			}
 		}
-		signal?.throwIfAborted();
+		signal.throwIfAborted();
+		assets.clear();
 	} catch (error) {
 		dispose();
 		throw error;
@@ -489,42 +486,48 @@ export async function createGccCompiler(
 					workspace.set(stage.output, linked.output!);
 					continue;
 				}
-				const module = await loaded.factory!({
-					noInitialRun: true,
-					noExitRuntime: false,
-					wasmBinary: assets.get(`${stage.tool}Wasm`),
-					instantiateWasm(
-						imports: WebAssembly.Imports,
-						receive: (
-							instance: WebAssembly.Instance,
-							module: WebAssembly.Module
-						) => void
-					) {
-						const instance = new WebAssembly.Instance(loaded.wasm, imports);
-						receive(instance, loaded.wasm);
-						return instance.exports;
-					},
-					locateFile(path: string) {
-						// Binutils' generated loader keeps its build-time *-new filename
-						// after packaging. Both names resolve to the same pinned module.
-						if (
-							path === `${stage.tool}.wasm` ||
-							((stage.tool === 'as' || stage.tool === 'ld') &&
-								path === `${stage.tool}-new.wasm`) ||
-							(manifest.target === 'wasm32-wasi' &&
-								stage.tool === 'as' &&
-								path === 'wat2wasm.wasm')
+				const module = await new Promise<GccModule>((resolve, reject) => {
+					loaded.factory!({
+						noInitialRun: true,
+						noExitRuntime: false,
+						instantiateWasm(
+							imports: WebAssembly.Imports,
+							receive: (
+								instance: WebAssembly.Instance,
+								module: WebAssembly.Module
+							) => void
 						) {
-							return new URL(manifest.assets[`${stage.tool}Wasm`].path, manifestUrl)
-								.href;
+							// The generated loader waits for receive(). Route asynchronous linking
+							// errors to the caller as well, so a failed stage cannot hang.
+							WebAssembly.instantiate(loaded.wasm, imports)
+								.then((instance) => receive(instance, loaded.wasm))
+								.catch(reject);
+							return {};
+						},
+						locateFile(path: string) {
+							// Binutils' generated loader keeps its build-time *-new filename
+							// after packaging. Both names resolve to the same pinned module.
+							if (
+								path === `${stage.tool}.wasm` ||
+								((stage.tool === 'as' || stage.tool === 'ld') &&
+									path === `${stage.tool}-new.wasm`) ||
+								(manifest.target === 'wasm32-wasi' &&
+									stage.tool === 'as' &&
+									path === 'wat2wasm.wasm')
+							) {
+								return new URL(
+									manifest.assets[`${stage.tool}Wasm`].path,
+									manifestUrl
+								).href;
+							}
+							throw new Error(`GCC requested an unverified asset: ${path}`);
+						},
+						print: print('stdout'),
+						printErr: print('stderr'),
+						onExit(code: number) {
+							exitCode = code;
 						}
-						throw new Error(`GCC requested an unverified asset: ${path}`);
-					},
-					print: print('stdout'),
-					printErr: print('stderr'),
-					onExit(code: number) {
-						exitCode = code;
-					}
+					}).then(resolve, reject);
 				});
 				if (disposed) throw new Error('GCC compiler is disposed');
 				if (
@@ -542,7 +545,12 @@ export async function createGccCompiler(
 				mountGccSysroot(module.FS, sysrootTree, '/sysroot');
 				for (const [path, bytes] of workspace) {
 					module.FS.mkdirTree(path.slice(0, path.lastIndexOf('/')));
-					module.FS.writeFile(path, bytes);
+					// The x86 plan owns private snapshots of user files and prior stage
+					// outputs. Its tools only write to distinct, reserved output paths.
+					// Keep all inputs visible for #include, .include and .incbin.
+					module.FS.writeFile(path, bytes, {
+						canOwn: manifest.target === 'x86_64-linux-gnu'
+					});
 				}
 				if (moduleFiles && stage.tool === 'cc1plus') {
 					module.FS.mkdirTree(gccStdModulesDirectory);

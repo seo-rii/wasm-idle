@@ -40,8 +40,7 @@ function syntheticBundle() {
 		const source = `// SYNTHETIC HOST CONTRACT ONLY: no source parsing or GCC implementation.
 export default async function(options) {
   const files = new Map();
-  let memory;
-  options.instantiateWasm({}, instance => { memory = instance.exports.memory; });
+  const memory = await new Promise(resolve => options.instantiateWasm({}, instance => resolve(instance.exports.memory)));
   return {
     HEAPU8: new Uint8Array(memory.buffer),
     FS: {

@@ -68,9 +68,8 @@ vi.mock('../src/module-loader.js', () => ({
 				throw host.failure;
 			}
 			const files = new Map<string, Uint8Array>();
-			let instance: WebAssembly.Instance;
-			(options.instantiateWasm as Function)({}, (value: WebAssembly.Instance) => {
-				instance = value;
+			const instance = await new Promise<WebAssembly.Instance>((resolve) => {
+				(options.instantiateWasm as Function)({}, resolve);
 			});
 			return {
 				HEAPU8: new Uint8Array((instance!.exports.memory as WebAssembly.Memory).buffer),
@@ -1702,6 +1701,17 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 			}
 		}
 	);
+
+	it('rejects an asynchronous Wasm instantiation failure and releases the compiler for retry', async () => {
+		const compiler = await createCrossGccCompiler(bundle().options);
+		try {
+			vi.spyOn(WebAssembly, 'instantiate').mockRejectedValueOnce(new Error('bad imports'));
+			await expect(compiler.compile({ code: '' })).rejects.toThrow('bad imports');
+			expect((await compiler.compile({ code: '' })).exitCode).toBe(0);
+		} finally {
+			compiler.dispose();
+		}
+	});
 
 	it('supports C, preprocessed .ii, AVX2/FMA and each requested output without adding later stages', async () => {
 		const compiler = await createCrossGccCompiler(bundle().options);
