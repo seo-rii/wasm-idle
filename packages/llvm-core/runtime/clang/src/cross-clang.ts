@@ -1,7 +1,7 @@
-import { verifyRuntimeAssetIntegrity } from '@wasm-idle/core';
+import { verifyRuntimeAssetIntegrity, waitForRuntimeAssetOperation } from '@wasm-idle/core';
 import { ConsoleStdout, Directory, File, PreopenDirectory, WASI, wasi } from '@bjorn3/browser_wasi_shim';
 import untar from '../../core/src/tar.js';
-import { readBuffer, waitForRuntimeAssetOperation } from '../../core/src/wasm.js';
+import { readBuffer } from '../../core/src/wasm.js';
 import { compilePinnedTools, createToolHost, type LlvmToolHost } from './tool-host-execution.js';
 
 export type CrossClangCpu = 'x86-64' | 'x86-64-v3';

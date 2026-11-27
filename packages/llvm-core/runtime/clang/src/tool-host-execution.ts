@@ -1,5 +1,5 @@
 // Internal execution of the modules admitted by the pinned asset loaders.
-import { waitForRuntimeAssetOperation } from '@wasm-idle/core/runtime-asset-loader';
+import { waitForRuntimeAssetOperation } from '@wasm-idle/core';
 
 export type LlvmToolExecutable = 'clang' | 'wasm-ld';
 export type LlvmToolHostErrorCode =
