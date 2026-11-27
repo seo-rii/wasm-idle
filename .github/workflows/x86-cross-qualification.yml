@@ -38,7 +38,7 @@ jobs:
               uses: actions/checkout@v4
               with:
                   repository: seo-rii/wasm-llvm
-                  ref: ed4adc4f7409f5166265f7875d02eae73ff7a021
+                  ref: 826b522013b3ab533ffdedf6b34995aa674944b8
                   path: x86-producer
                   sparse-checkout: |
                       test/fixtures/x86-cross
@@ -58,16 +58,19 @@ jobs:
                   pnpm --dir packages/llvm-core build
                   pnpm --dir packages/gcc build
             - run: pnpm exec playwright-core install --with-deps chromium
+            - name: Install the fallback for CPU profiles unavailable on the runner
+              run: sudo apt-get install -y qemu-user
             - name: Restore pinned x86 compiler bundles
               run: |
-                  mkdir -p "$RUNNER_TEMP/bundles"/{clang,gcc}
-                  for compiler in clang gcc; do
+                  mkdir -p "$RUNNER_TEMP/bundles"/{clang,gcc,gcc13}
+                  for compiler in clang gcc gcc13; do
                       tar -xJf "x86-producer/test/fixtures/x86-cross/$compiler.tar.xz" -C "$RUNNER_TEMP/bundles/$compiler"
                   done
                   cd "$RUNNER_TEMP/bundles"
                   sha256sum --check <<'PINS'
                   9b2a5471a3664b95562fbff63b0712065f07fc41f594a31f74999ebf53af2942  clang/cross-toolchain.v1.json
                   3170bee5a1a10f8474eab5d5bdeb6802ddb4c34a624804d6d51fbf8c650af86e  gcc/gcc-toolchain.v1.json
+                  4de4c401cabad291caa0eb20ec435bdda336597c7ee25954d95323012b8a0867  gcc13/gcc-toolchain.v1.json
                   PINS
             - name: Qualify Clang in Chromium and run the generated ELF programs
               run: |
@@ -78,6 +81,9 @@ jobs:
                   node scripts/verify-x86-cross-gcc.mjs "$manifest" x86-producer/producer/gcc-browser/qualification "$RUNNER_TEMP/x86-results/gcc"
                   node scripts/verify-x86-cross-gcc.mjs "$manifest" packages/gcc/test/multiple-sources "$RUNNER_TEMP/x86-results/gcc-multiple-sources"
                   node scripts/verify-x86-cross-gcc.mjs "$manifest" packages/gcc/test/cpu-profiles "$RUNNER_TEMP/x86-results/gcc-cpu-profiles"
+            - name: Qualify the supported GCC 13 bundle in Chromium and Linux
+              run: |
+                  node scripts/verify-x86-cross-gcc.mjs "$RUNNER_TEMP/bundles/gcc13/gcc-toolchain.v1.json" x86-producer/producer/gcc-browser/qualification "$RUNNER_TEMP/x86-results/gcc13"
             - name: Keep qualification reports
               if: always()
               uses: actions/upload-artifact@v4
