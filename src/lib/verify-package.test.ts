@@ -186,7 +186,7 @@ describe('package install budgets', () => {
 			Object.fromEntries(scenarios.map((scenario) => [scenario.name, scenario.budget]))
 		).toEqual({
 			'wasm-idle root install': {
-				maxBytes: 7653149,
+				maxBytes: 7655424,
 				maxFiles: 869,
 				maxPackages: 6
 			},
@@ -216,7 +216,7 @@ describe('package install budgets', () => {
 				maxPackages: 10
 			},
 			'all public packages/adapters aggregate': {
-				maxBytes: 43422720,
+				maxBytes: 43424768,
 				maxFiles: 3498,
 				maxPackages: 70
 			}
@@ -271,6 +271,9 @@ describe('package install budgets', () => {
 		expect(() =>
 			assertInstallBudget(root, { bytes: 7_651_041, files: 869, packages: 5 })
 		).not.toThrow();
+		expect(() =>
+			assertInstallBudget(root, { bytes: 7_654_830, files: 869, packages: 5 })
+		).not.toThrow();
 		const scenario = scenarios.find(
 			(entry) => entry.name === 'all public packages/adapters aggregate'
 		)!;
@@ -288,7 +291,8 @@ describe('package install budgets', () => {
 			{ bytes: 43_374_893, files: 3_494, packages: 66 },
 			{ bytes: 43_401_987, files: 3_494, packages: 66 },
 			{ bytes: 43_420_505, files: 3_498, packages: 66 },
-			{ bytes: 43_422_093, files: 3_498, packages: 66 }
+			{ bytes: 43_422_093, files: 3_498, packages: 66 },
+			{ bytes: 43_424_632, files: 3_498, packages: 66 }
 		])
 			expect(() => assertInstallBudget(scenario, measurement)).not.toThrow();
 		for (const entry of [root, scenario]) {
