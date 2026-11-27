@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { runInNewContext } from 'node:vm';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Directory, PreopenDirectory, WASI, wasi } from '@bjorn3/browser_wasi_shim';
+import { Directory, File, PreopenDirectory, WASI, wasi } from '@bjorn3/browser_wasi_shim';
 import { createCrossClangCompiler, parseCrossClangManifest, type CrossClangEmit } from '../src/cross-clang.js';
 
 const encoder = new TextEncoder();
@@ -252,7 +252,13 @@ describe('compile-only x86-64 Clang host', () => {
 				// Inspect the real WASI mounts: parent roots must release their mounts
 				// while the compiler's immutable trees remain usable for the next run.
 				expect(sysroot).toBeInstanceOf(Directory); expect(binaries).toBeInstanceOf(Directory);
-				expect(sysroot.contents.size).toBeGreaterThan(0); expect(binaries.contents.size).toBe(2);
+				expect(sysroot.contents.size).toBeGreaterThan(0);
+				for (const name of ['clang', 'ld.lld']) {
+					const tool = binaries.contents.get(name) as File;
+					expect(tool).toBeInstanceOf(File);
+					expect(tool.size).toBe(0n);
+					expect(tool.readonly).toBe(true);
+				}
 				expect(root.contents.size).toBe(0);
 			}
 		} finally { compiler.dispose(); }

@@ -92,7 +92,7 @@ class CompilerRootDirectory extends PreopenDirectory {
 			result.fdstat.fs_rights_base = directories;
 			// The shim defaults both masks to zero despite supporting these operations.
 			// That makes Clang reject a mounted linker as non-executable. File.readonly
-			// still rejects write opens for compiler binaries and sysroot files.
+			// still rejects write opens for tool paths and sysroot files.
 			result.fdstat.fs_rights_inherited = directories | BigInt(wasi.RIGHTS_FD_READ |
 				wasi.RIGHTS_FD_WRITE | wasi.RIGHTS_FD_SEEK | wasi.RIGHTS_FD_TELL |
 				wasi.RIGHTS_FD_FILESTAT_SET_SIZE | wasi.RIGHTS_FD_ALLOCATE |
@@ -268,7 +268,7 @@ async function loadCrossClangBundle(options: CreateCrossClangCompilerOptions) {
 			const receipt = manifest.assets[name];
 			const url = new URL(receipt.path, manifestUrl).href;
 			// readBuffer returns an independent copy. Keep the verified snapshot private
-			// for both the WASI filesystem and module preparation.
+			// until the tool is compiled or the sysroot is unpacked.
 			const bytes = await readBuffer(url, undefined, receipt.bytes, signal, fetchImpl);
 			await waitForRuntimeAssetOperation(verifyRuntimeAssetIntegrity({ asset: url, bytes, expected: receipt }), signal);
 			return bytes;
@@ -319,8 +319,9 @@ export async function createCrossClangCompiler(options: CreateCrossClangCompiler
 	const linkLibraries = { c: commonLibraries, cpp: [...cppLibraries, ...commonLibraries] };
 	let active: { root: Directory; stdout: string; stderr: string; diagnosticBytes: number } | undefined;
 	let host: LlvmToolHost | undefined;
+	// Clang probes both executable paths. The tool host dispatches the compiled modules.
 	let toolsDirectory = new Directory(new Map([
-		['clang', new File(clang, { readonly: true })], ['ld.lld', new File(lld, { readonly: true })]
+		['clang', new File([], { readonly: true })], ['ld.lld', new File([], { readonly: true })]
 	]));
 	const importNames = new Set(Object.keys(new WASI([], [], [], { debug: false }).wasiImport));
 	host = await createToolHost({
