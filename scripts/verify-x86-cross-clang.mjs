@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 const repoRoot = fileURLToPath(new URL('../', import.meta.url));
 const argv = process.argv.slice(2);
 if (argv.includes('--help')) {
-	console.log('Usage: node scripts/verify-x86-cross-clang.mjs /path/to/cross-toolchain.v1.json [output-directory]\n\nRequires a real wasm-llvm x86-64 bundle and installed Chromium.\nOn Linux x64, also verifies the generated programs with stdin/stdout.');
+	console.log('Usage: node scripts/verify-x86-cross-clang.mjs /path/to/cross-toolchain.v1.json [output-directory]\n\nBuild @wasm-idle/core and @wasm-idle/llvm-core first. Requires a real wasm-llvm x86-64 bundle and installed Chromium.\nOn Linux x64, also verifies the generated programs with stdin/stdout.');
 	process.exit(0);
 }
 if (argv.length < 1 || argv.length > 2) throw new Error('Expected a producer manifest path and optional fresh output directory; see --help');
@@ -90,6 +90,14 @@ let server;
 let browser;
 const report = { schemaVersion: 1, manifestSha256, host: `${process.platform}-${process.arch}`, cases: [], success: false };
 try {
+	const entryPoint = fileURLToPath(import.meta.resolve('@wasm-idle/llvm-core/cross-clang'));
+	const coreEntryPoint = fileURLToPath(import.meta.resolve('@wasm-idle/core'));
+	for (const entry of [coreEntryPoint, entryPoint]) {
+		await fs.access(entry).catch(() => {
+			throw new Error(`Missing ${entry}. Build @wasm-idle/core and @wasm-idle/llvm-core before qualification.`);
+		});
+	}
+	report.consumerModule = path.relative(repoRoot, entryPoint).split(path.sep).join('/');
 	const [{ createServer }, { chromium }, { resolveChromiumExecutable }] = await Promise.all([
 		import('vite'), import('playwright-core'), import('./rust-browser-probe-lib.mjs')
 	]);
@@ -99,7 +107,7 @@ try {
 		cacheDir: path.join(temporary, 'vite'),
 		logLevel: 'error',
 		optimizeDeps: { noDiscovery: true, include: ['@bjorn3/browser_wasi_shim'] },
-		resolve: { alias: [{ find: /^@wasm-idle\/core$/, replacement: path.join(repoRoot, 'packages/core/src/index.ts') }] },
+		resolve: { alias: [{ find: /^@wasm-idle\/core$/, replacement: coreEntryPoint }] },
 		server: { host: '127.0.0.1', port: 0, fs: { allow: [repoRoot] } },
 		plugins: [{
 			name: 'cross-clang-qualification',
@@ -139,9 +147,9 @@ try {
 	const page = await browser.newPage();
 	await page.goto(`${origin}/cross-probe`);
 	report.browser = await browser.version();
-	const { results, identity } = await page.evaluate(async ({ manifestUrl, manifestSha256, cases, origin }) => {
+	const { results, identity } = await page.evaluate(async ({ manifestUrl, manifestSha256, cases, consumerUrl }) => {
 		const workerCode = `
-import { createCrossClangCompiler } from ${JSON.stringify(`${origin}/packages/llvm-core/runtime/clang/src/cross-clang.ts`)};
+import { createCrossClangCompiler } from ${JSON.stringify(consumerUrl)};
 self.onmessage = async ({ data }) => {
   let compiler;
   try {
@@ -177,7 +185,7 @@ self.onmessage = async ({ data }) => {
 				worker.postMessage({ manifestUrl, manifestSha256, cases });
 			});
 		} finally { worker.terminate(); URL.revokeObjectURL(url); }
-	}, { manifestUrl: `${origin}/cross-bundle/${encodeURIComponent(path.basename(manifestPath))}`, manifestSha256, cases, origin });
+	}, { manifestUrl: `${origin}/cross-bundle/${encodeURIComponent(path.basename(manifestPath))}`, manifestSha256, cases, consumerUrl: `${origin}/${report.consumerModule}` });
 	report.identity = identity;
 	assert.equal(identity.manifestSha256, manifestSha256);
 	for (const [index, result] of results.entries()) {
