@@ -286,6 +286,15 @@ describe('compile-only x86-64 Clang host', () => {
 		}
 	});
 
+	it('preserves a leading U+FEFF in a filename and rejects unpaired surrogates', async () => {
+		const compiler = await createCrossClangCompiler(bundle().options);
+		try {
+			const files = ['한.h', '\uFEFF한.h'].map(path => ({ path, contents: '' }));
+			expect(compiler.compile({ code: '', files }).exitCode).toBe(0);
+			expect(() => compiler.compile({ code: '', files: [{ path: '\ud800.h', contents: '' }] })).toThrow('path');
+		} finally { compiler.dispose(); }
+	});
+
 	it('accepts Uint8Array headers created in another realm', async () => {
 		const compiler = await createCrossClangCompiler(bundle().options);
 		try {

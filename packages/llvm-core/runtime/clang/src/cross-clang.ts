@@ -69,6 +69,7 @@ export interface CrossClangCompiler {
 }
 
 const encoder = new TextEncoder();
+const textDecoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
 const target = 'x86_64-unknown-linux-gnu' as const;
 const requestKeys = new Set(['code', 'language', 'cpu', 'emit', 'optimization', 'standard', 'files']);
 const maxWorkspaceBytes = 16 * 1024 * 1024;
@@ -106,7 +107,9 @@ function record(value: unknown, label: string): Record<string, unknown> {
 	return value as Record<string, unknown>;
 }
 function text(value: unknown, label: string): string {
-	if (typeof value !== 'string' || !value || value.length > 4096 || value.includes('\0') || encoder.encode(value).length > 4096 || new TextDecoder('utf-8', { fatal: true }).decode(encoder.encode(value)) !== value) throw new Error(`Invalid cross Clang ${label}`);
+	if (typeof value !== 'string' || !value || value.length > 4096 || value.includes('\0')) throw new Error(`Invalid cross Clang ${label}`);
+	const bytes = encoder.encode(value);
+	if (bytes.length > 4096 || textDecoder.decode(bytes) !== value) throw new Error(`Invalid cross Clang ${label}`);
 	return value;
 }
 function digest(value: unknown): string {
