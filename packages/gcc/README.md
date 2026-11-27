@@ -812,7 +812,7 @@ old artifacts; the example clears its download when compilation starts.
 Results include stage argv, exit codes, milliseconds and peak linear-memory
 capacity (Emscripten memory only grows). This excludes JS/MEMFS allocations and
 is not process RSS. ELF checks require ELF64, little endian, x86-64, matching
-output kind and executable loadable segments without an interpreter.
+output kind, and an entry point inside file-backed executable segment data for static executables.
 
 ## Seeded API contract fuzzing
 

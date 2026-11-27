@@ -60,7 +60,7 @@ export default async function(options) {
       let bytes;
       if (tool.startsWith('cc1')) bytes = new TextEncoder().encode('# SYNTHETIC ASSEMBLY CONTRACT FIXTURE\\n.text\\n');
       else {
-        bytes = new Uint8Array(tool === 'as' ? 64 : 120);
+        bytes = new Uint8Array(tool === 'as' ? 64 : 121);
         const view = new DataView(bytes.buffer);
         bytes.set([127, 69, 76, 70, 2, 1, 1]);
         view.setUint16(16, tool === 'as' ? 1 : 2, true); view.setUint16(18, 62, true);
@@ -68,6 +68,9 @@ export default async function(options) {
         if (tool === 'ld') {
           view.setBigUint64(32, 64n, true); view.setUint16(54, 56, true);
           view.setUint16(56, 1, true); view.setUint32(64, 1, true);
+          view.setBigUint64(24, 0x400078n, true); view.setUint32(68, 5, true);
+          view.setBigUint64(80, 0x400000n, true);
+          view.setBigUint64(96, 121n, true); view.setBigUint64(104, 121n, true);
         }
       }
       files.set(output, bytes); return 0;

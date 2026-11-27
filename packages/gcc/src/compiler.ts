@@ -88,19 +88,37 @@ function validateOutput(bytes: Uint8Array, emit: CrossGccEmit) {
 			count = view.getUint16(56, true);
 		if (
 			!Number.isSafeInteger(table) ||
-			size < 56 ||
+			size !== 56 ||
 			!count ||
 			table < 64 ||
 			table + size * count > bytes.length
 		)
 			throw new Error('GCC produced an invalid ELF program table');
-		let loadable = false;
+		const entry = view.getBigUint64(24, true);
+		let executableEntry = false;
 		for (let index = 0; index < count; index++) {
-			const type = view.getUint32(table + index * size, true);
-			if (type === 1) loadable = true;
+			const header = table + index * size;
+			const type = view.getUint32(header, true);
 			if (type === 3) throw new Error('GCC executable requests a dynamic interpreter');
+			if (type !== 1) continue;
+			const offset = view.getBigUint64(header + 8, true);
+			const address = view.getBigUint64(header + 16, true);
+			const fileSize = view.getBigUint64(header + 32, true);
+			const memorySize = view.getBigUint64(header + 40, true);
+			if (
+				fileSize > memorySize ||
+				(fileSize > 0n && offset + fileSize > BigInt(bytes.length))
+			)
+				throw new Error('GCC produced an invalid ELF load segment');
+			if (
+				view.getUint32(header + 4, true) & 1 &&
+				entry >= address &&
+				entry < address + fileSize
+			)
+				executableEntry = true;
 		}
-		if (!loadable) throw new Error('GCC executable has no loadable segment');
+		if (!executableEntry)
+			throw new Error('GCC executable entry point is outside executable file data');
 	}
 }
 

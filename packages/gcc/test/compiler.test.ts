@@ -192,7 +192,7 @@ const wasm = Uint8Array.from([
 ]);
 
 function elf(type: number, machine = 62, dynamic = false) {
-	const bytes = new Uint8Array(type === 1 ? 64 : 120),
+	const bytes = new Uint8Array(type === 1 ? 64 : 121),
 		view = new DataView(bytes.buffer);
 	bytes.set([0x7f, 69, 76, 70, 2, 1, 1]);
 	view.setUint16(16, type, true);
@@ -204,6 +204,14 @@ function elf(type: number, machine = 62, dynamic = false) {
 		view.setUint16(54, 56, true);
 		view.setUint16(56, 1, true);
 		view.setUint32(64, dynamic ? 3 : 1, true);
+		view.setUint32(68, 5, true);
+		view.setBigUint64(24, 0x400078n, true);
+		view.setBigUint64(80, 0x400000n, true);
+		view.setBigUint64(96, BigInt(bytes.length), true);
+		view.setBigUint64(104, BigInt(bytes.length), true);
+		if (host.mode === 'entry-in-bss') view.setBigUint64(96, 120n, true);
+		if (host.mode === 'non-executable-load') view.setUint32(68, 4, true);
+		if (host.mode === 'truncated-load') view.setBigUint64(72, 512n, true);
 	}
 	return bytes;
 }
@@ -1865,7 +1873,15 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 	it('rejects missing output, another ELF architecture, dynamic linkage, and oversized diagnostics', async () => {
 		const compiler = await createCrossGccCompiler(bundle().options);
 		try {
-			for (const mode of ['no-output', 'wrong-machine', 'dynamic', 'diagnostics']) {
+			for (const mode of [
+				'no-output',
+				'wrong-machine',
+				'dynamic',
+				'entry-in-bss',
+				'non-executable-load',
+				'truncated-load',
+				'diagnostics'
+			]) {
 				host.mode = mode;
 				await expect(compiler.compile({ code: '' })).rejects.toThrow();
 			}
