@@ -175,6 +175,8 @@ vi.mock('../src/module-loader.js', () => ({
 										host.mode === 'dynamic'
 									))
 					);
+					if (tool.startsWith('cc1') && host.mode === 'raw-assembly')
+						files.set(output, Uint8Array.of(46, 255, 10));
 					if (host.mode === 'exit-status') throw { name: 'ExitStatus', status: 0 };
 					return 0;
 				}
@@ -1860,7 +1862,9 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 	] as const)(
 		'uses the same %s preprocessing contract for every unit',
 		async (language, preprocessed, path, tool) => {
-			const compiler = await createCrossGccCompiler(bundle().options);
+			const compiler = await createCrossGccCompiler(
+				bundle('usr/include/stdc-predef.h').options
+			);
 			try {
 				const result = await compiler.compile({
 					code: 'int main() {}',
@@ -1872,13 +1876,44 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 				expect(result.exitCode).toBe(0);
 				const frontends = result.stages.filter((stage) => stage.tool === tool);
 				expect(frontends).toHaveLength(2);
-				for (const frontend of frontends)
+				for (const frontend of frontends) {
 					expect(frontend.argv.includes('-fpreprocessed')).toBe(preprocessed);
+					expect(frontend.argv).not.toContain('-nostdinc');
+					expect(frontend.argv.includes('-isysroot')).toBe(!preprocessed);
+				}
 			} finally {
 				compiler.dispose();
 			}
 		}
 	);
+
+	it('preserves raw assembly bytes for callers and the following GNU assembler', async () => {
+		const compiler = await createCrossGccCompiler(bundle().options);
+		try {
+			host.mode = 'raw-assembly';
+			const raw = Uint8Array.of(46, 255, 10);
+			expect(
+				(await compiler.compile({ code: '', emit: 'assembly' })).artifact?.bytes
+			).toEqual(raw);
+			expect((await compiler.compile({ code: '', emit: 'object' })).exitCode).toBe(0);
+			expect(host.calls.at(-1)!.files.get('/workspace/program.s')).toEqual(raw);
+		} finally {
+			compiler.dispose();
+		}
+	});
+
+	it('snapshots Uint8Array workspace slices created in another realm', async () => {
+		const compiler = await createCrossGccCompiler(bundle().options);
+		try {
+			const contents = runInNewContext('Uint8Array.of(0, 42, 7, 0).subarray(1, 3)');
+			const result = compiler.compile({ code: '', files: [{ path: 'local.h', contents }] });
+			contents.fill(0);
+			expect((await result).exitCode).toBe(0);
+			expect(host.calls[0].files.get('/workspace/local.h')).toEqual(Uint8Array.of(42, 7));
+		} finally {
+			compiler.dispose();
+		}
+	});
 
 	it('rejects missing output, another ELF architecture, dynamic linkage, and oversized diagnostics', async () => {
 		const compiler = await createCrossGccCompiler(bundle().options);
@@ -1958,6 +1993,7 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 				{ code: '', flags: ['-flto'] },
 				{ code: '', standard: 'gnu++20 -fplugin=bad' },
 				{ code: '', preprocessed: 1 },
+				{ code: '', traceIncludes: 'yes' },
 				{ code: '', sources: 'helper.cpp' },
 				{ code: '', sources: null },
 				{ code: '', sources: [1] },
@@ -2049,6 +2085,7 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 			const code = '#include <bits/stdc++.h>\nint main() {}\n';
 			await compiler.compile({
 				code,
+				traceIncludes: true,
 				files: [{ path: 'b.cpp', contents: code }],
 				sources: ['b.cpp']
 			});
@@ -2060,7 +2097,8 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 					...flags.slice(0, include),
 					'-isystem',
 					'/pch',
-					...flags.slice(include)
+					...flags.slice(include),
+					'-H'
 				]);
 				expect(new TextDecoder().decode(call.files.get('/pch/bits/stdc++.h.gch'))).toBe(
 					'gpch'

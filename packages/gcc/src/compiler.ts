@@ -60,7 +60,7 @@ const pchDirectory = '/pch',
 function validateOutput(bytes: Uint8Array, emit: CrossGccEmit) {
 	if (emit === 'assembly') {
 		if (!bytes.length) throw new Error('GCC produced empty assembly');
-		new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+		// GNU assembly can contain literal non-UTF-8 bytes inside quoted directives.
 		return;
 	}
 	if (
@@ -680,7 +680,8 @@ export async function createGccCompiler(
 			throw new Error('Unsupported GCC precompiled header option');
 		const { frontEndFlags } = gccCompilePlan(
 			{ ...request, code: '', language: 'cpp', emit: 'assembly' },
-			manifest
+			manifest,
+			sysroot
 		);
 		// Precompile the copy GCC would find first, exactly as #include <bits/stdc++.h> does.
 		const header = frontEndFlags
