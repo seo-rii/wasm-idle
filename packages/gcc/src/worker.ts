@@ -168,7 +168,7 @@ export async function createGccWorker(
 				try {
 					// postMessage clones ordinary buffers, but SharedArrayBuffer views must
 					// become private bytes too. Never transfer/detach caller-owned inputs.
-					const snapshot =
+					let snapshot =
 						options.target === 'wasm32-wasi' && 'linkInputs' in request
 							? {
 									...request,
@@ -177,6 +177,28 @@ export async function createGccWorker(
 									)
 								}
 							: request;
+					// Structured clone shares SAB backing stores, including views from other realms.
+					if (Array.isArray(request.files)) {
+						snapshot = {
+							...snapshot,
+							files: request.files.map((file) => {
+								const bytes = file?.contents;
+								if (
+									ArrayBuffer.isView(bytes) &&
+									Object.prototype.toString.call(bytes) ===
+										'[object Uint8Array]' &&
+									Object.prototype.toString.call(bytes.buffer) ===
+										'[object SharedArrayBuffer]'
+								) {
+									return {
+										...file,
+										contents: Uint8Array.from(bytes as Uint8Array)
+									};
+								}
+								return file;
+							})
+						};
+					}
 					const response = await send({ type: 'compile', request: snapshot }, signal);
 					if (response.type !== 'result')
 						throw new Error('GCC Worker returned an invalid compile response');

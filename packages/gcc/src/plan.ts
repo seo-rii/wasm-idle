@@ -184,7 +184,12 @@ export function gccCompilePlan(
 		cc.push('-nostdinc', '-isysroot', manifest.sysrootPath);
 		const includes = [];
 		if (language === 'cpp') {
-			cc.push('-D_GNU_SOURCE');
+			if (
+				!definitions.some(
+					(flag) => flag === '-D_GNU_SOURCE' || flag.startsWith('-D_GNU_SOURCE=')
+				)
+			)
+				cc.push('-D_GNU_SOURCE');
 			const major = manifest.compiler.version.split('.')[0];
 			includes.push(
 				`/sysroot/usr/include/c++/${major}`,
@@ -239,9 +244,16 @@ export function gccCompilePlan(
 				`-L${lib}`,
 				'-L/sysroot/lib/x86_64-linux-gnu',
 				...objects,
-				...(language === 'cpp' ? ['-lstdc++'] : []),
-				'-lm',
 				'--start-group',
+				...(language === 'cpp'
+					? [
+							'-lstdc++',
+							...(sysroot?.has(`${gcc}/libstdc++exp.a`) ? ['-lstdc++exp'] : []),
+							...(sysroot?.has(`${gcc}/libstdc++fs.a`) ? ['-lstdc++fs'] : [])
+						]
+					: []),
+				'-lm',
+				...(sysroot?.has(`${lib}/libresolv.a`) ? ['-lresolv'] : []),
 				// The v1 bundle contract permits sysroots without GNU libatomic.
 				...(sysroot?.has(`${gcc}/libatomic.a`) ? ['-latomic'] : []),
 				'-lgcc',

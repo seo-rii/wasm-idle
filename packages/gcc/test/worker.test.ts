@@ -48,6 +48,20 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('GCC Worker ownership and cancellation', () => {
+	it('snapshots shared workspace file views when the caller submits a compilation', async () => {
+		const compiler = await createCrossGccWorker(options);
+		const storage = new Uint8Array(new SharedArrayBuffer(4));
+		const contents = storage.subarray(1, 3);
+		contents.set([42, 7]);
+		const pending = compiler.compile({ code: '', files: [{ path: 'config.h', contents }] });
+		contents.fill(24);
+		const message = FixtureWorker.instances[0].messages.at(-1)!;
+		const request = message.request as WasiGccCompileRequest;
+		expect(request.files![0].contents).toEqual(Uint8Array.of(42, 7));
+		compiler.dispose();
+		await expect(pending).rejects.toThrow(/disposed/u);
+	});
+
 	it('snapshots the explicit module profile and cancels pending module compilation', async () => {
 		const compiler = await createGccWorker({ ...options, target: 'wasm32-wasi' });
 		const transport = FixtureWorker.instances[0];
