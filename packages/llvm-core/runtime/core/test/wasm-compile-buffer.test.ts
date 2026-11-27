@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { gzipSync } from 'node:zlib';
+import * as assetOperation from '../../../../core/src/runtime-asset-operation.js';
 import ts from 'typescript';
 import { describe, it } from 'vitest';
 
@@ -69,6 +70,7 @@ function createLoader(options: {
 		}
 	});
 	run(module.exports, (name: string) => {
+		if (name === './runtime-asset-operation.js') return assetOperation;
 		throw new Error(`Unexpected dependency in this raw/gzip test: ${name}`);
 	}, module);
 	return { api: module.exports as Loader, copies, requests, compileInputs };
