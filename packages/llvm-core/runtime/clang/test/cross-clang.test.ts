@@ -27,10 +27,22 @@ const call = (index: number) => [0x10, ...unsigned(index)];
 const store = (address: number, value: number) => [...constant(address), ...constant(value), 0x36, 2, 0];
 const load = (address: number) => [...constant(address), 0x28, 2, 0];
 function elf(type = 2, machine = 62) {
-	const bytes = new Uint8Array(64), view = new DataView(bytes.buffer);
+	// The executable maps its ELF headers and a Linux exit(0) instruction sequence.
+	const code = [0xb8, 60, 0, 0, 0, 0x31, 0xff, 0x0f, 0x05];
+	const bytes = new Uint8Array(type === 2 ? 120 + code.length : 64), view = new DataView(bytes.buffer);
 	bytes.set([0x7f, 69, 76, 70, 2, 1, 1]);
 	view.setUint16(16, type, true); view.setUint16(18, machine, true);
 	view.setUint32(20, 1, true); view.setUint16(52, 64, true);
+	if (type === 2) {
+		view.setBigUint64(24, 0x400078n, true);
+		view.setBigUint64(32, 64n, true);
+		view.setUint16(54, 56, true); view.setUint16(56, 1, true);
+		view.setUint32(64, 1, true); view.setUint32(68, 5, true);
+		view.setBigUint64(80, 0x400000n, true); view.setBigUint64(88, 0x400000n, true);
+		view.setBigUint64(96, BigInt(bytes.length), true); view.setBigUint64(104, BigInt(bytes.length), true);
+		view.setBigUint64(112, 0x1000n, true);
+		bytes.set(code, 120);
+	}
 	return bytes;
 }
 
@@ -218,6 +230,26 @@ describe('compile-only x86-64 Clang host', () => {
 		for (const [options, emit] of [[{ output: elf(2, 183) }, 'executable'], [{ output: elf(1) }, 'executable'], [{ output: new Uint8Array(), fileName: 'program.s' }, 'assembly'], [{ noOutput: true }, 'executable']] as const) {
 			const compiler = await createCrossClangCompiler(bundle(options).options);
 			try { expect(() => compiler.compile({ code: '', emit: emit as CrossClangEmit })).toThrow(); }
+			finally { compiler.dispose(); }
+		}
+	});
+
+	it('requires static ELF program headers and an entry point in a file-backed executable segment', async () => {
+		const cases: [string, (view: DataView) => void, RegExp][] = [
+			['missing table', view => view.setUint16(56, 0, true), /program header table/],
+			['truncated table', view => view.setBigUint64(32, 1n << 60n, true), /program header table/],
+			['dynamic interpreter', view => view.setUint32(64, 3, true), /dynamic interpreter/],
+			['no loadable segment', view => view.setUint32(64, 4, true), /entry point/],
+			['non-executable segment', view => view.setUint32(68, 4, true), /entry point/],
+			['entry outside mapped bytes', view => view.setBigUint64(24, 0x410000n, true), /entry point/],
+			['truncated segment', view => view.setBigUint64(72, 0x1000n, true), /load segment/],
+			['invalid memory size', view => view.setBigUint64(104, 1n, true), /load segment/]
+		];
+		for (const [label, mutate, error] of cases) {
+			const output = elf();
+			mutate(new DataView(output.buffer));
+			const compiler = await createCrossClangCompiler(bundle({ output }).options);
+			try { expect(() => compiler.compile({ code: '' }), label).toThrow(error); }
 			finally { compiler.dispose(); }
 		}
 	});
