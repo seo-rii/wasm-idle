@@ -205,6 +205,7 @@ export async function createGccCompiler(
 		return absolute;
 	}
 	untar(assets.get('sysroot')!, {
+		pathEncoding: manifest.target === 'x86_64-linux-gnu' ? 'utf-8' : undefined,
 		addDirectory(path) {
 			if (path !== '.' && path !== './') addPath(path, true);
 		},

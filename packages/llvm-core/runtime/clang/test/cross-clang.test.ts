@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { runInNewContext } from 'node:vm';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Directory, PreopenDirectory, WASI, wasi } from '@bjorn3/browser_wasi_shim';
 import { createCrossClangCompiler, parseCrossClangManifest, type CrossClangEmit } from '../src/cross-clang.js';
@@ -206,6 +207,22 @@ describe('compile-only x86-64 Clang host', () => {
 		}
 	});
 
+	it.each([
+		['usr/lib/gcc/x86_64-linux-gnu/14/libstdc++fs.a', '-lstdc++fs', false],
+		['usr/lib/gcc/x86_64-linux-gnu/14/libstdc++exp.a', '-lstdc++exp', false],
+		['usr/lib/x86_64-linux-gnu/libresolv.a', '-lresolv', true]
+	] as const)('uses %s only for supported executable requests', async (archivePath, flag, linkWithC) => {
+		const compiler = await createCrossClangCompiler(bundle({ archivePath }).options);
+		try {
+			expect(compiler.compile({ code: '', language: 'cpp' }).argv).toContain(flag);
+			expect(compiler.compile({ code: '', language: 'c' }).argv.includes(flag)).toBe(linkWithC);
+		} finally { compiler.dispose(); }
+		const objectCompiler = await createCrossClangCompiler(bundle({ archivePath, output: elf(1), fileName: 'program.o' }).options);
+		try {
+			expect(objectCompiler.compile({ code: '', emit: 'object' }).argv).not.toContain(flag);
+		} finally { objectCompiler.dispose(); }
+	});
+
 	it.each(['c', 'cpp'] as const)('links the GNU atomic runtime for %s executables when the pinned sysroot contains it', async language => {
 		const compiler = await createCrossClangCompiler(bundle({ archivePath: 'usr/lib/gcc/x86_64-linux-gnu/14/libatomic.a' }).options);
 		try {
@@ -269,10 +286,21 @@ describe('compile-only x86-64 Clang host', () => {
 		}
 	});
 
+	it('accepts Uint8Array headers created in another realm', async () => {
+		const compiler = await createCrossClangCompiler(bundle().options);
+		try {
+			const contents: Uint8Array = runInNewContext('new Uint8Array([65, 66])');
+			expect(compiler.compile({ code: '', files: [{ path: 'header.h', contents }] }).exitCode).toBe(0);
+			const words = runInNewContext('new Uint16Array([65, 66])');
+			expect(() => compiler.compile({ code: '', files: [{ path: 'header.h', contents: words }] })).toThrow('workspace contents');
+		} finally { compiler.dispose(); }
+	});
+
 	it('rejects target overrides, unsafe workspace paths, collisions, and oversized inputs before execution', async () => {
 		const compiler = await createCrossClangCompiler(bundle().options);
 		try {
 			for (const request of [
+				{ code: '', cpuProfile: 'x86-64-v3' }, { code: '', defines: ['DEBUG'] },
 				{ code: '', cpu: 'native' }, { code: '', standard: 'gnu++20 -march=native' }, { code: '', optimization: '2 -target=wasm32' },
 				...['../file.h', '/etc/a', 'a//b', 'a/./b', 'a\\b', 'main.cpp', 'main.cpp/nested', 'program.elf', 'program.elf/child'].map(path => ({ code: '', files: [{ path, contents: '' }] })),
 				{ code: '', files: [{ path: 'a', contents: '' }, { path: 'a/b', contents: '' }] },
@@ -289,6 +317,52 @@ describe('compile-only x86-64 Clang host', () => {
 		await expect(createCrossClangCompiler(corrupt.options)).rejects.toThrow();
 		expect(compile).not.toHaveBeenCalled();
 		await expect(createCrossClangCompiler({ ...bundle().options, maxAssetBytes: 1024 })).rejects.toThrow('byte limit');
+	});
+
+	it('hashes each private asset once and performs uncached per-initialization reads', async () => {
+		const fixture = bundle(), digest = vi.spyOn(crypto.subtle, 'digest');
+		const compiler = await createCrossClangCompiler(fixture.options);
+		try {
+			expect(digest).toHaveBeenCalledTimes(4);
+			const fetches = vi.mocked(fixture.fetchImpl).mock.calls;
+			expect(fetches).toHaveLength(4);
+			for (const [, init] of fetches) expect(init?.signal).toBeInstanceOf(AbortSignal);
+		} finally { compiler.dispose(); }
+	});
+
+	it('aborts unfinished sibling streams when a bundle asset fails', async () => {
+		const fixture = bundle();
+		const cancelled: string[] = [];
+		const fetchImpl: typeof fetch = async (input, init) => {
+			const file = new URL(String(input)).pathname.split('/').at(-1)!;
+			if (file === 'cross-toolchain.v1.json') return fixture.fetchImpl(input, init);
+			if (file === 'lld.wasm') return new Response(null, { status: 503 });
+			return new Response(new ReadableStream<Uint8Array>({
+				cancel() { cancelled.push(file); }
+			}));
+		};
+		await expect(createCrossClangCompiler({ ...fixture.options, fetchImpl })).rejects.toThrow('503');
+		expect(cancelled.sort()).toEqual(['clang.wasm', 'sysroot.tar']);
+	});
+
+	it('rejects promptly during module preparation and prevents the next compile', async () => {
+		const fixture = bundle(), controller = new AbortController();
+		const compile = WebAssembly.compile.bind(WebAssembly);
+		let started!: () => void, resume!: () => void;
+		const first = new Promise<void>(resolve => { started = resolve; });
+		const gate = new Promise<void>(resolve => { resume = resolve; });
+		const compiling = vi.spyOn(WebAssembly, 'compile').mockImplementation(async bytes => {
+			started();
+			await gate;
+			return compile(bytes);
+		});
+		const pending = createCrossClangCompiler({ ...fixture.options, signal: controller.signal });
+		await first;
+		controller.abort();
+		try {
+			await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+			expect(compiling).toHaveBeenCalledTimes(1);
+		} finally { resume(); }
 	});
 
 	it('validates bounded streaming responses and rejects sysroot path escapes', async () => {

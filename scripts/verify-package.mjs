@@ -81,7 +81,8 @@ export const scenarios = [
 		// Filename inference for the active tab measures 7,653,149 bytes with the same files.
 		// The PHP and Ruby worker helpers add four files. The root install measures 7,651,041 bytes.
 		// The x86 Clang changes add 2,201 bytes. CI measures 7,654,830 installed bytes.
-		budget: { maxBytes: 7655424, maxFiles: 869, maxPackages: 6 },
+		// The Clang host, shared cancellation helper and UTF-8 paths add 4,956 bytes and two JS/declaration pairs.
+		budget: { maxBytes: 7660544, maxFiles: 873, maxPackages: 6 },
 		absentPackageNames: [
 			'@katana-project/asm',
 			'java-parser',
@@ -160,7 +161,8 @@ export const scenarios = [
 		// The core runtime Wasm module lookup adds one JavaScript/declaration pair (CI measures 2,862,838 bytes / 198 files).
 		// Seven reviewed language metadata additions grow the shared core by 6,040 bytes.
 		// Refreshed core receipts project a 2,895,848-byte GCC install; round to the next KiB.
-		budget: { maxBytes: 2895872, maxFiles: 198, maxPackages: 4 },
+		// The shared asset cancellation helper adds one JS/declaration pair.
+		budget: { maxBytes: 2895872, maxFiles: 200, maxPackages: 4 },
 		absentPackageNames: [
 			'wasm-idle',
 			'@wasm-idle/llvm-core',
@@ -501,8 +503,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// 43,420,505 bytes in 3,498 files and 66 packages.
 		// The DuckDB result formatter and refreshed Arrow runtime receipts measure 43,422,093 bytes.
 		// The x86 Clang and GCC changes add 2,201 and 338 bytes to the pinned aggregate.
-		// GCC x86 linking and lifecycle changes add 3,056 installed bytes. Allow the rounded 3 KiB.
-		budget: { maxBytes: 43427840, maxFiles: 3498, maxPackages: 70 },
+		// The combined GCC and Clang SDK changes add 8,096 bytes and four files.
+		budget: { maxBytes: 43432960, maxFiles: 3502, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
