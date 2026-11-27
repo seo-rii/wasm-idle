@@ -1640,6 +1640,27 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 		}
 	);
 
+	it.each(['c', 'cpp'] as const)(
+		'links the bundled x86 atomic runtime for %s',
+		async (language) => {
+			const compiler = await createCrossGccCompiler(
+				bundle('usr/lib/gcc/x86_64-linux-gnu/16/libatomic.a').options
+			);
+			try {
+				const result = await compiler.compile({ code: 'int main() {}', language });
+				const linker = result.stages.at(-1)!;
+				expect(
+					linker.argv.slice(
+						linker.argv.indexOf('--start-group'),
+						linker.argv.indexOf('--end-group') + 1
+					)
+				).toEqual(['--start-group', '-latomic', '-lgcc', '-lgcc_eh', '-lc', '--end-group']);
+			} finally {
+				compiler.dispose();
+			}
+		}
+	);
+
 	it('supports C, preprocessed .ii, AVX2/FMA and each requested output without adding later stages', async () => {
 		const compiler = await createCrossGccCompiler(bundle().options);
 		try {

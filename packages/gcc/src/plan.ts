@@ -153,7 +153,11 @@ export function gccCompileInputs(
 }
 
 /** No fork/exec and no source rewriting: the Worker explicitly schedules these real GNU tools. */
-export function gccCompilePlan(request: CrossGccCompileRequest, manifest: CrossGccManifest) {
+export function gccCompilePlan(
+	request: CrossGccCompileRequest,
+	manifest: CrossGccManifest,
+	sysroot?: ReadonlyMap<string, Uint8Array>
+) {
 	const { language, emit, optimization, standard, main, files, sources, definitions } =
 		gccCompileInputs(request, ['cpu']);
 	const cpu = request.cpu ?? 'x86-64';
@@ -238,6 +242,8 @@ export function gccCompilePlan(request: CrossGccCompileRequest, manifest: CrossG
 				...(language === 'cpp' ? ['-lstdc++'] : []),
 				'-lm',
 				'--start-group',
+				// The v1 bundle contract permits sysroots without GNU libatomic.
+				...(sysroot?.has(`${gcc}/libatomic.a`) ? ['-latomic'] : []),
 				'-lgcc',
 				'-lgcc_eh',
 				'-lc',
