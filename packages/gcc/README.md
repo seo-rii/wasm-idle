@@ -848,7 +848,9 @@ pnpm exec vite --config examples/gcc-cross/vite.config.mjs
 
 Open `/examples/gcc-cross/` and enter the producer manifest URL/trusted SHA-256.
 The GCC form offers CPU/output controls, downloads, diagnostics, measurements and
-cancellation. Cross-origin bundles need CORS. Locally, serve `.cache/gcc-bundle/`
+cancellation. Consecutive compilations reuse the verified Worker while the manifest URL and digest
+match. Cancelling the active request terminates that Worker. Cross-origin bundles need CORS.
+Locally, serve `.cache/gcc-bundle/`
 and use `/.cache/gcc-bundle/gcc-toolchain.v1.json` at the server's HTTP origin.
 This opt-in example leaves the main playground's Clang Run path unchanged.
 

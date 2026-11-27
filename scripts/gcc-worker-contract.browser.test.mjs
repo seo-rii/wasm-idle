@@ -420,6 +420,10 @@ test(
 				await page.locator('#compile').click();
 				await page.waitForFunction(() => globalThis.gccUiCalls.length === 2);
 				await completeSubmission(1, edited);
+				await page.locator('#manifest').fill('/second/gcc-toolchain.v1.json');
+				await page.locator('#compile').click();
+				await page.waitForFunction(() => globalThis.gccUiCalls[1].requests.length === 2);
+				assert.equal(await page.evaluate(() => globalThis.gccUiCalls.length), 2);
 			}
 		);
 	}

@@ -1,7 +1,12 @@
 import { createCrossGccWorker } from '@wasm-idle/gcc';
 
 const element = (id) => document.getElementById(id);
-let activeController, downloadUrl;
+let activeController, downloadUrl, compiler, loadedUrl, loadedDigest;
+
+function releaseCompiler() {
+	compiler?.dispose();
+	compiler = undefined;
+}
 
 function clearDownload() {
 	if (downloadUrl) URL.revokeObjectURL(downloadUrl);
@@ -14,7 +19,7 @@ element('cancel').addEventListener('click', () => activeController?.abort());
 element('form').addEventListener('submit', async (event) => {
 	event.preventDefault();
 	if (activeController) return;
-	const manifestUrl = element('manifest').value.trim();
+	const manifestInput = element('manifest').value.trim();
 	const manifestSha256 = element('sha256').value.trim();
 	const request = {
 		code: element('source').value,
@@ -29,15 +34,20 @@ element('form').addEventListener('submit', async (event) => {
 	element('compile').disabled = true;
 	element('cancel').disabled = false;
 	activeController = new AbortController();
-	let compiler;
 	const started = performance.now();
 	try {
-		element('status').textContent = 'Verifying and loading the GCC bundle…';
-		compiler = await createCrossGccWorker({
-			manifestUrl,
-			manifestSha256,
-			signal: activeController.signal
-		});
+		const manifestUrl = new URL(manifestInput, document.baseURI).href;
+		if (!compiler || loadedUrl !== manifestUrl || loadedDigest !== manifestSha256) {
+			releaseCompiler();
+			element('status').textContent = 'Verifying and loading the GCC bundle…';
+			compiler = await createCrossGccWorker({
+				manifestUrl,
+				manifestSha256,
+				signal: activeController.signal
+			});
+			loadedUrl = manifestUrl;
+			loadedDigest = manifestSha256;
+		}
 		element('status').textContent =
 			`Compiling with GCC ${compiler.identity.compilerVersion} (${compiler.manifest.qualification.status} producer qualification)…`;
 		const result = await compiler.compile(request, { signal: activeController.signal });
@@ -70,13 +80,13 @@ element('form').addEventListener('submit', async (event) => {
 		element('status').textContent =
 			`${artifact.format} · ${artifact.bytes.length.toLocaleString()} bytes · ${((performance.now() - started) / 1000).toFixed(1)} seconds including bundle loading.`;
 	} catch (error) {
+		releaseCompiler();
 		clearDownload();
 		element('status').textContent =
 			error?.name === 'AbortError'
 				? 'Compilation cancelled; the Worker was terminated.'
 				: `Compilation failed: ${error?.message || error}`;
 	} finally {
-		compiler?.dispose();
 		activeController = undefined;
 		element('compile').disabled = false;
 		element('cancel').disabled = true;
@@ -85,5 +95,6 @@ element('form').addEventListener('submit', async (event) => {
 
 window.addEventListener('beforeunload', () => {
 	activeController?.abort();
+	releaseCompiler();
 	clearDownload();
 });
