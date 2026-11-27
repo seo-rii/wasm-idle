@@ -9,12 +9,13 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { executionCommand } from './verify-x86-cross-native.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const args = process.argv.slice(2);
 if (args.includes('--help')) {
 	console.log(
-		'Usage: node scripts/verify-x86-cross-gcc.mjs MANIFEST PRODUCER_QUALIFICATION_DIR [NEW_OUTPUT_DIR]\nRequires built @wasm-idle/core and @wasm-idle/gcc packages, a real GCC Wasm bundle, the matching wasm-llvm qualification sources, Chromium, and Linux x86-64 for native stdin/stdout checks.'
+		'Usage: node scripts/verify-x86-cross-gcc.mjs MANIFEST PRODUCER_QUALIFICATION_DIR [NEW_OUTPUT_DIR]\nRequires built @wasm-idle/core and @wasm-idle/gcc packages, a real GCC Wasm bundle, the matching wasm-llvm qualification sources, Chromium, and Linux x86-64 for native stdin/stdout checks. Install qemu-user when the execution host lacks a requested SIMD profile.'
 	);
 	process.exit(0);
 }
@@ -192,11 +193,22 @@ try {
 			const results = [];
 			try {
 				for (const fixture of fixtures) {
+					if (fixture.precompiledHeader && !compiler.manifest.capabilities?.precompiledHeaders) {
+						results.push({ id: fixture.id, skipped: 'bundle has no PCH capability' });
+						continue;
+					}
 					const start = performance.now();
 					const deadline = new AbortController();
 					const timer = setTimeout(() => deadline.abort(), 600_000);
 					let result;
+					let precompiled;
 					try {
+						if (fixture.precompiledHeader) {
+							const { cpu, standard, optimization } = fixture.request;
+							const header = await compiler.precompileHeader({ cpu, standard, optimization }, { signal: deadline.signal });
+							if (header.exitCode !== 0 || !header.bytes) throw new Error(`PCH creation failed: ${header.stderr}`);
+							precompiled = { bytes: header.bytes };
+						}
 						result = await compiler.compile(fixture.request, {
 							signal: deadline.signal
 						});
@@ -234,6 +246,7 @@ try {
 					results.push({
 						id: fixture.id,
 						...details,
+						...(precompiled ? { precompiled } : {}),
 						elapsedMs: performance.now() - start,
 						...(encodedArtifact ? { artifact: encodedArtifact } : {})
 					});
@@ -284,6 +297,10 @@ try {
 	for (const [index, result] of actual.results.entries()) {
 		const fixture = fixtures[index];
 		assert.equal(result.id, fixture.id);
+		if (result.skipped) {
+			report.cases.push({ id: fixture.id, skipped: result.skipped });
+			continue;
+		}
 		if (result.artifact) {
 			const { bytesBase64, ...metadata } = result.artifact;
 			result.artifact = { ...metadata, bytes: Buffer.from(bytesBase64, 'base64') };
@@ -312,6 +329,14 @@ try {
 				sha256: digest(bytes),
 				format: result.artifact.format
 			};
+			if (fixture.precompiledHeader) {
+				assert(result.precompiled?.bytes > 0);
+				const frontend = result.stages.find((stage) => stage.tool === 'cc1plus');
+				assert(frontend?.argv.includes('/pch'), 'SDK did not offer the prepared header to GCC');
+				const reference = report.cases.find((other) => other.id === fixture.sameAs);
+				assert.equal(entry.artifact.sha256, reference?.artifact?.sha256, 'PCH changed the artifact');
+				entry.precompiledHeader = { ...result.precompiled, sameOutputAs: reference.id };
+			}
 			if (emit === 'object') {
 				assert(
 					process.platform === 'linux' && process.arch === 'x64',
@@ -336,12 +361,9 @@ try {
 					process.platform === 'linux' && process.arch === 'x64',
 					'Native stdin/stdout qualification requires Linux x86-64'
 				);
-				assert.equal(
-					fixture.request.cpu ?? 'x86-64',
-					'x86-64',
-					'Only baseline fixtures are executed natively'
-				);
-				const execution = spawnSync(file, [], {
+				const runner = executionCommand(file, fixture.request.cpu);
+				entry.executionMode = runner.mode;
+				const execution = spawnSync(runner.command, runner.args, {
 					input: fixture.stdin,
 					encoding: 'utf8',
 					timeout: 15_000,
