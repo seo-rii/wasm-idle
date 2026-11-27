@@ -27,18 +27,29 @@ type FileEntry = Entry & {
 };
 
 export interface TarFileSystem {
+	/** Omit for the byte-string paths consumed by MemFS; select UTF-8 for JavaScript paths. */
+	pathEncoding?: 'utf-8';
 	addDirectory(path: string): void;
 	addFile(path: string, contents: Uint8Array): void;
 }
 
-function* readEntry(buffer: Uint8Array | ArrayBufferLike) {
+const utf8 = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
+
+function readUtf8Path(u8: Uint8Array, offset: number, length: number) {
+	const field = u8.subarray(offset, offset + length);
+	const end = field.indexOf(0);
+	return utf8.decode(end < 0 ? field : field.subarray(0, end));
+}
+
+function* readEntry(buffer: Uint8Array | ArrayBufferLike, pathEncoding?: 'utf-8') {
+	const readPath = pathEncoding === 'utf-8' ? readUtf8Path : readStr;
 	const u8 = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
 	let offset = 0;
 	let nextFilename = '';
 
-	const str = (len: number) => {
+	const str = (len: number, read: typeof readUtf8Path = readStr) => {
 			offset += len;
-			return readStr(u8, offset - len, len);
+			return read(u8, offset - len, len);
 		},
 		oct = (len: number) => {
 			offset += len;
@@ -50,7 +61,7 @@ function* readEntry(buffer: Uint8Array | ArrayBufferLike) {
 		const headerOffset = offset;
 		if (u8.subarray(offset, offset + 512).every((byte) => byte === 0)) return;
 		const entryInit: EntryInit = {
-			filename: str(100),
+			filename: str(100, readPath),
 			mode: oct(8),
 			owner: oct(8),
 			group: oct(8),
@@ -70,7 +81,7 @@ function* readEntry(buffer: Uint8Array | ArrayBufferLike) {
 			groupName: str(32),
 			devMajor: str(8),
 			devMinor: str(8),
-			filenamePrefix: str(155)
+			filenamePrefix: str(155, readPath)
 		};
 
 		align();
@@ -90,7 +101,7 @@ function* readEntry(buffer: Uint8Array | ArrayBufferLike) {
 		offset = nextOffset;
 
 		if (entry.type === 'L') {
-			if (entry.contents) nextFilename = readStr(entry.contents, 0, entry.size);
+			if (entry.contents) nextFilename = readPath(entry.contents, 0, entry.size);
 			continue;
 		}
 
@@ -103,7 +114,7 @@ function* readEntry(buffer: Uint8Array | ArrayBufferLike) {
 }
 
 export default function untar(buffer: Uint8Array | ArrayBufferLike, memfs: TarFileSystem) {
-	for (const entry of readEntry(buffer)) {
+	for (const entry of readEntry(buffer, memfs.pathEncoding)) {
 		switch (entry.type) {
 			case '': // Regular file.
 			case '0': // Regular file.

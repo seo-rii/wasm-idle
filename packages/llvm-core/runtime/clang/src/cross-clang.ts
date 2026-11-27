@@ -273,6 +273,7 @@ export async function createCrossClangCompiler(options: CreateCrossClangCompiler
 	let extractedBytes = 0, entries = 0;
 	const seen = new Set<string>();
 	untar(sysrootBytes, {
+		pathEncoding: 'utf-8',
 		addDirectory(path) {
 			if (path === '.' || path === './') return;
 			const normalized = relativePath(path.replace(/^\.\//u, '').replace(/\/$/u, ''));

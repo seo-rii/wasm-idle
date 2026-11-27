@@ -132,7 +132,7 @@ describe('untar', () => {
 
 	it('reads GNU long names and ustar filename prefixes', () => {
 		const longName =
-			'include/c++/v1/__support/very/long/path/that/needs/gnu/longlink/header.hpp';
+			'include/c++/v1/__support/very/long/path/that/needs/gnu/긴이름/자료.hpp';
 		const addFile = vi.fn();
 		const addDirectory = vi.fn();
 
@@ -149,19 +149,19 @@ describe('untar', () => {
 					contents: encoder.encode('long-name')
 				}),
 				createTarEntry({
-					name: 'assoc_container.hpp',
-					prefix: 'include/c++/v1/ext/pb_ds',
+					name: '자료.hpp',
+					prefix: 'include/c++/v1/확장/pb_ds',
 					type: '0',
 					contents: encoder.encode('prefixed-name')
 				})
 			]),
-			{ addFile, addDirectory }
+			{ pathEncoding: 'utf-8', addFile, addDirectory }
 		);
 
 		expect(addDirectory).not.toHaveBeenCalled();
 		expect(addFile).toHaveBeenCalledWith(longName, expect.any(Uint8Array));
 		expect(addFile).toHaveBeenCalledWith(
-			'include/c++/v1/ext/pb_ds/assoc_container.hpp',
+			'include/c++/v1/확장/pb_ds/자료.hpp',
 			expect.any(Uint8Array)
 		);
 		expect(decoder.decode(addFile.mock.calls[0][1])).toBe('long-name');
