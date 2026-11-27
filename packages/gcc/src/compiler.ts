@@ -11,7 +11,12 @@ import {
 } from './manifest.js';
 import { loadGccModuleFactory, type GccModule, type GccModuleFactory } from './module-loader.js';
 import { gccCompilePlan, gccRelativePath } from './plan.js';
-import { gccSysrootTree, mountGccSysroot, type GccSysrootDirectory } from './sysroot-fs.js';
+import {
+	gccSysrootTree,
+	mountGccSysroot,
+	requireGccDirectoryTraversal,
+	type GccSysrootDirectory
+} from './sysroot-fs.js';
 import { wasiGccCompilePlan } from './wasi-plan.js';
 import {
 	gccStdModulesDirectory,
@@ -548,6 +553,7 @@ export async function createGccCompiler(
 					!(module.HEAPU8 instanceof Uint8Array)
 				)
 					throw new Error(`GCC ${stage.tool} has an incompatible Emscripten interface`);
+				if (manifest.target === 'x86_64-linux-gnu') requireGccDirectoryTraversal(module.FS);
 				module.FS.mkdirTree('/workspace');
 				module.FS.mkdirTree('/tmp');
 				if (stage.precompiledHeader || stage.output === pchPath)

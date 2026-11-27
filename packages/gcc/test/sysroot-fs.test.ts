@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { GccFileSystem, GccFileSystemNode } from '../src/module-loader.js';
-import { gccSysrootTree, mountGccSysroot } from '../src/sysroot-fs.js';
+import {
+	gccSysrootTree,
+	mountGccSysroot,
+	requireGccDirectoryTraversal
+} from '../src/sysroot-fs.js';
 
 interface Node extends GccFileSystemNode {
 	name: string;
@@ -52,6 +56,28 @@ function mounted(files: Record<string, string>, directories: string[] = []) {
 	}
 	return { created, lookup, errno };
 }
+
+it('preserves Emscripten lookup errors and checks the type of intermediate dot components', () => {
+	const missing = new ErrnoError(44);
+	const seen: [string, unknown][] = [];
+	const fs = {
+		ErrnoError,
+		lookupPath(path: string, options?: { follow?: boolean }) {
+			seen.push([path, options]);
+			if (path === 'missing') throw missing;
+			return { path, node: { mode: path === 'file' ? 0o100644 : 0o40755 } };
+		}
+	};
+	requireGccDirectoryTraversal(fs as unknown as GccFileSystem);
+	expect(() => fs.lookupPath('missing/../file')).toThrow(expect.objectContaining({ errno: 44 }));
+	expect(() => fs.lookupPath('file/./sibling')).toThrow(expect.objectContaining({ errno: 54 }));
+	const options = { follow: false };
+	fs.lookupPath('dir/../file', options);
+	expect(seen.slice(-2)).toEqual([
+		['dir', { follow: true }],
+		['dir/../file', options]
+	]);
+});
 
 describe('read-only GCC sysroot mount', () => {
 	it('creates nodes only for looked-up paths and lists unvisited entries', () => {

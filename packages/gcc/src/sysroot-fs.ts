@@ -19,6 +19,23 @@ const EINVAL = 28,
 const directoryMode = 0o40555,
 	fileMode = 0o100444;
 
+// Emscripten 4 skips the node type check when resolving "." or "..".
+export function requireGccDirectoryTraversal(fs: GccFileSystem) {
+	const lookup = fs.lookupPath?.bind(fs);
+	if (!lookup) return;
+	fs.lookupPath = (path, options) => {
+		if (path?.includes('/.')) {
+			for (const dot of path.matchAll(/\/\.{1,2}(?=\/|$)/g)) {
+				if (!dot.index) continue;
+				// Follow intermediate mount points and links using this stage's own FS.
+				const { node } = lookup(path.slice(0, dot.index), { follow: true });
+				if (!node || (node.mode & 0o170000) !== 0o040000) throw new fs.ErrnoError(54); // ENOTDIR
+			}
+		}
+		return lookup(path, options);
+	};
+}
+
 /** Build once per compiler; `files` and `directories` are already validated absolute paths. */
 export function gccSysrootTree(
 	files: ReadonlyMap<string, Uint8Array>,
