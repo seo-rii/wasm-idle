@@ -301,13 +301,45 @@ describe('compile-only x86-64 Clang host', () => {
 		} finally { compiler.dispose(); }
 	});
 
-	it('accepts Uint8Array headers created in another realm', async () => {
+	it('snapshots the exact byte range of cross-realm headers before reading later files', async () => {
 		const compiler = await createCrossClangCompiler(bundle().options);
 		try {
-			const contents: Uint8Array = runInNewContext('new Uint8Array([65, 66])');
-			expect(compiler.compile({ code: '', files: [{ path: 'header.h', contents }] }).exitCode).toBe(0);
+			const contents: Uint8Array = runInNewContext('new Uint8Array([0, 65, 66, 0]).subarray(1, 3)');
+			Object.defineProperty(contents, 'byteOffset', { value: 0 });
+			const fdstat = PreopenDirectory.prototype.fd_fdstat_get;
+			vi.spyOn(PreopenDirectory.prototype, 'fd_fdstat_get').mockImplementation(function (this: PreopenDirectory) {
+				const workspace = this.dir.contents.get('workspace') as Directory;
+				const header = workspace.contents.get('header.h') as File;
+				expect([...header.data]).toEqual([65, 66]);
+				return fdstat.call(this);
+			});
+			const files = [
+				{ path: 'header.h', contents },
+				{ path: 'later.h', get contents() { contents.fill(0); return ''; } }
+			];
+			expect(compiler.compile({ code: '', files }).exitCode).toBe(0);
 			const words = runInNewContext('new Uint16Array([65, 66])');
+			Object.defineProperty(words, Symbol.toStringTag, { value: 'Uint8Array' });
 			expect(() => compiler.compile({ code: '', files: [{ path: 'header.h', contents: words }] })).toThrow('workspace contents');
+		} finally { compiler.dispose(); }
+	});
+
+	it('checks the remaining workspace budget before copying binary or encoding text', async () => {
+		const compiler = await createCrossClangCompiler(bundle().options);
+		try {
+			const limit = 16 * 1024 * 1024;
+			const bytes = new Uint8Array(limit - 4);
+			Object.defineProperty(bytes, 'byteLength', { value: 0 });
+			const from = vi.spyOn(Uint8Array, 'from');
+			const encode = vi.spyOn(TextEncoder.prototype, 'encode');
+			const files = [{ path: 'data', contents: bytes }];
+			expect(() => compiler.compile({ code: '12345', files })).toThrow('workspace exceeds');
+			expect(from.mock.calls.some(([source]) => source === bytes)).toBe(false);
+			for (const text of ['ééa', '한aa', '😀a', '\ud800aa']) {
+				expect(() => compiler.compile({ code: '', files: [...files, { path: 'more', contents: text }] })).toThrow('workspace exceeds');
+				expect(encode.mock.calls.some(([source]) => source === text)).toBe(false);
+			}
+			expect(compiler.compile({ code: '😀', files }).exitCode).toBe(0);
 		} finally { compiler.dispose(); }
 	});
 

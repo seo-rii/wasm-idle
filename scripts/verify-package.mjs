@@ -82,7 +82,8 @@ export const scenarios = [
 		// The PHP and Ruby worker helpers add four files. The root install measures 7,651,041 bytes.
 		// The x86 Clang changes add 2,201 bytes. CI measures 7,654,830 installed bytes.
 		// The Clang host, shared cancellation helper and UTF-8 paths add 4,956 bytes and two JS/declaration pairs.
-		budget: { maxBytes: 7660544, maxFiles: 873, maxPackages: 6 },
+		// Cross Clang workspace and tool handling add 1,614 installed bytes.
+		budget: { maxBytes: 7661568, maxFiles: 873, maxPackages: 6 },
 		absentPackageNames: [
 			'@katana-project/asm',
 			'java-parser',
@@ -504,7 +505,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// The DuckDB result formatter and refreshed Arrow runtime receipts measure 43,422,093 bytes.
 		// The x86 Clang and GCC changes add 2,201 and 338 bytes to the pinned aggregate.
 		// The combined GCC and Clang SDK changes add 8,096 bytes and four files.
-		budget: { maxBytes: 43432960, maxFiles: 3502, maxPackages: 70 },
+		// The x86 Clang and GCC input handling changes need three additional KiB in the aggregate.
+		budget: { maxBytes: 43436032, maxFiles: 3502, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
