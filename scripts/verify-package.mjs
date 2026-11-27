@@ -501,7 +501,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// 43,420,505 bytes in 3,498 files and 66 packages.
 		// The DuckDB result formatter and refreshed Arrow runtime receipts measure 43,422,093 bytes.
 		// The x86 Clang and GCC changes add 2,201 and 338 bytes to the pinned aggregate.
-		budget: { maxBytes: 43424768, maxFiles: 3498, maxPackages: 70 },
+		// GCC x86 linking and lifecycle changes add 3,056 installed bytes. Allow the rounded 3 KiB.
+		budget: { maxBytes: 43427840, maxFiles: 3498, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
