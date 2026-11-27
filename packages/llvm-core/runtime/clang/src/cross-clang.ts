@@ -167,7 +167,7 @@ function addFile(root: Directory, path: string, bytes: Uint8Array, readonly: boo
 	parent.contents.set(name, new File(bytes, { readonly }));
 }
 
-function compilePlan(request: CrossClangCompileRequest, manifest: CrossClangManifest) {
+function compilePlan(request: CrossClangCompileRequest, manifest: CrossClangManifest, hasLibatomic: boolean) {
 	if (!request || typeof request.code !== 'string') throw new Error('Cross Clang requires source text');
 	const language = request.language ?? 'cpp', cpu = request.cpu ?? 'x86-64';
 	const emit = request.emit ?? 'executable', optimization = request.optimization ?? '2';
@@ -200,6 +200,7 @@ function compilePlan(request: CrossClangCompileRequest, manifest: CrossClangMani
 	argv.push(main, '-o', fileName);
 	// Unlike the C++ driver, Clang's C driver does not link the math library.
 	if (emit === 'executable' && language === 'c') argv.push('-lm');
+	if (emit === 'executable' && hasLibatomic) argv.push('-latomic');
 	return { cpu, emit, fileName, files, argv: Object.freeze(argv) };
 }
 
@@ -212,6 +213,34 @@ function validateOutput(bytes: Uint8Array, emit: CrossClangEmit) {
 	if (bytes.length < 64 || bytes[0] !== 0x7f || bytes[1] !== 0x45 || bytes[2] !== 0x4c || bytes[3] !== 0x46 || bytes[4] !== 2 || bytes[5] !== 1 || bytes[6] !== 1) throw new Error('Cross Clang did not produce little-endian ELF64');
 	const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 	if (view.getUint16(18, true) !== 62 || view.getUint16(16, true) !== (emit === 'object' ? 1 : 2) || view.getUint32(20, true) !== 1 || view.getUint16(52, true) !== 64) throw new Error('Cross Clang produced an unexpected ELF target or artifact type');
+	if (emit === 'object') return;
+
+	const programOffset = view.getBigUint64(32, true);
+	const headerSize = view.getUint16(54, true);
+	const headerCount = view.getUint16(56, true);
+	const fileSize = BigInt(bytes.length);
+	if (headerSize !== 56 || !headerCount || programOffset < 64n ||
+		programOffset + BigInt(headerSize * headerCount) > fileSize) {
+		throw new Error('Cross Clang produced an invalid ELF program header table');
+	}
+	const entry = view.getBigUint64(24, true);
+	let hasExecutableEntry = false;
+	for (let index = 0; index < headerCount; index++) {
+		const header = Number(programOffset) + index * headerSize;
+		const type = view.getUint32(header, true);
+		if (type === 3) throw new Error('Cross Clang static executable requests a dynamic interpreter');
+		if (type !== 1) continue;
+		const offset = view.getBigUint64(header + 8, true);
+		const address = view.getBigUint64(header + 16, true);
+		const size = view.getBigUint64(header + 32, true);
+		const memorySize = view.getBigUint64(header + 40, true);
+		if (size > memorySize || (size > 0n && offset + size > fileSize)) {
+			throw new Error('Cross Clang produced an invalid ELF load segment');
+		}
+		const executable = (view.getUint32(header + 4, true) & 1) !== 0;
+		if (executable && entry >= address && entry < address + size) hasExecutableEntry = true;
+	}
+	if (!hasExecutableEntry) throw new Error('Cross Clang ELF entry point is outside executable file data');
 }
 
 /**
@@ -224,7 +253,9 @@ export async function createCrossClangCompiler(options: CreateCrossClangCompiler
 	if (!['https:', 'http:'].includes(manifestUrl.protocol) || manifestUrl.username || manifestUrl.password || manifestUrl.hash) throw new Error('Cross Clang requires an HTTP(S) manifest URL');
 	const maxAssetBytes = options.maxAssetBytes ?? 512 * 1024 * 1024;
 	if (!Number.isSafeInteger(maxAssetBytes) || maxAssetBytes < 1024) throw new Error('Invalid cross Clang asset byte limit');
-	const fetchImpl = options.fetchImpl ?? globalThis.fetch?.bind(globalThis), signal = options.signal;
+	// readBuffer caches bytes before the caller checks their digest. Give each
+	// initialization its own cache so retrying can recover from a bad response.
+	const fetchImpl = options.fetchImpl?.bind(undefined) ?? globalThis.fetch?.bind(globalThis), signal = options.signal;
 	const manifestBytes = new Uint8Array(await readBuffer(manifestUrl.href, undefined, 1024 * 1024, signal, fetchImpl));
 	await verifyRuntimeAssetIntegrity({ asset: manifestUrl.href, bytes: manifestBytes, expected: manifestSha256 });
 	const manifest = parseCrossClangManifest(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(manifestBytes)));
@@ -258,6 +289,7 @@ export async function createCrossClangCompiler(options: CreateCrossClangCompiler
 		}
 	});
 	if (!seen.size) throw new Error('Cross Clang sysroot is empty');
+	const hasLibatomic = seen.has(`usr/lib/gcc/x86_64-linux-gnu/${manifest.gnu.gccVersion}/libatomic.a`);
 	let active: { root: Directory; stdout: string; stderr: string; diagnosticBytes: number } | undefined;
 	let host: LlvmToolHost | undefined;
 	let toolsDirectory = new Directory(new Map([
@@ -319,7 +351,7 @@ export async function createCrossClangCompiler(options: CreateCrossClangCompiler
 		compile(request) {
 			if (!host) throw new Error('Cross Clang compiler is disposed');
 			if (active) throw new Error('Cross Clang compiler is busy');
-			const plan = compilePlan(request, manifest), workspace = new Directory(new Map());
+			const plan = compilePlan(request, manifest, hasLibatomic), workspace = new Directory(new Map());
 			for (const file of plan.files) addFile(workspace, file.path, file.contents, false);
 			active = { root: new Directory(new Map([['sysroot', sysroot], ['bin', toolsDirectory], ['tmp', new Directory(new Map())], ['workspace', workspace]])), stdout: '', stderr: '', diagnosticBytes: 0 };
 			try {

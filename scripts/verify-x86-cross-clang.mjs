@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 const repoRoot = fileURLToPath(new URL('../', import.meta.url));
 const argv = process.argv.slice(2);
 if (argv.includes('--help')) {
-	console.log('Usage: node scripts/verify-x86-cross-clang.mjs /path/to/cross-toolchain.v1.json [output-directory]\n\nRequires a real wasm-llvm x86-64 bundle and installed Chromium.\nOn Linux x64, also verifies the generated programs with stdin/stdout.');
+	console.log('Usage: node scripts/verify-x86-cross-clang.mjs /path/to/cross-toolchain.v1.json [output-directory]\n\nBuild @wasm-idle/core and @wasm-idle/llvm-core first. Requires a real wasm-llvm x86-64 bundle and installed Chromium.\nOn Linux x64, also verifies the generated programs with stdin/stdout.');
 	process.exit(0);
 }
 if (argv.length < 1 || argv.length > 2) throw new Error('Expected a producer manifest path and optional fresh output directory; see --help');
@@ -58,6 +58,21 @@ int main() {
 `,
 		stdin: '5\n2 9 7 2 5\n', stdout: '7 2\n'
 	},
+	...['c', 'cpp'].map((language) => ({
+		name: `${language}-atomic-pair-stdin`, language, emit: 'executable', cpu: 'x86-64',
+		code: `#include <stdio.h>
+typedef struct { long long first, second; } Pair;
+${language === 'c' ? '#include <stdatomic.h>\nstatic _Atomic(Pair) pair;' : '#include <atomic>\nstatic std::atomic<Pair> pair;'}
+int main(void) {
+  Pair input;
+  if (scanf("%lld%lld", &input.first, &input.second) != 2) return 1;
+  atomic_store(&pair, input);
+  Pair output = atomic_load(&pair);
+  printf("%lld %lld\\n", output.first, output.second);
+}
+`,
+		stdin: '5000000000 -7000000000\n', stdout: '5000000000 -7000000000\n'
+	})),
 	...['assembly', 'object'].map((emit) => ({
 		name: `avx2-${emit}`, language: 'c', emit, cpu: 'x86-64-v3',
 		code: `#include <immintrin.h>
@@ -75,6 +90,14 @@ let server;
 let browser;
 const report = { schemaVersion: 1, manifestSha256, host: `${process.platform}-${process.arch}`, cases: [], success: false };
 try {
+	const entryPoint = fileURLToPath(import.meta.resolve('@wasm-idle/llvm-core/cross-clang'));
+	const coreEntryPoint = fileURLToPath(import.meta.resolve('@wasm-idle/core'));
+	for (const entry of [coreEntryPoint, entryPoint]) {
+		await fs.access(entry).catch(() => {
+			throw new Error(`Missing ${entry}. Build @wasm-idle/core and @wasm-idle/llvm-core before qualification.`);
+		});
+	}
+	report.consumerModule = path.relative(repoRoot, entryPoint).split(path.sep).join('/');
 	const [{ createServer }, { chromium }, { resolveChromiumExecutable }] = await Promise.all([
 		import('vite'), import('playwright-core'), import('./rust-browser-probe-lib.mjs')
 	]);
@@ -84,7 +107,7 @@ try {
 		cacheDir: path.join(temporary, 'vite'),
 		logLevel: 'error',
 		optimizeDeps: { noDiscovery: true, include: ['@bjorn3/browser_wasi_shim'] },
-		resolve: { alias: [{ find: /^@wasm-idle\/core$/, replacement: path.join(repoRoot, 'packages/core/src/index.ts') }] },
+		resolve: { alias: [{ find: /^@wasm-idle\/core$/, replacement: coreEntryPoint }] },
 		server: { host: '127.0.0.1', port: 0, fs: { allow: [repoRoot] } },
 		plugins: [{
 			name: 'cross-clang-qualification',
@@ -124,9 +147,9 @@ try {
 	const page = await browser.newPage();
 	await page.goto(`${origin}/cross-probe`);
 	report.browser = await browser.version();
-	const { results, identity } = await page.evaluate(async ({ manifestUrl, manifestSha256, cases, origin }) => {
+	const { results, identity } = await page.evaluate(async ({ manifestUrl, manifestSha256, cases, consumerUrl }) => {
 		const workerCode = `
-import { createCrossClangCompiler } from ${JSON.stringify(`${origin}/packages/llvm-core/runtime/clang/src/cross-clang.ts`)};
+import { createCrossClangCompiler } from ${JSON.stringify(consumerUrl)};
 self.onmessage = async ({ data }) => {
   let compiler;
   try {
@@ -135,9 +158,15 @@ self.onmessage = async ({ data }) => {
     for (const fixture of data.cases) {
       const start = performance.now();
       const result = compiler.compile({ code: fixture.code, language: fixture.language, cpu: fixture.cpu, emit: fixture.emit, optimization: '2' });
-      results.push({ name: fixture.name, ...result,
-        ...(result.artifact ? { artifact: { ...result.artifact, bytes: Array.from(result.artifact.bytes) } } : {}),
-        elapsedMs: performance.now() - start });
+      let encodedArtifact;
+      if (result.artifact) {
+        // CDP serializes each numeric array element separately. Keep static ELF
+        // binaries compact when returning the whole qualification suite to Node.
+        const { bytes, ...metadata } = result.artifact;
+        const url = new FileReaderSync().readAsDataURL(new Blob([bytes]));
+        encodedArtifact = { ...metadata, bytesBase64: url.slice(url.indexOf(',') + 1) };
+      }
+      results.push({ name: fixture.name, ...result, artifact: encodedArtifact, elapsedMs: performance.now() - start });
     }
     // A failed compilation after a successful one must not expose old output.
     const invalid = compiler.compile({ code: 'int main( {', language: 'c' });
@@ -156,7 +185,7 @@ self.onmessage = async ({ data }) => {
 				worker.postMessage({ manifestUrl, manifestSha256, cases });
 			});
 		} finally { worker.terminate(); URL.revokeObjectURL(url); }
-	}, { manifestUrl: `${origin}/cross-bundle/${encodeURIComponent(path.basename(manifestPath))}`, manifestSha256, cases, origin });
+	}, { manifestUrl: `${origin}/cross-bundle/${encodeURIComponent(path.basename(manifestPath))}`, manifestSha256, cases, consumerUrl: `${origin}/${report.consumerModule}` });
 	report.identity = identity;
 	assert.equal(identity.manifestSha256, manifestSha256);
 	for (const [index, result] of results.entries()) {
@@ -166,7 +195,7 @@ self.onmessage = async ({ data }) => {
 		assert(result.artifact, `${fixture.name}: no output artifact`);
 		assert.equal(result.artifact.target, 'x86_64-unknown-linux-gnu');
 		assert.equal(result.artifact.cpu, fixture.cpu);
-		const bytes = Buffer.from(result.artifact.bytes);
+		const bytes = Buffer.from(result.artifact.bytesBase64, 'base64');
 		const extension = fixture.emit === 'assembly' ? '.s' : fixture.emit === 'object' ? '.o' : '.elf';
 		const artifactPath = path.join(output, fixture.name + extension);
 		await fs.writeFile(artifactPath, bytes, { mode: 0o700 });

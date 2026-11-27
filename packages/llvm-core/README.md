@@ -99,6 +99,7 @@ The `wasm-llvm` cross producer supplies the separately deployed `clang.wasm`, `l
 and `sysroot.tar`. This requires a compiler with the X86 backend and an ELF-capable LLD;
 the default WASI compiler bundle cannot be reused. The GNU/Linux sysroot supplies real
 glibc, GCC runtime and libstdc++ headers/libraries, including `bits/stdc++.h` and PBDS.
+Executable builds use the sysroot's static libatomic when present, including for 16-byte C and C++ atomics.
 All assets and the manifest require exact SHA-256 pins. Raw asset paths are relative to
 the manifest. Per-asset and extracted-sysroot limits default to 512 MiB and are configurable.
 The manifest's `qualification.status` is producer metadata; release qualification must
@@ -124,12 +125,14 @@ includes the complete driver `argv` for application cache keys and reproducibili
 To qualify a real bundle, run from the wasm-idle repository root:
 
 ```sh
+pnpm --dir packages/core build
+pnpm --dir packages/llvm-core build
 pnpm exec playwright-core install chromium
 node scripts/verify-x86-cross-clang.mjs /path/to/bundle/cross-toolchain.v1.json out/x86-qualification
 ```
 
-The output directory must be empty. The probe compiles C and GNU C++/PBDS programs in
-a Chromium Worker, checks AVX2 assembly/object output, and verifies that a failed compile
+The output directory must be empty. The probe loads the built public SDK in a Chromium Worker,
+compiles C and GNU C++/PBDS programs, checks AVX2 assembly/object output, and verifies that a failed compile
 does not return stale bytes. On Linux x64 it also runs the generated baseline executables
 with stdin and checks stdout. It writes the artifacts and `qualification.json`, including
 input/output hashes, timings, and whether native execution was checked. Host-contract unit

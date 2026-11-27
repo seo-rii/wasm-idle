@@ -80,7 +80,8 @@ export const scenarios = [
 		// Linking workspace sources with per-input Clang modes measures 7,652,352 bytes.
 		// Filename inference for the active tab measures 7,653,149 bytes with the same files.
 		// The PHP and Ruby worker helpers add four files. The root install measures 7,651,041 bytes.
-		budget: { maxBytes: 7653149, maxFiles: 869, maxPackages: 6 },
+		// The x86 Clang changes add 2,201 bytes. CI measures 7,654,830 installed bytes.
+		budget: { maxBytes: 7655424, maxFiles: 869, maxPackages: 6 },
 		absentPackageNames: [
 			'@katana-project/asm',
 			'java-parser',
@@ -499,7 +500,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// With the PHP and Ruby helpers and updated language services, the pinned install measures
 		// 43,420,505 bytes in 3,498 files and 66 packages.
 		// The DuckDB result formatter and refreshed Arrow runtime receipts measure 43,422,093 bytes.
-		budget: { maxBytes: 43422720, maxFiles: 3498, maxPackages: 70 },
+		// The x86 Clang and GCC changes add 2,201 and 338 bytes to the pinned aggregate.
+		budget: { maxBytes: 43424768, maxFiles: 3498, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

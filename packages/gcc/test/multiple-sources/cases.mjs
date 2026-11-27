@@ -76,6 +76,14 @@ export const cases = [
 		stdout: '42\n',
 		stageCount: 3
 	},
+	...['c', 'cpp'].map((language) => ({
+		id: `${language}-atomic-pair`,
+		fixture: 'atomic-pair.c',
+		request: { language, standard: language === 'c' ? 'c11' : 'c++23', emit: 'executable' },
+		stdin: '5 19\n',
+		stdout: '5 19\n',
+		stageCount: 3
+	})),
 	{
 		id: 'cpp-separate-units',
 		fixture: 'main.c',

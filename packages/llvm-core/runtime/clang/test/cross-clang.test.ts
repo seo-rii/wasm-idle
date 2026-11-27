@@ -27,10 +27,22 @@ const call = (index: number) => [0x10, ...unsigned(index)];
 const store = (address: number, value: number) => [...constant(address), ...constant(value), 0x36, 2, 0];
 const load = (address: number) => [...constant(address), 0x28, 2, 0];
 function elf(type = 2, machine = 62) {
-	const bytes = new Uint8Array(64), view = new DataView(bytes.buffer);
+	// The executable maps its ELF headers and a Linux exit(0) instruction sequence.
+	const code = [0xb8, 60, 0, 0, 0, 0x31, 0xff, 0x0f, 0x05];
+	const bytes = new Uint8Array(type === 2 ? 120 + code.length : 64), view = new DataView(bytes.buffer);
 	bytes.set([0x7f, 69, 76, 70, 2, 1, 1]);
 	view.setUint16(16, type, true); view.setUint16(18, machine, true);
 	view.setUint32(20, 1, true); view.setUint16(52, 64, true);
+	if (type === 2) {
+		view.setBigUint64(24, 0x400078n, true);
+		view.setBigUint64(32, 64n, true);
+		view.setUint16(54, 56, true); view.setUint16(56, 1, true);
+		view.setUint32(64, 1, true); view.setUint32(68, 5, true);
+		view.setBigUint64(80, 0x400000n, true); view.setBigUint64(88, 0x400000n, true);
+		view.setBigUint64(96, BigInt(bytes.length), true); view.setBigUint64(104, BigInt(bytes.length), true);
+		view.setBigUint64(112, 0x1000n, true);
+		bytes.set(code, 120);
+	}
 	return bytes;
 }
 
@@ -166,6 +178,7 @@ describe('compile-only x86-64 Clang host', () => {
 			expect(result.exitCode).toBe(0); expect(result.stdout).toBe('compiler stdout\n');
 			expect(result.artifact).toMatchObject({ target: 'x86_64-unknown-linux-gnu', format: 'elf-executable', cpu: 'x86-64-v3', fileName: 'program.elf', bytes: elf() });
 			expect(result.argv).toEqual(expect.arrayContaining(['--target=x86_64-unknown-linux-gnu', '-march=x86-64-v3', '-O3', '--driver-mode=g++', '-stdlib=libstdc++', '-static', '-fno-pie', '--ld-path=/bin/ld.lld']));
+			expect(result.argv).not.toContain('-latomic');
 			expect(compiler.identity.sysrootSha256).toBe(fixture.manifest.assets.sysroot.sha256);
 			expect(preparedCalls).toBeGreaterThanOrEqual(2);
 			expect(compile).toHaveBeenCalledTimes(preparedCalls);
@@ -182,10 +195,24 @@ describe('compile-only x86-64 Clang host', () => {
 		for (const [emit, output, fileName, format] of [
 			['object', elf(1), 'program.o', 'elf-object'], ['assembly', encoder.encode('vpaddd %ymm0, %ymm1, %ymm2\n'), 'program.s', 'assembly']
 		] as const) {
-			const compiler = await createCrossClangCompiler(bundle({ output, fileName }).options);
-			try { const result = compiler.compile({ code: '', emit }); expect(result.artifact?.format).toBe(format); expect(result.argv).not.toContain('-static'); }
+			const compiler = await createCrossClangCompiler(bundle({ output, fileName, archivePath: 'usr/lib/gcc/x86_64-linux-gnu/14/libatomic.a' }).options);
+			try {
+				const result = compiler.compile({ code: '', emit });
+				expect(result.artifact?.format).toBe(format);
+				expect(result.argv).not.toContain('-static');
+				expect(result.argv).not.toContain('-latomic');
+			}
 			finally { compiler.dispose(); }
 		}
+	});
+
+	it.each(['c', 'cpp'] as const)('links the GNU atomic runtime for %s executables when the pinned sysroot contains it', async language => {
+		const compiler = await createCrossClangCompiler(bundle({ archivePath: 'usr/lib/gcc/x86_64-linux-gnu/14/libatomic.a' }).options);
+		try {
+			const result = compiler.compile({ code: 'int main() {}', language });
+			expect(result.argv).toContain('-latomic');
+			expect(result.argv.indexOf('-latomic')).toBeGreaterThan(result.argv.indexOf(language === 'c' ? 'main.c' : 'main.cpp'));
+		} finally { compiler.dispose(); }
 	});
 
 	it.each(['success', 'failure', 'missing-output'] as const)('releases invocation mounts after %s', async outcome => {
@@ -222,6 +249,26 @@ describe('compile-only x86-64 Clang host', () => {
 		}
 	});
 
+	it('requires static ELF program headers and an entry point in a file-backed executable segment', async () => {
+		const cases: [string, (view: DataView) => void, RegExp][] = [
+			['missing table', view => view.setUint16(56, 0, true), /program header table/],
+			['truncated table', view => view.setBigUint64(32, 1n << 60n, true), /program header table/],
+			['dynamic interpreter', view => view.setUint32(64, 3, true), /dynamic interpreter/],
+			['no loadable segment', view => view.setUint32(64, 4, true), /entry point/],
+			['non-executable segment', view => view.setUint32(68, 4, true), /entry point/],
+			['entry outside mapped bytes', view => view.setBigUint64(24, 0x410000n, true), /entry point/],
+			['truncated segment', view => view.setBigUint64(72, 0x1000n, true), /load segment/],
+			['invalid memory size', view => view.setBigUint64(104, 1n, true), /load segment/]
+		];
+		for (const [label, mutate, error] of cases) {
+			const output = elf();
+			mutate(new DataView(output.buffer));
+			const compiler = await createCrossClangCompiler(bundle({ output }).options);
+			try { expect(() => compiler.compile({ code: '' }), label).toThrow(error); }
+			finally { compiler.dispose(); }
+		}
+	});
+
 	it('rejects target overrides, unsafe workspace paths, collisions, and oversized inputs before execution', async () => {
 		const compiler = await createCrossClangCompiler(bundle().options);
 		try {
@@ -250,6 +297,23 @@ describe('compile-only x86-64 Clang host', () => {
 		for (const archivePath of ['../outside', '/outside', 'usr/../../outside']) {
 			await expect(createCrossClangCompiler(bundle({ archivePath }).options)).rejects.toThrow('relative path');
 		}
+	});
+
+	it.each(['cross-toolchain.v1.json', 'clang.wasm', 'sysroot.tar'])('recovers after a rejected %s response using the same fetch provider', async name => {
+		const fixture = bundle();
+		const original = fixture.files.get(name)!;
+		const corrupt = Uint8Array.from(original);
+		corrupt[0] ^= 1;
+		fixture.files.set(name, corrupt);
+		await expect(createCrossClangCompiler(fixture.options)).rejects.toThrow('SHA-256 mismatch');
+
+		fixture.files.set(name, original);
+		const compiler = await createCrossClangCompiler(fixture.options);
+		try {
+			expect(compiler.compile({ code: 'int main() {}' }).exitCode).toBe(0);
+			const requests = vi.mocked(fixture.fetchImpl).mock.calls.filter(([url]) => String(url).endsWith('/' + name));
+			expect(requests).toHaveLength(2);
+		} finally { compiler.dispose(); }
 	});
 
 	it('rejects incompatible manifests and returns an immutable independent snapshot', () => {
