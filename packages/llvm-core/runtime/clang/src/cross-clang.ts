@@ -1,8 +1,8 @@
 import { verifyRuntimeAssetIntegrity } from '@wasm-idle/core';
 import { ConsoleStdout, Directory, File, PreopenDirectory, WASI, wasi } from '@bjorn3/browser_wasi_shim';
 import untar from '../../core/src/tar.js';
-import { readBuffer } from '../../core/src/wasm.js';
-import { createLlvmToolHost, type LlvmToolHost } from './tool-host.js';
+import { readBuffer, waitForRuntimeAssetOperation } from '../../core/src/wasm.js';
+import { compilePinnedTools, createToolHost, type LlvmToolHost } from './tool-host-execution.js';
 
 export type CrossClangCpu = 'x86-64' | 'x86-64-v3';
 export type CrossClangEmit = 'executable' | 'object' | 'assembly';
@@ -243,31 +243,43 @@ function validateOutput(bytes: Uint8Array, emit: CrossClangEmit) {
 	if (!hasExecutableEntry) throw new Error('Cross Clang ELF entry point is outside executable file data');
 }
 
-/**
- * Load an opt-in Wasm-hosted compiler and GNU/Linux sysroot. The generated x86-64
- * bytes are returned for download; this API has no native execution method.
- */
-export async function createCrossClangCompiler(options: CreateCrossClangCompilerOptions): Promise<CrossClangCompiler> {
+async function loadCrossClangBundle(options: CreateCrossClangCompilerOptions) {
 	const manifestSha256 = digest(options.manifestSha256);
 	const manifestUrl = new URL(options.manifestUrl.toString());
 	if (!['https:', 'http:'].includes(manifestUrl.protocol) || manifestUrl.username || manifestUrl.password || manifestUrl.hash) throw new Error('Cross Clang requires an HTTP(S) manifest URL');
 	const maxAssetBytes = options.maxAssetBytes ?? 512 * 1024 * 1024;
 	if (!Number.isSafeInteger(maxAssetBytes) || maxAssetBytes < 1024) throw new Error('Invalid cross Clang asset byte limit');
-	// readBuffer caches bytes before the caller checks their digest. Give each
-	// initialization its own cache so retrying can recover from a bad response.
-	const fetchImpl = options.fetchImpl?.bind(undefined) ?? globalThis.fetch?.bind(globalThis), signal = options.signal;
-	const manifestBytes = new Uint8Array(await readBuffer(manifestUrl.href, undefined, 1024 * 1024, signal, fetchImpl));
-	await verifyRuntimeAssetIntegrity({ asset: manifestUrl.href, bytes: manifestBytes, expected: manifestSha256 });
-	const manifest = parseCrossClangManifest(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(manifestBytes)));
-	for (const asset of Object.values(manifest.assets)) if (asset.bytes > maxAssetBytes) throw new Error('Cross Clang asset exceeds the configured byte limit');
-	const loaded = await Promise.all((['clang', 'lld', 'sysroot'] as const).map(async name => {
-		const receipt = manifest.assets[name];
-		const url = new URL(receipt.path, manifestUrl).href;
-		const bytes = new Uint8Array(await readBuffer(url, undefined, receipt.bytes, signal, fetchImpl));
-		await verifyRuntimeAssetIntegrity({ asset: url, bytes, expected: receipt });
-		return bytes;
-	}));
-	const [clang, lld, sysrootBytes] = loaded;
+	const controller = new AbortController();
+	const signal = options.signal ? AbortSignal.any([options.signal, controller.signal]) : controller.signal;
+	const fetchImpl = options.fetchImpl?.bind(undefined) ?? globalThis.fetch?.bind(globalThis);
+	try {
+		const bytes = await readBuffer(manifestUrl.href, undefined, 1024 * 1024, signal, fetchImpl);
+		await waitForRuntimeAssetOperation(verifyRuntimeAssetIntegrity({ asset: manifestUrl.href, bytes, expected: manifestSha256 }), signal);
+		const manifest = parseCrossClangManifest(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)));
+		for (const asset of Object.values(manifest.assets)) if (asset.bytes > maxAssetBytes) throw new Error('Cross Clang asset exceeds the configured byte limit');
+		const [clang, lld, sysrootBytes] = await Promise.all((['clang', 'lld', 'sysroot'] as const).map(async name => {
+			const receipt = manifest.assets[name];
+			const url = new URL(receipt.path, manifestUrl).href;
+			// readBuffer returns an independent copy. Keep the verified snapshot private
+			// for both the WASI filesystem and module preparation.
+			const bytes = await readBuffer(url, undefined, receipt.bytes, signal, fetchImpl);
+			await waitForRuntimeAssetOperation(verifyRuntimeAssetIntegrity({ asset: url, bytes, expected: receipt }), signal);
+			return bytes;
+		}));
+		return { manifestSha256, manifest, maxAssetBytes, clang, lld, sysrootBytes };
+	} catch (error) {
+		controller.abort(error);
+		throw error;
+	}
+}
+
+/**
+ * Load an opt-in Wasm-hosted compiler and GNU/Linux sysroot. The generated x86-64
+ * bytes are returned for download; this API has no native execution method.
+ */
+export async function createCrossClangCompiler(options: CreateCrossClangCompilerOptions): Promise<CrossClangCompiler> {
+	const { manifestSha256, manifest, maxAssetBytes, clang, lld, sysrootBytes } = await loadCrossClangBundle(options);
+	const signal = options.signal;
 	signal?.throwIfAborted();
 	let sysroot = new Directory(new Map());
 	let extractedBytes = 0, entries = 0;
@@ -297,8 +309,7 @@ export async function createCrossClangCompiler(options: CreateCrossClangCompiler
 		['clang', new File(clang, { readonly: true })], ['ld.lld', new File(lld, { readonly: true })]
 	]));
 	const importNames = new Set(Object.keys(new WASI([], [], [], { debug: false }).wasiImport));
-	host = await createLlvmToolHost({
-		tools: { clang: { bytes: clang, sha256: manifest.assets.clang.sha256 }, 'wasm-ld': { bytes: lld, sha256: manifest.assets.lld.sha256 } },
+	host = await createToolHost({
 		allowClangCc1: true, compilerPaths: [manifest.compilerPath], linkerPaths: [manifest.linkerPath],
 		validateModule(_executable, module) {
 			const imports = WebAssembly.Module.imports(module), exports = WebAssembly.Module.exports(module);
@@ -344,7 +355,10 @@ export async function createCrossClangCompiler(options: CreateCrossClangCompiler
 				}
 			};
 		}
-	});
+	}, compilePinnedTools.bind(undefined, [
+		{ executable: 'clang', bytes: clang, sha256: manifest.assets.clang.sha256 },
+		{ executable: 'wasm-ld', bytes: lld, sha256: manifest.assets.lld.sha256 }
+	], signal));
 	if (signal?.aborted) { host.dispose(); signal.throwIfAborted(); }
 	return {
 		manifest,

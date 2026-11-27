@@ -291,6 +291,52 @@ describe('compile-only x86-64 Clang host', () => {
 		await expect(createCrossClangCompiler({ ...bundle().options, maxAssetBytes: 1024 })).rejects.toThrow('byte limit');
 	});
 
+	it('hashes each private asset once and performs uncached per-initialization reads', async () => {
+		const fixture = bundle(), digest = vi.spyOn(crypto.subtle, 'digest');
+		const compiler = await createCrossClangCompiler(fixture.options);
+		try {
+			expect(digest).toHaveBeenCalledTimes(4);
+			const fetches = vi.mocked(fixture.fetchImpl).mock.calls;
+			expect(fetches).toHaveLength(4);
+			for (const [, init] of fetches) expect(init?.signal).toBeInstanceOf(AbortSignal);
+		} finally { compiler.dispose(); }
+	});
+
+	it('aborts unfinished sibling streams when a bundle asset fails', async () => {
+		const fixture = bundle();
+		const cancelled: string[] = [];
+		const fetchImpl: typeof fetch = async (input, init) => {
+			const file = new URL(String(input)).pathname.split('/').at(-1)!;
+			if (file === 'cross-toolchain.v1.json') return fixture.fetchImpl(input, init);
+			if (file === 'lld.wasm') return new Response(null, { status: 503 });
+			return new Response(new ReadableStream<Uint8Array>({
+				cancel() { cancelled.push(file); }
+			}));
+		};
+		await expect(createCrossClangCompiler({ ...fixture.options, fetchImpl })).rejects.toThrow('503');
+		expect(cancelled.sort()).toEqual(['clang.wasm', 'sysroot.tar']);
+	});
+
+	it('rejects promptly during module preparation and prevents the next compile', async () => {
+		const fixture = bundle(), controller = new AbortController();
+		const compile = WebAssembly.compile.bind(WebAssembly);
+		let started!: () => void, resume!: () => void;
+		const first = new Promise<void>(resolve => { started = resolve; });
+		const gate = new Promise<void>(resolve => { resume = resolve; });
+		const compiling = vi.spyOn(WebAssembly, 'compile').mockImplementation(async bytes => {
+			started();
+			await gate;
+			return compile(bytes);
+		});
+		const pending = createCrossClangCompiler({ ...fixture.options, signal: controller.signal });
+		await first;
+		controller.abort();
+		try {
+			await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+			expect(compiling).toHaveBeenCalledTimes(1);
+		} finally { resume(); }
+	});
+
 	it('validates bounded streaming responses and rejects sysroot path escapes', async () => {
 		const large = bundle(); large.files.set('sysroot.tar', new Uint8Array(4096));
 		await expect(createCrossClangCompiler(large.options)).rejects.toThrow('byte limit');

@@ -177,7 +177,8 @@ function runtimeAbortReason(signal: AbortSignal) {
 	return signal.reason ?? new DOMException('Runtime asset load aborted', 'AbortError');
 }
 
-function waitForRuntimeAssetOperation<T>(
+/** Stop waiting for asynchronous asset work and discard late completions after cancellation. */
+export function waitForRuntimeAssetOperation<T>(
 	operation: Promise<T>,
 	signal?: AbortSignal,
 	onLateValue?: (value: T, reason: unknown) => void | Promise<void>
