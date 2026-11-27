@@ -131,8 +131,9 @@ describe('untar', () => {
 	});
 
 	it('reads GNU long names and ustar filename prefixes', () => {
-		const longName =
-			'include/c++/v1/__support/very/long/path/that/needs/gnu/긴이름/자료.hpp';
+		// GNU tar also writes the first 100 bytes into the following file header.
+		// Here that short field ends after the first byte of 한.
+		const longName = 'a'.repeat(99) + '한글/자료.hpp';
 		const addFile = vi.fn();
 		const addDirectory = vi.fn();
 
@@ -144,7 +145,7 @@ describe('untar', () => {
 					contents: encoder.encode(`${longName}\0`)
 				}),
 				createTarEntry({
-					name: 'ignored-name',
+					name: longName,
 					type: '0',
 					contents: encoder.encode('long-name')
 				}),

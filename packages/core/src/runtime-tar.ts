@@ -60,8 +60,10 @@ function* readEntry(buffer: Uint8Array | ArrayBufferLike, pathEncoding?: 'utf-8'
 	while (offset + 512 <= u8.length) {
 		const headerOffset = offset;
 		if (u8.subarray(offset, offset + 512).every((byte) => byte === 0)) return;
+		// GNU long names supersede the fixed fields, which can end mid-character.
+		const headerPath = nextFilename ? readStr : readPath;
 		const entryInit: EntryInit = {
-			filename: str(100, readPath),
+			filename: str(100, headerPath),
 			mode: oct(8),
 			owner: oct(8),
 			group: oct(8),
@@ -81,7 +83,7 @@ function* readEntry(buffer: Uint8Array | ArrayBufferLike, pathEncoding?: 'utf-8'
 			groupName: str(32),
 			devMajor: str(8),
 			devMinor: str(8),
-			filenamePrefix: str(155, readPath)
+			filenamePrefix: str(155, headerPath)
 		};
 
 		align();
