@@ -505,7 +505,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// The x86 Clang and GCC changes add 2,201 and 338 bytes to the pinned aggregate.
 		// The combined GCC and Clang SDK changes add 8,096 bytes and four files.
 		// The x86 Clang and GCC input handling changes need three additional KiB in the aggregate.
-		budget: { maxBytes: 43436032, maxFiles: 3502, maxPackages: 70 },
+		// Checking directory traversal for Clang and GCC header lookup adds 2,961 bytes.
+		budget: { maxBytes: 43439104, maxFiles: 3502, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
