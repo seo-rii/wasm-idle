@@ -38,7 +38,7 @@ jobs:
               uses: actions/checkout@v4
               with:
                   repository: seo-rii/wasm-llvm
-                  ref: 826b522013b3ab533ffdedf6b34995aa674944b8
+                  ref: 7664dceed7c43067417cf0aed61d51ccfac1d46a
                   path: x86-producer
                   sparse-checkout: |
                       test/fixtures/x86-cross
@@ -69,7 +69,7 @@ jobs:
                   cd "$RUNNER_TEMP/bundles"
                   sha256sum --check <<'PINS'
                   9b2a5471a3664b95562fbff63b0712065f07fc41f594a31f74999ebf53af2942  clang/cross-toolchain.v1.json
-                  3170bee5a1a10f8474eab5d5bdeb6802ddb4c34a624804d6d51fbf8c650af86e  gcc/gcc-toolchain.v1.json
+                  b241298ff39c2d8b9fa572062b5f4c21863f6ff7bbd2b6b61809c2e2748cc5f3  gcc/gcc-toolchain.v1.json
                   4de4c401cabad291caa0eb20ec435bdda336597c7ee25954d95323012b8a0867  gcc13/gcc-toolchain.v1.json
                   PINS
             - name: Qualify Clang in Chromium and run the generated ELF programs
