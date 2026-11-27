@@ -1,8 +1,8 @@
-import { verifyRuntimeAssetIntegrity } from '@wasm-idle/core';
+import { verifyRuntimeAssetIntegrity, waitForRuntimeAssetOperation } from '@wasm-idle/core';
 import { ConsoleStdout, Directory, File, PreopenDirectory, WASI, wasi } from '@bjorn3/browser_wasi_shim';
 import untar from '../../core/src/tar.js';
 import { readBuffer } from '../../core/src/wasm.js';
-import { createLlvmToolHost, type LlvmToolHost } from './tool-host.js';
+import { compilePinnedTools, createToolHost, type LlvmToolHost } from './tool-host-execution.js';
 
 export type CrossClangCpu = 'x86-64' | 'x86-64-v3';
 export type CrossClangEmit = 'executable' | 'object' | 'assembly';
@@ -70,6 +70,7 @@ export interface CrossClangCompiler {
 
 const encoder = new TextEncoder();
 const target = 'x86_64-unknown-linux-gnu' as const;
+const requestKeys = new Set(['code', 'language', 'cpu', 'emit', 'optimization', 'standard', 'files']);
 const maxWorkspaceBytes = 16 * 1024 * 1024;
 const maxDiagnosticsBytes = 4 * 1024 * 1024;
 const fixedManifest = {
@@ -167,8 +168,11 @@ function addFile(root: Directory, path: string, bytes: Uint8Array, readonly: boo
 	parent.contents.set(name, new File(bytes, { readonly }));
 }
 
-function compilePlan(request: CrossClangCompileRequest, manifest: CrossClangManifest, hasLibatomic: boolean) {
+function compilePlan(request: CrossClangCompileRequest, manifest: CrossClangManifest, linkLibraries: Record<'c' | 'cpp', readonly string[]>) {
 	if (!request || typeof request.code !== 'string') throw new Error('Cross Clang requires source text');
+	for (const key of Object.keys(request)) {
+		if (!requestKeys.has(key)) throw new Error(`Unsupported cross Clang compile option: ${key}`);
+	}
 	const language = request.language ?? 'cpp', cpu = request.cpu ?? 'x86-64';
 	const emit = request.emit ?? 'executable', optimization = request.optimization ?? '2';
 	if (!['c', 'cpp'].includes(language) || !manifest.cpuProfiles.includes(cpu) || !['executable', 'object', 'assembly'].includes(emit) || !['0', '1', '2', '3', 's'].includes(optimization)) throw new Error('Invalid cross Clang compilation profile');
@@ -184,7 +188,7 @@ function compilePlan(request: CrossClangCompileRequest, manifest: CrossClangMani
 	for (const file of request.files ?? []) {
 		const path = relativePath(file.path);
 		if (path === fileName || path.startsWith(`${fileName}/`)) throw new Error('Cross Clang output path is reserved');
-		if (typeof file.contents !== 'string' && !(file.contents instanceof Uint8Array)) throw new Error('Invalid cross Clang workspace contents');
+		if (typeof file.contents !== 'string' && (!ArrayBuffer.isView(file.contents) || Object.prototype.toString.call(file.contents) !== '[object Uint8Array]')) throw new Error('Invalid cross Clang workspace contents');
 		const contents = typeof file.contents === 'string' ? encoder.encode(file.contents) : Uint8Array.from(file.contents);
 		totalBytes += contents.length;
 		if (totalBytes > maxWorkspaceBytes) throw new Error('Cross Clang workspace exceeds its limit');
@@ -200,7 +204,7 @@ function compilePlan(request: CrossClangCompileRequest, manifest: CrossClangMani
 	argv.push(main, '-o', fileName);
 	// Unlike the C++ driver, Clang's C driver does not link the math library.
 	if (emit === 'executable' && language === 'c') argv.push('-lm');
-	if (emit === 'executable' && hasLibatomic) argv.push('-latomic');
+	if (emit === 'executable') argv.push(...linkLibraries[language]);
 	return { cpu, emit, fileName, files, argv: Object.freeze(argv) };
 }
 
@@ -243,36 +247,49 @@ function validateOutput(bytes: Uint8Array, emit: CrossClangEmit) {
 	if (!hasExecutableEntry) throw new Error('Cross Clang ELF entry point is outside executable file data');
 }
 
-/**
- * Load an opt-in Wasm-hosted compiler and GNU/Linux sysroot. The generated x86-64
- * bytes are returned for download; this API has no native execution method.
- */
-export async function createCrossClangCompiler(options: CreateCrossClangCompilerOptions): Promise<CrossClangCompiler> {
+async function loadCrossClangBundle(options: CreateCrossClangCompilerOptions) {
 	const manifestSha256 = digest(options.manifestSha256);
 	const manifestUrl = new URL(options.manifestUrl.toString());
 	if (!['https:', 'http:'].includes(manifestUrl.protocol) || manifestUrl.username || manifestUrl.password || manifestUrl.hash) throw new Error('Cross Clang requires an HTTP(S) manifest URL');
 	const maxAssetBytes = options.maxAssetBytes ?? 512 * 1024 * 1024;
 	if (!Number.isSafeInteger(maxAssetBytes) || maxAssetBytes < 1024) throw new Error('Invalid cross Clang asset byte limit');
-	// readBuffer caches bytes before the caller checks their digest. Give each
-	// initialization its own cache so retrying can recover from a bad response.
-	const fetchImpl = options.fetchImpl?.bind(undefined) ?? globalThis.fetch?.bind(globalThis), signal = options.signal;
-	const manifestBytes = new Uint8Array(await readBuffer(manifestUrl.href, undefined, 1024 * 1024, signal, fetchImpl));
-	await verifyRuntimeAssetIntegrity({ asset: manifestUrl.href, bytes: manifestBytes, expected: manifestSha256 });
-	const manifest = parseCrossClangManifest(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(manifestBytes)));
-	for (const asset of Object.values(manifest.assets)) if (asset.bytes > maxAssetBytes) throw new Error('Cross Clang asset exceeds the configured byte limit');
-	const loaded = await Promise.all((['clang', 'lld', 'sysroot'] as const).map(async name => {
-		const receipt = manifest.assets[name];
-		const url = new URL(receipt.path, manifestUrl).href;
-		const bytes = new Uint8Array(await readBuffer(url, undefined, receipt.bytes, signal, fetchImpl));
-		await verifyRuntimeAssetIntegrity({ asset: url, bytes, expected: receipt });
-		return bytes;
-	}));
-	const [clang, lld, sysrootBytes] = loaded;
+	const controller = new AbortController();
+	const signal = options.signal ? AbortSignal.any([options.signal, controller.signal]) : controller.signal;
+	const fetchImpl = options.fetchImpl?.bind(undefined) ?? globalThis.fetch?.bind(globalThis);
+	try {
+		const bytes = await readBuffer(manifestUrl.href, undefined, 1024 * 1024, signal, fetchImpl);
+		await waitForRuntimeAssetOperation(verifyRuntimeAssetIntegrity({ asset: manifestUrl.href, bytes, expected: manifestSha256 }), signal);
+		const manifest = parseCrossClangManifest(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)));
+		for (const asset of Object.values(manifest.assets)) if (asset.bytes > maxAssetBytes) throw new Error('Cross Clang asset exceeds the configured byte limit');
+		const [clang, lld, sysrootBytes] = await Promise.all((['clang', 'lld', 'sysroot'] as const).map(async name => {
+			const receipt = manifest.assets[name];
+			const url = new URL(receipt.path, manifestUrl).href;
+			// readBuffer returns an independent copy. Keep the verified snapshot private
+			// for both the WASI filesystem and module preparation.
+			const bytes = await readBuffer(url, undefined, receipt.bytes, signal, fetchImpl);
+			await waitForRuntimeAssetOperation(verifyRuntimeAssetIntegrity({ asset: url, bytes, expected: receipt }), signal);
+			return bytes;
+		}));
+		return { manifestSha256, manifest, maxAssetBytes, clang, lld, sysrootBytes };
+	} catch (error) {
+		controller.abort(error);
+		throw error;
+	}
+}
+
+/**
+ * Load an opt-in Wasm-hosted compiler and GNU/Linux sysroot. The generated x86-64
+ * bytes are returned for download; this API has no native execution method.
+ */
+export async function createCrossClangCompiler(options: CreateCrossClangCompilerOptions): Promise<CrossClangCompiler> {
+	const { manifestSha256, manifest, maxAssetBytes, clang, lld, sysrootBytes } = await loadCrossClangBundle(options);
+	const signal = options.signal;
 	signal?.throwIfAborted();
 	let sysroot = new Directory(new Map());
 	let extractedBytes = 0, entries = 0;
 	const seen = new Set<string>();
 	untar(sysrootBytes, {
+		pathEncoding: 'utf-8',
 		addDirectory(path) {
 			if (path === '.' || path === './') return;
 			const normalized = relativePath(path.replace(/^\.\//u, '').replace(/\/$/u, ''));
@@ -289,15 +306,21 @@ export async function createCrossClangCompiler(options: CreateCrossClangCompiler
 		}
 	});
 	if (!seen.size) throw new Error('Cross Clang sysroot is empty');
-	const hasLibatomic = seen.has(`usr/lib/gcc/x86_64-linux-gnu/${manifest.gnu.gccVersion}/libatomic.a`);
+	const gcc = `usr/lib/gcc/x86_64-linux-gnu/${manifest.gnu.gccVersion}`;
+	const commonLibraries: string[] = [];
+	if (seen.has(`${gcc}/libatomic.a`)) commonLibraries.push('-latomic');
+	if (seen.has('usr/lib/x86_64-linux-gnu/libresolv.a') || seen.has('lib/x86_64-linux-gnu/libresolv.a')) commonLibraries.push('-lresolv');
+	const cppLibraries = ['stdc++exp', 'stdc++fs']
+		.filter(name => seen.has(`${gcc}/lib${name}.a`))
+		.map(name => `-l${name}`);
+	const linkLibraries = { c: commonLibraries, cpp: [...cppLibraries, ...commonLibraries] };
 	let active: { root: Directory; stdout: string; stderr: string; diagnosticBytes: number } | undefined;
 	let host: LlvmToolHost | undefined;
 	let toolsDirectory = new Directory(new Map([
 		['clang', new File(clang, { readonly: true })], ['ld.lld', new File(lld, { readonly: true })]
 	]));
 	const importNames = new Set(Object.keys(new WASI([], [], [], { debug: false }).wasiImport));
-	host = await createLlvmToolHost({
-		tools: { clang: { bytes: clang, sha256: manifest.assets.clang.sha256 }, 'wasm-ld': { bytes: lld, sha256: manifest.assets.lld.sha256 } },
+	host = await createToolHost({
 		allowClangCc1: true, compilerPaths: [manifest.compilerPath], linkerPaths: [manifest.linkerPath],
 		validateModule(_executable, module) {
 			const imports = WebAssembly.Module.imports(module), exports = WebAssembly.Module.exports(module);
@@ -343,7 +366,10 @@ export async function createCrossClangCompiler(options: CreateCrossClangCompiler
 				}
 			};
 		}
-	});
+	}, compilePinnedTools.bind(undefined, [
+		{ executable: 'clang', bytes: clang, sha256: manifest.assets.clang.sha256 },
+		{ executable: 'wasm-ld', bytes: lld, sha256: manifest.assets.lld.sha256 }
+	], signal));
 	if (signal?.aborted) { host.dispose(); signal.throwIfAborted(); }
 	return {
 		manifest,
@@ -351,7 +377,7 @@ export async function createCrossClangCompiler(options: CreateCrossClangCompiler
 		compile(request) {
 			if (!host) throw new Error('Cross Clang compiler is disposed');
 			if (active) throw new Error('Cross Clang compiler is busy');
-			const plan = compilePlan(request, manifest, hasLibatomic), workspace = new Directory(new Map());
+			const plan = compilePlan(request, manifest, linkLibraries), workspace = new Directory(new Map());
 			for (const file of plan.files) addFile(workspace, file.path, file.contents, false);
 			active = { root: new Directory(new Map([['sysroot', sysroot], ['bin', toolsDirectory], ['tmp', new Directory(new Map())], ['workspace', workspace]])), stdout: '', stderr: '', diagnosticBytes: 0 };
 			try {

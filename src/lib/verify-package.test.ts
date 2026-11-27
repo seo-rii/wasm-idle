@@ -186,13 +186,13 @@ describe('package install budgets', () => {
 			Object.fromEntries(scenarios.map((scenario) => [scenario.name, scenario.budget]))
 		).toEqual({
 			'wasm-idle root install': {
-				maxBytes: 7655424,
-				maxFiles: 869,
+				maxBytes: 7660544,
+				maxFiles: 873,
 				maxPackages: 6
 			},
 			'@wasm-idle/gcc install': {
 				maxBytes: 2895872,
-				maxFiles: 198,
+				maxFiles: 200,
 				maxPackages: 4
 			},
 			'wasm-idle/container install': {
@@ -216,8 +216,8 @@ describe('package install budgets', () => {
 				maxPackages: 10
 			},
 			'all public packages/adapters aggregate': {
-				maxBytes: 43424768,
-				maxFiles: 3498,
+				maxBytes: 43432960,
+				maxFiles: 3502,
 				maxPackages: 70
 			}
 		});
@@ -229,6 +229,9 @@ describe('package install budgets', () => {
 			expect(() =>
 				assertInstallBudget(scenario, { bytes, files: 196, packages: 4 })
 			).not.toThrow();
+		expect(() =>
+			assertInstallBudget(scenario, { bytes: 2_869_378, files: 200, packages: 4 })
+		).not.toThrow();
 		const atLimit = {
 			bytes: scenario.budget.maxBytes,
 			files: scenario.budget.maxFiles,
@@ -274,6 +277,9 @@ describe('package install budgets', () => {
 		expect(() =>
 			assertInstallBudget(root, { bytes: 7_654_830, files: 869, packages: 5 })
 		).not.toThrow();
+		expect(() =>
+			assertInstallBudget(root, { bytes: 7_659_786, files: 873, packages: 5 })
+		).not.toThrow();
 		const scenario = scenarios.find(
 			(entry) => entry.name === 'all public packages/adapters aggregate'
 		)!;
@@ -292,7 +298,9 @@ describe('package install budgets', () => {
 			{ bytes: 43_401_987, files: 3_494, packages: 66 },
 			{ bytes: 43_420_505, files: 3_498, packages: 66 },
 			{ bytes: 43_422_093, files: 3_498, packages: 66 },
-			{ bytes: 43_424_632, files: 3_498, packages: 66 }
+			{ bytes: 43_424_632, files: 3_498, packages: 66 },
+			{ bytes: 43_427_688, files: 3_498, packages: 66 },
+			{ bytes: 43_432_728, files: 3_502, packages: 66 }
 		])
 			expect(() => assertInstallBudget(scenario, measurement)).not.toThrow();
 		for (const entry of [root, scenario]) {
