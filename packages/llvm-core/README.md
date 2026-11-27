@@ -99,6 +99,7 @@ The `wasm-llvm` cross producer supplies the separately deployed `clang.wasm`, `l
 and `sysroot.tar`. This requires a compiler with the X86 backend and an ELF-capable LLD;
 the default WASI compiler bundle cannot be reused. The GNU/Linux sysroot supplies real
 glibc, GCC runtime and libstdc++ headers/libraries, including `bits/stdc++.h` and PBDS.
+Executable builds use the sysroot's static libatomic when present, including for 16-byte C and C++ atomics.
 All assets and the manifest require exact SHA-256 pins. Raw asset paths are relative to
 the manifest. Per-asset and extracted-sysroot limits default to 512 MiB and are configurable.
 The manifest's `qualification.status` is producer metadata; release qualification must

@@ -58,6 +58,21 @@ int main() {
 `,
 		stdin: '5\n2 9 7 2 5\n', stdout: '7 2\n'
 	},
+	...['c', 'cpp'].map((language) => ({
+		name: `${language}-atomic-pair-stdin`, language, emit: 'executable', cpu: 'x86-64',
+		code: `#include <stdio.h>
+typedef struct { long long first, second; } Pair;
+${language === 'c' ? '#include <stdatomic.h>\nstatic _Atomic(Pair) pair;' : '#include <atomic>\nstatic std::atomic<Pair> pair;'}
+int main(void) {
+  Pair input;
+  if (scanf("%lld%lld", &input.first, &input.second) != 2) return 1;
+  atomic_store(&pair, input);
+  Pair output = atomic_load(&pair);
+  printf("%lld %lld\\n", output.first, output.second);
+}
+`,
+		stdin: '5000000000 -7000000000\n', stdout: '5000000000 -7000000000\n'
+	})),
 	...['assembly', 'object'].map((emit) => ({
 		name: `avx2-${emit}`, language: 'c', emit, cpu: 'x86-64-v3',
 		code: `#include <immintrin.h>

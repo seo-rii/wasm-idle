@@ -178,6 +178,7 @@ describe('compile-only x86-64 Clang host', () => {
 			expect(result.exitCode).toBe(0); expect(result.stdout).toBe('compiler stdout\n');
 			expect(result.artifact).toMatchObject({ target: 'x86_64-unknown-linux-gnu', format: 'elf-executable', cpu: 'x86-64-v3', fileName: 'program.elf', bytes: elf() });
 			expect(result.argv).toEqual(expect.arrayContaining(['--target=x86_64-unknown-linux-gnu', '-march=x86-64-v3', '-O3', '--driver-mode=g++', '-stdlib=libstdc++', '-static', '-fno-pie', '--ld-path=/bin/ld.lld']));
+			expect(result.argv).not.toContain('-latomic');
 			expect(compiler.identity.sysrootSha256).toBe(fixture.manifest.assets.sysroot.sha256);
 			expect(preparedCalls).toBeGreaterThanOrEqual(2);
 			expect(compile).toHaveBeenCalledTimes(preparedCalls);
@@ -194,10 +195,24 @@ describe('compile-only x86-64 Clang host', () => {
 		for (const [emit, output, fileName, format] of [
 			['object', elf(1), 'program.o', 'elf-object'], ['assembly', encoder.encode('vpaddd %ymm0, %ymm1, %ymm2\n'), 'program.s', 'assembly']
 		] as const) {
-			const compiler = await createCrossClangCompiler(bundle({ output, fileName }).options);
-			try { const result = compiler.compile({ code: '', emit }); expect(result.artifact?.format).toBe(format); expect(result.argv).not.toContain('-static'); }
+			const compiler = await createCrossClangCompiler(bundle({ output, fileName, archivePath: 'usr/lib/gcc/x86_64-linux-gnu/14/libatomic.a' }).options);
+			try {
+				const result = compiler.compile({ code: '', emit });
+				expect(result.artifact?.format).toBe(format);
+				expect(result.argv).not.toContain('-static');
+				expect(result.argv).not.toContain('-latomic');
+			}
 			finally { compiler.dispose(); }
 		}
+	});
+
+	it.each(['c', 'cpp'] as const)('links the GNU atomic runtime for %s executables when the pinned sysroot contains it', async language => {
+		const compiler = await createCrossClangCompiler(bundle({ archivePath: 'usr/lib/gcc/x86_64-linux-gnu/14/libatomic.a' }).options);
+		try {
+			const result = compiler.compile({ code: 'int main() {}', language });
+			expect(result.argv).toContain('-latomic');
+			expect(result.argv.indexOf('-latomic')).toBeGreaterThan(result.argv.indexOf(language === 'c' ? 'main.c' : 'main.cpp'));
+		} finally { compiler.dispose(); }
 	});
 
 	it.each(['success', 'failure', 'missing-output'] as const)('releases invocation mounts after %s', async outcome => {
