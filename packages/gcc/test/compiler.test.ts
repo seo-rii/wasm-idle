@@ -2139,6 +2139,34 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 		expect(compileWasm).not.toHaveBeenCalled();
 	});
 
+	it.each(['fetch', 'integrity'])(
+		'aborts pending asset fetches on %s failure',
+		async (failure) => {
+			const fixture = bundle();
+			const signals: AbortSignal[] = [];
+			const fetchImpl: typeof fetch = async (url, init) => {
+				if (String(url).endsWith('gcc-toolchain.v1.json'))
+					return fixture.options.fetchImpl(url, init);
+				if (String(url).endsWith('cc1.wasm'))
+					return failure === 'fetch'
+						? new Response(null, { status: 503 })
+						: new Response(new Uint8Array(wasm.length));
+				const signal = init!.signal!;
+				signals.push(signal);
+				return new Promise((_, reject) =>
+					signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+				);
+			};
+			const parent = new AbortController();
+			await expect(
+				createCrossGccCompiler({ ...fixture.options, fetchImpl, signal: parent.signal })
+			).rejects.toThrow(failure === 'fetch' ? /503/ : /SHA-256 mismatch/);
+			expect(signals).toHaveLength(8);
+			expect(signals.every((signal) => signal.aborted)).toBe(true);
+			expect(parent.signal.aborted).toBe(false);
+		}
+	);
+
 	it.each(['gcc-toolchain.v1.json', 'cc1plus.mjs', 'as.wasm', 'sysroot.tar'])(
 		'refetches %s after an integrity failure when the same fetch provider is reused',
 		async (path) => {
