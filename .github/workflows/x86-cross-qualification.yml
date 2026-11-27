@@ -38,7 +38,7 @@ jobs:
               uses: actions/checkout@v4
               with:
                   repository: seo-rii/wasm-llvm
-                  ref: 7664dceed7c43067417cf0aed61d51ccfac1d46a
+                  ref: b22df24b584fad3866327720d4a8354172b08483
                   path: x86-producer
                   sparse-checkout: |
                       test/fixtures/x86-cross
@@ -68,9 +68,9 @@ jobs:
                   done
                   cd "$RUNNER_TEMP/bundles"
                   sha256sum --check <<'PINS'
-                  9b2a5471a3664b95562fbff63b0712065f07fc41f594a31f74999ebf53af2942  clang/cross-toolchain.v1.json
+                  9e7e96e411b381fb23943e159f46a24d8c95812ba3b86746e16a6573f4d6b6ac  clang/cross-toolchain.v1.json
                   b241298ff39c2d8b9fa572062b5f4c21863f6ff7bbd2b6b61809c2e2748cc5f3  gcc/gcc-toolchain.v1.json
-                  4de4c401cabad291caa0eb20ec435bdda336597c7ee25954d95323012b8a0867  gcc13/gcc-toolchain.v1.json
+                  a8f80b80922e21519fa7b99626dea6cf18dbe94b4df8289ac5730c02d4acacdd  gcc13/gcc-toolchain.v1.json
                   PINS
             - name: Qualify Clang in Chromium and run the generated ELF programs
               run: |
@@ -78,7 +78,7 @@ jobs:
             - name: Qualify GCC in Chromium and run its multi-source and CPU cases
               run: |
                   manifest="$RUNNER_TEMP/bundles/gcc/gcc-toolchain.v1.json"
-                  node scripts/verify-x86-cross-gcc.mjs "$manifest" x86-producer/producer/gcc-browser/qualification "$RUNNER_TEMP/x86-results/gcc"
+                  node scripts/verify-x86-cross-gcc.mjs --runtime-libraries "$manifest" x86-producer/producer/gcc-browser/qualification "$RUNNER_TEMP/x86-results/gcc"
                   node scripts/verify-x86-cross-gcc.mjs "$manifest" packages/gcc/test/multiple-sources "$RUNNER_TEMP/x86-results/gcc-multiple-sources"
                   node scripts/verify-x86-cross-gcc.mjs "$manifest" packages/gcc/test/cpu-profiles "$RUNNER_TEMP/x86-results/gcc-cpu-profiles"
             - name: Qualify the supported GCC 13 bundle in Chromium and Linux

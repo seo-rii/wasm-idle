@@ -9,13 +9,17 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { parseArgs } from 'node:util';
 import { executionCommand } from './verify-x86-cross-native.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const args = process.argv.slice(2);
-if (args.includes('--help')) {
+const { values: options, positionals: args } = parseArgs({
+	options: { help: { type: 'boolean' }, 'runtime-libraries': { type: 'boolean' } },
+	allowPositionals: true
+});
+if (options.help) {
 	console.log(
-		'Usage: node scripts/verify-x86-cross-gcc.mjs MANIFEST PRODUCER_QUALIFICATION_DIR [NEW_OUTPUT_DIR]\nRequires built @wasm-idle/core and @wasm-idle/gcc packages, a real GCC Wasm bundle, the matching wasm-llvm qualification sources, Chromium, and Linux x86-64 for native stdin/stdout checks. Install qemu-user when the execution host lacks a requested SIMD profile.'
+		'Usage: node scripts/verify-x86-cross-gcc.mjs [--runtime-libraries] MANIFEST PRODUCER_QUALIFICATION_DIR [NEW_OUTPUT_DIR]\nRequires built @wasm-idle/core and @wasm-idle/gcc packages, a real GCC Wasm bundle, the matching wasm-llvm qualification sources, Chromium, and Linux x86-64 for native stdin/stdout checks. Install qemu-user when the execution host lacks a requested SIMD profile.'
 	);
 	process.exit(0);
 }
@@ -31,7 +35,12 @@ const manifest = JSON.parse(manifestBytes);
 assert.equal(manifest.kind, 'gcc-x86_64-linux-gnu');
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const manifestSha256 = digest(manifestBytes);
-const { cases } = await import(pathToFileURL(path.join(suite, 'cases.mjs')));
+const suiteCases = await import(pathToFileURL(path.join(suite, 'cases.mjs')));
+if (options['runtime-libraries'])
+	assert(suiteCases.runtimeLibraryCases?.length, 'Missing producer runtime library cases');
+const cases = options['runtime-libraries']
+	? [...suiteCases.cases, ...suiteCases.runtimeLibraryCases]
+	: suiteCases.cases;
 const { assertCaseResult } = await import(pathToFileURL(path.join(suite, 'assertions.mjs')));
 const fixtures = [];
 const suiteFiles = [
@@ -191,6 +200,7 @@ try {
 				clearTimeout(initializationTimer);
 			}
 			const results = [];
+			let checkedFallback = false;
 			try {
 				for (const fixture of fixtures) {
 					if (fixture.precompiledHeader && !compiler.manifest.capabilities?.precompiledHeaders) {
@@ -209,9 +219,26 @@ try {
 							if (header.exitCode !== 0 || !header.bytes) throw new Error(`PCH creation failed: ${header.stderr}`);
 							precompiled = { bytes: header.bytes };
 						}
-						result = await compiler.compile(fixture.request, {
-							signal: deadline.signal
-						});
+						const request = precompiled ? { ...fixture.request, traceIncludes: true } : fixture.request;
+						result = await compiler.compile(request, { signal: deadline.signal });
+						if (precompiled) {
+							const pchMarker = /^! \/pch\/bits\/stdc\+\+\.h\.gch$/m;
+							precompiled.used = pchMarker.test(result.stderr);
+							if (!checkedFallback) {
+								// An ordinary C++ token before the include prevents a PCH load.
+								const fallback = await compiler.compile({
+									...request,
+									emit: 'assembly',
+									code: 'static_assert(sizeof(int) > 0);\n#include <bits/stdc++.h>\nint fallback;'
+								}, { signal: deadline.signal });
+								if (fallback.exitCode !== 0 || !fallback.artifact ||
+									pchMarker.test(fallback.stderr) ||
+									!/^\. \/sysroot\/.*\/bits\/stdc\+\+\.h$/m.test(fallback.stderr))
+									throw new Error('GCC did not trace the expected textual PCH fallback');
+								precompiled.textualFallbackVerified = true;
+								checkedFallback = true;
+							}
+						}
 					} catch (error) {
 						// Return completed cases before reporting this host failure. Throwing
 						// out of page.evaluate would discard their artifacts and prevent
@@ -333,6 +360,7 @@ try {
 				assert(result.precompiled?.bytes > 0);
 				const frontend = result.stages.find((stage) => stage.tool === 'cc1plus');
 				assert(frontend?.argv.includes('/pch'), 'SDK did not offer the prepared header to GCC');
+				assert.equal(result.precompiled.used, true, 'GCC did not load the prepared header');
 				const reference = report.cases.find((other) => other.id === fixture.sameAs);
 				assert.equal(entry.artifact.sha256, reference?.artifact?.sha256, 'PCH changed the artifact');
 				entry.precompiledHeader = { ...result.precompiled, sameOutputAs: reference.id };
