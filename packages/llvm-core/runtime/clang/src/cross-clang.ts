@@ -70,6 +70,7 @@ export interface CrossClangCompiler {
 
 const encoder = new TextEncoder();
 const target = 'x86_64-unknown-linux-gnu' as const;
+const requestKeys = new Set(['code', 'language', 'cpu', 'emit', 'optimization', 'standard', 'files']);
 const maxWorkspaceBytes = 16 * 1024 * 1024;
 const maxDiagnosticsBytes = 4 * 1024 * 1024;
 const fixedManifest = {
@@ -169,6 +170,9 @@ function addFile(root: Directory, path: string, bytes: Uint8Array, readonly: boo
 
 function compilePlan(request: CrossClangCompileRequest, manifest: CrossClangManifest, hasLibatomic: boolean) {
 	if (!request || typeof request.code !== 'string') throw new Error('Cross Clang requires source text');
+	for (const key of Object.keys(request)) {
+		if (!requestKeys.has(key)) throw new Error(`Unsupported cross Clang compile option: ${key}`);
+	}
 	const language = request.language ?? 'cpp', cpu = request.cpu ?? 'x86-64';
 	const emit = request.emit ?? 'executable', optimization = request.optimization ?? '2';
 	if (!['c', 'cpp'].includes(language) || !manifest.cpuProfiles.includes(cpu) || !['executable', 'object', 'assembly'].includes(emit) || !['0', '1', '2', '3', 's'].includes(optimization)) throw new Error('Invalid cross Clang compilation profile');
@@ -184,7 +188,7 @@ function compilePlan(request: CrossClangCompileRequest, manifest: CrossClangMani
 	for (const file of request.files ?? []) {
 		const path = relativePath(file.path);
 		if (path === fileName || path.startsWith(`${fileName}/`)) throw new Error('Cross Clang output path is reserved');
-		if (typeof file.contents !== 'string' && !(file.contents instanceof Uint8Array)) throw new Error('Invalid cross Clang workspace contents');
+		if (typeof file.contents !== 'string' && (!ArrayBuffer.isView(file.contents) || Object.prototype.toString.call(file.contents) !== '[object Uint8Array]')) throw new Error('Invalid cross Clang workspace contents');
 		const contents = typeof file.contents === 'string' ? encoder.encode(file.contents) : Uint8Array.from(file.contents);
 		totalBytes += contents.length;
 		if (totalBytes > maxWorkspaceBytes) throw new Error('Cross Clang workspace exceeds its limit');

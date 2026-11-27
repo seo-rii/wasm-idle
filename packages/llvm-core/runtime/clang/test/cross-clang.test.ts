@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { runInNewContext } from 'node:vm';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Directory, PreopenDirectory, WASI, wasi } from '@bjorn3/browser_wasi_shim';
 import { createCrossClangCompiler, parseCrossClangManifest, type CrossClangEmit } from '../src/cross-clang.js';
@@ -269,10 +270,21 @@ describe('compile-only x86-64 Clang host', () => {
 		}
 	});
 
+	it('accepts Uint8Array headers created in another realm', async () => {
+		const compiler = await createCrossClangCompiler(bundle().options);
+		try {
+			const contents: Uint8Array = runInNewContext('new Uint8Array([65, 66])');
+			expect(compiler.compile({ code: '', files: [{ path: 'header.h', contents }] }).exitCode).toBe(0);
+			const words = runInNewContext('new Uint16Array([65, 66])');
+			expect(() => compiler.compile({ code: '', files: [{ path: 'header.h', contents: words }] })).toThrow('workspace contents');
+		} finally { compiler.dispose(); }
+	});
+
 	it('rejects target overrides, unsafe workspace paths, collisions, and oversized inputs before execution', async () => {
 		const compiler = await createCrossClangCompiler(bundle().options);
 		try {
 			for (const request of [
+				{ code: '', cpuProfile: 'x86-64-v3' }, { code: '', defines: ['DEBUG'] },
 				{ code: '', cpu: 'native' }, { code: '', standard: 'gnu++20 -march=native' }, { code: '', optimization: '2 -target=wasm32' },
 				...['../file.h', '/etc/a', 'a//b', 'a/./b', 'a\\b', 'main.cpp', 'main.cpp/nested', 'program.elf', 'program.elf/child'].map(path => ({ code: '', files: [{ path, contents: '' }] })),
 				{ code: '', files: [{ path: 'a', contents: '' }, { path: 'a/b', contents: '' }] },
