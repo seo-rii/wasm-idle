@@ -224,7 +224,9 @@ export async function createCrossClangCompiler(options: CreateCrossClangCompiler
 	if (!['https:', 'http:'].includes(manifestUrl.protocol) || manifestUrl.username || manifestUrl.password || manifestUrl.hash) throw new Error('Cross Clang requires an HTTP(S) manifest URL');
 	const maxAssetBytes = options.maxAssetBytes ?? 512 * 1024 * 1024;
 	if (!Number.isSafeInteger(maxAssetBytes) || maxAssetBytes < 1024) throw new Error('Invalid cross Clang asset byte limit');
-	const fetchImpl = options.fetchImpl ?? globalThis.fetch?.bind(globalThis), signal = options.signal;
+	// readBuffer caches bytes before the caller checks their digest. Give each
+	// initialization its own cache so retrying can recover from a bad response.
+	const fetchImpl = options.fetchImpl?.bind(undefined) ?? globalThis.fetch?.bind(globalThis), signal = options.signal;
 	const manifestBytes = new Uint8Array(await readBuffer(manifestUrl.href, undefined, 1024 * 1024, signal, fetchImpl));
 	await verifyRuntimeAssetIntegrity({ asset: manifestUrl.href, bytes: manifestBytes, expected: manifestSha256 });
 	const manifest = parseCrossClangManifest(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(manifestBytes)));

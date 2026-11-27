@@ -252,6 +252,23 @@ describe('compile-only x86-64 Clang host', () => {
 		}
 	});
 
+	it.each(['cross-toolchain.v1.json', 'clang.wasm', 'sysroot.tar'])('recovers after a rejected %s response using the same fetch provider', async name => {
+		const fixture = bundle();
+		const original = fixture.files.get(name)!;
+		const corrupt = Uint8Array.from(original);
+		corrupt[0] ^= 1;
+		fixture.files.set(name, corrupt);
+		await expect(createCrossClangCompiler(fixture.options)).rejects.toThrow('SHA-256 mismatch');
+
+		fixture.files.set(name, original);
+		const compiler = await createCrossClangCompiler(fixture.options);
+		try {
+			expect(compiler.compile({ code: 'int main() {}' }).exitCode).toBe(0);
+			const requests = vi.mocked(fixture.fetchImpl).mock.calls.filter(([url]) => String(url).endsWith('/' + name));
+			expect(requests).toHaveLength(2);
+		} finally { compiler.dispose(); }
+	});
+
 	it('rejects incompatible manifests and returns an immutable independent snapshot', () => {
 		const { manifest } = bundle(), parsed = parseCrossClangManifest(manifest);
 		manifest.assets.clang.sha256 = '0'.repeat(64);
