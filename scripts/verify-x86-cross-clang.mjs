@@ -11,11 +11,12 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { executionCommand } from './verify-x86-cross-native.mjs';
 
 const repoRoot = fileURLToPath(new URL('../', import.meta.url));
 const argv = process.argv.slice(2);
 if (argv.includes('--help')) {
-	console.log('Usage: node scripts/verify-x86-cross-clang.mjs /path/to/cross-toolchain.v1.json [output-directory]\n\nBuild @wasm-idle/core and @wasm-idle/llvm-core first. Requires a real wasm-llvm x86-64 bundle and installed Chromium.\nOn Linux x64, also verifies the generated programs with stdin/stdout.');
+	console.log('Usage: node scripts/verify-x86-cross-clang.mjs /path/to/cross-toolchain.v1.json [output-directory]\n\nBuild @wasm-idle/core and @wasm-idle/llvm-core first. Requires a real wasm-llvm x86-64 bundle and installed Chromium.\nOn Linux x64, also verifies the generated programs with stdin/stdout. Install qemu-user when the execution host lacks a requested SIMD profile.');
 	process.exit(0);
 }
 if (argv.length < 1 || argv.length > 2) throw new Error('Expected a producer manifest path and optional fresh output directory; see --help');
@@ -73,6 +74,11 @@ int main(void) {
 `,
 		stdin: '5000000000 -7000000000\n', stdout: '5000000000 -7000000000\n'
 	})),
+	{
+		name: 'v3-simd-execution', language: 'c', emit: 'executable', cpu: 'x86-64-v3',
+		code: await fs.readFile(new URL('../packages/gcc/test/cpu-profiles/fixtures/simd-run.c', import.meta.url), 'utf8'),
+		stdin: '1 2 3 4 5 6 7 8\n', stdout: '2 2\n4 5\n6 10\n8 17\n10 26\n12 37\n14 50\n16 65\n'
+	},
 	...['assembly', 'object'].map((emit) => ({
 		name: `avx2-${emit}`, language: 'c', emit, cpu: 'x86-64-v3',
 		code: `#include <immintrin.h>
@@ -208,6 +214,7 @@ self.onmessage = async ({ data }) => {
 			assert.equal(bytes.readUInt16LE(16), fixture.emit === 'object' ? 1 : 2);
 		}
 		let nativeRun = 'not-applicable';
+		let executionMode;
 		let objectDisassembly = 'not-applicable';
 		if (fixture.emit === 'object') {
 			if (process.platform === 'linux' && process.arch === 'x64') {
@@ -221,7 +228,9 @@ self.onmessage = async ({ data }) => {
 		}
 		if (fixture.emit === 'executable') {
 			if (process.platform === 'linux' && process.arch === 'x64') {
-				const execution = spawnSync(artifactPath, [], { input: fixture.stdin, encoding: 'utf8', timeout: 10_000, maxBuffer: 1024 * 1024 });
+				const runner = executionCommand(artifactPath, fixture.cpu);
+				executionMode = runner.mode;
+				const execution = spawnSync(runner.command, runner.args, { input: fixture.stdin, encoding: 'utf8', timeout: 10_000, maxBuffer: 1024 * 1024 });
 				assert.ifError(execution.error);
 				assert.equal(execution.status, 0, execution.stderr);
 				assert.equal(execution.stdout, fixture.stdout);
@@ -229,7 +238,7 @@ self.onmessage = async ({ data }) => {
 			} else nativeRun = 'requires-linux-x64';
 		}
 		report.cases.push({ name: fixture.name, cpu: fixture.cpu, format: result.artifact.format, bytes: bytes.length,
-			sha256: createHash('sha256').update(bytes).digest('hex'), elapsedMs: result.elapsedMs, nativeRun, objectDisassembly });
+			sha256: createHash('sha256').update(bytes).digest('hex'), elapsedMs: result.elapsedMs, nativeRun, executionMode, objectDisassembly });
 	}
 	report.success = true;
 	report.qualification = report.cases.some((entry) => entry.nativeRun === 'requires-linux-x64') ? 'browser-compilation-only' : 'browser-compilation-and-native-io';

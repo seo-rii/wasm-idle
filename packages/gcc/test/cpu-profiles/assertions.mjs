@@ -17,9 +17,13 @@ export function assertCaseResult(test, result) {
 	}
 	assert.equal(result.exitCode, 0, `${test.id}: ${result.stderr}`);
 	assert.equal(result.artifact?.cpu, test.request.cpu);
-	assert.equal(result.artifact?.format, 'assembly');
 	assert.equal(result.artifact?.compiler, 'gcc');
 	assert.equal(result.artifact?.target, 'x86_64-linux-gnu');
+	if (test.request.emit === 'executable') {
+		assert.equal(result.artifact?.format, 'elf-executable');
+		return;
+	}
+	assert.equal(result.artifact?.format, 'assembly');
 	const assembly = new TextDecoder('utf-8', { fatal: true }).decode(
 		new Uint8Array(result.artifact.bytes)
 	);
