@@ -150,9 +150,15 @@ self.onmessage = async ({ data }) => {
     for (const fixture of data.cases) {
       const start = performance.now();
       const result = compiler.compile({ code: fixture.code, language: fixture.language, cpu: fixture.cpu, emit: fixture.emit, optimization: '2' });
-      results.push({ name: fixture.name, ...result,
-        ...(result.artifact ? { artifact: { ...result.artifact, bytes: Array.from(result.artifact.bytes) } } : {}),
-        elapsedMs: performance.now() - start });
+      let encodedArtifact;
+      if (result.artifact) {
+        // CDP serializes each numeric array element separately. Keep static ELF
+        // binaries compact when returning the whole qualification suite to Node.
+        const { bytes, ...metadata } = result.artifact;
+        const url = new FileReaderSync().readAsDataURL(new Blob([bytes]));
+        encodedArtifact = { ...metadata, bytesBase64: url.slice(url.indexOf(',') + 1) };
+      }
+      results.push({ name: fixture.name, ...result, artifact: encodedArtifact, elapsedMs: performance.now() - start });
     }
     // A failed compilation after a successful one must not expose old output.
     const invalid = compiler.compile({ code: 'int main( {', language: 'c' });
@@ -181,7 +187,7 @@ self.onmessage = async ({ data }) => {
 		assert(result.artifact, `${fixture.name}: no output artifact`);
 		assert.equal(result.artifact.target, 'x86_64-unknown-linux-gnu');
 		assert.equal(result.artifact.cpu, fixture.cpu);
-		const bytes = Buffer.from(result.artifact.bytes);
+		const bytes = Buffer.from(result.artifact.bytesBase64, 'base64');
 		const extension = fixture.emit === 'assembly' ? '.s' : fixture.emit === 'object' ? '.o' : '.elf';
 		const artifactPath = path.join(output, fixture.name + extension);
 		await fs.writeFile(artifactPath, bytes, { mode: 0o700 });
