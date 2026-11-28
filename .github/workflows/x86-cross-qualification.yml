@@ -38,7 +38,7 @@ jobs:
               uses: actions/checkout@v4
               with:
                   repository: seo-rii/wasm-llvm
-                  ref: b22df24b584fad3866327720d4a8354172b08483
+                  ref: ed4105b3aefc8fc0b0334973e295215ffbdc6340
                   path: x86-producer
                   sparse-checkout: |
                       test/fixtures/x86-cross
@@ -68,9 +68,9 @@ jobs:
                   done
                   cd "$RUNNER_TEMP/bundles"
                   sha256sum --check <<'PINS'
-                  9e7e96e411b381fb23943e159f46a24d8c95812ba3b86746e16a6573f4d6b6ac  clang/cross-toolchain.v1.json
+                  dbb80dbe1fc999b4d927585d54922d3a5402cbd781ffb45f558d2d06738a5fc3  clang/cross-toolchain.v1.json
                   b241298ff39c2d8b9fa572062b5f4c21863f6ff7bbd2b6b61809c2e2748cc5f3  gcc/gcc-toolchain.v1.json
-                  a8f80b80922e21519fa7b99626dea6cf18dbe94b4df8289ac5730c02d4acacdd  gcc13/gcc-toolchain.v1.json
+                  78dde7f8f1088d52ecfd05d11cec721c3ac211d45f2fa7e6c222abab885a3705  gcc13/gcc-toolchain.v1.json
                   PINS
             - name: Qualify Clang in Chromium and run the generated ELF programs
               run: |
@@ -83,7 +83,7 @@ jobs:
                   node scripts/verify-x86-cross-gcc.mjs "$manifest" packages/gcc/test/cpu-profiles "$RUNNER_TEMP/x86-results/gcc-cpu-profiles"
             - name: Qualify the supported GCC 13 bundle in Chromium and Linux
               run: |
-                  node scripts/verify-x86-cross-gcc.mjs "$RUNNER_TEMP/bundles/gcc13/gcc-toolchain.v1.json" x86-producer/producer/gcc-browser/qualification "$RUNNER_TEMP/x86-results/gcc13"
+                  node scripts/verify-x86-cross-gcc.mjs --runtime-libraries "$RUNNER_TEMP/bundles/gcc13/gcc-toolchain.v1.json" x86-producer/producer/gcc-browser/qualification "$RUNNER_TEMP/x86-results/gcc13"
             - name: Keep qualification reports
               if: always()
               uses: actions/upload-artifact@v4

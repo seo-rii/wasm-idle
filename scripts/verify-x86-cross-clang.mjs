@@ -59,6 +59,11 @@ int main() {
 `,
 		stdin: '5\n2 9 7 2 5\n', stdout: '7 2\n'
 	},
+	{
+		name: 'cpp-stacktrace', language: 'cpp', standard: 'c++23', emit: 'executable', cpu: 'x86-64',
+		code: '#include <cstdio>\n#include <stacktrace>\nint main() { if (std::stacktrace::current().empty()) return 1; std::puts("trace"); }\n',
+		stdin: '', stdout: 'trace\n'
+	},
 	...['c', 'cpp'].map((language) => ({
 		name: `${language}-atomic-pair-stdin`, language, emit: 'executable', cpu: 'x86-64',
 		code: `#include <stdio.h>
@@ -163,7 +168,7 @@ self.onmessage = async ({ data }) => {
     const results = [];
     for (const fixture of data.cases) {
       const start = performance.now();
-      const result = compiler.compile({ code: fixture.code, language: fixture.language, cpu: fixture.cpu, emit: fixture.emit, optimization: '2' });
+      const result = compiler.compile({ code: fixture.code, language: fixture.language, standard: fixture.standard, cpu: fixture.cpu, emit: fixture.emit, optimization: '2' });
       let encodedArtifact;
       if (result.artifact) {
         // CDP serializes each numeric array element separately. Keep static ELF
