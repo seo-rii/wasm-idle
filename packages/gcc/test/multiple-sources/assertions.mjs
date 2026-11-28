@@ -14,17 +14,25 @@ export function assertCaseResult(test, result) {
 	assert.equal(result.artifact?.compiler, 'gcc');
 	assert.equal(result.artifact?.target, 'x86_64-linux-gnu');
 	assert.equal(result.stages.at(-1).tool, 'ld');
-	const frontend = test.request.language === 'c' ? 'cc1' : 'cc1plus';
-	const units = result.stages.filter((stage) => stage.tool === frontend);
-	assert.equal(units.length, 1 + (test.request.sources?.length ?? 0));
+	const mainLanguage = test.request.language ?? 'cpp';
+	const languages = [
+		mainLanguage,
+		...(test.request.sources ?? []).map((unit) =>
+			typeof unit === 'string' ? mainLanguage : (unit.language ?? mainLanguage)
+		)
+	];
+	assert.deepEqual(
+		result.stages
+			.filter((stage) => stage.tool === 'cc1' || stage.tool === 'cc1plus')
+			.map((stage) => stage.tool),
+		languages.map((language) => (language === 'c' ? 'cc1' : 'cc1plus'))
+	);
 	const objects = result.stages
 		.filter((stage) => stage.tool === 'as')
 		.map((stage) => stage.argv[stage.argv.indexOf('-o') + 1]);
 	assert.equal(new Set(objects).size, objects.length);
 	assert.deepEqual(
-		result.stages
-			.at(-1)
-			.argv.filter((arg) => arg.startsWith('/workspace/') && arg.endsWith('.o')),
+		result.stages.at(-1).argv.filter((arg) => arg.startsWith('/tmp/') && arg.endsWith('.o')),
 		objects
 	);
 }

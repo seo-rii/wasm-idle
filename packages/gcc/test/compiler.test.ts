@@ -1869,6 +1869,11 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 					)
 				).toEqual([]);
 			}
+			const assemblers = host.calls.filter((stage) => stage.tool === 'as');
+			expect(assemblers[1].files.get('/workspace/program.o')).toEqual(elf(1));
+			expect(assemblers[1].files.get('/workspace/program.1.s')).toEqual(
+				assemblers[1].files.get('/tmp/program.1.s')
+			);
 			const link = host.calls.at(-1)!;
 			expect(
 				link.argv.filter((arg) => arg.startsWith('/tmp/') && arg.endsWith('.o'))

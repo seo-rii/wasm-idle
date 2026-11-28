@@ -117,6 +117,9 @@ export const cases = [
 				{
 					path: 'embed.c',
 					contents: String.raw`
+#if __has_include("program.o") || __has_include("program.s")
+#error assembler inputs are visible during preprocessing
+#endif
 __asm__(".section .rodata\n"
         ".globl header_bytes\nheader_bytes:\n.incbin \"data/bytes\"\n"
         ".globl embedded_object\nembedded_object:\n.incbin \"program.o\",0,1\n"
@@ -129,6 +132,38 @@ __asm__(".section .rodata\n"
 		stdin: '',
 		stdout: '65 127\n',
 		stageCount: 5
+	},
+	{
+		id: 'mixed-c-cpp-and-preprocessed-units',
+		fixture: 'mixed.c',
+		request: {
+			language: 'c',
+			includePaths: ['include'],
+			defines: ['BASE_VALUE=40'],
+			files: [
+				{
+					path: 'include/project/answer.h',
+					contents: 'int cpp_answer(void); int preprocessed_answer(void);'
+				},
+				{
+					path: 'answer.cpp',
+					contents:
+						'template<int N> constexpr int value = N; extern "C" int cpp_answer() { return value<BASE_VALUE>; }'
+				},
+				{
+					path: 'answer.i',
+					contents:
+						'enum { BASE_VALUE = 2 }; int preprocessed_answer(void) { return BASE_VALUE; }'
+				}
+			],
+			sources: [
+				{ path: 'answer.cpp', language: 'cpp', standard: 'c++17' },
+				{ path: 'answer.i', preprocessed: true }
+			]
+		},
+		stdin: '',
+		stdout: '42\n',
+		stageCount: 7
 	},
 	{
 		id: 'cpp-separate-units',
