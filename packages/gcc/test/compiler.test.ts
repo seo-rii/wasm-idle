@@ -229,7 +229,8 @@ const wasm = Uint8Array.from([
 ]);
 
 function elf(type: number, machine = 62, dynamic = false) {
-	const bytes = new Uint8Array(type === 1 ? 64 : 121),
+	const needsLibrary = type === 2 && host.mode === 'shared-library';
+	const bytes = new Uint8Array(needsLibrary ? 224 : type === 1 ? 64 : 121),
 		view = new DataView(bytes.buffer);
 	bytes.set([0x7f, 69, 76, 70, 2, 1, 1]);
 	view.setUint16(16, type, true);
@@ -246,6 +247,15 @@ function elf(type: number, machine = 62, dynamic = false) {
 		view.setBigUint64(80, 0x400000n, true);
 		view.setBigUint64(96, BigInt(bytes.length), true);
 		view.setBigUint64(104, BigInt(bytes.length), true);
+		if (needsLibrary) {
+			view.setBigUint64(24, 0x4000b0n, true);
+			view.setUint16(56, 2, true);
+			view.setUint32(120, 2, true); // PT_DYNAMIC
+			view.setBigUint64(128, 192n, true);
+			view.setBigUint64(152, 32n, true);
+			view.setBigUint64(160, 32n, true);
+			view.setBigInt64(192, 1n, true); // DT_NEEDED followed by DT_NULL
+		}
 		if (host.mode === 'entry-in-bss') view.setBigUint64(96, 120n, true);
 		if (host.mode === 'non-executable-load') view.setUint32(68, 4, true);
 		if (host.mode === 'truncated-load') view.setBigUint64(72, 512n, true);
@@ -2016,6 +2026,7 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 				'no-output',
 				'wrong-machine',
 				'dynamic',
+				'shared-library',
 				'entry-in-bss',
 				'non-executable-load',
 				'truncated-load',

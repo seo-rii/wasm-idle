@@ -1,4 +1,8 @@
-import { verifyRuntimeAssetIntegrity, waitForRuntimeAssetOperation } from '@wasm-idle/core';
+import {
+	assertStaticElf64ProgramHeaders,
+	verifyRuntimeAssetIntegrity,
+	waitForRuntimeAssetOperation
+} from '@wasm-idle/core';
 import untar from '@wasm-idle/core/runtime-tar';
 import { readBuffer } from '@wasm-idle/core/runtime-asset-loader';
 import {
@@ -90,44 +94,7 @@ function validateOutput(bytes: Uint8Array, emit: CrossGccEmit, target: GccOutput
 		view.getUint16(52, true) !== 64
 	)
 		throw new Error('GCC produced an unexpected ELF target or output type');
-	if (emit === 'executable') {
-		const table = Number(view.getBigUint64(32, true)),
-			size = view.getUint16(54, true),
-			count = view.getUint16(56, true);
-		if (
-			!Number.isSafeInteger(table) ||
-			size !== 56 ||
-			!count ||
-			table < 64 ||
-			table + size * count > bytes.length
-		)
-			throw new Error('GCC produced an invalid ELF program table');
-		const entry = view.getBigUint64(24, true);
-		let executableEntry = false;
-		for (let index = 0; index < count; index++) {
-			const header = table + index * size;
-			const type = view.getUint32(header, true);
-			if (type === 3) throw new Error('GCC executable requests a dynamic interpreter');
-			if (type !== 1) continue;
-			const offset = view.getBigUint64(header + 8, true);
-			const address = view.getBigUint64(header + 16, true);
-			const fileSize = view.getBigUint64(header + 32, true);
-			const memorySize = view.getBigUint64(header + 40, true);
-			if (
-				fileSize > memorySize ||
-				(fileSize > 0n && offset + fileSize > BigInt(bytes.length))
-			)
-				throw new Error('GCC produced an invalid ELF load segment');
-			if (
-				view.getUint32(header + 4, true) & 1 &&
-				entry >= address &&
-				entry < address + fileSize
-			)
-				executableEntry = true;
-		}
-		if (!executableEntry)
-			throw new Error('GCC executable entry point is outside executable file data');
-	}
+	if (emit === 'executable') assertStaticElf64ProgramHeaders(view);
 }
 
 export function createGccCompiler(

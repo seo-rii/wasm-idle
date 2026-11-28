@@ -1,3 +1,4 @@
+export { assertStaticElf64ProgramHeaders } from './runtime-elf.js';
 export { WorkerSession, type WorkerOperation } from './worker-session.js';
 export { waitForRuntimeAssetOperation } from './runtime-asset-operation.js';
 export { RuntimeAssetCache, type RuntimeAssetCacheConsumer } from './session-asset-cache.js';
