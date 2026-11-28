@@ -46,6 +46,10 @@ export default async function(options) {
     FS: {
       mkdirTree() {}, chdir() {},
       writeFile(path, bytes) { files.set(path, Uint8Array.from(bytes)); },
+      utime(path, atime, mtime) {
+        if (!files.has(path) || !Number.isFinite(mtime) || atime !== mtime)
+          throw Error('Invalid synthetic input timestamp');
+      },
       readFile(path) { if (!files.has(path)) throw Error('Synthetic missing output'); return files.get(path); },
       mount(type) { type.mount({}); },
       createNode(parent, name, mode) { return { name, mode }; },
