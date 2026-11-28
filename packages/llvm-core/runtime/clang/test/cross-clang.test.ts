@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { runInNewContext } from 'node:vm';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Directory, PreopenDirectory, WASI, wasi } from '@bjorn3/browser_wasi_shim';
+import { Directory, File, PreopenDirectory, WASI, wasi } from '@bjorn3/browser_wasi_shim';
 import { createCrossClangCompiler, parseCrossClangManifest, type CrossClangEmit } from '../src/cross-clang.js';
 
 const encoder = new TextEncoder();
@@ -239,7 +239,9 @@ describe('compile-only x86-64 Clang host', () => {
 			mounted.push({ root: this.dir, sysroot: this.dir.contents.get('sysroot') as Directory, binaries: this.dir.contents.get('bin') as Directory });
 			return fdstat.call(this);
 		});
-		const compiler = await createCrossClangCompiler(bundle({ noOutput: outcome === 'missing-output' }).options);
+		const compile = vi.spyOn(WebAssembly, 'compile');
+		const fixture = bundle({ noOutput: outcome === 'missing-output' });
+		const compiler = await createCrossClangCompiler(fixture.options);
 		try {
 			if (outcome === 'missing-output') {
 				expect(() => compiler.compile({ code: 'int main() {}' })).toThrow('without producing the requested output');
@@ -252,7 +254,14 @@ describe('compile-only x86-64 Clang host', () => {
 				// Inspect the real WASI mounts: parent roots must release their mounts
 				// while the compiler's immutable trees remain usable for the next run.
 				expect(sysroot).toBeInstanceOf(Directory); expect(binaries).toBeInstanceOf(Directory);
-				expect(sysroot.contents.size).toBeGreaterThan(0); expect(binaries.contents.size).toBe(2);
+				expect(sysroot.contents.size).toBeGreaterThan(0);
+				for (const [name, asset] of [['clang', 'clang.wasm'], ['ld.lld', 'lld.wasm']]) {
+					const tool = binaries.contents.get(name) as File;
+					expect(tool).toBeInstanceOf(File);
+					expect(tool.data).toEqual(fixture.files.get(asset));
+					expect(compile.mock.calls.some(([bytes]) => ArrayBuffer.isView(bytes) && bytes.buffer === tool.data.buffer)).toBe(true);
+					expect(tool.readonly).toBe(true);
+				}
 				expect(root.contents.size).toBe(0);
 			}
 		} finally { compiler.dispose(); }
@@ -286,13 +295,54 @@ describe('compile-only x86-64 Clang host', () => {
 		}
 	});
 
-	it('accepts Uint8Array headers created in another realm', async () => {
+	it('preserves a leading U+FEFF in a filename and rejects unpaired surrogates', async () => {
 		const compiler = await createCrossClangCompiler(bundle().options);
 		try {
-			const contents: Uint8Array = runInNewContext('new Uint8Array([65, 66])');
-			expect(compiler.compile({ code: '', files: [{ path: 'header.h', contents }] }).exitCode).toBe(0);
+			const files = ['한.h', '\uFEFF한.h'].map(path => ({ path, contents: '' }));
+			expect(compiler.compile({ code: '', files }).exitCode).toBe(0);
+			expect(() => compiler.compile({ code: '', files: [{ path: '\ud800.h', contents: '' }] })).toThrow('path');
+		} finally { compiler.dispose(); }
+	});
+
+	it('snapshots the exact byte range of cross-realm headers before reading later files', async () => {
+		const compiler = await createCrossClangCompiler(bundle().options);
+		try {
+			const contents: Uint8Array = runInNewContext('new Uint8Array([0, 65, 66, 0]).subarray(1, 3)');
+			Object.defineProperty(contents, 'byteOffset', { value: 0 });
+			const fdstat = PreopenDirectory.prototype.fd_fdstat_get;
+			vi.spyOn(PreopenDirectory.prototype, 'fd_fdstat_get').mockImplementation(function (this: PreopenDirectory) {
+				const workspace = this.dir.contents.get('workspace') as Directory;
+				const header = workspace.contents.get('header.h') as File;
+				expect([...header.data]).toEqual([65, 66]);
+				return fdstat.call(this);
+			});
+			const files = [
+				{ path: 'header.h', contents },
+				{ path: 'later.h', get contents() { contents.fill(0); return ''; } }
+			];
+			expect(compiler.compile({ code: '', files }).exitCode).toBe(0);
 			const words = runInNewContext('new Uint16Array([65, 66])');
+			Object.defineProperty(words, Symbol.toStringTag, { value: 'Uint8Array' });
 			expect(() => compiler.compile({ code: '', files: [{ path: 'header.h', contents: words }] })).toThrow('workspace contents');
+		} finally { compiler.dispose(); }
+	});
+
+	it('checks the remaining workspace budget before copying binary or encoding text', async () => {
+		const compiler = await createCrossClangCompiler(bundle().options);
+		try {
+			const limit = 16 * 1024 * 1024;
+			const bytes = new Uint8Array(limit - 4);
+			Object.defineProperty(bytes, 'byteLength', { value: 0 });
+			const from = vi.spyOn(Uint8Array, 'from');
+			const encode = vi.spyOn(TextEncoder.prototype, 'encode');
+			const files = [{ path: 'data', contents: bytes }];
+			expect(() => compiler.compile({ code: '12345', files })).toThrow('workspace exceeds');
+			expect(from.mock.calls.some(([source]) => source === bytes)).toBe(false);
+			for (const text of ['ééa', '한aa', '😀a', '\ud800aa']) {
+				expect(() => compiler.compile({ code: '', files: [...files, { path: 'more', contents: text }] })).toThrow('workspace exceeds');
+				expect(encode.mock.calls.some(([source]) => source === text)).toBe(false);
+			}
+			expect(compiler.compile({ code: '😀', files }).exitCode).toBe(0);
 		} finally { compiler.dispose(); }
 	});
 

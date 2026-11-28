@@ -82,7 +82,8 @@ export const scenarios = [
 		// The PHP and Ruby worker helpers add four files. The root install measures 7,651,041 bytes.
 		// The x86 Clang changes add 2,201 bytes. CI measures 7,654,830 installed bytes.
 		// The Clang host, shared cancellation helper and UTF-8 paths add 4,956 bytes and two JS/declaration pairs.
-		budget: { maxBytes: 7660544, maxFiles: 873, maxPackages: 6 },
+		// Cross Clang workspace and tool handling add 1,614 installed bytes.
+		budget: { maxBytes: 7661568, maxFiles: 873, maxPackages: 6 },
 		absentPackageNames: [
 			'@katana-project/asm',
 			'java-parser',

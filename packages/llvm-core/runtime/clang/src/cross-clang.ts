@@ -69,9 +69,14 @@ export interface CrossClangCompiler {
 }
 
 const encoder = new TextEncoder();
+const textDecoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
 const target = 'x86_64-unknown-linux-gnu' as const;
 const requestKeys = new Set(['code', 'language', 'cpu', 'emit', 'optimization', 'standard', 'files']);
 const maxWorkspaceBytes = 16 * 1024 * 1024;
+const typedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype);
+const viewGetter = (key: PropertyKey) => Object.getOwnPropertyDescriptor(typedArrayPrototype, key)!.get!;
+const viewType = viewGetter(Symbol.toStringTag), viewLength = viewGetter('byteLength');
+const viewOffset = viewGetter('byteOffset'), viewBuffer = viewGetter('buffer');
 const maxDiagnosticsBytes = 4 * 1024 * 1024;
 const fixedManifest = {
 	schemaVersion: 1, kind: 'clang-x86_64-linux-gnu', host: 'wasm32-wasip1', target,
@@ -91,7 +96,7 @@ class CompilerRootDirectory extends PreopenDirectory {
 			result.fdstat.fs_rights_base = directories;
 			// The shim defaults both masks to zero despite supporting these operations.
 			// That makes Clang reject a mounted linker as non-executable. File.readonly
-			// still rejects write opens for compiler binaries and sysroot files.
+			// still rejects write opens for tool paths and sysroot files.
 			result.fdstat.fs_rights_inherited = directories | BigInt(wasi.RIGHTS_FD_READ |
 				wasi.RIGHTS_FD_WRITE | wasi.RIGHTS_FD_SEEK | wasi.RIGHTS_FD_TELL |
 				wasi.RIGHTS_FD_FILESTAT_SET_SIZE | wasi.RIGHTS_FD_ALLOCATE |
@@ -106,7 +111,9 @@ function record(value: unknown, label: string): Record<string, unknown> {
 	return value as Record<string, unknown>;
 }
 function text(value: unknown, label: string): string {
-	if (typeof value !== 'string' || !value || value.length > 4096 || value.includes('\0') || encoder.encode(value).length > 4096 || new TextDecoder('utf-8', { fatal: true }).decode(encoder.encode(value)) !== value) throw new Error(`Invalid cross Clang ${label}`);
+	if (typeof value !== 'string' || !value || value.length > 4096 || value.includes('\0')) throw new Error(`Invalid cross Clang ${label}`);
+	const bytes = encoder.encode(value);
+	if (bytes.length > 4096 || textDecoder.decode(bytes) !== value) throw new Error(`Invalid cross Clang ${label}`);
 	return value;
 }
 function digest(value: unknown): string {
@@ -160,7 +167,7 @@ function directory(root: Directory, path: string): Directory {
 	}
 	return current;
 }
-function addFile(root: Directory, path: string, bytes: Uint8Array, readonly: boolean) {
+function addFile(root: Directory, path: string, bytes: Uint8Array | ArrayBuffer, readonly: boolean) {
 	const parts = path.split('/');
 	const name = parts.pop()!;
 	const parent = directory(root, parts.join('/'));
@@ -168,8 +175,33 @@ function addFile(root: Directory, path: string, bytes: Uint8Array, readonly: boo
 	parent.contents.set(name, new File(bytes, { readonly }));
 }
 
+function workspaceBuffer(contents: string | Uint8Array, remaining: number): ArrayBuffer {
+	if (typeof contents === 'string') {
+		if (contents.length > remaining) throw new Error('Cross Clang workspace exceeds its limit');
+		// Each UTF-16 code unit needs at most three UTF-8 bytes. Only scan text
+		// near the limit, before allocating the encoded source.
+		if (contents.length * 3 > remaining) {
+			let size = contents.length;
+			for (const character of contents) {
+				const first = character.charCodeAt(0);
+				// A surrogate pair needs four bytes for its two code units.
+				size += first < 0x80 ? 0 : first < 0x800 ? 1 : 2;
+				if (size > remaining) throw new Error('Cross Clang workspace exceeds its limit');
+			}
+		}
+		return encoder.encode(contents).buffer;
+	}
+	if (!ArrayBuffer.isView(contents) || viewType.call(contents) !== 'Uint8Array') throw new Error('Invalid cross Clang workspace contents');
+	const length = viewLength.call(contents);
+	if (length > remaining) throw new Error('Cross Clang workspace exceeds its limit');
+	// Pin a fixed span even for growable buffers. File takes ownership of this
+	// independent ArrayBuffer without making a second copy at mount time.
+	return new Uint8Array(new Uint8Array(viewBuffer.call(contents), viewOffset.call(contents), length)).buffer;
+}
+
 function compilePlan(request: CrossClangCompileRequest, manifest: CrossClangManifest, linkLibraries: Record<'c' | 'cpp', readonly string[]>) {
-	if (!request || typeof request.code !== 'string') throw new Error('Cross Clang requires source text');
+	const source = request?.code;
+	if (typeof source !== 'string') throw new Error('Cross Clang requires source text');
 	for (const key of Object.keys(request)) {
 		if (!requestKeys.has(key)) throw new Error(`Unsupported cross Clang compile option: ${key}`);
 	}
@@ -181,17 +213,16 @@ function compilePlan(request: CrossClangCompileRequest, manifest: CrossClangMani
 	if (!standards.includes(standard)) throw new Error('Unsupported cross Clang language standard');
 	const fileName = emit === 'assembly' ? 'program.s' : emit === 'object' ? 'program.o' : 'program.elf';
 	const main = language === 'c' ? 'main.c' : 'main.cpp';
-	const code = encoder.encode(request.code);
-	let totalBytes = code.length;
-	if (totalBytes > maxWorkspaceBytes || request.files && (!Array.isArray(request.files) || request.files.length > 1024)) throw new Error('Cross Clang workspace exceeds its limit');
+	const extraFiles = request.files;
+	if (extraFiles && (!Array.isArray(extraFiles) || extraFiles.length > 1024)) throw new Error('Cross Clang workspace exceeds its limit');
+	const code = workspaceBuffer(source, maxWorkspaceBytes);
+	let remaining = maxWorkspaceBytes - code.byteLength;
 	const files = [{ path: main, contents: code }];
-	for (const file of request.files ?? []) {
+	for (const file of extraFiles ?? []) {
 		const path = relativePath(file.path);
 		if (path === fileName || path.startsWith(`${fileName}/`)) throw new Error('Cross Clang output path is reserved');
-		if (typeof file.contents !== 'string' && (!ArrayBuffer.isView(file.contents) || Object.prototype.toString.call(file.contents) !== '[object Uint8Array]')) throw new Error('Invalid cross Clang workspace contents');
-		const contents = typeof file.contents === 'string' ? encoder.encode(file.contents) : Uint8Array.from(file.contents);
-		totalBytes += contents.length;
-		if (totalBytes > maxWorkspaceBytes) throw new Error('Cross Clang workspace exceeds its limit');
+		const contents = workspaceBuffer(file.contents, remaining);
+		remaining -= contents.byteLength;
 		files.push({ path, contents });
 	}
 	const argv = [manifest.compilerPath, `--target=${target}`, `--sysroot=${manifest.sysrootPath}`,
@@ -265,7 +296,7 @@ async function loadCrossClangBundle(options: CreateCrossClangCompilerOptions) {
 			const receipt = manifest.assets[name];
 			const url = new URL(receipt.path, manifestUrl).href;
 			// readBuffer returns an independent copy. Keep the verified snapshot private
-			// for both the WASI filesystem and module preparation.
+			// until the tool is compiled or the sysroot is unpacked.
 			const bytes = await readBuffer(url, undefined, receipt.bytes, signal, fetchImpl);
 			await waitForRuntimeAssetOperation(verifyRuntimeAssetIntegrity({ asset: url, bytes, expected: receipt }), signal);
 			return bytes;
@@ -316,8 +347,9 @@ export async function createCrossClangCompiler(options: CreateCrossClangCompiler
 	const linkLibraries = { c: commonLibraries, cpp: [...cppLibraries, ...commonLibraries] };
 	let active: { root: Directory; stdout: string; stderr: string; diagnosticBytes: number } | undefined;
 	let host: LlvmToolHost | undefined;
+	// readBuffer owns each full ArrayBuffer. Guest file reads and module preparation can share it.
 	let toolsDirectory = new Directory(new Map([
-		['clang', new File(clang, { readonly: true })], ['ld.lld', new File(lld, { readonly: true })]
+		['clang', new File(clang.buffer, { readonly: true })], ['ld.lld', new File(lld.buffer, { readonly: true })]
 	]));
 	const importNames = new Set(Object.keys(new WASI([], [], [], { debug: false }).wasiImport));
 	host = await createToolHost({
