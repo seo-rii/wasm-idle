@@ -192,6 +192,21 @@ describe('compile-only x86-64 Clang host', () => {
 		expect(() => compiler.compile({ code: '' })).toThrow('disposed');
 	});
 
+	it('passes each extended dialect only to the selected language', async () => {
+		const compiler = await createCrossClangCompiler(bundle().options);
+		try {
+			for (const [language, standards] of [
+				['c', ['c89', 'gnu89', 'c90', 'gnu90', 'c2y', 'gnu2y']],
+				['cpp', ['c++26', 'gnu++26', 'c++2c', 'gnu++2c']]
+			] as const) {
+				for (const standard of standards) {
+					expect(compiler.compile({ code: '', language, standard }).argv).toContain(`-std=${standard}`);
+					expect(() => compiler.compile({ code: '', language: language === 'c' ? 'cpp' : 'c', standard })).toThrow('language standard');
+				}
+			}
+		} finally { compiler.dispose(); }
+	});
+
 	it('validates object and assembly outputs independently of executable output', async () => {
 		// GNU inline assembly can include a raw byte in an assembler comment.
 		const assembly = Uint8Array.from([...encoder.encode('retq\t# '), 0xff, 0x0a]);

@@ -255,7 +255,9 @@ function compilePlan(request: CrossClangCompileRequest, manifest: CrossClangMani
 	const emit = request.emit ?? 'executable', optimization = request.optimization ?? '2';
 	if (!['c', 'cpp'].includes(language) || !manifest.cpuProfiles.includes(cpu) || !['executable', 'object', 'assembly'].includes(emit) || !['0', '1', '2', '3', 's'].includes(optimization)) throw new Error('Invalid cross Clang compilation profile');
 	const standard = request.standard ?? (language === 'c' ? 'gnu17' : 'gnu++20');
-	const standards = language === 'c' ? ['c99', 'gnu99', 'c11', 'gnu11', 'c17', 'gnu17', 'c23', 'gnu23'] : ['c++11', 'gnu++11', 'c++14', 'gnu++14', 'c++17', 'gnu++17', 'c++20', 'gnu++20', 'c++23', 'gnu++23'];
+	const standards = language === 'c'
+		? ['c89', 'gnu89', 'c90', 'gnu90', 'c99', 'gnu99', 'c11', 'gnu11', 'c17', 'gnu17', 'c23', 'gnu23', 'c2y', 'gnu2y']
+		: ['c++11', 'gnu++11', 'c++14', 'gnu++14', 'c++17', 'gnu++17', 'c++20', 'gnu++20', 'c++23', 'gnu++23', 'c++26', 'gnu++26', 'c++2c', 'gnu++2c'];
 	if (!standards.includes(standard)) throw new Error('Unsupported cross Clang language standard');
 	const fileName = emit === 'assembly' ? 'program.s' : emit === 'object' ? 'program.o' : 'program.elf';
 	const main = language === 'c' ? 'main.c' : 'main.cpp';
