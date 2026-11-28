@@ -1921,6 +1921,25 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 		}
 	});
 
+	it('checks aggregate UTF-8 workspace size before allocating any source snapshots', async () => {
+		const compiler = await createCrossGccCompiler(bundle().options);
+		const bytes = new Uint8Array(16 * 1024 * 1024 - 7);
+		const encode = vi.spyOn(TextEncoder.prototype, 'encode');
+		const copy = vi.spyOn(Uint8Array, 'from');
+		try {
+			const request = { code: '😀', files: [{ path: 'raw', contents: bytes }, { path: 'h', contents: '\ud800a' }] };
+			await expect(compiler.compile(request)).rejects.toThrow(/workspace exceeds/);
+			expect(encode).not.toHaveBeenCalled();
+			expect(copy).not.toHaveBeenCalled();
+			request.files[1].contents = '\ud800';
+			expect((await compiler.compile({ ...request, emit: 'assembly' })).exitCode).toBe(0);
+		} finally {
+			encode.mockRestore();
+			copy.mockRestore();
+			compiler.dispose();
+		}
+	});
+
 	it('snapshots Uint8Array workspace slices created in another realm', async () => {
 		const compiler = await createCrossGccCompiler(bundle().options);
 		try {

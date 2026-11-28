@@ -1,3 +1,4 @@
+import { assertGccWorkspaceFits } from './plan.js';
 import { snapshotWasiGccLinkInputs } from './wasm-link-inputs.js';
 import type {
 	CreateCrossGccCompilerOptions,
@@ -166,6 +167,9 @@ export async function createGccWorker(
 				if (busy) throw new Error('GCC Worker is busy');
 				busy = true;
 				try {
+					if (disposed) throw new Error('GCC Worker is disposed');
+					signal?.throwIfAborted();
+					assertGccWorkspaceFits(request);
 					// postMessage clones ordinary buffers, but SharedArrayBuffer views must
 					// become private bytes too. Never transfer/detach caller-owned inputs.
 					let snapshot =

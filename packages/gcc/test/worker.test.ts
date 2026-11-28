@@ -68,6 +68,24 @@ describe('GCC Worker ownership and cancellation', () => {
 		}
 	);
 
+	it('rejects unusable or oversized workspace requests before copying or posting', async () => {
+		const compiler = await createCrossGccWorker(options);
+		const bytes = new Uint8Array(16 * 1024 * 1024 + 1);
+		const copies = vi.spyOn(Uint8Array, 'from');
+		try {
+			const files = [{ path: 'local.h', contents: bytes.subarray(0, -1) }];
+			await expect(compiler.compile({ code: 'x', files })).rejects.toThrow(/workspace exceeds/);
+			await expect(compiler.compile({ code: '', files }, { signal: AbortSignal.abort() })).rejects.toMatchObject({ name: 'AbortError' });
+			compiler.dispose();
+			await expect(compiler.compile({ code: '', files })).rejects.toThrow(/disposed/);
+			expect(copies).not.toHaveBeenCalled();
+			expect(FixtureWorker.instances[0].messages).toHaveLength(1);
+		} finally {
+			copies.mockRestore();
+			compiler.dispose();
+		}
+	});
+
 	it('snapshots the explicit module profile and cancels pending module compilation', async () => {
 		const compiler = await createGccWorker({ ...options, target: 'wasm32-wasi' });
 		const transport = FixtureWorker.instances[0];
