@@ -770,7 +770,7 @@ the request, including `avx2`; source target pragmas/attributes can override it.
 
 Parsing GNU `bits/stdc++.h` takes most of a typical C++ compilation. When
 `manifest.capabilities.precompiledHeaders` is true, `precompileHeader()` lets the real
-`cc1plus` precompile that header for one C++ profile (`standard`, `optimization` and `cpu`,
+`cc1plus` precompile that header for one C++ profile (`standard`, `optimization`, `cpu` and `defines`,
 with the same defaults as `compile()`):
 
 ```ts
@@ -784,7 +784,7 @@ stage `argv` shows. GCC itself decides whether to load it: a PCH is used only wh
 `#include <bits/stdc++.h>` comes before any C/C++ token and the macros and target
 options match. Otherwise GCC parses the header normally. Pass `traceIncludes: true` to
 `compile()` for GCC’s include trace in `result.stderr`. A line beginning with
-`! /pch/bits/stdc++.h.gch` records a successful PCH load. The output is identical either
+`! /pch/bits/stdc++.h.gch/cached` records a successful PCH load. The output is identical either
 way. With the producer's GCC 16.2 build, a `bits/stdc++.h` program's front end took about
 1.2 s instead of 3.4 s. Older bundles lack the capability; for them the method rejects
 instead of risking GCC's `PCH allocation failure`.

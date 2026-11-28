@@ -69,7 +69,7 @@ export interface CrossGccCompileRequest {
 /** The C++ profile a precompiled header serves; defaults match compile(). */
 export type CrossGccPrecompileRequest = Pick<
 	CrossGccCompileRequest,
-	'cpu' | 'optimization' | 'standard'
+	'cpu' | 'optimization' | 'standard' | 'defines'
 >;
 
 export interface CrossGccIdentity {

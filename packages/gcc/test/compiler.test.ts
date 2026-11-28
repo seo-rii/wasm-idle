@@ -33,6 +33,7 @@ const host = vi.hoisted(() => ({
 		argv: string[];
 		files: Map<string, Uint8Array>;
 		mtimes: Map<string, number>;
+		pchCandidate?: Uint8Array;
 	}[],
 	sysrootFiles: [] as WeakRef<Uint8Array>[],
 	mode: '',
@@ -74,13 +75,19 @@ vi.mock('../src/module-loader.js', () => ({
 			}
 			const files = new Map<string, Uint8Array>();
 			const mtimes = new Map<string, number>();
+			const pchDirectory = '/pch/bits/stdc++.h.gch';
+			const pchPath = pchDirectory + '/cached';
+			const dir = { mode: 0o40755, node_ops: { readdir: () => files.has(pchPath) ? ['.', '..', 'cached'] : ['.', '..'] }, stream_ops: {} as { close?: () => void } };
+			let hasPchDirectory = false;
 			const instance = await new Promise<WebAssembly.Instance>((resolve) => {
 				(options.instantiateWasm as Function)({}, resolve);
 			});
 			return {
 				HEAPU8: new Uint8Array((instance!.exports.memory as WebAssembly.Memory).buffer),
 				FS: {
-					mkdirTree() {},
+					mkdirTree(path: string) { if (path === pchDirectory) hasPchDirectory = true; },
+					lookupPath() { return { node: dir }; },
+					unlink(path: string) { files.delete(path); },
 					chdir() {},
 					utime(path: string, _atime: number, mtime: number) {
 						mtimes.set(path, mtime);
@@ -126,7 +133,15 @@ vi.mock('../src/module-loader.js', () => ({
 					}
 				},
 				callMain(argv: string[]) {
-					host.calls.push({ tool, argv, files, mtimes });
+					let pchCandidate;
+					if (hasPchDirectory) {
+						expect(files.has(pchPath)).toBe(false);
+						expect(dir.node_ops.readdir()).toContain('cached');
+						pchCandidate = files.get(pchPath);
+						dir.stream_ops.close?.();
+						expect(files.has(pchPath)).toBe(false);
+					}
+					host.calls.push({ tool, argv, files, mtimes, pchCandidate });
 					const bmi = files.get('/gcc-std-modules/std.gcm');
 					if (bmi) {
 						host.bmiReads.push(Uint8Array.from(bmi));
@@ -2137,7 +2152,7 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 			await expect(compiler.precompileHeader({ code: '' } as never)).rejects.toThrow(
 				'Unsupported GCC precompiled header option'
 			);
-			const precompiled = await compiler.precompileHeader({ optimization: '2' });
+			const precompiled = await compiler.precompileHeader({ optimization: '2', defines: ['ONLINE_JUDGE=1'] });
 			expect(precompiled).toMatchObject({ exitCode: 0, bytes: 4 });
 			expect(precompiled.stages.map((stage) => stage.tool)).toEqual(['cc1plus']);
 			expect(precompiled.stages[0].argv.slice(-5)).toEqual([
@@ -2153,6 +2168,7 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 			await compiler.compile({
 				code,
 				traceIncludes: true,
+				defines: ['ONLINE_JUDGE=1'],
 				files: [{ path: 'b.cpp', contents: code }],
 				sources: ['b.cpp']
 			});
@@ -2167,11 +2183,12 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 					...flags.slice(include),
 					'-H'
 				]);
-				expect(new TextDecoder().decode(call.files.get('/pch/bits/stdc++.h.gch'))).toBe(
+				expect(new TextDecoder().decode(call.pchCandidate)).toBe(
 					'gpch'
 				);
 			}
 			for (const request of [
+				{ code },
 				{ code, optimization: '0' as const },
 				{ code, standard: 'gnu++17' },
 				{ code, cpu: 'avx2' as const },

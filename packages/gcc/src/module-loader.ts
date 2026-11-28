@@ -18,8 +18,9 @@ export interface GccFileSystem {
 			noent_okay?: boolean;
 			parent?: boolean;
 		}
-	): { path: string; node?: { mode: number } };
+	): { path: string; node?: Pick<GccFileSystemNode, 'mode'> & Partial<GccFileSystemNode> };
 	mkdirTree(path: string): void;
+	unlink(path: string): void;
 	writeFile(path: string, bytes: Uint8Array, options?: { canOwn?: boolean }): void;
 	utime(path: string, atime: number, mtime: number): void;
 	readFile(path: string): Uint8Array;

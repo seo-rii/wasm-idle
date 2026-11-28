@@ -43,6 +43,42 @@ export function requireGccDirectoryTraversal(fs: GccFileSystem) {
 	};
 }
 
+/**
+ * GCC accepts a .gch directory of variants. libcpp opens it, enumerates the variants,
+ * opens the selected candidate and closes the directory before parsing more source.
+ * Publish the candidate only during that scan. Opening a directory as an ordinary
+ * header fails in GCC, and a direct request for its child never sees the cache bytes.
+ */
+export function mountGccPch(fs: GccFileSystem, directory: string, bytes: Uint8Array) {
+	fs.mkdirTree(directory);
+	const node = fs.lookupPath?.(directory).node;
+	if (!node?.node_ops || !node.stream_ops) throw new Error('GCC PCH requires a compiler directory');
+	const ops = node.node_ops as { readdir(node: GccFileSystemNode): string[] };
+	const streams = node.stream_ops as { close?(stream: unknown): void };
+	const path = directory + '/cached';
+	let visible = false;
+	node.node_ops = {
+		...ops,
+		readdir(dir: GccFileSystemNode) {
+			if (!visible) {
+				fs.writeFile(path, bytes, { canOwn: true });
+				visible = true;
+			}
+			return ops.readdir(dir);
+		}
+	};
+	node.stream_ops = {
+		...streams,
+		close(stream: unknown) {
+			if (visible) {
+				fs.unlink(path);
+				visible = false;
+			}
+			streams.close?.(stream);
+		}
+	};
+}
+
 /** Build once per compiler; `files` and `directories` are already validated absolute paths. */
 export function gccSysrootTree(
 	files: ReadonlyMap<string, Uint8Array>,

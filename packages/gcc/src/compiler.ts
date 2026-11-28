@@ -14,6 +14,7 @@ import { gccCompilePlan, gccRelativePath } from './plan.js';
 import {
 	gccSysrootTree,
 	mountGccSysroot,
+	mountGccPch,
 	requireGccDirectoryTraversal,
 	type GccSysrootDirectory
 } from './sysroot-fs.js';
@@ -560,7 +561,7 @@ export async function createGccCompiler(
 				if (manifest.target === 'x86_64-linux-gnu') requireGccDirectoryTraversal(module.FS);
 				module.FS.mkdirTree('/workspace');
 				module.FS.mkdirTree('/tmp');
-				if (stage.precompiledHeader || stage.output === pchPath)
+				if (stage.output === pchPath)
 					module.FS.mkdirTree(`${pchDirectory}/bits`);
 				mountGccSysroot(module.FS, sysrootTree, '/sysroot', sysrootTime);
 				for (const [path, bytes] of workspace) {
@@ -590,7 +591,7 @@ export async function createGccCompiler(
 				}
 				// GCC maps a PCH privately, so the shared bytes are copied, never modified.
 				if (stage.precompiledHeader)
-					module.FS.writeFile(pchPath, stage.precompiledHeader, { canOwn: true });
+					mountGccPch(module.FS, pchPath, stage.precompiledHeader);
 				module.FS.chdir('/workspace');
 				try {
 					const status = module.callMain([...stage.argv]);
@@ -701,7 +702,7 @@ export async function createGccCompiler(
 		if (
 			!request ||
 			typeof request !== 'object' ||
-			Object.keys(request).some((key) => !['cpu', 'optimization', 'standard'].includes(key))
+			Object.keys(request).some((key) => !['cpu', 'optimization', 'standard', 'defines'].includes(key))
 		)
 			throw new Error('Unsupported GCC precompiled header option');
 		const { frontEndFlags } = gccCompilePlan(
