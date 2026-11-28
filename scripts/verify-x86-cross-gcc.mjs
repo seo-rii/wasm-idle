@@ -214,22 +214,22 @@ try {
 					let precompiled;
 					try {
 						if (fixture.precompiledHeader) {
-							const { cpu, standard, optimization } = fixture.request;
-							const header = await compiler.precompileHeader({ cpu, standard, optimization }, { signal: deadline.signal });
+							const { cpu, standard, optimization, defines } = fixture.request;
+							const header = await compiler.precompileHeader({ cpu, standard, optimization, defines }, { signal: deadline.signal });
 							if (header.exitCode !== 0 || !header.bytes) throw new Error(`PCH creation failed: ${header.stderr}`);
 							precompiled = { bytes: header.bytes };
 						}
 						const request = precompiled ? { ...fixture.request, traceIncludes: true } : fixture.request;
 						result = await compiler.compile(request, { signal: deadline.signal });
 						if (precompiled) {
-							const pchMarker = /^! \/pch\/bits\/stdc\+\+\.h\.gch$/m;
+							const pchMarker = /^! \/pch\/bits\/stdc\+\+\.h\.gch\/cached$/m;
 							precompiled.used = pchMarker.test(result.stderr);
 							if (!checkedFallback) {
 								// An ordinary C++ token before the include prevents a PCH load.
 								const fallback = await compiler.compile({
 									...request,
 									emit: 'assembly',
-									code: 'static_assert(sizeof(int) > 0);\n#include <bits/stdc++.h>\nint fallback;'
+									code: '#if __has_include(<bits/stdc++.h.gch>) || __has_include(<bits/stdc++.h.gch/cached>)\n#error Private PCH is visible as source\n#endif\nstatic_assert(sizeof(int) > 0);\n#include <bits/stdc++.h>\nint fallback;'
 								}, { signal: deadline.signal });
 								if (fallback.exitCode !== 0 || !fallback.artifact ||
 									pchMarker.test(fallback.stderr) ||

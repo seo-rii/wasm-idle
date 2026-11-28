@@ -18,6 +18,7 @@ import { gccCompilePlan, gccRelativePath } from './plan.js';
 import {
 	gccSysrootTree,
 	mountGccSysroot,
+	mountGccPch,
 	requireGccDirectoryTraversal,
 	type GccSysrootDirectory
 } from './sysroot-fs.js';
@@ -527,10 +528,18 @@ export async function createGccCompiler(
 				if (manifest.target === 'x86_64-linux-gnu') requireGccDirectoryTraversal(module.FS);
 				module.FS.mkdirTree('/workspace');
 				module.FS.mkdirTree('/tmp');
-				if (stage.precompiledHeader || stage.output === pchPath)
-					module.FS.mkdirTree(`${pchDirectory}/bits`);
+				if (stage.output === pchPath) module.FS.mkdirTree(`${pchDirectory}/bits`);
 				mountGccSysroot(module.FS, sysrootTree, '/sysroot', sysrootTime);
 				for (const [path, bytes] of workspace) {
+					if (manifest.target === 'x86_64-linux-gnu' && path.startsWith('/tmp/')) {
+						// GNU as has always resolved .include and .incbin from the workspace,
+						// including outputs of earlier units. Only its private FS gets these aliases.
+						if (stage.tool === 'as')
+							module.FS.writeFile('/workspace/' + path.slice('/tmp/'.length), bytes, {
+								canOwn: true
+							});
+						if (!stage.argv.includes(path)) continue;
+					}
 					module.FS.mkdirTree(path.slice(0, path.lastIndexOf('/')));
 					// The x86 plan owns private snapshots of user files and prior stage
 					// outputs. Its tools only write to distinct, reserved output paths.
@@ -555,7 +564,7 @@ export async function createGccCompiler(
 				}
 				// GCC maps a PCH privately, so the shared bytes are copied, never modified.
 				if (stage.precompiledHeader)
-					module.FS.writeFile(pchPath, stage.precompiledHeader, { canOwn: true });
+					mountGccPch(module.FS, pchPath, stage.precompiledHeader);
 				module.FS.chdir('/workspace');
 				try {
 					const status = module.callMain([...stage.argv]);
@@ -666,7 +675,9 @@ export async function createGccCompiler(
 		if (
 			!request ||
 			typeof request !== 'object' ||
-			Object.keys(request).some((key) => !['cpu', 'optimization', 'standard'].includes(key))
+			Object.keys(request).some(
+				(key) => !['cpu', 'optimization', 'standard', 'defines'].includes(key)
+			)
 		)
 			throw new Error('Unsupported GCC precompiled header option');
 		const { frontEndFlags } = gccCompilePlan(
@@ -736,18 +747,17 @@ export async function createGccCompiler(
 				manifest.target === 'wasm32-wasi'
 					? wasiGccCompilePlan(request as WasiGccCompileRequest, manifest)
 					: gccCompilePlan(request as CrossGccCompileRequest, manifest, sysroot);
-			const frontEndFlags = 'frontEndFlags' in plan ? plan.frontEndFlags : undefined;
-			// GCC loads the header only where it is valid; otherwise it parses the source.
-			const pch =
-				precompiled &&
-				frontEndFlags &&
-				frontEndFlags.length === precompiled.flags.length &&
-				frontEndFlags.every((flag, index) => flag === precompiled!.flags[index])
-					? precompiled
-					: undefined;
 			const result = await run(
 				plan.stages.map((stage) => {
-					if (!pch || stage.tool !== 'cc1plus') return stage;
+					const flags = 'frontEndFlags' in stage ? stage.frontEndFlags : undefined;
+					const pch = precompiled;
+					if (
+						stage.tool !== 'cc1plus' ||
+						!pch ||
+						flags?.length !== pch.flags.length ||
+						!flags.every((flag, index) => flag === pch.flags[index])
+					)
+						return stage;
 					const include = stage.argv.indexOf('-isystem');
 					return {
 						...stage,
@@ -774,7 +784,7 @@ export async function createGccCompiler(
 			);
 			if (!result.workspace) return result;
 			const { workspace, wasmInspection, coverageNotes, ...completed } = result;
-			const bytes = workspace.get(`/workspace/${plan.fileName}`)!;
+			const bytes = workspace.get(plan.stages.at(-1)!.output)!;
 			const linkInput: WasiGccLinkInputReceipt | undefined =
 				manifest.target === 'wasm32-wasi' && plan.emit === 'object'
 					? Object.freeze({

@@ -28,13 +28,23 @@ const reservedNames = new Set([
 	'program.elf'
 ]);
 
-export function gccRelativePath(value: unknown): string {
+export function gccRelativePath(value: unknown, linux = false): string {
 	if (
 		typeof value !== 'string' ||
 		!value ||
 		value.length > 4096 ||
 		/[\\\x00-\x1f]/u.test(value) ||
-		value.split('/').some((part) => !part || part === '.' || part === '..')
+		value
+			.split('/')
+			.some(
+				(part) =>
+					!part ||
+					part === '.' ||
+					part === '..' ||
+					(linux &&
+						(part.length > 255 ||
+							(part.length > 85 && encoder.encode(part).length > 255)))
+			)
 	)
 		throw new Error('Invalid GCC relative path');
 	return value;
@@ -84,12 +94,49 @@ export function gccWorkspaceInputs(request: CrossGccCompileRequest | WasiGccComp
 	return { code, files };
 }
 
+function gccStandard(
+	language: 'c' | 'cpp',
+	selected: unknown,
+	dialects: { c23?: boolean; cpp26?: boolean }
+) {
+	const standard = selected ?? (language === 'c' ? 'gnu17' : 'gnu++20');
+	const standards =
+		language === 'c'
+			? [
+					'c99',
+					'gnu99',
+					'c11',
+					'gnu11',
+					'c17',
+					'gnu17',
+					'c2x',
+					'gnu2x',
+					...(dialects.c23 ? ['c23', 'gnu23'] : [])
+				]
+			: [
+					'c++11',
+					'gnu++11',
+					'c++14',
+					'gnu++14',
+					'c++17',
+					'gnu++17',
+					'c++20',
+					'gnu++20',
+					'c++23',
+					'gnu++23',
+					...(dialects.cpp26 ? ['c++26', 'gnu++26'] : [])
+				];
+	if (typeof standard !== 'string' || !standards.includes(standard))
+		throw new Error('Unsupported GCC language standard');
+	return standard;
+}
+
 /** Shared source validation for the two real GCC backends; it never edits source text. */
 export function gccCompileInputs(
 	request: CrossGccCompileRequest | WasiGccCompileRequest,
 	targetKeys: readonly string[],
 	additionalReservedNames: readonly string[] = [],
-	dialects: { c23?: boolean; cpp26?: boolean } = {}
+	dialects: { c23?: boolean; cpp26?: boolean; linux?: boolean } = {}
 ) {
 	if (!request || typeof request !== 'object' || typeof request.code !== 'string')
 		throw new Error('GCC requires source text');
@@ -128,7 +175,19 @@ export function gccCompileInputs(
 		(!Array.isArray(request.sources) || request.sources.length > 63)
 	)
 		throw new Error('GCC supports at most 63 additional translation units');
-	const sources = (request.sources ?? []).map(gccRelativePath);
+	const linux = dialects.linux === true;
+	const sources = (request.sources ?? []).map((unit) => {
+		if (linux && unit && typeof unit === 'object') {
+			if (
+				Object.keys(unit).some(
+					(key) => !['path', 'language', 'preprocessed', 'standard'].includes(key)
+				)
+			)
+				throw new Error('Unsupported GCC translation unit option');
+			return gccRelativePath(unit.path, true);
+		}
+		return gccRelativePath(unit, linux);
+	});
 	if (new Set(sources).size !== sources.length) throw new Error('Duplicate GCC translation unit');
 	if (sources.length && emit !== 'executable')
 		throw new Error('Additional GCC translation units require executable output');
@@ -137,34 +196,7 @@ export function gccCompileInputs(
 		reserved.add(`program.${i}.s`);
 		reserved.add(`program.${i}.o`);
 	}
-	const standard = request.standard ?? (language === 'c' ? 'gnu17' : 'gnu++20');
-	const standards =
-		language === 'c'
-			? [
-					'c99',
-					'gnu99',
-					'c11',
-					'gnu11',
-					'c17',
-					'gnu17',
-					'c2x',
-					'gnu2x',
-					...(dialects.c23 ? ['c23', 'gnu23'] : [])
-				]
-			: [
-					'c++11',
-					'gnu++11',
-					'c++14',
-					'gnu++14',
-					'c++17',
-					'gnu++17',
-					'c++20',
-					'gnu++20',
-					'c++23',
-					'gnu++23',
-					...(dialects.cpp26 ? ['c++26', 'gnu++26'] : [])
-				];
-	if (!standards.includes(standard)) throw new Error('Unsupported GCC language standard');
+	const standard = gccStandard(language, request.standard, dialects);
 	const main = request.preprocessed
 		? language === 'c'
 			? 'main.i'
@@ -176,7 +208,7 @@ export function gccCompileInputs(
 	const files = [{ path: `/workspace/${main}`, contents: encoder.encode(workspace.code) }];
 	const paths = new Set<string>();
 	for (const file of workspace.files ?? []) {
-		const path = gccRelativePath(file.path);
+		const path = gccRelativePath(file.path, linux);
 		if (reserved.has(path.split('/')[0])) throw new Error('GCC input/output path is reserved');
 		if (paths.has(path)) throw new Error('Duplicate GCC workspace file');
 		for (const existing of paths) {
@@ -203,67 +235,110 @@ export function gccCompilePlan(
 	sysroot?: ReadonlyMap<string, Uint8Array>
 ) {
 	const gcc16 = manifest.compiler?.version === '16.2.0';
+	const dialects = { c23: gcc16, cpp26: gcc16, linux: true };
 	const { language, emit, optimization, standard, main, files, sources, definitions } =
-		gccCompileInputs(request, ['cpu', 'traceIncludes'], [], { c23: gcc16, cpp26: gcc16 });
+		gccCompileInputs(request, ['cpu', 'traceIncludes', 'includePaths'], [], dialects);
+	if (
+		request.includePaths !== undefined &&
+		(!Array.isArray(request.includePaths) || request.includePaths.length > 64)
+	)
+		throw new Error('GCC supports at most 64 project include directories');
+	const includePaths = (request.includePaths ?? []).map((dir) =>
+		dir === '.' ? '/workspace' : '/workspace/' + gccRelativePath(dir, true)
+	);
 	if (request.traceIncludes !== undefined && typeof request.traceIncludes !== 'boolean')
 		throw new Error('Invalid GCC traceIncludes option');
 	const cpu = request.cpu ?? 'x86-64';
 	// AVX2 without FMA is a subset of the existing producer v1 capability.
 	if (!manifest.cpuProfiles.includes(cpu === 'avx2' ? 'avx2-fma' : cpu))
 		throw new Error('Invalid GCC compilation profile');
-	const cc = [
-		'-quiet',
-		'-m64',
-		'-march=x86-64',
-		'-mtune=generic',
-		`-O${optimization}`,
-		`-std=${standard}`,
-		'-fno-pie',
-		'-fasynchronous-unwind-tables',
-		'-fdiagnostics-color=never',
-		...definitions
-	];
-	if (cpu === 'avx2') cc.push('-mavx2', '-mno-fma');
-	else if (cpu === 'avx2-fma') cc.push('-mavx2', '-mfma');
-	if (language === 'cpp') cc.push('-fexceptions');
-	if (request.preprocessed) cc.push('-fpreprocessed');
-	else {
-		// GCC's implicit glibc preinclude preserves PCH eligibility. An explicit
-		// -include or -imacros would disable PCH before the first source include.
-		if (!sysroot?.has('/sysroot/usr/include/stdc-predef.h')) cc.push('-nostdinc');
-		cc.push('-isysroot', manifest.sysrootPath);
-		const includes = [];
-		if (language === 'cpp') {
-			if (
-				!definitions.some(
-					(flag) => flag === '-D_GNU_SOURCE' || flag.startsWith('-D_GNU_SOURCE=')
+	function frontendFlags(language: 'c' | 'cpp', standard: string, preprocessed: boolean) {
+		const cc = [
+			'-quiet',
+			'-m64',
+			'-march=x86-64',
+			'-mtune=generic',
+			`-O${optimization}`,
+			`-std=${standard}`,
+			'-fno-pie',
+			'-fasynchronous-unwind-tables',
+			'-fdiagnostics-color=never',
+			...(preprocessed ? [] : definitions)
+		];
+		if (cpu === 'avx2') cc.push('-mavx2', '-mno-fma');
+		else if (cpu === 'avx2-fma') cc.push('-mavx2', '-mfma');
+		if (language === 'cpp') cc.push('-fexceptions');
+		if (preprocessed) cc.push('-fpreprocessed');
+		else {
+			// GCC's implicit glibc preinclude preserves PCH eligibility. An explicit
+			// -include or -imacros would disable PCH before the first source include.
+			if (!sysroot?.has('/sysroot/usr/include/stdc-predef.h')) cc.push('-nostdinc');
+			cc.push('-isysroot', manifest.sysrootPath);
+			for (const dir of includePaths) cc.push('-I', dir);
+			const includes = [];
+			if (language === 'cpp') {
+				if (
+					!definitions.some(
+						(flag) => flag === '-D_GNU_SOURCE' || flag.startsWith('-D_GNU_SOURCE=')
+					)
 				)
-			)
-				cc.push('-D_GNU_SOURCE');
-			const major = manifest.compiler.version.split('.')[0];
+					cc.push('-D_GNU_SOURCE');
+				const major = manifest.compiler.version.split('.')[0];
+				includes.push(
+					`/sysroot/usr/include/c++/${major}`,
+					`/sysroot/usr/include/x86_64-linux-gnu/c++/${major}`,
+					`/sysroot/usr/include/c++/${major}/backward`
+				);
+			}
 			includes.push(
-				`/sysroot/usr/include/c++/${major}`,
-				`/sysroot/usr/include/x86_64-linux-gnu/c++/${major}`,
-				`/sysroot/usr/include/c++/${major}/backward`
+				manifest.resourceDir,
+				`${manifest.gccInstallation}/include-fixed`,
+				'/sysroot/usr/include/x86_64-linux-gnu',
+				'/sysroot/usr/include'
 			);
+			for (const include of includes) cc.push('-isystem', include);
 		}
-		includes.push(
-			manifest.resourceDir,
-			`${manifest.gccInstallation}/include-fixed`,
-			'/sysroot/usr/include/x86_64-linux-gnu',
-			'/sysroot/usr/include'
-		);
-		for (const include of includes) cc.push('-isystem', include);
+		return cc;
 	}
-	const stages: { tool: CrossGccTool; argv: string[]; output: string }[] = [];
+	const frontEndFlags = frontendFlags(language, standard, request.preprocessed ?? false);
+	let linkCpp = language === 'cpp';
+	const stages: {
+		tool: CrossGccTool;
+		argv: string[];
+		output: string;
+		frontEndFlags?: string[];
+	}[] = [];
 	const objects: string[] = [];
 	for (const [index, source] of [main, ...sources].entries()) {
 		const stem = index === 0 ? 'program' : `program.${index}`;
-		const assembly = `/workspace/${stem}.s`;
+		const assembly = `/tmp/${stem}.s`;
+		const unit = index > 0 ? request.sources![index - 1] : undefined;
+		let unitLanguage = language;
+		let flags = frontEndFlags;
+		if (unit && typeof unit === 'object') {
+			unitLanguage = unit.language ?? language;
+			if (
+				!['c', 'cpp'].includes(unitLanguage) ||
+				(unit.preprocessed !== undefined && typeof unit.preprocessed !== 'boolean')
+			)
+				throw new Error('Invalid GCC translation unit profile');
+			const unitStandard = gccStandard(
+				unitLanguage,
+				unit.standard ?? (unitLanguage === language ? standard : undefined),
+				dialects
+			);
+			flags = frontendFlags(
+				unitLanguage,
+				unitStandard,
+				unit.preprocessed ?? request.preprocessed ?? false
+			);
+		}
+		if (unitLanguage === 'cpp') linkCpp = true;
 		stages.push({
-			tool: language === 'c' ? 'cc1' : 'cc1plus',
+			tool: unitLanguage === 'c' ? 'cc1' : 'cc1plus',
+			frontEndFlags: flags,
 			argv: [
-				...cc,
+				...flags,
 				...(request.traceIncludes ? ['-H'] : []),
 				`/workspace/${source}`,
 				'-o',
@@ -272,7 +347,7 @@ export function gccCompilePlan(
 			output: assembly
 		});
 		if (emit !== 'assembly') {
-			const object = `/workspace/${stem}.o`;
+			const object = `/tmp/${stem}.o`;
 			stages.push({
 				tool: 'as',
 				argv: ['--64', '-o', object, assembly],
@@ -292,7 +367,7 @@ export function gccCompilePlan(
 				'--sysroot=/sysroot',
 				'-static',
 				'-o',
-				'/workspace/program.elf',
+				'/tmp/program.elf',
 				`${lib}/crt1.o`,
 				`${lib}/crti.o`,
 				`${gcc}/crtbeginT.o`,
@@ -301,7 +376,7 @@ export function gccCompilePlan(
 				'-L/sysroot/lib/x86_64-linux-gnu',
 				...objects,
 				'--start-group',
-				...(language === 'cpp'
+				...(linkCpp
 					? [
 							'-lstdc++',
 							...(sysroot?.has(`${gcc}/libstdc++exp.a`) ? ['-lstdc++exp'] : []),
@@ -309,7 +384,11 @@ export function gccCompilePlan(
 						]
 					: []),
 				'-lm',
-				...(sysroot?.has(`${lib}/libresolv.a`) ? ['-lresolv'] : []),
+				...([lib, '/sysroot/lib/x86_64-linux-gnu'].some((dir) =>
+					sysroot?.has(`${dir}/libresolv.a`)
+				)
+					? ['-lresolv']
+					: []),
 				// The v1 bundle contract permits sysroots without GNU libatomic.
 				...(sysroot?.has(`${gcc}/libatomic.a`) ? ['-latomic'] : []),
 				'-lgcc',
@@ -319,7 +398,7 @@ export function gccCompilePlan(
 				`${gcc}/crtend.o`,
 				`${lib}/crtn.o`
 			],
-			output: '/workspace/program.elf'
+			output: '/tmp/program.elf'
 		});
 	}
 	return {
@@ -329,6 +408,6 @@ export function gccCompilePlan(
 		emit,
 		fileName: stages.at(-1)!.output.split('/').at(-1)!,
 		// A precompiled header is valid only for these exact front-end flags.
-		frontEndFlags: cc
+		frontEndFlags
 	};
 }

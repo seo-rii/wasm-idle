@@ -47,6 +47,14 @@ export interface CreateCrossGccCompilerOptions {
 	readonly maxAssetBytes?: number;
 }
 
+/** Select a per-file profile for a translation unit in an x86 executable. */
+export interface CrossGccSourceUnit {
+	readonly path: string;
+	readonly language?: 'c' | 'cpp';
+	readonly standard?: string;
+	readonly preprocessed?: boolean;
+}
+
 /** This is the complete option allowlist; arbitrary gcc driver flags are not accepted. */
 export interface CrossGccCompileRequest {
 	readonly code: string;
@@ -61,7 +69,9 @@ export interface CrossGccCompileRequest {
 	readonly preprocessed?: boolean;
 	readonly files?: readonly { readonly path: string; readonly contents: string | Uint8Array }[];
 	/** Additional translation unit paths in files, in link order. Executable output only. */
-	readonly sources?: readonly string[];
+	readonly sources?: readonly (string | CrossGccSourceUnit)[];
+	/** Project include directories, in GCC -I order, relative to the workspace. */
+	readonly includePaths?: readonly string[];
 	/** Object-like macro definitions passed as real -D arguments, e.g. ONLINE_JUDGE=1. */
 	readonly defines?: readonly string[];
 }
@@ -69,7 +79,7 @@ export interface CrossGccCompileRequest {
 /** The C++ profile a precompiled header serves; defaults match compile(). */
 export type CrossGccPrecompileRequest = Pick<
 	CrossGccCompileRequest,
-	'cpu' | 'optimization' | 'standard'
+	'cpu' | 'optimization' | 'standard' | 'defines'
 >;
 
 export interface CrossGccIdentity {
@@ -281,8 +291,9 @@ export interface CreateGccCompilerOptions extends CreateCrossGccCompilerOptions 
 
 export interface WasiGccCompileRequest extends Omit<
 	CrossGccCompileRequest,
-	'cpu' | 'traceIncludes'
+	'cpu' | 'traceIncludes' | 'sources' | 'includePaths'
 > {
+	readonly sources?: readonly string[];
 	/** Baseline Wasm only. An x86 AVX2/FMA profile is not Wasm SIMD. */
 	readonly cpu?: 'wasm32';
 	/** Opt in to the separately qualified std/std.compat BMI profile. Requires explicit
