@@ -28,13 +28,14 @@ const reservedNames = new Set([
 	'program.elf'
 ]);
 
-export function gccRelativePath(value: unknown): string {
+export function gccRelativePath(value: unknown, linux = false): string {
 	if (
 		typeof value !== 'string' ||
 		!value ||
 		value.length > 4096 ||
 		/[\\\x00-\x1f]/u.test(value) ||
-		value.split('/').some((part) => !part || part === '.' || part === '..')
+		value.split('/').some((part) => !part || part === '.' || part === '..' ||
+			(linux && (part.length > 255 || (part.length > 85 && encoder.encode(part).length > 255))))
 	)
 		throw new Error('Invalid GCC relative path');
 	return value;
@@ -128,7 +129,8 @@ export function gccCompileInputs(
 		(!Array.isArray(request.sources) || request.sources.length > 63)
 	)
 		throw new Error('GCC supports at most 63 additional translation units');
-	const sources = (request.sources ?? []).map(gccRelativePath);
+	const linux = targetKeys.includes('traceIncludes');
+	const sources = (request.sources ?? []).map((path) => gccRelativePath(path, linux));
 	if (new Set(sources).size !== sources.length) throw new Error('Duplicate GCC translation unit');
 	if (sources.length && emit !== 'executable')
 		throw new Error('Additional GCC translation units require executable output');
@@ -176,7 +178,7 @@ export function gccCompileInputs(
 	const files = [{ path: `/workspace/${main}`, contents: encoder.encode(workspace.code) }];
 	const paths = new Set<string>();
 	for (const file of workspace.files ?? []) {
-		const path = gccRelativePath(file.path);
+		const path = gccRelativePath(file.path, linux);
 		if (reserved.has(path.split('/')[0])) throw new Error('GCC input/output path is reserved');
 		if (paths.has(path)) throw new Error('Duplicate GCC workspace file');
 		for (const existing of paths) {
@@ -259,7 +261,7 @@ export function gccCompilePlan(
 	const objects: string[] = [];
 	for (const [index, source] of [main, ...sources].entries()) {
 		const stem = index === 0 ? 'program' : `program.${index}`;
-		const assembly = `/workspace/${stem}.s`;
+		const assembly = `/tmp/${stem}.s`;
 		stages.push({
 			tool: language === 'c' ? 'cc1' : 'cc1plus',
 			argv: [
@@ -272,7 +274,7 @@ export function gccCompilePlan(
 			output: assembly
 		});
 		if (emit !== 'assembly') {
-			const object = `/workspace/${stem}.o`;
+			const object = `/tmp/${stem}.o`;
 			stages.push({
 				tool: 'as',
 				argv: ['--64', '-o', object, assembly],
@@ -292,7 +294,7 @@ export function gccCompilePlan(
 				'--sysroot=/sysroot',
 				'-static',
 				'-o',
-				'/workspace/program.elf',
+				'/tmp/program.elf',
 				`${lib}/crt1.o`,
 				`${lib}/crti.o`,
 				`${gcc}/crtbeginT.o`,
@@ -319,7 +321,7 @@ export function gccCompilePlan(
 				`${gcc}/crtend.o`,
 				`${lib}/crtn.o`
 			],
-			output: '/workspace/program.elf'
+			output: '/tmp/program.elf'
 		});
 	}
 	return {

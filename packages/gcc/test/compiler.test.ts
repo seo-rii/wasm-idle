@@ -1833,12 +1833,15 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 			expect(frontends[2].files.get('/workspace/lib/local.h')).toEqual(
 				encoder.encode('#define LOCAL 4')
 			);
+			for (const call of frontends) {
+				expect([...call.files.keys()].filter((name) => /^\/workspace\/program(?:\.|$)/.test(name))).toEqual([]);
+			}
 			const link = host.calls.at(-1)!;
 			expect(
-				link.argv.filter((arg) => arg.startsWith('/workspace/') && arg.endsWith('.o'))
-			).toEqual(['/workspace/program.o', '/workspace/program.1.o', '/workspace/program.2.o']);
+				link.argv.filter((arg) => arg.startsWith('/tmp/') && arg.endsWith('.o'))
+			).toEqual(['/tmp/program.o', '/tmp/program.1.o', '/tmp/program.2.o']);
 			for (const object of ['program.o', 'program.1.o', 'program.2.o'])
-				expect(link.files.get(`/workspace/${object}`)).toEqual(elf(1));
+				expect(link.files.get(`/tmp/${object}`)).toEqual(elf(1));
 			expect(new Set(host.calls.map((call) => call.files)).size).toBe(7);
 		} finally {
 			compiler.dispose();
@@ -1908,7 +1911,7 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 				(await compiler.compile({ code: '', emit: 'assembly' })).artifact?.bytes
 			).toEqual(raw);
 			expect((await compiler.compile({ code: '', emit: 'object' })).exitCode).toBe(0);
-			expect(host.calls.at(-1)!.files.get('/workspace/program.s')).toEqual(raw);
+			expect(host.calls.at(-1)!.files.get('/tmp/program.s')).toEqual(raw);
 		} finally {
 			compiler.dispose();
 		}
@@ -2031,6 +2034,18 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 			expect((error as Error).message.length).toBeLessThan(1024);
 			host.mode = '';
 			expect((await compiler.compile({ code: '' })).artifact).toBeDefined();
+		} finally {
+			compiler.dispose();
+		}
+	});
+
+	it('enforces Linux NAME_MAX in UTF-8 bytes for each project file component', async () => {
+		const compiler = await createCrossGccCompiler(bundle().options);
+		try {
+			for (const unit of ['a'.repeat(255), '子'.repeat(85)]) {
+				expect((await compiler.compile({ code: '', files: [{ path: 'dir/' + unit, contents: '' }] })).exitCode).toBe(0);
+				await expect(compiler.compile({ code: '', files: [{ path: unit + 'a/input.h', contents: '' }] })).rejects.toThrow('relative path');
+			}
 		} finally {
 			compiler.dispose();
 		}

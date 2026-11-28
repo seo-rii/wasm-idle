@@ -807,7 +807,7 @@ export async function createGccCompiler(
 			);
 			if (!result.workspace) return result;
 			const { workspace, wasmInspection, coverageNotes, ...completed } = result;
-			const bytes = workspace.get(`/workspace/${plan.fileName}`)!;
+			const bytes = workspace.get(plan.stages.at(-1)!.output)!;
 			const linkInput: WasiGccLinkInputReceipt | undefined =
 				manifest.target === 'wasm32-wasi' && plan.emit === 'object'
 					? Object.freeze({
