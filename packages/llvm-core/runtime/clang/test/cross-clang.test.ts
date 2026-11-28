@@ -295,6 +295,29 @@ describe('compile-only x86-64 Clang host', () => {
 		}
 	});
 
+	it('inspects dynamic tags even when a static output has no interpreter', async () => {
+		const output = new Uint8Array(224);
+		output.set(elf());
+		const view = new DataView(output.buffer);
+		view.setBigUint64(24, 0x4000b0n, true);
+		view.setUint16(56, 2, true);
+		view.setBigUint64(96, 224n, true); view.setBigUint64(104, 224n, true);
+		view.setUint32(120, 2, true); // PT_DYNAMIC
+		view.setBigUint64(128, 192n, true);
+		view.setBigUint64(152, 32n, true); view.setBigUint64(160, 32n, true);
+		for (const [first, second, expected] of [
+			[21n, 0n, null], [1n, 0n, /DT_NEEDED/], [21n, 21n, /DT_NULL/]
+		] as const) {
+			view.setBigInt64(192, first, true); view.setBigInt64(208, second, true);
+			const compiler = await createCrossClangCompiler(bundle({ output }).options);
+			try {
+				const compile = () => compiler.compile({ code: '' });
+				if (expected) expect(compile).toThrow(expected);
+				else expect(compile().exitCode).toBe(0);
+			} finally { compiler.dispose(); }
+		}
+	});
+
 	it('requires static ELF program headers and an entry point in a file-backed executable segment', async () => {
 		const cases: [string, (view: DataView) => void, RegExp][] = [
 			['missing table', view => view.setUint16(56, 0, true), /program header table/],
