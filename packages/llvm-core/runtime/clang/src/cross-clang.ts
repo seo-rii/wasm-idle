@@ -1,7 +1,8 @@
 import { verifyRuntimeAssetIntegrity, waitForRuntimeAssetOperation } from '@wasm-idle/core';
-import { ConsoleStdout, Directory, File, OpenDirectory, PreopenDirectory, WASI, wasi } from '@bjorn3/browser_wasi_shim';
+import { ConsoleStdout, Directory, File, OpenDirectory, OpenFile, PreopenDirectory, WASI, wasi } from '@bjorn3/browser_wasi_shim';
 import untar from '../../core/src/tar.js';
 import { readBuffer } from '../../core/src/wasm.js';
+import { CompilerOpenFile, takeCompilerOutput } from './cross-clang-file.js';
 import { compilePinnedTools, createToolHost, type LlvmToolHost } from './tool-host-execution.js';
 
 export type CrossClangCpu = 'x86-64' | 'x86-64-v3';
@@ -83,15 +84,21 @@ const fixedManifest = {
 	sysrootPath: '/sysroot', gccToolchain: '/sysroot/usr', compilerPath: '/bin/clang', linkerPath: '/bin/ld.lld'
 } as const;
 
+// A UTF-16 code unit uses at most three UTF-8 bytes.
+function tooLongComponent(name: string): boolean {
+	return name.length > 255 || (name.length > 85 && encoder.encode(name).length > 255);
+}
+
 // The WASI shim lexically removes "." and ".." before looking up any inode.
 // POSIX requires every preceding component to resolve to an existing directory.
 function traversalError(root: Directory, path: string): number {
-	if (!/(?:^|\/)\.\.?(?:\/|$)/u.test(path)) return 0;
+	if (!/(?:^|\/)\.\.?(?:\/|$)/u.test(path) && (path.length <= 85 || !path.split('/').some(tooLongComponent))) return 0;
 	if (path.startsWith('/')) return wasi.ERRNO_NOTCAPABLE;
 	if (path.includes('\0')) return wasi.ERRNO_INVAL;
 	const parts = path.split('/'), directories = [root];
 	for (let i = 0; i < parts.length; i++) {
 		const part = parts[i];
+		if (tooLongComponent(part)) return wasi.ERRNO_NAMETOOLONG;
 		if (part === '..') {
 			if (directories.length === 1) return wasi.ERRNO_NOTCAPABLE;
 			directories.pop();
@@ -116,6 +123,7 @@ function checkLookupPaths(fd: OpenDirectory): OpenDirectory {
 		if (ret) return { ret, fd_obj: null };
 		const result = open(dirflags, path, ...flags);
 		if (result.fd_obj instanceof OpenDirectory) checkLookupPaths(result.fd_obj);
+		else if (result.fd_obj instanceof OpenFile && !result.fd_obj.file.readonly) result.fd_obj = new CompilerOpenFile(result.fd_obj);
 		return result;
 	};
 	return fd;
@@ -160,7 +168,7 @@ function digest(value: unknown): string {
 }
 function relativePath(value: unknown): string {
 	const path = text(value, 'path');
-	if (path.includes('\\') || path.split('/').some(part => !part || part === '.' || part === '..')) throw new Error(`Invalid cross Clang relative path: ${path}`);
+	if (path.includes('\\') || path.split('/').some(part => !part || part === '.' || part === '..' || tooLongComponent(part))) throw new Error(`Invalid cross Clang relative path: ${path}`);
 	return path;
 }
 
@@ -247,7 +255,9 @@ function compilePlan(request: CrossClangCompileRequest, manifest: CrossClangMani
 	const emit = request.emit ?? 'executable', optimization = request.optimization ?? '2';
 	if (!['c', 'cpp'].includes(language) || !manifest.cpuProfiles.includes(cpu) || !['executable', 'object', 'assembly'].includes(emit) || !['0', '1', '2', '3', 's'].includes(optimization)) throw new Error('Invalid cross Clang compilation profile');
 	const standard = request.standard ?? (language === 'c' ? 'gnu17' : 'gnu++20');
-	const standards = language === 'c' ? ['c99', 'gnu99', 'c11', 'gnu11', 'c17', 'gnu17', 'c23', 'gnu23'] : ['c++11', 'gnu++11', 'c++14', 'gnu++14', 'c++17', 'gnu++17', 'c++20', 'gnu++20', 'c++23', 'gnu++23'];
+	const standards = language === 'c'
+		? ['c89', 'gnu89', 'c90', 'gnu90', 'c99', 'gnu99', 'c11', 'gnu11', 'c17', 'gnu17', 'c23', 'gnu23', 'c2y', 'gnu2y']
+		: ['c++11', 'gnu++11', 'c++14', 'gnu++14', 'c++17', 'gnu++17', 'c++20', 'gnu++20', 'c++23', 'gnu++23', 'c++26', 'gnu++26', 'c++2c', 'gnu++2c'];
 	if (!standards.includes(standard)) throw new Error('Unsupported cross Clang language standard');
 	const fileName = emit === 'assembly' ? 'program.s' : emit === 'object' ? 'program.o' : 'program.elf';
 	const main = language === 'c' ? 'main.c' : 'main.cpp';
@@ -269,7 +279,8 @@ function compilePlan(request: CrossClangCompileRequest, manifest: CrossClangMani
 		'-x', language === 'c' ? 'c' : 'c++'];
 	if (language === 'cpp') argv.push('--driver-mode=g++', '-stdlib=libstdc++');
 	if (emit === 'executable') argv.push('-fuse-ld=lld', `--ld-path=${manifest.linkerPath}`, '--rtlib=libgcc', '--unwindlib=libgcc', '-static');
-	else argv.push(emit === 'object' ? '-c' : '-S');
+	else if (emit === 'object') argv.push('-c');
+	else argv.push('-S', '-fno-addrsig');
 	argv.push(main, '-o', fileName);
 	// Unlike the C++ driver, Clang's C driver does not link the math library.
 	if (emit === 'executable' && language === 'c') argv.push('-lm');
@@ -456,7 +467,7 @@ export async function createCrossClangCompiler(options: CreateCrossClangCompiler
 				if (result.code !== 0) return captured;
 				const output = workspace.contents.get(plan.fileName);
 				if (!(output instanceof File)) throw new Error('Cross Clang exited successfully without producing the requested output');
-				const bytes = Uint8Array.from(output.data);
+				const bytes = takeCompilerOutput(output);
 				validateOutput(bytes, plan.emit);
 				return { ...captured, artifact: { target, format: plan.emit === 'assembly' ? 'assembly' : plan.emit === 'object' ? 'elf-object' : 'elf-executable', fileName: plan.fileName, bytes, cpu: plan.cpu } };
 			} finally {
