@@ -84,7 +84,8 @@ export const scenarios = [
 		// The Clang host, shared cancellation helper and UTF-8 paths add 4,956 bytes and two JS/declaration pairs.
 		// Cross Clang workspace and tool handling add 1,614 installed bytes.
 		// Checking directory traversal in the Clang host adds 1,705 installed bytes.
-		budget: { maxBytes: 7663616, maxFiles: 873, maxPackages: 6 },
+		// The x86 Clang working file and shared ELF check bring the root install to 7,670,047 bytes / 877 files.
+		budget: { maxBytes: 7670784, maxFiles: 877, maxPackages: 6 },
 		absentPackageNames: [
 			'@katana-project/asm',
 			'java-parser',
@@ -164,7 +165,8 @@ export const scenarios = [
 		// Seven reviewed language metadata additions grow the shared core by 6,040 bytes.
 		// Refreshed core receipts project a 2,895,848-byte GCC install; round to the next KiB.
 		// The shared asset cancellation helper adds one JS/declaration pair.
-		budget: { maxBytes: 2895872, maxFiles: 200, maxPackages: 4 },
+		// The shared x86 ELF check adds one JavaScript/declaration pair.
+		budget: { maxBytes: 2895872, maxFiles: 202, maxPackages: 4 },
 		absentPackageNames: [
 			'wasm-idle',
 			'@wasm-idle/llvm-core',
@@ -416,7 +418,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// Java's XML platform adapter and llvm-core's pinned SIMD compatibility headers.
 		// Add 384 KiB for the reviewed SIMD integration to the Java install limit.
 		// Cross Clang directory lookup and read-only tool files bring the LSP install to 5,898,407 bytes.
-		budget: { maxBytes: 5899264, maxFiles: 1050, maxPackages: 10 },
+		// The x86 working file and ELF changes bring this install to 5,905,321 bytes.
+		budget: { maxBytes: 5905408, maxFiles: 1050, maxPackages: 10 },
 		absentPackageNames: [
 			'@lezer/rust',
 			'@wasm-idle/debug',
@@ -510,7 +513,9 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// The x86 Clang and GCC input handling changes need three additional KiB in the aggregate.
 		// Checking directory traversal for Clang and GCC header lookup adds 2,961 bytes.
 		// GCC workspace preflight and dialect support measure 43,441,502 bytes in CI.
-		budget: { maxBytes: 43443200, maxFiles: 3502, maxPackages: 70 },
+		// The combined Clang, GCC and shared ELF changes add 11,084 bytes and four files.
+		// Round the 43,452,678-byte aggregate to the next KiB.
+		budget: { maxBytes: 43453440, maxFiles: 3506, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",
