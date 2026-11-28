@@ -564,6 +564,8 @@ export async function createGccCompiler(
 					module.FS.mkdirTree(`${pchDirectory}/bits`);
 				mountGccSysroot(module.FS, sysrootTree, '/sysroot', sysrootTime);
 				for (const [path, bytes] of workspace) {
+					// Each x86 tool sees only the generated inputs named in its own argv.
+					if (manifest.target === 'x86_64-linux-gnu' && path.startsWith('/tmp/') && !stage.argv.includes(path)) continue;
 					module.FS.mkdirTree(path.slice(0, path.lastIndexOf('/')));
 					// The x86 plan owns private snapshots of user files and prior stage
 					// outputs. Its tools only write to distinct, reserved output paths.

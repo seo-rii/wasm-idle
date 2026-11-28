@@ -1912,7 +1912,7 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 				(await compiler.compile({ code: '', emit: 'assembly' })).artifact?.bytes
 			).toEqual(raw);
 			expect((await compiler.compile({ code: '', emit: 'object' })).exitCode).toBe(0);
-			expect(host.calls.at(-1)!.files.get('/tmp/program.s')).toEqual(raw);
+			expect(host.calls.find((call) => call.tool === 'as')!.files.get('/tmp/program.s')).toEqual(raw);
 		} finally {
 			compiler.dispose();
 		}
