@@ -1,7 +1,8 @@
 import { verifyRuntimeAssetIntegrity, waitForRuntimeAssetOperation } from '@wasm-idle/core';
-import { ConsoleStdout, Directory, File, OpenDirectory, PreopenDirectory, WASI, wasi } from '@bjorn3/browser_wasi_shim';
+import { ConsoleStdout, Directory, File, OpenDirectory, OpenFile, PreopenDirectory, WASI, wasi } from '@bjorn3/browser_wasi_shim';
 import untar from '../../core/src/tar.js';
 import { readBuffer } from '../../core/src/wasm.js';
+import { CompilerOpenFile, takeCompilerOutput } from './cross-clang-file.js';
 import { compilePinnedTools, createToolHost, type LlvmToolHost } from './tool-host-execution.js';
 
 export type CrossClangCpu = 'x86-64' | 'x86-64-v3';
@@ -116,6 +117,7 @@ function checkLookupPaths(fd: OpenDirectory): OpenDirectory {
 		if (ret) return { ret, fd_obj: null };
 		const result = open(dirflags, path, ...flags);
 		if (result.fd_obj instanceof OpenDirectory) checkLookupPaths(result.fd_obj);
+		else if (result.fd_obj instanceof OpenFile && !result.fd_obj.file.readonly) result.fd_obj = new CompilerOpenFile(result.fd_obj);
 		return result;
 	};
 	return fd;
@@ -456,7 +458,7 @@ export async function createCrossClangCompiler(options: CreateCrossClangCompiler
 				if (result.code !== 0) return captured;
 				const output = workspace.contents.get(plan.fileName);
 				if (!(output instanceof File)) throw new Error('Cross Clang exited successfully without producing the requested output');
-				const bytes = Uint8Array.from(output.data);
+				const bytes = takeCompilerOutput(output);
 				validateOutput(bytes, plan.emit);
 				return { ...captured, artifact: { target, format: plan.emit === 'assembly' ? 'assembly' : plan.emit === 'object' ? 'elf-object' : 'elf-executable', fileName: plan.fileName, bytes, cpu: plan.cpu } };
 			} finally {
