@@ -239,7 +239,9 @@ describe('compile-only x86-64 Clang host', () => {
 			mounted.push({ root: this.dir, sysroot: this.dir.contents.get('sysroot') as Directory, binaries: this.dir.contents.get('bin') as Directory });
 			return fdstat.call(this);
 		});
-		const compiler = await createCrossClangCompiler(bundle({ noOutput: outcome === 'missing-output' }).options);
+		const compile = vi.spyOn(WebAssembly, 'compile');
+		const fixture = bundle({ noOutput: outcome === 'missing-output' });
+		const compiler = await createCrossClangCompiler(fixture.options);
 		try {
 			if (outcome === 'missing-output') {
 				expect(() => compiler.compile({ code: 'int main() {}' })).toThrow('without producing the requested output');
@@ -253,10 +255,11 @@ describe('compile-only x86-64 Clang host', () => {
 				// while the compiler's immutable trees remain usable for the next run.
 				expect(sysroot).toBeInstanceOf(Directory); expect(binaries).toBeInstanceOf(Directory);
 				expect(sysroot.contents.size).toBeGreaterThan(0);
-				for (const name of ['clang', 'ld.lld']) {
+				for (const [name, asset] of [['clang', 'clang.wasm'], ['ld.lld', 'lld.wasm']]) {
 					const tool = binaries.contents.get(name) as File;
 					expect(tool).toBeInstanceOf(File);
-					expect(tool.size).toBe(0n);
+					expect(tool.data).toEqual(fixture.files.get(asset));
+					expect(compile.mock.calls.some(([bytes]) => ArrayBuffer.isView(bytes) && bytes.buffer === tool.data.buffer)).toBe(true);
 					expect(tool.readonly).toBe(true);
 				}
 				expect(root.contents.size).toBe(0);
