@@ -385,9 +385,9 @@ export async function createCrossClangCompiler(options: CreateCrossClangCompiler
 	const linkLibraries = { c: commonLibraries, cpp: [...cppLibraries, ...commonLibraries] };
 	let active: { root: Directory; stdout: string; stderr: string; diagnosticBytes: number } | undefined;
 	let host: LlvmToolHost | undefined;
-	// Clang probes both executable paths. The tool host dispatches the compiled modules.
+	// readBuffer owns each full ArrayBuffer. Guest file reads and module preparation can share it.
 	let toolsDirectory = new Directory(new Map([
-		['clang', new File([], { readonly: true })], ['ld.lld', new File([], { readonly: true })]
+		['clang', new File(clang.buffer, { readonly: true })], ['ld.lld', new File(lld.buffer, { readonly: true })]
 	]));
 	const importNames = new Set(Object.keys(new WASI([], [], [], { debug: false }).wasiImport));
 	host = await createToolHost({
