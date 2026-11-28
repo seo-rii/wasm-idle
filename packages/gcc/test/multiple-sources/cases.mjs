@@ -53,6 +53,21 @@ const maximumFiles = Array.from({ length: 63 }, (_, index) => ({
 
 export const cases = [
 	{
+		id: 'directory-traversal-includes',
+		fixture: 'include-traversal.c',
+		request: {
+			language: 'c',
+			files: [
+				{ path: 'config.h', contents: '#define RESULT "ok"' },
+				{ path: 'regular', contents: '' },
+				{ path: 'directory/keep', contents: '' }
+			]
+		},
+		stdin: '',
+		stdout: 'ok\n',
+		stageCount: 3
+	},
+	{
 		id: 'default-request-executable',
 		fixture: 'standalone.cpp',
 		request: {},

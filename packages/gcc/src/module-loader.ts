@@ -10,6 +10,15 @@ export interface GccFileSystemNode {
 }
 
 export interface GccFileSystem {
+	lookupPath?(
+		path: string,
+		options?: {
+			follow?: boolean;
+			follow_mount?: boolean;
+			noent_okay?: boolean;
+			parent?: boolean;
+		}
+	): { path: string; node?: { mode: number } };
 	mkdirTree(path: string): void;
 	writeFile(path: string, bytes: Uint8Array, options?: { canOwn?: boolean }): void;
 	readFile(path: string): Uint8Array;
