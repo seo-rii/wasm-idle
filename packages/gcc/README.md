@@ -727,7 +727,7 @@ orchestrates the stages without `fork`/`exec`.
 | `cpu`          | `x86-64` (baseline default), `avx2` (`-mavx2 -mno-fma`), `avx2-fma` (`-mavx2 -mfma`); all use `-march=x86-64` |
 | `emit`         | `assembly`, `object`, `executable` (static default)                                                           |
 | `optimization` | `0`, `1`, `2` (default), `3`, `s`                                                                             |
-| `standard`     | C99/C11/C17/C2x or C++11/14/17/20/23, including GNU dialects; defaults `gnu17`/`gnu++20`                      |
+| `standard`     | C99/C11/C17/C2x or C++11/14/17/20/23, including GNU dialects. GCC 16 also accepts `c23`, `gnu23`, `c++26` and `gnu++26`. Defaults to `gnu17`/`gnu++20`.                      |
 | `preprocessed` | `true` for `.i`/`.ii` plus `-fpreprocessed`; ordinary source is the default                                   |
 | `files`        | Up to 1,024 relative local files; 16 MiB total source and file contents                                       |
 | `sources`      | Up to 63 additional translation unit paths from `files`; executable output only                               |

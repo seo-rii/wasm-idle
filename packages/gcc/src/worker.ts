@@ -1,3 +1,4 @@
+import { gccWorkspaceInputs } from './plan.js';
 import { snapshotWasiGccLinkInputs } from './wasm-link-inputs.js';
 import type {
 	CreateCrossGccCompilerOptions,
@@ -166,39 +167,29 @@ export async function createGccWorker(
 				if (busy) throw new Error('GCC Worker is busy');
 				busy = true;
 				try {
-					// postMessage clones ordinary buffers, but SharedArrayBuffer views must
-					// become private bytes too. Never transfer/detach caller-owned inputs.
-					let snapshot =
-						options.target === 'wasm32-wasi' && 'linkInputs' in request
-							? {
-									...request,
-									linkInputs: snapshotWasiGccLinkInputs(
-										(request as WasiGccCompileRequest).linkInputs
-									)
-								}
-							: request;
-					// Structured clone would share a SAB or copy the entire backing store of a slice.
-					if (Array.isArray(request.files)) {
-						snapshot = {
-							...snapshot,
-							files: request.files.map((file) => {
-								const bytes = file?.contents;
-								if (
-									ArrayBuffer.isView(bytes) &&
-									Object.prototype.toString.call(bytes) ===
-										'[object Uint8Array]' &&
-									(bytes.byteLength !== bytes.buffer.byteLength ||
-										Object.prototype.toString.call(bytes.buffer) ===
-											'[object SharedArrayBuffer]')
-								) {
-									return {
-										...file,
-										contents: Uint8Array.from(bytes as Uint8Array)
-									};
-								}
-								return file;
-							})
-						};
+					if (disposed) throw new Error('GCC Worker is disposed');
+					signal?.throwIfAborted();
+					const { code, files } = gccWorkspaceInputs(request);
+					const snapshot = {
+						...request,
+						code,
+						...(options.target === 'wasm32-wasi' && 'linkInputs' in request
+							? { linkInputs: snapshotWasiGccLinkInputs(request.linkInputs) }
+							: {})
+					};
+					if (files) {
+						// Structured clone shares SABs and clones the full backing store of a slice.
+						snapshot.files = files.map(({ path, contents }) => {
+							if (typeof contents === 'string') return { path, contents };
+							const buffer = contents.buffer;
+							if (
+								contents.byteLength !== buffer.byteLength ||
+								Object.prototype.toString.call(buffer) ===
+									'[object SharedArrayBuffer]'
+							)
+								return { path, contents: Uint8Array.from(contents) };
+							return { path, contents };
+						});
 					}
 					const response = await send({ type: 'compile', request: snapshot }, signal);
 					if (response.type !== 'result')

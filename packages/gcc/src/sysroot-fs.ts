@@ -19,7 +19,7 @@ const EINVAL = 28,
 const directoryMode = 0o40555,
 	fileMode = 0o100444;
 
-// Emscripten 4 skips the node type check when resolving "." or "..".
+// Emscripten 4 skips directory checks for dot components and trailing slashes.
 export function requireGccDirectoryTraversal(fs: GccFileSystem) {
 	const lookup = fs.lookupPath?.bind(fs);
 	if (!lookup) return;
@@ -31,6 +31,13 @@ export function requireGccDirectoryTraversal(fs: GccFileSystem) {
 				const { node } = lookup(path.slice(0, dot.index), { follow: true });
 				if (!node || (node.mode & 0o170000) !== 0o040000) throw new fs.ErrnoError(54); // ENOTDIR
 			}
+		}
+		if (path?.endsWith('/') && !options?.parent) {
+			// A trailing slash follows a final symlink and requires its target to exist.
+			const result = lookup(path, { ...options, follow: true, noent_okay: false });
+			if (!result.node || (result.node.mode & 0o170000) !== 0o040000)
+				throw new fs.ErrnoError(54); // ENOTDIR
+			return result;
 		}
 		return lookup(path, options);
 	};
@@ -66,7 +73,12 @@ export function gccSysrootTree(
  * looks up, and the read-only modes keep one tool from changing bytes seen by the next.
  * No `mmap` operation is provided: GCC maps files only to restore PCH, which the sysroot lacks.
  */
-export function mountGccSysroot(FS: GccFileSystem, tree: GccSysrootDirectory, mountpoint: string) {
+export function mountGccSysroot(
+	FS: GccFileSystem,
+	tree: GccSysrootDirectory,
+	mountpoint: string,
+	timestamp: number
+) {
 	// Include-path probing makes most lookups miss; reuse one error like MEMFS does.
 	const missing = new FS.ErrnoError(ENOENT);
 	const readOnly = () => {
@@ -147,7 +159,7 @@ export function mountGccSysroot(FS: GccFileSystem, tree: GccSysrootDirectory, mo
 		node.contents = contents;
 		node.node_ops = nodeOps;
 		node.stream_ops = streamOps;
-		node.atime = node.mtime = node.ctime = Date.now();
+		node.atime = node.mtime = node.ctime = timestamp;
 		return node;
 	}
 	FS.mkdirTree(mountpoint);

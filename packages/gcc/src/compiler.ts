@@ -263,6 +263,7 @@ export async function createGccCompiler(
 				throw new Error('GCC TLS bundle is missing its qualified runtime archive: ' + path);
 	}
 	const sysrootTree = gccSysrootTree(sysroot, directories, '/sysroot');
+	const sysrootTime = Date.now();
 	const factories = new Map<
 		CrossGccTool,
 		{ factory?: GccModuleFactory; revoke(): void; wasm: WebAssembly.Module }
@@ -403,6 +404,7 @@ export async function createGccCompiler(
 		if (disposed) throw new Error('GCC compiler is disposed');
 		if (active) throw new Error('GCC compiler is busy');
 		active = true;
+		const workspaceTime = Date.now();
 		const workspace = new Map(files.map((file) => [file.path, file.contents]));
 		const results: CrossGccStageResult[] = [];
 		const coverageNotes: WasiGccCoverageNote[] = [];
@@ -560,7 +562,7 @@ export async function createGccCompiler(
 				module.FS.mkdirTree('/tmp');
 				if (stage.precompiledHeader || stage.output === pchPath)
 					module.FS.mkdirTree(`${pchDirectory}/bits`);
-				mountGccSysroot(module.FS, sysrootTree, '/sysroot');
+				mountGccSysroot(module.FS, sysrootTree, '/sysroot', sysrootTime);
 				for (const [path, bytes] of workspace) {
 					module.FS.mkdirTree(path.slice(0, path.lastIndexOf('/')));
 					// The x86 plan owns private snapshots of user files and prior stage
@@ -569,6 +571,9 @@ export async function createGccCompiler(
 					module.FS.writeFile(path, bytes, {
 						canOwn: manifest.target === 'x86_64-linux-gnu'
 					});
+					// Recreating a tool's MEMFS must preserve the input's __TIMESTAMP__.
+					if (manifest.target === 'x86_64-linux-gnu')
+						module.FS.utime(path, workspaceTime, workspaceTime);
 				}
 				if (moduleFiles && stage.tool === 'cc1plus') {
 					module.FS.mkdirTree(gccStdModulesDirectory);

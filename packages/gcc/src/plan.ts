@@ -40,12 +40,56 @@ export function gccRelativePath(value: unknown): string {
 	return value;
 }
 
+/** Check the complete workspace before encoding text, copying views or posting a request. */
+export function gccWorkspaceInputs(request: CrossGccCompileRequest | WasiGccCompileRequest) {
+	const code = request?.code;
+	if (typeof code !== 'string') throw new Error('GCC requires source text');
+	const limitError = 'GCC workspace exceeds its limit';
+	const inputs = request.files;
+	if (inputs != null && (!Array.isArray(inputs) || inputs.length > 1024))
+		throw new Error(limitError);
+	const strings = [code];
+	let units = code.length;
+	let binary = 0;
+	const files = inputs?.map((file) => {
+		const contents = file?.contents;
+		if (typeof contents === 'string') {
+			strings.push(contents);
+			units += contents.length;
+			return { path: file.path, contents };
+		}
+		if (
+			!ArrayBuffer.isView(contents) ||
+			Object.prototype.toString.call(contents) !== '[object Uint8Array]'
+		)
+			throw new Error('Invalid GCC workspace contents');
+		// Pin the measured span before any later input can grow a shared backing store.
+		const view = new Uint8Array(contents.buffer, contents.byteOffset, contents.byteLength);
+		binary += view.byteLength;
+		return { path: file.path, contents: view };
+	});
+	// UTF-8 needs one to three bytes per UTF-16 code unit. Scan text only when
+	// these bounds straddle the limit, including surrogate pairs and lone surrogates.
+	let bytes = binary + units;
+	if (bytes > maxWorkspaceBytes) throw new Error(limitError);
+	if (binary + units * 3 > maxWorkspaceBytes) {
+		for (const string of strings) {
+			for (const character of string) {
+				const first = character.charCodeAt(0);
+				bytes += first < 0x80 ? 0 : first < 0x800 ? 1 : 2;
+				if (bytes > maxWorkspaceBytes) throw new Error(limitError);
+			}
+		}
+	}
+	return { code, files };
+}
+
 /** Shared source validation for the two real GCC backends; it never edits source text. */
 export function gccCompileInputs(
 	request: CrossGccCompileRequest | WasiGccCompileRequest,
 	targetKeys: readonly string[],
 	additionalReservedNames: readonly string[] = [],
-	allowCpp26 = false
+	dialects: { c23?: boolean; cpp26?: boolean } = {}
 ) {
 	if (!request || typeof request !== 'object' || typeof request.code !== 'string')
 		throw new Error('GCC requires source text');
@@ -96,7 +140,17 @@ export function gccCompileInputs(
 	const standard = request.standard ?? (language === 'c' ? 'gnu17' : 'gnu++20');
 	const standards =
 		language === 'c'
-			? ['c99', 'gnu99', 'c11', 'gnu11', 'c17', 'gnu17', 'c2x', 'gnu2x']
+			? [
+					'c99',
+					'gnu99',
+					'c11',
+					'gnu11',
+					'c17',
+					'gnu17',
+					'c2x',
+					'gnu2x',
+					...(dialects.c23 ? ['c23', 'gnu23'] : [])
+				]
 			: [
 					'c++11',
 					'gnu++11',
@@ -108,7 +162,7 @@ export function gccCompileInputs(
 					'gnu++20',
 					'c++23',
 					'gnu++23',
-					...(allowCpp26 ? ['c++26', 'gnu++26'] : [])
+					...(dialects.cpp26 ? ['c++26', 'gnu++26'] : [])
 				];
 	if (!standards.includes(standard)) throw new Error('Unsupported GCC language standard');
 	const main = request.preprocessed
@@ -118,16 +172,10 @@ export function gccCompileInputs(
 		: language === 'c'
 			? 'main.c'
 			: 'main.cpp';
-	const code = encoder.encode(request.code);
-	let totalBytes = code.length;
-	if (
-		totalBytes > maxWorkspaceBytes ||
-		(request.files && (!Array.isArray(request.files) || request.files.length > 1024))
-	)
-		throw new Error('GCC workspace exceeds its limit');
-	const files = [{ path: `/workspace/${main}`, contents: code }];
+	const workspace = gccWorkspaceInputs(request);
+	const files = [{ path: `/workspace/${main}`, contents: encoder.encode(workspace.code) }];
 	const paths = new Set<string>();
-	for (const file of request.files ?? []) {
+	for (const file of workspace.files ?? []) {
 		const path = gccRelativePath(file.path);
 		if (reserved.has(path.split('/')[0])) throw new Error('GCC input/output path is reserved');
 		if (paths.has(path)) throw new Error('Duplicate GCC workspace file');
@@ -136,18 +184,10 @@ export function gccCompileInputs(
 				throw new Error('GCC workspace file/directory collision');
 		}
 		paths.add(path);
-		if (
-			typeof file.contents !== 'string' &&
-			(!ArrayBuffer.isView(file.contents) ||
-				Object.prototype.toString.call(file.contents) !== '[object Uint8Array]')
-		)
-			throw new Error('Invalid GCC workspace contents');
 		const contents =
 			typeof file.contents === 'string'
 				? encoder.encode(file.contents)
 				: Uint8Array.from(file.contents);
-		totalBytes += contents.length;
-		if (totalBytes > maxWorkspaceBytes) throw new Error('GCC workspace exceeds its limit');
 		files.push({ path: `/workspace/${path}`, contents });
 	}
 	for (const source of sources) {
@@ -162,8 +202,9 @@ export function gccCompilePlan(
 	manifest: CrossGccManifest,
 	sysroot?: ReadonlyMap<string, Uint8Array>
 ) {
+	const gcc16 = manifest.compiler?.version === '16.2.0';
 	const { language, emit, optimization, standard, main, files, sources, definitions } =
-		gccCompileInputs(request, ['cpu', 'traceIncludes']);
+		gccCompileInputs(request, ['cpu', 'traceIncludes'], [], { c23: gcc16, cpp26: gcc16 });
 	if (request.traceIncludes !== undefined && typeof request.traceIncludes !== 'boolean')
 		throw new Error('Invalid GCC traceIncludes option');
 	const cpu = request.cpu ?? 'x86-64';

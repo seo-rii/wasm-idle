@@ -45,7 +45,7 @@ export function wasiGccCompilePlan(request: WasiGccCompileRequest, manifest: Was
 					: []),
 				...Array.from({ length: 63 }, (_, i) => `program.${i + 1}.wat`)
 			],
-			manifest.capabilities.debugger === true
+			{ cpp26: manifest.capabilities.debugger === true }
 		);
 	const stdModules = validateGccStdModulesProfile(request, {
 		language,

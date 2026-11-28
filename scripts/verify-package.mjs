@@ -509,7 +509,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		// The combined GCC and Clang SDK changes add 8,096 bytes and four files.
 		// The x86 Clang and GCC input handling changes need three additional KiB in the aggregate.
 		// Checking directory traversal for Clang and GCC header lookup adds 2,961 bytes.
-		budget: { maxBytes: 43439104, maxFiles: 3502, maxPackages: 70 },
+		// GCC workspace preflight and dialect support measure 43,441,502 bytes in CI.
+		budget: { maxBytes: 43443200, maxFiles: 3502, maxPackages: 70 },
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/debug');",

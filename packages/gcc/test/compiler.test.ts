@@ -28,7 +28,12 @@ interface FixtureNode {
 }
 
 const host = vi.hoisted(() => ({
-	calls: [] as { tool: string; argv: string[]; files: Map<string, Uint8Array> }[],
+	calls: [] as {
+		tool: string;
+		argv: string[];
+		files: Map<string, Uint8Array>;
+		mtimes: Map<string, number>;
+	}[],
 	sysrootFiles: [] as WeakRef<Uint8Array>[],
 	mode: '',
 	output: undefined as Uint8Array | undefined,
@@ -68,6 +73,7 @@ vi.mock('../src/module-loader.js', () => ({
 				throw host.failure;
 			}
 			const files = new Map<string, Uint8Array>();
+			const mtimes = new Map<string, number>();
 			const instance = await new Promise<WebAssembly.Instance>((resolve) => {
 				(options.instantiateWasm as Function)({}, resolve);
 			});
@@ -76,6 +82,9 @@ vi.mock('../src/module-loader.js', () => ({
 				FS: {
 					mkdirTree() {},
 					chdir() {},
+					utime(path: string, _atime: number, mtime: number) {
+						mtimes.set(path, mtime);
+					},
 					writeFile(path: string, bytes: Uint8Array, options?: { canOwn?: boolean }) {
 						files.set(path, options?.canOwn ? bytes : Uint8Array.from(bytes));
 					},
@@ -117,7 +126,7 @@ vi.mock('../src/module-loader.js', () => ({
 					}
 				},
 				callMain(argv: string[]) {
-					host.calls.push({ tool, argv, files });
+					host.calls.push({ tool, argv, files, mtimes });
 					const bmi = files.get('/gcc-std-modules/std.gcm');
 					if (bmi) {
 						host.bmiReads.push(Uint8Array.from(bmi));
@@ -1817,6 +1826,9 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 				'/workspace/other.cpp',
 				'/workspace/lib/helper.cpp'
 			]);
+			const mtimes = frontends.map((stage) => stage.mtimes.get('/workspace/lib/local.h'));
+			expect(mtimes[0]).toBeTypeOf('number');
+			expect(new Set(mtimes).size).toBe(1);
 			expect(frontends[2].files.get('/workspace/lib/helper.cpp')).toEqual(helper);
 			expect(frontends[2].files.get('/workspace/lib/local.h')).toEqual(
 				encoder.encode('#define LOCAL 4')
@@ -1912,6 +1924,31 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 				);
 			expect(host.calls.every((stage) => stage.tool === 'cc1')).toBe(true);
 		} finally {
+			compiler.dispose();
+		}
+	});
+
+	it('checks aggregate UTF-8 workspace size before allocating any source snapshots', async () => {
+		const compiler = await createCrossGccCompiler(bundle().options);
+		const bytes = new Uint8Array(16 * 1024 * 1024 - 7);
+		const encode = vi.spyOn(TextEncoder.prototype, 'encode');
+		const copy = vi.spyOn(Uint8Array, 'from');
+		try {
+			const request = {
+				code: '😀',
+				files: [
+					{ path: 'raw', contents: bytes },
+					{ path: 'h', contents: '\ud800a' }
+				]
+			};
+			await expect(compiler.compile(request)).rejects.toThrow(/workspace exceeds/);
+			expect(encode).not.toHaveBeenCalled();
+			expect(copy).not.toHaveBeenCalled();
+			request.files[1].contents = '\ud800';
+			expect((await compiler.compile({ ...request, emit: 'assembly' })).exitCode).toBe(0);
+		} finally {
+			encode.mockRestore();
+			copy.mockRestore();
 			compiler.dispose();
 		}
 	});
@@ -2230,6 +2267,29 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 			compiler.dispose();
 		}
 	});
+
+	it.each(['13.3.0', '16.2.0'] as const)(
+		'checks recent x86 dialects against GCC %s',
+		async (version) => {
+			const compiler = await createCrossGccCompiler(bundle(undefined, version).options);
+			try {
+				for (const standard of ['c23', 'gnu23', 'c++26', 'gnu++26']) {
+					const language = standard.includes('++') ? 'cpp' : 'c';
+					const result = compiler.compile({
+						code: '',
+						emit: 'assembly',
+						language,
+						standard
+					});
+					if (version === '13.3.0')
+						await expect(result).rejects.toThrow(/language standard/);
+					else expect((await result).stages[0].argv).toContain(`-std=${standard}`);
+				}
+			} finally {
+				compiler.dispose();
+			}
+		}
+	);
 
 	it.each([
 		['13.3.0', '13', '16'],

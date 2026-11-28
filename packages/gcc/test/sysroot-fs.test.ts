@@ -39,7 +39,7 @@ function mounted(files: Record<string, string>, directories: string[] = []) {
 		directories,
 		'/sysroot'
 	);
-	mountGccSysroot(FS, tree, '/sysroot');
+	mountGccSysroot(FS, tree, '/sysroot', 1234);
 	function lookup(path: string) {
 		let node = root!;
 		for (const name of path.split('/').filter(Boolean))
@@ -64,13 +64,18 @@ it('preserves Emscripten lookup errors and checks the type of intermediate dot c
 		ErrnoError,
 		lookupPath(path: string, options?: { follow?: boolean }) {
 			seen.push([path, options]);
-			if (path === 'missing') throw missing;
-			return { path, node: { mode: path === 'file' ? 0o100644 : 0o40755 } };
+			const name = path.replace(/\/+$/u, '');
+			if (name === 'missing') throw missing;
+			return { path, node: { mode: name === 'file' ? 0o100644 : 0o40755 } };
 		}
 	};
 	requireGccDirectoryTraversal(fs as unknown as GccFileSystem);
 	expect(() => fs.lookupPath('missing/../file')).toThrow(expect.objectContaining({ errno: 44 }));
 	expect(() => fs.lookupPath('file/./sibling')).toThrow(expect.objectContaining({ errno: 54 }));
+	expect(() => fs.lookupPath('missing/')).toThrow(expect.objectContaining({ errno: 44 }));
+	expect(() => fs.lookupPath('file///')).toThrow(expect.objectContaining({ errno: 54 }));
+	fs.lookupPath('dir/', { follow: false });
+	expect(seen.at(-1)).toEqual(['dir/', { follow: true, noent_okay: false }]);
 	const options = { follow: false };
 	fs.lookupPath('dir/../file', options);
 	expect(seen.slice(-2)).toEqual([
@@ -92,6 +97,7 @@ describe('read-only GCC sysroot mount', () => {
 		const include = fs.lookup('usr/include');
 		expect(fs.created).toEqual(['/', '/usr', '/usr/include']);
 		expect(include.mode).toBe(0o40555);
+		expect(include.node_ops.getattr(include)).toMatchObject({ mtime: new Date(1234) });
 		expect(include.node_ops.readdir(include)).toEqual(['.', '..', 'stdio.h']);
 		const usr = fs.lookup('usr');
 		expect((usr.node_ops.readdir(usr) as string[]).sort()).toEqual([
