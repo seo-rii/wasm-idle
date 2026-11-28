@@ -41,40 +41,47 @@ export function gccRelativePath(value: unknown): string {
 }
 
 /** Check the complete workspace before encoding text, copying views or posting a request. */
-export function assertGccWorkspaceFits(request: CrossGccCompileRequest | WasiGccCompileRequest) {
-	if (typeof request?.code !== 'string') throw new Error('GCC requires source text');
+export function gccWorkspaceInputs(request: CrossGccCompileRequest | WasiGccCompileRequest) {
+	const code = request?.code;
+	if (typeof code !== 'string') throw new Error('GCC requires source text');
 	const limitError = 'GCC workspace exceeds its limit';
-	if (request.files != null && (!Array.isArray(request.files) || request.files.length > 1024))
+	const inputs = request.files;
+	if (inputs != null && (!Array.isArray(inputs) || inputs.length > 1024))
 		throw new Error(limitError);
-	const strings = [request.code];
-	let units = request.code.length;
+	const strings = [code];
+	let units = code.length;
 	let binary = 0;
-	for (const file of request.files ?? []) {
+	const files = inputs?.map((file) => {
 		const contents = file?.contents;
 		if (typeof contents === 'string') {
 			strings.push(contents);
 			units += contents.length;
-		} else if (
-			ArrayBuffer.isView(contents) &&
-			Object.prototype.toString.call(contents) === '[object Uint8Array]'
-		) {
-			binary += contents.byteLength;
-		} else {
-			throw new Error('Invalid GCC workspace contents');
+			return { path: file.path, contents };
 		}
-	}
+		if (
+			!ArrayBuffer.isView(contents) ||
+			Object.prototype.toString.call(contents) !== '[object Uint8Array]'
+		)
+			throw new Error('Invalid GCC workspace contents');
+		// Pin the measured span before any later input can grow a shared backing store.
+		const view = new Uint8Array(contents.buffer, contents.byteOffset, contents.byteLength);
+		binary += view.byteLength;
+		return { path: file.path, contents: view };
+	});
 	// UTF-8 needs one to three bytes per UTF-16 code unit. Scan text only when
 	// these bounds straddle the limit, including surrogate pairs and lone surrogates.
 	let bytes = binary + units;
 	if (bytes > maxWorkspaceBytes) throw new Error(limitError);
-	if (binary + units * 3 <= maxWorkspaceBytes) return;
-	for (const string of strings) {
-		for (const character of string) {
-			const first = character.charCodeAt(0);
-			bytes += first < 0x80 ? 0 : first < 0x800 ? 1 : 2;
-			if (bytes > maxWorkspaceBytes) throw new Error(limitError);
+	if (binary + units * 3 > maxWorkspaceBytes) {
+		for (const string of strings) {
+			for (const character of string) {
+				const first = character.charCodeAt(0);
+				bytes += first < 0x80 ? 0 : first < 0x800 ? 1 : 2;
+				if (bytes > maxWorkspaceBytes) throw new Error(limitError);
+			}
 		}
 	}
+	return { code, files };
 }
 
 /** Shared source validation for the two real GCC backends; it never edits source text. */
@@ -165,10 +172,10 @@ export function gccCompileInputs(
 		: language === 'c'
 			? 'main.c'
 			: 'main.cpp';
-	assertGccWorkspaceFits(request);
-	const files = [{ path: `/workspace/${main}`, contents: encoder.encode(request.code) }];
+	const workspace = gccWorkspaceInputs(request);
+	const files = [{ path: `/workspace/${main}`, contents: encoder.encode(workspace.code) }];
 	const paths = new Set<string>();
-	for (const file of request.files ?? []) {
+	for (const file of workspace.files ?? []) {
 		const path = gccRelativePath(file.path);
 		if (reserved.has(path.split('/')[0])) throw new Error('GCC input/output path is reserved');
 		if (paths.has(path)) throw new Error('Duplicate GCC workspace file');

@@ -68,6 +68,33 @@ describe('GCC Worker ownership and cancellation', () => {
 		}
 	);
 
+	it('posts only the measured span of a length-tracking workspace view', async () => {
+		const compiler = await createCrossGccWorker(options);
+		const buffer = new SharedArrayBuffer(1, { maxByteLength: 10 });
+		const pending = compiler.compile({
+			code: '',
+			files: [
+				{ path: 'raw', contents: new Uint8Array(buffer) },
+				{
+					path: 'second',
+					get contents() {
+						buffer.grow(10);
+						return '';
+					}
+				}
+			]
+		});
+		try {
+			const received = FixtureWorker.instances[0].messages.at(-1)!
+				.request as WasiGccCompileRequest;
+			expect(buffer.byteLength).toBe(10);
+			expect(received.files![0].contents).toEqual(Uint8Array.of(0));
+		} finally {
+			compiler.dispose();
+			await expect(pending).rejects.toThrow(/disposed/u);
+		}
+	});
+
 	it('rejects unusable or oversized workspace requests before copying or posting', async () => {
 		const compiler = await createCrossGccWorker(options);
 		const bytes = new Uint8Array(16 * 1024 * 1024 + 1);
