@@ -21,6 +21,11 @@
 			"import": "./dist/runtime-asset-loader.js",
 			"default": "./dist/runtime-asset-loader.js"
 		},
+		"./runtime-elf": {
+			"types": "./dist/runtime-elf.d.ts",
+			"import": "./dist/runtime-elf.js",
+			"default": "./dist/runtime-elf.js"
+		},
 		"./runtime-tar": {
 			"types": "./dist/runtime-tar.d.ts",
 			"import": "./dist/runtime-tar.js",
