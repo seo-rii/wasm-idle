@@ -193,13 +193,17 @@ describe('compile-only x86-64 Clang host', () => {
 	});
 
 	it('validates object and assembly outputs independently of executable output', async () => {
+		// GNU inline assembly can include a raw byte in an assembler comment.
+		const assembly = Uint8Array.from([...encoder.encode('retq\t# '), 0xff, 0x0a]);
 		for (const [emit, output, fileName, format] of [
-			['object', elf(1), 'program.o', 'elf-object'], ['assembly', encoder.encode('vpaddd %ymm0, %ymm1, %ymm2\n'), 'program.s', 'assembly']
+			['object', elf(1), 'program.o', 'elf-object'], ['assembly', assembly, 'program.s', 'assembly']
 		] as const) {
 			const compiler = await createCrossClangCompiler(bundle({ output, fileName, archivePath: 'usr/lib/gcc/x86_64-linux-gnu/14/libatomic.a' }).options);
 			try {
 				const result = compiler.compile({ code: '', emit });
 				expect(result.artifact?.format).toBe(format);
+				expect(result.artifact?.bytes).toEqual(output);
+				expect(result.argv).toContain('-fno-pie');
 				expect(result.argv).not.toContain('-static');
 				expect(result.argv).not.toContain('-latomic');
 			}

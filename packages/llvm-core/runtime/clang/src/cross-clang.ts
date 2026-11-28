@@ -265,10 +265,10 @@ function compilePlan(request: CrossClangCompileRequest, manifest: CrossClangMani
 	}
 	const argv = [manifest.compilerPath, `--target=${target}`, `--sysroot=${manifest.sysrootPath}`,
 		`--gcc-toolchain=${manifest.gccToolchain}`, `-resource-dir=${manifest.resourceDir}`,
-		`-march=${cpu}`, `-O${optimization}`, `-std=${standard}`, '-fdiagnostics-color=never',
+		`-march=${cpu}`, `-O${optimization}`, `-std=${standard}`, '-fno-pie', '-fdiagnostics-color=never',
 		'-x', language === 'c' ? 'c' : 'c++'];
 	if (language === 'cpp') argv.push('--driver-mode=g++', '-stdlib=libstdc++');
-	if (emit === 'executable') argv.push('-fuse-ld=lld', `--ld-path=${manifest.linkerPath}`, '--rtlib=libgcc', '--unwindlib=libgcc', '-static', '-fno-pie');
+	if (emit === 'executable') argv.push('-fuse-ld=lld', `--ld-path=${manifest.linkerPath}`, '--rtlib=libgcc', '--unwindlib=libgcc', '-static');
 	else argv.push(emit === 'object' ? '-c' : '-S');
 	argv.push(main, '-o', fileName);
 	// Unlike the C++ driver, Clang's C driver does not link the math library.
@@ -280,7 +280,7 @@ function compilePlan(request: CrossClangCompileRequest, manifest: CrossClangMani
 function validateOutput(bytes: Uint8Array, emit: CrossClangEmit) {
 	if (emit === 'assembly') {
 		if (!bytes.length) throw new Error('Cross Clang produced empty assembly');
-		new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+		// GNU assembly can contain arbitrary bytes in inline assembly comments.
 		return;
 	}
 	if (bytes.length < 64 || bytes[0] !== 0x7f || bytes[1] !== 0x45 || bytes[2] !== 0x4c || bytes[3] !== 0x46 || bytes[4] !== 2 || bytes[5] !== 1 || bytes[6] !== 1) throw new Error('Cross Clang did not produce little-endian ELF64');

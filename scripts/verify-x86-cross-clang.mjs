@@ -81,8 +81,12 @@ int main(void) {
 	},
 	...['assembly', 'object'].map((emit) => ({
 		name: `avx2-${emit}`, language: 'c', emit, cpu: 'x86-64-v3',
-		code: `#include <immintrin.h>
+		code: String.raw`#include <immintrin.h>
+#if defined(__PIE__) || defined(__PIC__)
+#error The static x86 profile must also apply to object and assembly output
+#endif
 __attribute__((noinline)) void add8(const int *a, const int *b, int *out) {
+  __asm__ volatile("# raw byte: \xff");
   __m256i x = _mm256_loadu_si256((const __m256i *)a);
   __m256i y = _mm256_loadu_si256((const __m256i *)b);
   _mm256_storeu_si256((__m256i *)out, _mm256_add_epi32(x, y));
@@ -208,6 +212,7 @@ self.onmessage = async ({ data }) => {
 		if (fixture.emit === 'assembly') {
 			assert.match(bytes.toString(), /\bvpaddd\b/);
 			assert.match(bytes.toString(), /\bymm\d+\b/);
+			assert(bytes.includes(Buffer.from('# raw byte: \xff', 'latin1')), 'GNU assembly must preserve the inline comment byte');
 		} else {
 			assert.equal(bytes.subarray(0, 7).toString('hex'), '7f454c46020101');
 			assert.equal(bytes.readUInt16LE(18), 62, 'ELF machine must be x86-64');
