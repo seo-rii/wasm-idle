@@ -136,7 +136,11 @@ export function gccCompileInputs(
 				throw new Error('GCC workspace file/directory collision');
 		}
 		paths.add(path);
-		if (typeof file.contents !== 'string' && !(file.contents instanceof Uint8Array))
+		if (
+			typeof file.contents !== 'string' &&
+			(!ArrayBuffer.isView(file.contents) ||
+				Object.prototype.toString.call(file.contents) !== '[object Uint8Array]')
+		)
 			throw new Error('Invalid GCC workspace contents');
 		const contents =
 			typeof file.contents === 'string'
@@ -159,7 +163,9 @@ export function gccCompilePlan(
 	sysroot?: ReadonlyMap<string, Uint8Array>
 ) {
 	const { language, emit, optimization, standard, main, files, sources, definitions } =
-		gccCompileInputs(request, ['cpu']);
+		gccCompileInputs(request, ['cpu', 'traceIncludes']);
+	if (request.traceIncludes !== undefined && typeof request.traceIncludes !== 'boolean')
+		throw new Error('Invalid GCC traceIncludes option');
 	const cpu = request.cpu ?? 'x86-64';
 	// AVX2 without FMA is a subset of the existing producer v1 capability.
 	if (!manifest.cpuProfiles.includes(cpu === 'avx2' ? 'avx2-fma' : cpu))
@@ -181,7 +187,10 @@ export function gccCompilePlan(
 	if (language === 'cpp') cc.push('-fexceptions');
 	if (request.preprocessed) cc.push('-fpreprocessed');
 	else {
-		cc.push('-nostdinc', '-isysroot', manifest.sysrootPath);
+		// GCC's implicit glibc preinclude preserves PCH eligibility. An explicit
+		// -include or -imacros would disable PCH before the first source include.
+		if (!sysroot?.has('/sysroot/usr/include/stdc-predef.h')) cc.push('-nostdinc');
+		cc.push('-isysroot', manifest.sysrootPath);
 		const includes = [];
 		if (language === 'cpp') {
 			if (
@@ -212,7 +221,13 @@ export function gccCompilePlan(
 		const assembly = `/workspace/${stem}.s`;
 		stages.push({
 			tool: language === 'c' ? 'cc1' : 'cc1plus',
-			argv: [...cc, `/workspace/${source}`, '-o', assembly],
+			argv: [
+				...cc,
+				...(request.traceIncludes ? ['-H'] : []),
+				`/workspace/${source}`,
+				'-o',
+				assembly
+			],
 			output: assembly
 		});
 		if (emit !== 'assembly') {

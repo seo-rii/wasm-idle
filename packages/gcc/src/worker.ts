@@ -177,7 +177,7 @@ export async function createGccWorker(
 									)
 								}
 							: request;
-					// Structured clone shares SAB backing stores, including views from other realms.
+					// Structured clone would share a SAB or copy the entire backing store of a slice.
 					if (Array.isArray(request.files)) {
 						snapshot = {
 							...snapshot,
@@ -187,8 +187,9 @@ export async function createGccWorker(
 									ArrayBuffer.isView(bytes) &&
 									Object.prototype.toString.call(bytes) ===
 										'[object Uint8Array]' &&
-									Object.prototype.toString.call(bytes.buffer) ===
-										'[object SharedArrayBuffer]'
+									(bytes.byteLength !== bytes.buffer.byteLength ||
+										Object.prototype.toString.call(bytes.buffer) ===
+											'[object SharedArrayBuffer]')
 								) {
 									return {
 										...file,

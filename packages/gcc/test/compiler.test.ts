@@ -175,6 +175,8 @@ vi.mock('../src/module-loader.js', () => ({
 										host.mode === 'dynamic'
 									))
 					);
+					if (tool.startsWith('cc1') && host.mode === 'raw-assembly')
+						files.set(output, Uint8Array.of(46, 255, 10));
 					if (host.mode === 'exit-status') throw { name: 'ExitStatus', status: 0 };
 					return 0;
 				}
@@ -1860,7 +1862,9 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 	] as const)(
 		'uses the same %s preprocessing contract for every unit',
 		async (language, preprocessed, path, tool) => {
-			const compiler = await createCrossGccCompiler(bundle().options);
+			const compiler = await createCrossGccCompiler(
+				bundle('usr/include/stdc-predef.h').options
+			);
 			try {
 				const result = await compiler.compile({
 					code: 'int main() {}',
@@ -1872,13 +1876,58 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 				expect(result.exitCode).toBe(0);
 				const frontends = result.stages.filter((stage) => stage.tool === tool);
 				expect(frontends).toHaveLength(2);
-				for (const frontend of frontends)
+				for (const frontend of frontends) {
 					expect(frontend.argv.includes('-fpreprocessed')).toBe(preprocessed);
+					expect(frontend.argv).not.toContain('-nostdinc');
+					expect(frontend.argv.includes('-isysroot')).toBe(!preprocessed);
+				}
 			} finally {
 				compiler.dispose();
 			}
 		}
 	);
+
+	it('preserves raw assembly bytes for callers and the following GNU assembler', async () => {
+		const compiler = await createCrossGccCompiler(bundle().options);
+		try {
+			host.mode = 'raw-assembly';
+			const raw = Uint8Array.of(46, 255, 10);
+			expect(
+				(await compiler.compile({ code: '', emit: 'assembly' })).artifact?.bytes
+			).toEqual(raw);
+			expect((await compiler.compile({ code: '', emit: 'object' })).exitCode).toBe(0);
+			expect(host.calls.at(-1)!.files.get('/workspace/program.s')).toEqual(raw);
+		} finally {
+			compiler.dispose();
+		}
+	});
+
+	it('rejects invalid UTF-8 WAT before returning assembly or invoking wat2wasm', async () => {
+		const compiler = await createGccCompiler(wasiBundle());
+		try {
+			host.mode = 'raw-assembly';
+			for (const emit of ['assembly', 'object'] as const)
+				await expect(compiler.compile({ code: '', language: 'c', emit })).rejects.toThrow(
+					/utf-8/i
+				);
+			expect(host.calls.every((stage) => stage.tool === 'cc1')).toBe(true);
+		} finally {
+			compiler.dispose();
+		}
+	});
+
+	it('snapshots Uint8Array workspace slices created in another realm', async () => {
+		const compiler = await createCrossGccCompiler(bundle().options);
+		try {
+			const contents = runInNewContext('Uint8Array.of(0, 42, 7, 0).subarray(1, 3)');
+			const result = compiler.compile({ code: '', files: [{ path: 'local.h', contents }] });
+			contents.fill(0);
+			expect((await result).exitCode).toBe(0);
+			expect(host.calls[0].files.get('/workspace/local.h')).toEqual(Uint8Array.of(42, 7));
+		} finally {
+			compiler.dispose();
+		}
+	});
 
 	it('rejects missing output, another ELF architecture, dynamic linkage, and oversized diagnostics', async () => {
 		const compiler = await createCrossGccCompiler(bundle().options);
@@ -1958,6 +2007,7 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 				{ code: '', flags: ['-flto'] },
 				{ code: '', standard: 'gnu++20 -fplugin=bad' },
 				{ code: '', preprocessed: 1 },
+				{ code: '', traceIncludes: 'yes' },
 				{ code: '', sources: 'helper.cpp' },
 				{ code: '', sources: null },
 				{ code: '', sources: [1] },
@@ -2049,6 +2099,7 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 			const code = '#include <bits/stdc++.h>\nint main() {}\n';
 			await compiler.compile({
 				code,
+				traceIncludes: true,
 				files: [{ path: 'b.cpp', contents: code }],
 				sources: ['b.cpp']
 			});
@@ -2060,7 +2111,8 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 					...flags.slice(0, include),
 					'-isystem',
 					'/pch',
-					...flags.slice(include)
+					...flags.slice(include),
+					'-H'
 				]);
 				expect(new TextDecoder().decode(call.files.get('/pch/bits/stdc++.h.gch'))).toBe(
 					'gpch'
@@ -2100,6 +2152,34 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 		expect(loader).not.toHaveBeenCalled();
 		expect(compileWasm).not.toHaveBeenCalled();
 	});
+
+	it.each(['fetch', 'integrity'])(
+		'aborts pending asset fetches on %s failure',
+		async (failure) => {
+			const fixture = bundle();
+			const signals: AbortSignal[] = [];
+			const fetchImpl: typeof fetch = async (url, init) => {
+				if (String(url).endsWith('gcc-toolchain.v1.json'))
+					return fixture.options.fetchImpl(url, init);
+				if (String(url).endsWith('cc1.wasm'))
+					return failure === 'fetch'
+						? new Response(null, { status: 503 })
+						: new Response(new Uint8Array(wasm.length));
+				const signal = init!.signal!;
+				signals.push(signal);
+				return new Promise((_, reject) =>
+					signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+				);
+			};
+			const parent = new AbortController();
+			await expect(
+				createCrossGccCompiler({ ...fixture.options, fetchImpl, signal: parent.signal })
+			).rejects.toThrow(failure === 'fetch' ? /503/ : /SHA-256 mismatch/);
+			expect(signals).toHaveLength(8);
+			expect(signals.every((signal) => signal.aborted)).toBe(true);
+			expect(parent.signal.aborted).toBe(false);
+		}
+	);
 
 	it.each(['gcc-toolchain.v1.json', 'cc1plus.mjs', 'as.wasm', 'sysroot.tar'])(
 		'refetches %s after an integrity failure when the same fetch provider is reused',

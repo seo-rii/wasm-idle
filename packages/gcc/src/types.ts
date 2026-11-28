@@ -52,6 +52,8 @@ export interface CrossGccCompileRequest {
 	readonly code: string;
 	readonly language?: 'c' | 'cpp';
 	readonly cpu?: CrossGccCpu;
+	/** Request GCC -H include and PCH diagnostics in stderr. */
+	readonly traceIncludes?: boolean;
 	readonly emit?: CrossGccEmit;
 	readonly optimization?: '0' | '1' | '2' | '3' | 's';
 	readonly standard?: string;
@@ -277,7 +279,10 @@ export interface CreateGccCompilerOptions extends CreateCrossGccCompilerOptions 
 	readonly target: GccOutputTarget;
 }
 
-export interface WasiGccCompileRequest extends Omit<CrossGccCompileRequest, 'cpu'> {
+export interface WasiGccCompileRequest extends Omit<
+	CrossGccCompileRequest,
+	'cpu' | 'traceIncludes'
+> {
 	/** Baseline Wasm only. An x86 AVX2/FMA profile is not Wasm SIMD. */
 	readonly cpu?: 'wasm32';
 	/** Opt in to the separately qualified std/std.compat BMI profile. Requires explicit

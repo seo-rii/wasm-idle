@@ -1,4 +1,4 @@
-import { verifyRuntimeAssetIntegrity } from '@wasm-idle/core';
+import { verifyRuntimeAssetIntegrity, waitForRuntimeAssetOperation } from '@wasm-idle/core';
 import untar from '@wasm-idle/core/runtime-tar';
 import { readBuffer } from '@wasm-idle/core/runtime-asset-loader';
 import {
@@ -37,6 +37,7 @@ import type {
 	CrossGccPrecompileRequest,
 	CrossGccStageResult,
 	CrossGccTool,
+	GccOutputTarget,
 	GccWasmInspection,
 	GccSharedMemoryProfile,
 	WasiGccArtifact,
@@ -57,10 +58,11 @@ const maxCoverageNotesBytes = 64 * 1024 * 1024;
 const pchDirectory = '/pch',
 	pchPath = `${pchDirectory}/bits/stdc++.h.gch`;
 
-function validateOutput(bytes: Uint8Array, emit: CrossGccEmit) {
+function validateOutput(bytes: Uint8Array, emit: CrossGccEmit, target: GccOutputTarget) {
 	if (emit === 'assembly') {
 		if (!bytes.length) throw new Error('GCC produced empty assembly');
-		new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+		// WAT is UTF-8. GNU assembly can contain literal bytes inside quoted directives.
+		if (target === 'wasm32-wasi') new TextDecoder('utf-8', { fatal: true }).decode(bytes);
 		return;
 	}
 	if (
@@ -152,7 +154,10 @@ export async function createGccCompiler(
 	// Pinned asset bytes belong to this compiler. A cancellable read bypasses the
 	// shared raw-byte cache, which would otherwise outlive dispose() with this handle.
 	const fetchImpl = options.fetchImpl ?? globalThis.fetch?.bind(globalThis);
-	const signal = options.signal ?? new AbortController().signal;
+	const controller = new AbortController();
+	const signal = options.signal
+		? AbortSignal.any([options.signal, controller.signal])
+		: controller.signal;
 	const manifestBytes = await readBuffer(
 		manifestUrl.href,
 		undefined,
@@ -172,17 +177,23 @@ export async function createGccCompiler(
 	for (const asset of Object.values(manifest.assets))
 		if (asset.bytes > maxAssetBytes)
 			throw new Error('GCC asset exceeds the configured byte limit');
-	const assets = new Map<CrossGccAssetName, Uint8Array>();
+	const assets = new Map<CrossGccAssetName, Uint8Array<ArrayBuffer>>();
 	await Promise.all(
 		(Object.keys(manifest.assets) as CrossGccAssetName[]).map(async (name) => {
 			const receipt = manifestAssets[name]!,
 				url = new URL(receipt.path, manifestUrl).href;
 			const bytes = await readBuffer(url, undefined, receipt.bytes, signal, fetchImpl);
-			await verifyRuntimeAssetIntegrity({ asset: url, bytes, expected: receipt });
+			await waitForRuntimeAssetOperation(
+				verifyRuntimeAssetIntegrity({ asset: url, bytes, expected: receipt }),
+				signal
+			);
 			assets.set(name, bytes);
 		})
-	);
-	signal?.throwIfAborted();
+	).catch((error: unknown) => {
+		controller.abort(error);
+		throw error;
+	});
+	signal.throwIfAborted();
 	const sysroot = new Map<string, Uint8Array>(),
 		directories = new Set<string>();
 	let extractedBytes = 0,
@@ -343,7 +354,7 @@ export async function createGccCompiler(
 				const { module: wasm } = await compileGccWasm(bytes, 'executable');
 				factories.set(tool, { revoke() {}, wasm });
 			} else {
-				const wasm = await WebAssembly.compile(Uint8Array.from(bytes));
+				const wasm = await WebAssembly.compile(bytes);
 				const loader = await loadGccModuleFactory(assets.get(`${tool}Js`)!);
 				factories.set(tool, { ...loader, wasm });
 			}
@@ -625,7 +636,8 @@ export async function createGccCompiler(
 						contents: Uint8Array.from(contents)
 					});
 				}
-				const output = Uint8Array.from(module.FS.readFile(stage.output));
+				// Emscripten FS.readFile already returns a fresh array of the requested size.
+				const output = module.FS.readFile(stage.output);
 				if (manifest.target === 'wasm32-wasi' && stage.tool === 'as')
 					wasmInspection = await inspectOutput(output, 'object');
 				else if (stage.output !== pchPath)
@@ -635,7 +647,8 @@ export async function createGccCompiler(
 							? 'object'
 							: stage.tool === 'ld'
 								? 'executable'
-								: 'assembly'
+								: 'assembly',
+						manifest.target
 					);
 				workspace.set(stage.output, output);
 			}
@@ -680,7 +693,8 @@ export async function createGccCompiler(
 			throw new Error('Unsupported GCC precompiled header option');
 		const { frontEndFlags } = gccCompilePlan(
 			{ ...request, code: '', language: 'cpp', emit: 'assembly' },
-			manifest
+			manifest,
+			sysroot
 		);
 		// Precompile the copy GCC would find first, exactly as #include <bits/stdc++.h> does.
 		const header = frontEndFlags
