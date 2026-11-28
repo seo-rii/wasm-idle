@@ -1,7 +1,10 @@
-import { verifyRuntimeAssetIntegrity, waitForRuntimeAssetOperation } from '@wasm-idle/core';
+import {
+	assertStaticElf64ProgramHeaders,
+	verifyRuntimeAssetIntegrity,
+	waitForRuntimeAssetOperation
+} from '@wasm-idle/core';
 import untar from '@wasm-idle/core/runtime-tar';
 import { readBuffer } from '@wasm-idle/core/runtime-asset-loader';
-import { assertStaticElf64ProgramHeaders } from '@wasm-idle/core/runtime-elf';
 import {
 	gccDigest,
 	gccExceptionRuntimePaths,
