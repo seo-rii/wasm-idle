@@ -28,7 +28,12 @@ interface FixtureNode {
 }
 
 const host = vi.hoisted(() => ({
-	calls: [] as { tool: string; argv: string[]; files: Map<string, Uint8Array>; mtimes: Map<string, number> }[],
+	calls: [] as {
+		tool: string;
+		argv: string[];
+		files: Map<string, Uint8Array>;
+		mtimes: Map<string, number>;
+	}[],
 	sysrootFiles: [] as WeakRef<Uint8Array>[],
 	mode: '',
 	output: undefined as Uint8Array | undefined,
@@ -77,7 +82,9 @@ vi.mock('../src/module-loader.js', () => ({
 				FS: {
 					mkdirTree() {},
 					chdir() {},
-					utime(path: string, _atime: number, mtime: number) { mtimes.set(path, mtime); },
+					utime(path: string, _atime: number, mtime: number) {
+						mtimes.set(path, mtime);
+					},
 					writeFile(path: string, bytes: Uint8Array, options?: { canOwn?: boolean }) {
 						files.set(path, options?.canOwn ? bytes : Uint8Array.from(bytes));
 					},
@@ -1927,7 +1934,13 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 		const encode = vi.spyOn(TextEncoder.prototype, 'encode');
 		const copy = vi.spyOn(Uint8Array, 'from');
 		try {
-			const request = { code: '😀', files: [{ path: 'raw', contents: bytes }, { path: 'h', contents: '\ud800a' }] };
+			const request = {
+				code: '😀',
+				files: [
+					{ path: 'raw', contents: bytes },
+					{ path: 'h', contents: '\ud800a' }
+				]
+			};
 			await expect(compiler.compile(request)).rejects.toThrow(/workspace exceeds/);
 			expect(encode).not.toHaveBeenCalled();
 			expect(copy).not.toHaveBeenCalled();
@@ -2254,6 +2267,29 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 			compiler.dispose();
 		}
 	});
+
+	it.each(['13.3.0', '16.2.0'] as const)(
+		'checks recent x86 dialects against GCC %s',
+		async (version) => {
+			const compiler = await createCrossGccCompiler(bundle(undefined, version).options);
+			try {
+				for (const standard of ['c23', 'gnu23', 'c++26', 'gnu++26']) {
+					const language = standard.includes('++') ? 'cpp' : 'c';
+					const result = compiler.compile({
+						code: '',
+						emit: 'assembly',
+						language,
+						standard
+					});
+					if (version === '13.3.0')
+						await expect(result).rejects.toThrow(/language standard/);
+					else expect((await result).stages[0].argv).toContain(`-std=${standard}`);
+				}
+			} finally {
+				compiler.dispose();
+			}
+		}
+	);
 
 	it.each([
 		['13.3.0', '13', '16'],

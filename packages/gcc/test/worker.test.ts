@@ -74,8 +74,12 @@ describe('GCC Worker ownership and cancellation', () => {
 		const copies = vi.spyOn(Uint8Array, 'from');
 		try {
 			const files = [{ path: 'local.h', contents: bytes.subarray(0, -1) }];
-			await expect(compiler.compile({ code: 'x', files })).rejects.toThrow(/workspace exceeds/);
-			await expect(compiler.compile({ code: '', files }, { signal: AbortSignal.abort() })).rejects.toMatchObject({ name: 'AbortError' });
+			await expect(compiler.compile({ code: 'x', files })).rejects.toThrow(
+				/workspace exceeds/
+			);
+			await expect(
+				compiler.compile({ code: '', files }, { signal: AbortSignal.abort() })
+			).rejects.toMatchObject({ name: 'AbortError' });
 			compiler.dispose();
 			await expect(compiler.compile({ code: '', files })).rejects.toThrow(/disposed/);
 			expect(copies).not.toHaveBeenCalled();

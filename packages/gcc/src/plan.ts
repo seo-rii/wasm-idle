@@ -54,7 +54,10 @@ export function assertGccWorkspaceFits(request: CrossGccCompileRequest | WasiGcc
 		if (typeof contents === 'string') {
 			strings.push(contents);
 			units += contents.length;
-		} else if (ArrayBuffer.isView(contents) && Object.prototype.toString.call(contents) === '[object Uint8Array]') {
+		} else if (
+			ArrayBuffer.isView(contents) &&
+			Object.prototype.toString.call(contents) === '[object Uint8Array]'
+		) {
 			binary += contents.byteLength;
 		} else {
 			throw new Error('Invalid GCC workspace contents');
@@ -79,7 +82,7 @@ export function gccCompileInputs(
 	request: CrossGccCompileRequest | WasiGccCompileRequest,
 	targetKeys: readonly string[],
 	additionalReservedNames: readonly string[] = [],
-	allowCpp26 = false
+	dialects: { c23?: boolean; cpp26?: boolean } = {}
 ) {
 	if (!request || typeof request !== 'object' || typeof request.code !== 'string')
 		throw new Error('GCC requires source text');
@@ -130,7 +133,17 @@ export function gccCompileInputs(
 	const standard = request.standard ?? (language === 'c' ? 'gnu17' : 'gnu++20');
 	const standards =
 		language === 'c'
-			? ['c99', 'gnu99', 'c11', 'gnu11', 'c17', 'gnu17', 'c2x', 'gnu2x']
+			? [
+					'c99',
+					'gnu99',
+					'c11',
+					'gnu11',
+					'c17',
+					'gnu17',
+					'c2x',
+					'gnu2x',
+					...(dialects.c23 ? ['c23', 'gnu23'] : [])
+				]
 			: [
 					'c++11',
 					'gnu++11',
@@ -142,7 +155,7 @@ export function gccCompileInputs(
 					'gnu++20',
 					'c++23',
 					'gnu++23',
-					...(allowCpp26 ? ['c++26', 'gnu++26'] : [])
+					...(dialects.cpp26 ? ['c++26', 'gnu++26'] : [])
 				];
 	if (!standards.includes(standard)) throw new Error('Unsupported GCC language standard');
 	const main = request.preprocessed
@@ -182,8 +195,9 @@ export function gccCompilePlan(
 	manifest: CrossGccManifest,
 	sysroot?: ReadonlyMap<string, Uint8Array>
 ) {
+	const gcc16 = manifest.compiler?.version === '16.2.0';
 	const { language, emit, optimization, standard, main, files, sources, definitions } =
-		gccCompileInputs(request, ['cpu', 'traceIncludes']);
+		gccCompileInputs(request, ['cpu', 'traceIncludes'], [], { c23: gcc16, cpp26: gcc16 });
 	if (request.traceIncludes !== undefined && typeof request.traceIncludes !== 'boolean')
 		throw new Error('Invalid GCC traceIncludes option');
 	const cpu = request.cpu ?? 'x86-64';
