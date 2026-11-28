@@ -561,12 +561,16 @@ export async function createGccCompiler(
 				if (manifest.target === 'x86_64-linux-gnu') requireGccDirectoryTraversal(module.FS);
 				module.FS.mkdirTree('/workspace');
 				module.FS.mkdirTree('/tmp');
-				if (stage.output === pchPath)
-					module.FS.mkdirTree(`${pchDirectory}/bits`);
+				if (stage.output === pchPath) module.FS.mkdirTree(`${pchDirectory}/bits`);
 				mountGccSysroot(module.FS, sysrootTree, '/sysroot', sysrootTime);
 				for (const [path, bytes] of workspace) {
 					// Each x86 tool sees only the generated inputs named in its own argv.
-					if (manifest.target === 'x86_64-linux-gnu' && path.startsWith('/tmp/') && !stage.argv.includes(path)) continue;
+					if (
+						manifest.target === 'x86_64-linux-gnu' &&
+						path.startsWith('/tmp/') &&
+						!stage.argv.includes(path)
+					)
+						continue;
 					module.FS.mkdirTree(path.slice(0, path.lastIndexOf('/')));
 					// The x86 plan owns private snapshots of user files and prior stage
 					// outputs. Its tools only write to distinct, reserved output paths.
@@ -702,7 +706,9 @@ export async function createGccCompiler(
 		if (
 			!request ||
 			typeof request !== 'object' ||
-			Object.keys(request).some((key) => !['cpu', 'optimization', 'standard', 'defines'].includes(key))
+			Object.keys(request).some(
+				(key) => !['cpu', 'optimization', 'standard', 'defines'].includes(key)
+			)
 		)
 			throw new Error('Unsupported GCC precompiled header option');
 		const { frontEndFlags } = gccCompilePlan(
@@ -772,18 +778,17 @@ export async function createGccCompiler(
 				manifest.target === 'wasm32-wasi'
 					? wasiGccCompilePlan(request as WasiGccCompileRequest, manifest)
 					: gccCompilePlan(request as CrossGccCompileRequest, manifest, sysroot);
-			const frontEndFlags = 'frontEndFlags' in plan ? plan.frontEndFlags : undefined;
-			// GCC loads the header only where it is valid; otherwise it parses the source.
-			const pch =
-				precompiled &&
-				frontEndFlags &&
-				frontEndFlags.length === precompiled.flags.length &&
-				frontEndFlags.every((flag, index) => flag === precompiled!.flags[index])
-					? precompiled
-					: undefined;
 			const result = await run(
 				plan.stages.map((stage) => {
-					if (!pch || stage.tool !== 'cc1plus') return stage;
+					const flags = 'frontEndFlags' in stage ? stage.frontEndFlags : undefined;
+					const pch = precompiled;
+					if (
+						stage.tool !== 'cc1plus' ||
+						!pch ||
+						flags?.length !== pch.flags.length ||
+						!flags.every((flag, index) => flag === pch.flags[index])
+					)
+						return stage;
 					const include = stage.argv.indexOf('-isystem');
 					return {
 						...stage,

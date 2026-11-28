@@ -214,8 +214,8 @@ try {
 					let precompiled;
 					try {
 						if (fixture.precompiledHeader) {
-							const { cpu, standard, optimization } = fixture.request;
-							const header = await compiler.precompileHeader({ cpu, standard, optimization }, { signal: deadline.signal });
+							const { cpu, standard, optimization, defines } = fixture.request;
+							const header = await compiler.precompileHeader({ cpu, standard, optimization, defines }, { signal: deadline.signal });
 							if (header.exitCode !== 0 || !header.bytes) throw new Error(`PCH creation failed: ${header.stderr}`);
 							precompiled = { bytes: header.bytes };
 						}

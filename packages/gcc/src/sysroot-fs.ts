@@ -52,7 +52,8 @@ export function requireGccDirectoryTraversal(fs: GccFileSystem) {
 export function mountGccPch(fs: GccFileSystem, directory: string, bytes: Uint8Array) {
 	fs.mkdirTree(directory);
 	const node = fs.lookupPath?.(directory).node;
-	if (!node?.node_ops || !node.stream_ops) throw new Error('GCC PCH requires a compiler directory');
+	if (!node?.node_ops || !node.stream_ops)
+		throw new Error('GCC PCH requires a compiler directory');
 	const ops = node.node_ops as { readdir(node: GccFileSystemNode): string[] };
 	const streams = node.stream_ops as { close?(stream: unknown): void };
 	const path = directory + '/cached';

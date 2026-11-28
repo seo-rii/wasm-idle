@@ -77,7 +77,13 @@ vi.mock('../src/module-loader.js', () => ({
 			const mtimes = new Map<string, number>();
 			const pchDirectory = '/pch/bits/stdc++.h.gch';
 			const pchPath = pchDirectory + '/cached';
-			const dir = { mode: 0o40755, node_ops: { readdir: () => files.has(pchPath) ? ['.', '..', 'cached'] : ['.', '..'] }, stream_ops: {} as { close?: () => void } };
+			const dir = {
+				mode: 0o40755,
+				node_ops: {
+					readdir: () => (files.has(pchPath) ? ['.', '..', 'cached'] : ['.', '..'])
+				},
+				stream_ops: {} as { close?: () => void }
+			};
 			let hasPchDirectory = false;
 			const instance = await new Promise<WebAssembly.Instance>((resolve) => {
 				(options.instantiateWasm as Function)({}, resolve);
@@ -85,9 +91,15 @@ vi.mock('../src/module-loader.js', () => ({
 			return {
 				HEAPU8: new Uint8Array((instance!.exports.memory as WebAssembly.Memory).buffer),
 				FS: {
-					mkdirTree(path: string) { if (path === pchDirectory) hasPchDirectory = true; },
-					lookupPath() { return { node: dir }; },
-					unlink(path: string) { files.delete(path); },
+					mkdirTree(path: string) {
+						if (path === pchDirectory) hasPchDirectory = true;
+					},
+					lookupPath() {
+						return { node: dir };
+					},
+					unlink(path: string) {
+						files.delete(path);
+					},
 					chdir() {},
 					utime(path: string, _atime: number, mtime: number) {
 						mtimes.set(path, mtime);
@@ -1661,7 +1673,8 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 						? ['-lstdc++', '-lm', '-lgcc', '-lgcc_eh', '-lc']
 						: ['-lm', '-lgcc', '-lgcc_eh', '-lc']
 				);
-				expect(linker.argv.indexOf('/workspace/program.o')).toBeLessThan(
+				expect(linker.argv).toContain('/tmp/program.o');
+				expect(linker.argv.indexOf('/tmp/program.o')).toBeLessThan(
 					linker.argv.indexOf('-lm')
 				);
 				expect(linker.argv.indexOf('-lm')).toBeLessThan(linker.argv.indexOf('-lgcc'));
@@ -1850,7 +1863,11 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 				encoder.encode('#define LOCAL 4')
 			);
 			for (const call of frontends) {
-				expect([...call.files.keys()].filter((name) => /^\/workspace\/program(?:\.|$)/.test(name))).toEqual([]);
+				expect(
+					[...call.files.keys()].filter((name) =>
+						/^\/workspace\/program(?:\.|$)/.test(name)
+					)
+				).toEqual([]);
 			}
 			const link = host.calls.at(-1)!;
 			expect(
@@ -1927,7 +1944,9 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 				(await compiler.compile({ code: '', emit: 'assembly' })).artifact?.bytes
 			).toEqual(raw);
 			expect((await compiler.compile({ code: '', emit: 'object' })).exitCode).toBe(0);
-			expect(host.calls.find((call) => call.tool === 'as')!.files.get('/tmp/program.s')).toEqual(raw);
+			expect(
+				host.calls.find((call) => call.tool === 'as')!.files.get('/tmp/program.s')
+			).toEqual(raw);
 		} finally {
 			compiler.dispose();
 		}
@@ -2055,12 +2074,80 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 		}
 	});
 
+	it('plans language, standard and preprocessing per unit and links the C++ runtime', async () => {
+		const compiler = await createCrossGccCompiler(bundle().options);
+		try {
+			const result = await compiler.compile({
+				code: '',
+				language: 'c',
+				standard: 'c11',
+				defines: ['ANSWER=23'],
+				includePaths: ['includes', '.'],
+				files: ['x.cpp', 'pre.i', 'ordinary.c'].map((path) => ({ path, contents: '' })),
+				sources: [
+					{ path: 'x.cpp', language: 'cpp' },
+					{ path: 'pre.i', preprocessed: true },
+					'ordinary.c'
+				]
+			});
+			const cc = result.stages.filter(({ tool }) => tool === 'cc1' || tool === 'cc1plus');
+			expect(cc.map(({ tool }) => tool)).toEqual(['cc1', 'cc1plus', 'cc1', 'cc1']);
+			expect(cc.map(({ argv }) => argv.find((flag) => flag.startsWith('-std=')))).toEqual([
+				'-std=c11',
+				'-std=gnu++20',
+				'-std=c11',
+				'-std=c11'
+			]);
+			expect(cc[1].argv).toContain('-DANSWER=23');
+			expect(cc[2].argv).toContain('-fpreprocessed');
+			expect(cc[2].argv).not.toContain('-DANSWER=23');
+			expect(cc[2].argv).not.toContain('-I');
+			const dirs = cc[0].argv.flatMap((arg, i, argv) => (arg === '-I' ? [argv[i + 1]] : []));
+			expect(dirs).toEqual(['/workspace/includes', '/workspace']);
+			expect(result.stages.at(-1)!.argv).toContain('-lstdc++');
+			for (const unit of [
+				{ path: 'x.cpp', language: 'rust' },
+				{ path: 'x.cpp', standard: 'gnu++23' },
+				{ path: 'x.cpp', preprocessed: 4 },
+				{ path: 'x.cpp', flags: [] }
+			]) {
+				await expect(
+					compiler.compile({
+						code: '',
+						language: 'c',
+						files: [{ path: 'x.cpp', contents: '' }],
+						sources: [unit as never]
+					})
+				).rejects.toThrow();
+			}
+			for (const dir of ['..', '/sysroot', 'i/../../etc']) {
+				await expect(compiler.compile({ code: '', includePaths: [dir] })).rejects.toThrow(
+					'relative path'
+				);
+			}
+		} finally {
+			compiler.dispose();
+		}
+	});
+
 	it('enforces Linux NAME_MAX in UTF-8 bytes for each project file component', async () => {
 		const compiler = await createCrossGccCompiler(bundle().options);
 		try {
 			for (const unit of ['a'.repeat(255), '子'.repeat(85)]) {
-				expect((await compiler.compile({ code: '', files: [{ path: 'dir/' + unit, contents: '' }] })).exitCode).toBe(0);
-				await expect(compiler.compile({ code: '', files: [{ path: unit + 'a/input.h', contents: '' }] })).rejects.toThrow('relative path');
+				expect(
+					(
+						await compiler.compile({
+							code: '',
+							files: [{ path: 'dir/' + unit, contents: '' }]
+						})
+					).exitCode
+				).toBe(0);
+				await expect(
+					compiler.compile({
+						code: '',
+						files: [{ path: unit + 'a/input.h', contents: '' }]
+					})
+				).rejects.toThrow('relative path');
 			}
 		} finally {
 			compiler.dispose();
@@ -2152,7 +2239,10 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 			await expect(compiler.precompileHeader({ code: '' } as never)).rejects.toThrow(
 				'Unsupported GCC precompiled header option'
 			);
-			const precompiled = await compiler.precompileHeader({ optimization: '2', defines: ['ONLINE_JUDGE=1'] });
+			const precompiled = await compiler.precompileHeader({
+				optimization: '2',
+				defines: ['ONLINE_JUDGE=1']
+			});
 			expect(precompiled).toMatchObject({ exitCode: 0, bytes: 4 });
 			expect(precompiled.stages.map((stage) => stage.tool)).toEqual(['cc1plus']);
 			expect(precompiled.stages[0].argv.slice(-5)).toEqual([
@@ -2183,9 +2273,7 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 					...flags.slice(include),
 					'-H'
 				]);
-				expect(new TextDecoder().decode(call.pchCandidate)).toBe(
-					'gpch'
-				);
+				expect(new TextDecoder().decode(call.pchCandidate)).toBe('gpch');
 			}
 			for (const request of [
 				{ code },

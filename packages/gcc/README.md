@@ -703,8 +703,12 @@ caller's thread: use and terminate your own Worker to cancel it.
 ## Supported compilation contract
 
 An x86 request compiles `code` as C/C++, with headers/data under `/workspace`.
-For executables, `sources` selects further units, linked in listed order. All use
-the request's language, standard, CPU, optimization and preprocessing settings.
+For executables, `sources` selects further units, linked in listed order. String paths
+inherit the request profile. An object such as `{ path: 'lib/helper.cpp', language: 'cpp' }`
+selects a per-file language and optionally a `standard` and `preprocessed` setting.
+Changing languages selects that language's default standard unless the unit specifies one.
+Each ordinary unit receives the request's macros. A preprocessed unit skips them. The
+linker includes the C++ runtime whenever any unit selects C++.
 GCC receives unchanged source. Its `target`/`optimize` pragmas, push/pop options,
 PBDS, intrinsics and exceptions use real GNU implementation and qualification.
 
@@ -729,8 +733,9 @@ orchestrates the stages without `fork`/`exec`.
 | `optimization` | `0`, `1`, `2` (default), `3`, `s`                                                                             |
 | `standard`     | C99/C11/C17/C2x or C++11/14/17/20/23, including GNU dialects. GCC 16 also accepts `c23`, `gnu23`, `c++26` and `gnu++26`. Defaults to `gnu17`/`gnu++20`.                      |
 | `preprocessed` | `true` for `.i`/`.ii` plus `-fpreprocessed`; ordinary source is the default                                   |
-| `files`        | Up to 1,024 relative local files; 16 MiB total source and file contents                                       |
-| `sources`      | Up to 63 additional translation unit paths from `files`; executable output only                               |
+| `files`        | Up to 1,024 relative local files, 255 UTF-8 bytes per path component, 16 MiB total source and file contents                                       |
+| `sources`      | Up to 63 paths or per-file profiles from `files`, for executable output |
+| `includePaths` | Up to 64 relative project directories searched in order as GCC `-I` paths. Use `.` for the workspace root. |
 | `defines`      | Up to 256 object-like macro definitions, e.g. `ONLINE_JUDGE=1`, passed directly as GCC `-D` options           |
 
 ```ts
