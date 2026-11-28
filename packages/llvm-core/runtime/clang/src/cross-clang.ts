@@ -280,7 +280,7 @@ function compilePlan(request: CrossClangCompileRequest, manifest: CrossClangMani
 function validateOutput(bytes: Uint8Array, emit: CrossClangEmit) {
 	if (emit === 'assembly') {
 		if (!bytes.length) throw new Error('Cross Clang produced empty assembly');
-		new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+		// GNU assembly can contain arbitrary bytes in inline assembly comments.
 		return;
 	}
 	if (bytes.length < 64 || bytes[0] !== 0x7f || bytes[1] !== 0x45 || bytes[2] !== 0x4c || bytes[3] !== 0x46 || bytes[4] !== 2 || bytes[5] !== 1 || bytes[6] !== 1) throw new Error('Cross Clang did not produce little-endian ELF64');
