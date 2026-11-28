@@ -28,7 +28,7 @@ interface FixtureNode {
 }
 
 const host = vi.hoisted(() => ({
-	calls: [] as { tool: string; argv: string[]; files: Map<string, Uint8Array> }[],
+	calls: [] as { tool: string; argv: string[]; files: Map<string, Uint8Array>; mtimes: Map<string, number> }[],
 	sysrootFiles: [] as WeakRef<Uint8Array>[],
 	mode: '',
 	output: undefined as Uint8Array | undefined,
@@ -68,6 +68,7 @@ vi.mock('../src/module-loader.js', () => ({
 				throw host.failure;
 			}
 			const files = new Map<string, Uint8Array>();
+			const mtimes = new Map<string, number>();
 			const instance = await new Promise<WebAssembly.Instance>((resolve) => {
 				(options.instantiateWasm as Function)({}, resolve);
 			});
@@ -76,6 +77,7 @@ vi.mock('../src/module-loader.js', () => ({
 				FS: {
 					mkdirTree() {},
 					chdir() {},
+					utime(path: string, _atime: number, mtime: number) { mtimes.set(path, mtime); },
 					writeFile(path: string, bytes: Uint8Array, options?: { canOwn?: boolean }) {
 						files.set(path, options?.canOwn ? bytes : Uint8Array.from(bytes));
 					},
@@ -117,7 +119,7 @@ vi.mock('../src/module-loader.js', () => ({
 					}
 				},
 				callMain(argv: string[]) {
-					host.calls.push({ tool, argv, files });
+					host.calls.push({ tool, argv, files, mtimes });
 					const bmi = files.get('/gcc-std-modules/std.gcm');
 					if (bmi) {
 						host.bmiReads.push(Uint8Array.from(bmi));
@@ -1817,6 +1819,9 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 				'/workspace/other.cpp',
 				'/workspace/lib/helper.cpp'
 			]);
+			const mtimes = frontends.map((stage) => stage.mtimes.get('/workspace/lib/local.h'));
+			expect(mtimes[0]).toBeTypeOf('number');
+			expect(new Set(mtimes).size).toBe(1);
 			expect(frontends[2].files.get('/workspace/lib/helper.cpp')).toEqual(helper);
 			expect(frontends[2].files.get('/workspace/lib/local.h')).toEqual(
 				encoder.encode('#define LOCAL 4')

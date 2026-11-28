@@ -66,7 +66,12 @@ export function gccSysrootTree(
  * looks up, and the read-only modes keep one tool from changing bytes seen by the next.
  * No `mmap` operation is provided: GCC maps files only to restore PCH, which the sysroot lacks.
  */
-export function mountGccSysroot(FS: GccFileSystem, tree: GccSysrootDirectory, mountpoint: string) {
+export function mountGccSysroot(
+	FS: GccFileSystem,
+	tree: GccSysrootDirectory,
+	mountpoint: string,
+	timestamp: number
+) {
 	// Include-path probing makes most lookups miss; reuse one error like MEMFS does.
 	const missing = new FS.ErrnoError(ENOENT);
 	const readOnly = () => {
@@ -147,7 +152,7 @@ export function mountGccSysroot(FS: GccFileSystem, tree: GccSysrootDirectory, mo
 		node.contents = contents;
 		node.node_ops = nodeOps;
 		node.stream_ops = streamOps;
-		node.atime = node.mtime = node.ctime = Date.now();
+		node.atime = node.mtime = node.ctime = timestamp;
 		return node;
 	}
 	FS.mkdirTree(mountpoint);

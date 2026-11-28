@@ -39,7 +39,7 @@ function mounted(files: Record<string, string>, directories: string[] = []) {
 		directories,
 		'/sysroot'
 	);
-	mountGccSysroot(FS, tree, '/sysroot');
+	mountGccSysroot(FS, tree, '/sysroot', 1234);
 	function lookup(path: string) {
 		let node = root!;
 		for (const name of path.split('/').filter(Boolean))
@@ -92,6 +92,7 @@ describe('read-only GCC sysroot mount', () => {
 		const include = fs.lookup('usr/include');
 		expect(fs.created).toEqual(['/', '/usr', '/usr/include']);
 		expect(include.mode).toBe(0o40555);
+		expect(include.node_ops.getattr(include)).toMatchObject({ mtime: new Date(1234) });
 		expect(include.node_ops.readdir(include)).toEqual(['.', '..', 'stdio.h']);
 		const usr = fs.lookup('usr');
 		expect((usr.node_ops.readdir(usr) as string[]).sort()).toEqual([

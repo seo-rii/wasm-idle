@@ -21,6 +21,7 @@ export interface GccFileSystem {
 	): { path: string; node?: { mode: number } };
 	mkdirTree(path: string): void;
 	writeFile(path: string, bytes: Uint8Array, options?: { canOwn?: boolean }): void;
+	utime(path: string, atime: number, mtime: number): void;
 	readFile(path: string): Uint8Array;
 	stat(path: string): { size: number };
 	chdir(path: string): void;
