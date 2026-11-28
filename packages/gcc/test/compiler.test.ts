@@ -1902,6 +1902,20 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 		}
 	});
 
+	it('rejects invalid UTF-8 WAT before returning assembly or invoking wat2wasm', async () => {
+		const compiler = await createGccCompiler(wasiBundle());
+		try {
+			host.mode = 'raw-assembly';
+			for (const emit of ['assembly', 'object'] as const)
+				await expect(compiler.compile({ code: '', language: 'c', emit })).rejects.toThrow(
+					/utf-8/i
+				);
+			expect(host.calls.every((stage) => stage.tool === 'cc1')).toBe(true);
+		} finally {
+			compiler.dispose();
+		}
+	});
+
 	it('snapshots Uint8Array workspace slices created in another realm', async () => {
 		const compiler = await createCrossGccCompiler(bundle().options);
 		try {
