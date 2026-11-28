@@ -192,6 +192,21 @@ describe('compile-only x86-64 Clang host', () => {
 		expect(() => compiler.compile({ code: '' })).toThrow('disposed');
 	});
 
+	it('passes each extended dialect only to the selected language', async () => {
+		const compiler = await createCrossClangCompiler(bundle().options);
+		try {
+			for (const [language, standards] of [
+				['c', ['c89', 'gnu89', 'c90', 'gnu90', 'c2y', 'gnu2y']],
+				['cpp', ['c++26', 'gnu++26', 'c++2c', 'gnu++2c']]
+			] as const) {
+				for (const standard of standards) {
+					expect(compiler.compile({ code: '', language, standard }).argv).toContain(`-std=${standard}`);
+					expect(() => compiler.compile({ code: '', language: language === 'c' ? 'cpp' : 'c', standard })).toThrow('language standard');
+				}
+			}
+		} finally { compiler.dispose(); }
+	});
+
 	it('validates object and assembly outputs independently of executable output', async () => {
 		// GNU inline assembly can include a raw byte in an assembler comment.
 		const assembly = Uint8Array.from([...encoder.encode('retq\t# '), 0xff, 0x0a]);
@@ -201,6 +216,7 @@ describe('compile-only x86-64 Clang host', () => {
 			const compiler = await createCrossClangCompiler(bundle({ output, fileName, archivePath: 'usr/lib/gcc/x86_64-linux-gnu/14/libatomic.a' }).options);
 			try {
 				const result = compiler.compile({ code: '', emit });
+				expect(result.argv.includes('-fno-addrsig')).toBe(emit === 'assembly');
 				expect(result.artifact?.format).toBe(format);
 				expect(result.artifact?.bytes).toEqual(output);
 				expect(result.argv).toContain('-fno-pie');
@@ -333,7 +349,9 @@ describe('compile-only x86-64 Clang host', () => {
 				for (const [path, errno] of [
 					['missing/../config.h', wasi.ERRNO_NOENT], ['leaf/../config.h', wasi.ERRNO_NOTDIR],
 					['dir/../missing/../config.h', wasi.ERRNO_NOENT], ['leaf/.', wasi.ERRNO_NOTDIR],
-					['dir/.//../config.h', wasi.ERRNO_SUCCESS]
+					['dir/.//../config.h', wasi.ERRNO_SUCCESS],
+					['子'.repeat(85), wasi.ERRNO_SUCCESS], ['子'.repeat(85) + 'a', wasi.ERRNO_NAMETOOLONG],
+					['missing/' + 'a'.repeat(256), wasi.ERRNO_NOENT]
 				] as const) {
 					expect(fd.path_filestat_get(0, prefix + path).ret, path).toBe(errno);
 					expect(fd.path_open(0, prefix + path, 0, read, 0n, 0).ret, path).toBe(errno);
@@ -343,7 +361,7 @@ describe('compile-only x86-64 Clang host', () => {
 			return start.call(this, instance);
 		});
 		try {
-			const files = ['config.h', 'leaf', 'dir/existing'].map(path => ({ path, contents: '' }));
+			const files = ['config.h', 'leaf', 'dir/existing', '子'.repeat(85)].map(path => ({ path, contents: '' }));
 			expect(compiler.compile({ code: '', files }).exitCode).toBe(0);
 		} finally { compiler.dispose(); }
 	});
@@ -405,7 +423,7 @@ describe('compile-only x86-64 Clang host', () => {
 			for (const request of [
 				{ code: '', cpuProfile: 'x86-64-v3' }, { code: '', defines: ['DEBUG'] },
 				{ code: '', cpu: 'native' }, { code: '', standard: 'gnu++20 -march=native' }, { code: '', optimization: '2 -target=wasm32' },
-				...['../file.h', '/etc/a', 'a//b', 'a/./b', 'a\\b', 'main.cpp', 'main.cpp/nested', 'program.elf', 'program.elf/child'].map(path => ({ code: '', files: [{ path, contents: '' }] })),
+				...['a'.repeat(256), 'nested/' + '子'.repeat(85) + 'a', '../file.h', '/etc/a', 'a//b', 'a/./b', 'a\\b', 'main.cpp', 'main.cpp/nested', 'program.elf', 'program.elf/child'].map(path => ({ code: '', files: [{ path, contents: '' }] })),
 				{ code: '', files: [{ path: 'a', contents: '' }, { path: 'a/b', contents: '' }] },
 				{ code: 'x'.repeat(16 * 1024 * 1024 + 1) }
 			]) expect(() => compiler.compile(request as never)).toThrow();

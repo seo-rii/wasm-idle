@@ -64,6 +64,21 @@ int main() {
 		code: '#include <cstdio>\n#include <stacktrace>\nint main() { if (std::stacktrace::current().empty()) return 1; std::puts("trace"); }\n',
 		stdin: '', stdout: 'trace\n'
 	},
+	{
+		name: 'gnu89-inline', language: 'c', standard: 'gnu89', emit: 'executable', cpu: 'x86-64',
+		code: 'inline int twice(int n) { return n * 2; } int (*pick)(int) = twice; int main(void) { return pick(5) != 10; }',
+		stdin: '', stdout: ''
+	},
+	{
+		name: 'c2y-countof', language: 'c', standard: 'c2y', emit: 'executable', cpu: 'x86-64',
+		code: 'static int values[3]; int main(void) { return _Countof(values) != 3; }',
+		stdin: '', stdout: ''
+	},
+	{
+		name: 'cpp26-pack-indexing', language: 'cpp', standard: 'c++26', emit: 'executable', cpu: 'x86-64',
+		code: 'template<class... T> using First = T...[0]; static_assert(__is_same(First<int, char>, int)); int main() {}',
+		stdin: '', stdout: ''
+	},
 	...['c', 'cpp'].map((language) => ({
 		name: `${language}-atomic-pair-stdin`, language, emit: 'executable', cpu: 'x86-64',
 		code: `#include <stdio.h>
@@ -215,6 +230,11 @@ self.onmessage = async ({ data }) => {
 		const artifactPath = path.join(output, fixture.name + extension);
 		await fs.writeFile(artifactPath, bytes, { mode: 0o700 });
 		if (fixture.emit === 'assembly') {
+			if (process.platform === 'linux' && process.arch === 'x64') {
+				const assembled = spawnSync('as', ['--64', '-o', path.join(temporary, 'roundtrip.o'), artifactPath], { encoding: 'utf8', timeout: 10_000 });
+				assert.ifError(assembled.error);
+				assert.equal(assembled.status, 0, assembled.stderr);
+			}
 			assert.match(bytes.toString(), /\bvpaddd\b/);
 			assert.match(bytes.toString(), /\bymm\d+\b/);
 			assert(bytes.includes(Buffer.from('# raw byte: \xff', 'latin1')), 'GNU assembly must preserve the inline comment byte');
