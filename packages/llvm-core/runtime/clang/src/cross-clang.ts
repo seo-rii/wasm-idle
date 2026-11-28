@@ -84,15 +84,21 @@ const fixedManifest = {
 	sysrootPath: '/sysroot', gccToolchain: '/sysroot/usr', compilerPath: '/bin/clang', linkerPath: '/bin/ld.lld'
 } as const;
 
+// A UTF-16 code unit uses at most three UTF-8 bytes.
+function tooLongComponent(name: string): boolean {
+	return name.length > 255 || (name.length > 85 && encoder.encode(name).length > 255);
+}
+
 // The WASI shim lexically removes "." and ".." before looking up any inode.
 // POSIX requires every preceding component to resolve to an existing directory.
 function traversalError(root: Directory, path: string): number {
-	if (!/(?:^|\/)\.\.?(?:\/|$)/u.test(path)) return 0;
+	if (!/(?:^|\/)\.\.?(?:\/|$)/u.test(path) && (path.length <= 85 || !path.split('/').some(tooLongComponent))) return 0;
 	if (path.startsWith('/')) return wasi.ERRNO_NOTCAPABLE;
 	if (path.includes('\0')) return wasi.ERRNO_INVAL;
 	const parts = path.split('/'), directories = [root];
 	for (let i = 0; i < parts.length; i++) {
 		const part = parts[i];
+		if (tooLongComponent(part)) return wasi.ERRNO_NAMETOOLONG;
 		if (part === '..') {
 			if (directories.length === 1) return wasi.ERRNO_NOTCAPABLE;
 			directories.pop();
@@ -162,7 +168,7 @@ function digest(value: unknown): string {
 }
 function relativePath(value: unknown): string {
 	const path = text(value, 'path');
-	if (path.includes('\\') || path.split('/').some(part => !part || part === '.' || part === '..')) throw new Error(`Invalid cross Clang relative path: ${path}`);
+	if (path.includes('\\') || path.split('/').some(part => !part || part === '.' || part === '..' || tooLongComponent(part))) throw new Error(`Invalid cross Clang relative path: ${path}`);
 	return path;
 }
 

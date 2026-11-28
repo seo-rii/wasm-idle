@@ -310,7 +310,9 @@ describe('compile-only x86-64 Clang host', () => {
 				for (const [path, errno] of [
 					['missing/../config.h', wasi.ERRNO_NOENT], ['leaf/../config.h', wasi.ERRNO_NOTDIR],
 					['dir/../missing/../config.h', wasi.ERRNO_NOENT], ['leaf/.', wasi.ERRNO_NOTDIR],
-					['dir/.//../config.h', wasi.ERRNO_SUCCESS]
+					['dir/.//../config.h', wasi.ERRNO_SUCCESS],
+					['子'.repeat(85), wasi.ERRNO_SUCCESS], ['子'.repeat(85) + 'a', wasi.ERRNO_NAMETOOLONG],
+					['missing/' + 'a'.repeat(256), wasi.ERRNO_NOENT]
 				] as const) {
 					expect(fd.path_filestat_get(0, prefix + path).ret, path).toBe(errno);
 					expect(fd.path_open(0, prefix + path, 0, read, 0n, 0).ret, path).toBe(errno);
@@ -320,7 +322,7 @@ describe('compile-only x86-64 Clang host', () => {
 			return start.call(this, instance);
 		});
 		try {
-			const files = ['config.h', 'leaf', 'dir/existing'].map(path => ({ path, contents: '' }));
+			const files = ['config.h', 'leaf', 'dir/existing', '子'.repeat(85)].map(path => ({ path, contents: '' }));
 			expect(compiler.compile({ code: '', files }).exitCode).toBe(0);
 		} finally { compiler.dispose(); }
 	});
@@ -382,7 +384,7 @@ describe('compile-only x86-64 Clang host', () => {
 			for (const request of [
 				{ code: '', cpuProfile: 'x86-64-v3' }, { code: '', defines: ['DEBUG'] },
 				{ code: '', cpu: 'native' }, { code: '', standard: 'gnu++20 -march=native' }, { code: '', optimization: '2 -target=wasm32' },
-				...['../file.h', '/etc/a', 'a//b', 'a/./b', 'a\\b', 'main.cpp', 'main.cpp/nested', 'program.elf', 'program.elf/child'].map(path => ({ code: '', files: [{ path, contents: '' }] })),
+				...['a'.repeat(256), 'nested/' + '子'.repeat(85) + 'a', '../file.h', '/etc/a', 'a//b', 'a/./b', 'a\\b', 'main.cpp', 'main.cpp/nested', 'program.elf', 'program.elf/child'].map(path => ({ code: '', files: [{ path, contents: '' }] })),
 				{ code: '', files: [{ path: 'a', contents: '' }, { path: 'a/b', contents: '' }] },
 				{ code: 'x'.repeat(16 * 1024 * 1024 + 1) }
 			]) expect(() => compiler.compile(request as never)).toThrow();
