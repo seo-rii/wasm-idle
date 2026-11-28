@@ -215,6 +215,11 @@ self.onmessage = async ({ data }) => {
 		const artifactPath = path.join(output, fixture.name + extension);
 		await fs.writeFile(artifactPath, bytes, { mode: 0o700 });
 		if (fixture.emit === 'assembly') {
+			if (process.platform === 'linux' && process.arch === 'x64') {
+				const assembled = spawnSync('as', ['--64', '-o', path.join(temporary, 'roundtrip.o'), artifactPath], { encoding: 'utf8', timeout: 10_000 });
+				assert.ifError(assembled.error);
+				assert.equal(assembled.status, 0, assembled.stderr);
+			}
 			assert.match(bytes.toString(), /\bvpaddd\b/);
 			assert.match(bytes.toString(), /\bymm\d+\b/);
 			assert(bytes.includes(Buffer.from('# raw byte: \xff', 'latin1')), 'GNU assembly must preserve the inline comment byte');

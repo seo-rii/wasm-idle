@@ -109,7 +109,8 @@ also bind the manifest digest to evidence from the actual browser compiler bundl
 `'x86-64-v3'` profile enables AVX2/FMA and requires a compatible CPU when the downloaded
 program is run. Compilation does not depend on the browser machine's CPU features.
 All three output modes compile with `-fno-pie` for the static Linux target.
-`emit: 'object'` and `'assembly'` return `program.o` and `program.s`. Executable builds
+`emit: 'object'` and `'assembly'` return `program.o` and `program.s`. Assembly output disables
+LLVM address-significance directives so GNU `as` can assemble the generated instructions. Executable builds
 return a checked little-endian x86-64 ELF `program.elf`. C defaults to GNU17 and C++ to
 GNU++20. Additional headers/data can be supplied as `files` with relative workspace paths. Each filename or directory component is limited to 255 UTF-8 bytes.
 Workspace files use the Unix epoch as their modification time, including for the C/C++ preprocessor’s `__TIMESTAMP__`.

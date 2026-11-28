@@ -201,6 +201,7 @@ describe('compile-only x86-64 Clang host', () => {
 			const compiler = await createCrossClangCompiler(bundle({ output, fileName, archivePath: 'usr/lib/gcc/x86_64-linux-gnu/14/libatomic.a' }).options);
 			try {
 				const result = compiler.compile({ code: '', emit });
+				expect(result.argv.includes('-fno-addrsig')).toBe(emit === 'assembly');
 				expect(result.artifact?.format).toBe(format);
 				expect(result.artifact?.bytes).toEqual(output);
 				expect(result.argv).toContain('-fno-pie');
