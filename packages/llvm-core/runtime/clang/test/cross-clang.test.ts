@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { runInNewContext } from 'node:vm';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Directory, File, PreopenDirectory, WASI, wasi } from '@bjorn3/browser_wasi_shim';
+import { Directory, File, OpenDirectory, PreopenDirectory, WASI, wasi } from '@bjorn3/browser_wasi_shim';
 import { createCrossClangCompiler, parseCrossClangManifest, type CrossClangEmit } from '../src/cross-clang.js';
 
 const encoder = new TextEncoder();
@@ -293,6 +293,32 @@ describe('compile-only x86-64 Clang host', () => {
 			try { expect(() => compiler.compile({ code: '' }), label).toThrow(error); }
 			finally { compiler.dispose(); }
 		}
+	});
+
+	it('checks directories crossed by header lookups before resolving dot components', async () => {
+		const compiler = await createCrossClangCompiler(bundle().options);
+		const start = WASI.prototype.start;
+		vi.spyOn(WASI.prototype, 'start').mockImplementation(function (this: WASI, instance) {
+			const root = this.fds[3] as PreopenDirectory;
+			const read = BigInt(wasi.RIGHTS_FD_READ);
+			const workspace = root.path_open(0, 'workspace', wasi.OFLAGS_DIRECTORY, read, 0n, 0).fd_obj as OpenDirectory;
+			for (const [fd, prefix] of [[root, 'workspace/'], [workspace, '']] as const) {
+				for (const [path, errno] of [
+					['missing/../config.h', wasi.ERRNO_NOENT], ['leaf/../config.h', wasi.ERRNO_NOTDIR],
+					['dir/../missing/../config.h', wasi.ERRNO_NOENT], ['leaf/.', wasi.ERRNO_NOTDIR],
+					['dir/.//../config.h', wasi.ERRNO_SUCCESS]
+				] as const) {
+					expect(fd.path_filestat_get(0, prefix + path).ret, path).toBe(errno);
+					expect(fd.path_open(0, prefix + path, 0, read, 0n, 0).ret, path).toBe(errno);
+				}
+			}
+			expect(workspace.path_filestat_get(0, '../sysroot').ret).toBe(wasi.ERRNO_NOTCAPABLE);
+			return start.call(this, instance);
+		});
+		try {
+			const files = ['config.h', 'leaf', 'dir/existing'].map(path => ({ path, contents: '' }));
+			expect(compiler.compile({ code: '', files }).exitCode).toBe(0);
+		} finally { compiler.dispose(); }
 	});
 
 	it('preserves a leading U+FEFF in a filename and rejects unpaired surrogates', async () => {

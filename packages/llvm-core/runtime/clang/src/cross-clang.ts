@@ -1,5 +1,5 @@
 import { verifyRuntimeAssetIntegrity, waitForRuntimeAssetOperation } from '@wasm-idle/core';
-import { ConsoleStdout, Directory, File, PreopenDirectory, WASI, wasi } from '@bjorn3/browser_wasi_shim';
+import { ConsoleStdout, Directory, File, OpenDirectory, PreopenDirectory, WASI, wasi } from '@bjorn3/browser_wasi_shim';
 import untar from '../../core/src/tar.js';
 import { readBuffer } from '../../core/src/wasm.js';
 import { compilePinnedTools, createToolHost, type LlvmToolHost } from './tool-host-execution.js';
@@ -82,6 +82,44 @@ const fixedManifest = {
 	schemaVersion: 1, kind: 'clang-x86_64-linux-gnu', host: 'wasm32-wasip1', target,
 	sysrootPath: '/sysroot', gccToolchain: '/sysroot/usr', compilerPath: '/bin/clang', linkerPath: '/bin/ld.lld'
 } as const;
+
+// The WASI shim lexically removes "." and ".." before looking up any inode.
+// POSIX requires every preceding component to resolve to an existing directory.
+function traversalError(root: Directory, path: string): number {
+	if (!/(?:^|\/)\.\.?(?:\/|$)/u.test(path)) return 0;
+	if (path.startsWith('/')) return wasi.ERRNO_NOTCAPABLE;
+	if (path.includes('\0')) return wasi.ERRNO_INVAL;
+	const parts = path.split('/'), directories = [root];
+	for (let i = 0; i < parts.length; i++) {
+		const part = parts[i];
+		if (part === '..') {
+			if (directories.length === 1) return wasi.ERRNO_NOTCAPABLE;
+			directories.pop();
+		} else if (part && part !== '.' && i < parts.length - 1) {
+			const entry = directories.at(-1)!.contents.get(part);
+			if (!entry) return wasi.ERRNO_NOENT;
+			if (!(entry instanceof Directory)) return wasi.ERRNO_NOTDIR;
+			directories.push(entry);
+		}
+	}
+	return 0;
+}
+
+function checkLookupPaths(fd: OpenDirectory): OpenDirectory {
+	const stat = fd.path_filestat_get.bind(fd), open = fd.path_open.bind(fd);
+	fd.path_filestat_get = (flags, path) => {
+		const ret = traversalError(fd.dir, path);
+		return ret ? { ret, filestat: null } : stat(flags, path);
+	};
+	fd.path_open = (dirflags, path, ...flags) => {
+		const ret = traversalError(fd.dir, path);
+		if (ret) return { ret, fd_obj: null };
+		const result = open(dirflags, path, ...flags);
+		if (result.fd_obj instanceof OpenDirectory) checkLookupPaths(result.fd_obj);
+		return result;
+	};
+	return fd;
+}
 
 /** WASI libc derives access()/stat() permissions from a preopen's capabilities. */
 class CompilerRootDirectory extends PreopenDirectory {
@@ -376,7 +414,7 @@ export async function createCrossClangCompiler(options: CreateCrossClangCompiler
 				? [argv[0], ...argv.slice(2)] : [...argv];
 			const wasiHost = new WASI(wasiArgv, Object.entries(context.env).map(([key, value]) => `${key}=${value}`), [
 				new File([]).path_open(0, BigInt(wasi.RIGHTS_FD_READ), 0).fd_obj,
-				output('stdout'), output('stderr'), new CompilerRootDirectory('/', run.root.contents)
+				output('stdout'), output('stderr'), checkLookupPaths(new CompilerRootDirectory('/', run.root.contents))
 			], { debug: false });
 			let memory: WebAssembly.Memory | undefined;
 			return {
