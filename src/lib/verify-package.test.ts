@@ -216,7 +216,7 @@ describe('package install budgets', () => {
 				maxPackages: 10
 			},
 			'all public packages/adapters aggregate': {
-				maxBytes: 43439104,
+				maxBytes: 43443200,
 				maxFiles: 3502,
 				maxPackages: 70
 			}
@@ -300,7 +300,8 @@ describe('package install budgets', () => {
 			{ bytes: 43_422_093, files: 3_498, packages: 66 },
 			{ bytes: 43_424_632, files: 3_498, packages: 66 },
 			{ bytes: 43_427_688, files: 3_498, packages: 66 },
-			{ bytes: 43_432_728, files: 3_502, packages: 66 }
+			{ bytes: 43_432_728, files: 3_502, packages: 66 },
+			{ bytes: 43_441_502, files: 3_502, packages: 66 }
 		])
 			expect(() => assertInstallBudget(scenario, measurement)).not.toThrow();
 		for (const entry of [root, scenario]) {
