@@ -415,7 +415,8 @@ void [shell, options, serve, result, javaAssets, binding.dispose()];
 		packageNames: ['@wasm-idle/lsp', '@wasm-idle/llvm-core', '@wasm-idle/core'],
 		// Java's XML platform adapter and llvm-core's pinned SIMD compatibility headers.
 		// Add 384 KiB for the reviewed SIMD integration to the Java install limit.
-		budget: { maxBytes: 5898240, maxFiles: 1050, maxPackages: 10 },
+		// Cross Clang directory lookup and read-only tool files bring the LSP install to 5,898,407 bytes.
+		budget: { maxBytes: 5899264, maxFiles: 1050, maxPackages: 10 },
 		absentPackageNames: [
 			'@lezer/rust',
 			'@wasm-idle/debug',

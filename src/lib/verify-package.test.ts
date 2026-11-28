@@ -211,7 +211,7 @@ describe('package install budgets', () => {
 				maxPackages: 25
 			},
 			'@wasm-idle/lsp install': {
-				maxBytes: 5898240,
+				maxBytes: 5899264,
 				maxFiles: 1050,
 				maxPackages: 10
 			},
