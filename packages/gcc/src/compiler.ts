@@ -42,6 +42,7 @@ import type {
 	CrossGccPrecompileRequest,
 	CrossGccStageResult,
 	CrossGccTool,
+	GccOutputTarget,
 	GccWasmInspection,
 	GccSharedMemoryProfile,
 	WasiGccArtifact,
@@ -62,10 +63,11 @@ const maxCoverageNotesBytes = 64 * 1024 * 1024;
 const pchDirectory = '/pch',
 	pchPath = `${pchDirectory}/bits/stdc++.h.gch`;
 
-function validateOutput(bytes: Uint8Array, emit: CrossGccEmit) {
+function validateOutput(bytes: Uint8Array, emit: CrossGccEmit, target: GccOutputTarget) {
 	if (emit === 'assembly') {
 		if (!bytes.length) throw new Error('GCC produced empty assembly');
-		// GNU assembly can contain literal non-UTF-8 bytes inside quoted directives.
+		// WAT is UTF-8. GNU assembly can contain literal bytes inside quoted directives.
+		if (target === 'wasm32-wasi') new TextDecoder('utf-8', { fatal: true }).decode(bytes);
 		return;
 	}
 	if (
@@ -651,7 +653,8 @@ export async function createGccCompiler(
 							? 'object'
 							: stage.tool === 'ld'
 								? 'executable'
-								: 'assembly'
+								: 'assembly',
+						manifest.target
 					);
 				workspace.set(stage.output, output);
 			}
