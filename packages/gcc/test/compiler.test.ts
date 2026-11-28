@@ -1689,7 +1689,8 @@ describe('synthetic GCC host contract (not real compiler qualification)', () => 
 	it.each([
 		['usr/lib/gcc/x86_64-linux-gnu/16/libstdc++exp.a', '-lstdc++exp'],
 		['usr/lib/gcc/x86_64-linux-gnu/16/libstdc++fs.a', '-lstdc++fs'],
-		['usr/lib/x86_64-linux-gnu/libresolv.a', '-lresolv']
+		['usr/lib/x86_64-linux-gnu/libresolv.a', '-lresolv'],
+		['lib/x86_64-linux-gnu/libresolv.a', '-lresolv']
 	])(
 		'links %s when the bundle provides it and honors explicit GNU macros',
 		async (path, flag) => {

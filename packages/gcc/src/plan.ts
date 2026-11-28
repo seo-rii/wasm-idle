@@ -311,7 +311,7 @@ export function gccCompilePlan(
 						]
 					: []),
 				'-lm',
-				...(sysroot?.has(`${lib}/libresolv.a`) ? ['-lresolv'] : []),
+				...([lib, '/sysroot/lib/x86_64-linux-gnu'].some((dir) => sysroot?.has(`${dir}/libresolv.a`)) ? ['-lresolv'] : []),
 				// The v1 bundle contract permits sysroots without GNU libatomic.
 				...(sysroot?.has(`${gcc}/libatomic.a`) ? ['-latomic'] : []),
 				'-lgcc',
