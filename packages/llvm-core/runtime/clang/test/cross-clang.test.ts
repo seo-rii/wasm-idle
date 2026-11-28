@@ -203,6 +203,7 @@ describe('compile-only x86-64 Clang host', () => {
 				const result = compiler.compile({ code: '', emit });
 				expect(result.artifact?.format).toBe(format);
 				expect(result.artifact?.bytes).toEqual(output);
+				expect(result.argv).toContain('-fno-pie');
 				expect(result.argv).not.toContain('-static');
 				expect(result.argv).not.toContain('-latomic');
 			}

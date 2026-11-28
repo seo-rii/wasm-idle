@@ -108,7 +108,8 @@ also bind the manifest digest to evidence from the actual browser compiler bundl
 `cpu: 'x86-64'` selects the baseline x86-64 instruction set, including SSE2. The explicit
 `'x86-64-v3'` profile enables AVX2/FMA and requires a compatible CPU when the downloaded
 program is run. Compilation does not depend on the browser machine's CPU features.
-`emit: 'object'` and `'assembly'` return `program.o` and `program.s`; executable builds
+All three output modes compile with `-fno-pie` for the static Linux target.
+`emit: 'object'` and `'assembly'` return `program.o` and `program.s`. Executable builds
 return a checked little-endian x86-64 ELF `program.elf`. C defaults to GNU17 and C++ to
 GNU++20. Additional headers/data can be supplied as `files` with relative workspace paths.
 The main file (`main.c` / `main.cpp`) and selected output filename are reserved. Workspaces
