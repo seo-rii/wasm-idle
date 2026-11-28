@@ -1,4 +1,4 @@
-import { verifyRuntimeAssetIntegrity, waitForRuntimeAssetOperation } from '@wasm-idle/core';
+import { assertStaticElf64ProgramHeaders, verifyRuntimeAssetIntegrity, waitForRuntimeAssetOperation } from '@wasm-idle/core';
 import { ConsoleStdout, Directory, File, OpenDirectory, PreopenDirectory, WASI, wasi } from '@bjorn3/browser_wasi_shim';
 import untar from '../../core/src/tar.js';
 import { readBuffer } from '../../core/src/wasm.js';
@@ -286,34 +286,7 @@ function validateOutput(bytes: Uint8Array, emit: CrossClangEmit) {
 	if (bytes.length < 64 || bytes[0] !== 0x7f || bytes[1] !== 0x45 || bytes[2] !== 0x4c || bytes[3] !== 0x46 || bytes[4] !== 2 || bytes[5] !== 1 || bytes[6] !== 1) throw new Error('Cross Clang did not produce little-endian ELF64');
 	const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 	if (view.getUint16(18, true) !== 62 || view.getUint16(16, true) !== (emit === 'object' ? 1 : 2) || view.getUint32(20, true) !== 1 || view.getUint16(52, true) !== 64) throw new Error('Cross Clang produced an unexpected ELF target or artifact type');
-	if (emit === 'object') return;
-
-	const programOffset = view.getBigUint64(32, true);
-	const headerSize = view.getUint16(54, true);
-	const headerCount = view.getUint16(56, true);
-	const fileSize = BigInt(bytes.length);
-	if (headerSize !== 56 || !headerCount || programOffset < 64n ||
-		programOffset + BigInt(headerSize * headerCount) > fileSize) {
-		throw new Error('Cross Clang produced an invalid ELF program header table');
-	}
-	const entry = view.getBigUint64(24, true);
-	let hasExecutableEntry = false;
-	for (let index = 0; index < headerCount; index++) {
-		const header = Number(programOffset) + index * headerSize;
-		const type = view.getUint32(header, true);
-		if (type === 3) throw new Error('Cross Clang static executable requests a dynamic interpreter');
-		if (type !== 1) continue;
-		const offset = view.getBigUint64(header + 8, true);
-		const address = view.getBigUint64(header + 16, true);
-		const size = view.getBigUint64(header + 32, true);
-		const memorySize = view.getBigUint64(header + 40, true);
-		if (size > memorySize || (size > 0n && offset + size > fileSize)) {
-			throw new Error('Cross Clang produced an invalid ELF load segment');
-		}
-		const executable = (view.getUint32(header + 4, true) & 1) !== 0;
-		if (executable && entry >= address && entry < address + size) hasExecutableEntry = true;
-	}
-	if (!hasExecutableEntry) throw new Error('Cross Clang ELF entry point is outside executable file data');
+	if (emit === 'executable') assertStaticElf64ProgramHeaders(view);
 }
 
 async function loadCrossClangBundle(options: CreateCrossClangCompilerOptions) {
